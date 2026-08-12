@@ -1,0 +1,876 @@
+# Kế hoạch triển khai đăng nhập Google Workspace - Production
+
+## 1. Mục tiêu
+
+Hệ thống cần:
+
+- Cho phép người dùng đăng nhập bằng tài khoản Google Workspace của tổ chức.
+- Chỉ chấp nhận tài khoản thuộc domain được phép.
+- Không yêu cầu developer phải có quyền Google Workspace Admin.
+- Google chỉ xác minh danh tính, còn ứng dụng tự quản lý quyền truy cập.
+- Dữ liệu người dùng, role, trạng thái và audit log do backend + PostgreSQL quản lý.
+- Một Google account có thể có nhiều profile làm việc khác nhau.
+
+Nguyên tắc:
+
+- Google trả lời câu hỏi "Bạn là ai?".
+- Backend trả lời câu hỏi "Bạn có được vào không?" và "Bạn được làm gì?".
+
+## 2. Kiến trúc tổng thể
+
+```text
+Google Account / Google Workspace
+          |
+          | OIDC
+          v
+ASP.NET Core Backend
+          |
+          | Validate claims + domain + allowlist + active status
+          v
+PostgreSQL
+  Users / UserProfiles / Roles / Permissions / RolePermissions / AuthAuditLogs
+          |
+          | HttpOnly session cookie
+          v
+Frontend
+```
+
+### Trách nhiệm
+
+**Google**
+
+- Xác thực danh tính.
+- Cung cấp `sub`, `email`, `email_verified`, `hd`, tên và avatar.
+- Không quản lý role của ứng dụng.
+
+**Backend + PostgreSQL**
+
+- Kiểm tra domain.
+- Kiểm tra allowlist.
+- Kiểm tra trạng thái `IsActive`.
+- Quản lý nhiều profile trên cùng một Google account.
+- Quản lý role.
+- Quản lý permission và scope.
+- Enforce authorization.
+- Quản lý session.
+- Ghi audit log.
+
+## 3. Quy tắc bắt buộc trước khi code
+
+- Chỉ dùng một flow chính thức: Google OIDC + cookie session.
+- Không lưu Google token trong `localStorage`.
+- Tách rõ endpoint:
+  - `/api/auth/login`: bắt đầu đăng nhập.
+  - `/signin-google`: callback từ Google.
+  - `/api/auth/me`: lấy session hiện tại.
+  - `/api/auth/logout`: hủy session.
+- `hd` chỉ là một lớp kiểm tra phụ.
+- Quyết định cuối phải dựa trên `sub` + allowlist + `IsActive`.
+- `sub` là định danh Google ổn định sau khi link xong.
+- Bootstrap admin phải có cơ chế tắt sau khi môi trường production đã khởi tạo.
+- Backend phải là nơi enforce quyền, không dựa vào việc ẩn/hiện nút ở frontend.
+- Nếu dùng cookie thì phải có chiến lược CSRF rõ ràng.
+- Cần chuẩn hóa HTTP status và error code từ đầu.
+- Session phải lưu `ActiveProfileId`, không chỉ lưu `RoleId`.
+
+## 4. Luồng đăng nhập production
+
+```text
+Người dùng
+   |
+Frontend /login
+   |
+"Đăng nhập với Google"
+   |
+Backend /api/auth/login
+   |
+Google OIDC
+   |
+Google callback
+   |
+ASP.NET Core Backend
+```
+
+Backend thực hiện:
+
+1. Validate chữ ký/token theo OIDC.
+2. Validate issuer.
+3. Validate audience.
+4. Validate expiration.
+5. Kiểm tra `email_verified`.
+6. Kiểm tra `hd`.
+7. Lấy `sub`.
+8. Tìm user theo `sub`.
+9. Nếu chưa có `sub`, thử link theo email nhưng chỉ khi email đã nằm trong allowlist.
+10. Kiểm tra `IsActive`.
+11. Load các profile khả dụng của user.
+12. Nếu không có profile nào thì từ chối.
+13. Nếu chỉ có một profile thì tự động chọn.
+14. Nếu có nhiều profile thì chuyển sang màn hình chọn profile.
+15. Tạo session cookie `HttpOnly` với `ActiveProfileId`.
+16. Ghi audit log.
+17. Redirect về frontend.
+
+## 5. Kiểm tra domain tổ chức
+
+Ví dụ domain:
+
+```text
+vmu.edu.vn
+```
+
+Backend phải kiểm tra:
+
+```text
+hd == "vmu.edu.vn"
+```
+
+Không được chỉ kiểm tra:
+
+```csharp
+email.EndsWith("@vmu.edu.vn")
+```
+
+Nếu `hd` không tồn tại hoặc Google không trả claim này thì request phải bị từ chối an toàn.
+
+## 6. Allowlist, user database và profile
+
+Domain đúng không đồng nghĩa với việc được truy cập.
+
+Luồng:
+
+```text
+Google login
+  |
+hd đúng domain?
+  |
+User có trong database?
+  |
+IsActive = true?
+  |
+Cho đăng nhập
+```
+
+Nếu user chưa có `sub`:
+
+- Chỉ được link một lần.
+- Chỉ link khi email đã tồn tại trong allowlist.
+- Không cho tự do tạo account mới chỉ vì đúng domain.
+
+Sau khi user được xác thực, hệ thống phải load danh sách `UserProfiles`.
+
+Luồng:
+
+```text
+Google login
+  |
+User xác thực hợp lệ
+  |
+Load UserProfiles
+  |
+0 profile -> 403
+1 profile -> tự chọn
+>1 profile -> yêu cầu chọn profile
+```
+
+## 7. Account linking lần đầu
+
+Quy tắc:
+
+- Chỉ link khi `GoogleSubject` còn `NULL`.
+- Không overwrite `GoogleSubject` đã có giá trị.
+- Không cho hai user cùng trỏ vào một `GoogleSubject`.
+- Không link lại tùy tiện chỉ dựa trên email.
+
+Ví dụ:
+
+```text
+User:
+Email = user1@vmu.edu.vn
+GoogleSubject = NULL
+IsActive = true
+
+UserProfile:
+ProfileName = Giảng viên
+Role = LECTURER
+IsActive = true
+```
+
+Lần đăng nhập đầu:
+
+```text
+Google:
+email = user1@vmu.edu.vn
+sub   = 123456789
+hd    = vmu.edu.vn
+```
+
+Backend:
+
+```text
+Không tìm thấy GoogleSubject = 123456789
+  |
+Tìm Email = user1@vmu.edu.vn
+  |
+Email tồn tại + IsActive
+  |
+GoogleSubject đang NULL
+  |
+Link GoogleSubject = 123456789
+```
+
+Từ lần sau ưu tiên lookup bằng `GoogleSubject`.
+
+## 8. Database schema
+
+### Users
+
+```text
+Id UUID PK
+GoogleSubject VARCHAR NULL UNIQUE
+Email VARCHAR NOT NULL UNIQUE
+DisplayName VARCHAR NULL
+AvatarUrl VARCHAR NULL
+IsActive BOOLEAN NOT NULL
+FirstLoginAt TIMESTAMP NULL
+LastLoginAt TIMESTAMP NULL
+CreatedAt TIMESTAMP NOT NULL
+UpdatedAt TIMESTAMP NOT NULL
+```
+
+### UserProfiles
+
+```text
+Id UUID PK
+UserId UUID NOT NULL
+RoleId UUID NOT NULL
+ProfileName VARCHAR NOT NULL
+ProfileCode VARCHAR NOT NULL UNIQUE
+OrganizationUnitCode VARCHAR NULL
+OrganizationUnitName VARCHAR NULL
+IsActive BOOLEAN NOT NULL
+IsDefault BOOLEAN NOT NULL
+LastSelectedAt TIMESTAMP NULL
+CreatedAt TIMESTAMP NOT NULL
+UpdatedAt TIMESTAMP NOT NULL
+```
+
+### Roles
+
+```text
+Id UUID PK
+Code VARCHAR UNIQUE
+Name VARCHAR
+Description VARCHAR NULL
+IsSystem BOOLEAN NOT NULL
+```
+
+### RolePermissions
+
+```text
+Id UUID PK
+RoleId UUID NOT NULL
+PermissionId UUID NOT NULL
+IsGranted BOOLEAN NOT NULL
+CreatedAt TIMESTAMP NOT NULL
+```
+
+Scope không nằm trong `RolePermissions`. Scope là phạm vi dữ liệu của profile, đã có sẵn ở `UserProfiles.OrganizationUnitCode`. Khi authorization:
+
+```text
+ActiveProfile
+      ↓
+Role → Permission
+      +
+OrganizationUnitCode → Resource Scope
+```
+
+Nếu tương lai một profile cần nhiều scope, lúc đó mới tách bảng `UserProfileScopes` riêng.
+
+### Permissions
+
+```text
+Id UUID PK
+Code VARCHAR NOT NULL UNIQUE
+Name VARCHAR NOT NULL
+Description VARCHAR NULL
+CreatedAt TIMESTAMP NOT NULL
+UpdatedAt TIMESTAMP NOT NULL
+```
+
+Role ban đầu:
+
+- `ADMIN`
+- `DEPARTMENT_MANAGER`
+- `LECTURER`
+- `MANAGER`
+- `USER`
+
+### AuthAuditLogs
+
+```text
+Id UUID PK
+UserId UUID NULL
+ProfileId UUID NULL
+Email VARCHAR NULL
+Event VARCHAR NOT NULL
+IpAddress VARCHAR NULL
+UserAgent VARCHAR NULL
+Metadata JSON/JSONB NULL
+CreatedAt TIMESTAMP NOT NULL
+```
+
+## 9. Authorization
+
+Authentication và Authorization phải tách biệt.
+
+Ví dụ:
+
+```csharp
+[Authorize]
+```
+
+Admin API:
+
+```csharp
+[Authorize(Policy = "PERMISSION_ADMIN_ACCESS")]
+```
+
+Frontend chỉ phục vụ UX, không được dùng để bảo vệ dữ liệu hay API.
+
+Authorization phải dựa trên:
+
+- `Authenticated User`
+- `ActiveProfileId`
+- `Role`
+- `Permission`
+- `Resource Scope`
+
+Role chỉ là nguồn gốc quyền của profile hiện tại, không phải quyền tự động của toàn bộ tài khoản.
+
+## 10. Bootstrap admin đầu tiên
+
+Không dùng quy trình:
+
+```text
+Người đăng nhập đầu tiên -> ADMIN
+```
+
+Thay vào đó:
+
+```env
+BOOTSTRAP_ADMIN_EMAIL=your.name@vmu.edu.vn
+```
+
+Startup hoặc migration tạo:
+
+```text
+Email = your.name@vmu.edu.vn
+IsActive = true
+GoogleSubject = NULL
+```
+
+Sau khi production khởi tạo xong, cơ chế bootstrap phải được vô hiệu hóa hoặc khóa lại.
+Bootstrap nên tạo luôn:
+
+- User admin
+- Profile mặc định cho admin
+- Role `ADMIN`
+- Permission map ban đầu
+
+## 11. Session authentication
+
+Sau khi Google xác thực thành công, backend tạo session của ứng dụng.
+
+Khuyến nghị:
+
+- `HttpOnly = true`
+- `Secure = true`
+- `SameSite = Lax`
+- Có expiration rõ ràng
+- Session phải lưu:
+  - `UserId`
+  - `ActiveProfileId`
+
+Frontend không lưu các giá trị sau trong `localStorage`:
+
+- Google Access Token
+- Google ID Token
+- Session secret
+- Refresh Token
+
+Frontend kiểm tra phiên bằng:
+
+```text
+GET /api/auth/me
+```
+
+Ví dụ response:
+
+```json
+{
+  "authenticated": true,
+  "user": {
+    "email": "abc@vmu.edu.vn",
+    "name": "Nguyễn Văn A"
+  },
+  "activeProfile": {
+    "id": "profile-id",
+    "name": "Giảng viên",
+    "role": "LECTURER"
+  },
+  "availableProfiles": [
+    {
+      "id": "profile-id",
+      "name": "Giảng viên",
+      "role": "LECTURER"
+    },
+    {
+      "id": "profile-id-2",
+      "name": "Quản trị khảo sát",
+      "role": "SURVEY_ADMIN"
+    }
+  ]
+}
+```
+
+`user` là danh tính gốc, còn `activeProfile` là ngữ cảnh làm việc hiện tại.
+
+## 12. Session revocation và user bị disable
+
+Người dùng bị disable không được dùng session cũ để tiếp tục truy cập.
+
+Quy tắc:
+
+- Mỗi request quan trọng phải kiểm tra trạng thái user còn active.
+- Mỗi request quan trọng phải kiểm tra `ActiveProfileId` còn hợp lệ.
+- Logout phải hủy session server-side.
+- Cookie phía client không đủ để xem là đã logout.
+- Nếu dùng cache, cache chỉ là tối ưu, không thay cho kiểm tra backend.
+
+## 13. Backend API
+
+### Authentication
+
+```text
+GET  /api/auth/login
+GET  /api/auth/me
+GET  /api/auth/profiles
+POST /api/auth/select-profile
+POST /api/auth/switch-profile
+POST /api/auth/logout
+```
+
+Khuyến nghị status:
+
+- `200`: thành công
+- `401`: chưa đăng nhập hoặc session hết hạn
+- `403`: sai domain, user disabled hoặc không có quyền
+- `409`: xung đột account linking
+
+### User administration
+
+```text
+GET    /api/admin/users
+POST   /api/admin/users
+PATCH  /api/admin/users/{userId}/status
+
+GET    /api/admin/users/{userId}/profiles
+POST   /api/admin/users/{userId}/profiles
+
+PATCH  /api/admin/profiles/{profileId}
+PATCH  /api/admin/profiles/{profileId}/role
+PATCH  /api/admin/profiles/{profileId}/status
+```
+
+`User` quản lý identity/account; `Profile` quản lý vai trò/ngữ cảnh làm việc.
+
+`/api/auth/switch-profile` phải xác nhận:
+
+- `profile.UserId == currentUser.Id`
+- `profile.IsActive == true`
+- `user.IsActive == true`
+
+## 14. Frontend
+
+Login page chỉ làm nhiệm vụ:
+
+- Hiển thị nút đăng nhập Google
+- Gọi `/api/auth/login`
+- Gọi `/api/auth/me`
+- Xử lý protected routes
+- Logout
+- Hiển thị lỗi `401`, `403`, hết session, sai domain, account disabled
+- Hiển thị danh sách profile nếu user có nhiều profile
+- Gọi switch profile khi người dùng chọn profile khác
+
+Frontend không quyết định user hợp lệ hay không.
+Frontend không được tự tin vào `profileId` do chính nó tự giữ.
+
+## 15. User administration
+
+Admin ứng dụng có thể:
+
+- Thêm user vào allowlist
+- Enable user
+- Disable user
+- Thay đổi role
+- Tạo và vô hiệu profile
+- Xem thời gian login gần nhất
+- Xem audit history
+
+## 16. Offboarding
+
+Khi người dùng không còn được phép sử dụng hệ thống:
+
+```text
+Users.IsActive = false
+```
+
+Sau đó:
+
+```text
+Google Login -> Google xác thực thành công -> Backend -> IsActive = false -> 403 ACCOUNT_DISABLED
+```
+
+## 17. Audit logging
+
+Nên ghi:
+
+- `LOGIN_SUCCESS`
+- `LOGIN_FAILED`
+- `LOGIN_INVALID_DOMAIN`
+- `LOGIN_USER_NOT_REGISTERED`
+- `LOGIN_DISABLED_USER`
+- `LOGOUT`
+- `ROLE_CHANGED`
+- `USER_CREATED`
+- `USER_ENABLED`
+- `USER_DISABLED`
+- `PROFILE_CREATED`
+- `PROFILE_DISABLED`
+- `PROFILE_SWITCHED`
+
+Không bao giờ ghi:
+
+- Google ID Token
+- Google Access Token
+- Refresh Token
+- Client Secret
+- Session Cookie
+
+## 18. Google Cloud OAuth
+
+OAuth Client nên là:
+
+- Type: Web Application
+
+Development callback:
+
+```text
+https://localhost:<backend-port>/signin-google
+```
+
+Production:
+
+```text
+https://khaosat.example.vn/signin-google
+```
+
+Scopes tối thiểu:
+
+- `openid`
+- `email`
+- `profile`
+
+Không xin thêm Gmail, Drive, Calendar, Contacts nếu ứng dụng không dùng.
+
+## 19. Secret management
+
+Local `.env`:
+
+```env
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_ALLOWED_DOMAIN=vmu.edu.vn
+BOOTSTRAP_ADMIN_EMAIL=
+```
+
+Yêu cầu:
+
+- `.env` phải nằm trong `.gitignore`
+- Không commit secret
+- Không hard-code secret trong source
+- Không đưa secret vào Docker image
+- Production phải inject secret từ environment hoặc secret manager
+
+## 20. Production domain
+
+Khuyến nghị same-origin:
+
+```text
+https://khaosat.domain.vn/
+```
+
+Frontend:
+
+```text
+/
+```
+
+Backend:
+
+```text
+/api/*
+```
+
+Ví dụ:
+
+```text
+https://khaosat.domain.vn/login
+https://khaosat.domain.vn/api/auth/me
+https://khaosat.domain.vn/api/surveys
+```
+
+Reverse proxy:
+
+```text
+Nginx
+  |-- /      -> Frontend
+  |-- /api   -> Backend
+```
+
+## 21. Production security checklist
+
+- [ ] HTTPS
+- [ ] HttpOnly cookie
+- [ ] Secure cookie
+- [ ] SameSite phù hợp
+- [ ] CSRF protection
+- [ ] OIDC validation
+- [ ] `email_verified` validation
+- [ ] `hd` validation
+- [ ] Allowlist
+- [ ] `IsActive`
+- [ ] Server-side authorization
+- [ ] Role/policy validation
+- [ ] Session expiration
+- [ ] Disabled-user session revocation
+- [ ] Rate limiting
+- [ ] Security headers
+- [ ] Structured logging
+- [ ] Audit logging
+- [ ] Không log token/secret
+- [ ] Không commit secret
+- [ ] PostgreSQL persistent volume
+- [ ] Database backup
+- [ ] Health checks
+- [ ] Integration tests
+
+## 22. Error codes
+
+Backend nên trả machine-readable code:
+
+```text
+AUTH_GOOGLE_FAILED
+AUTH_INVALID_DOMAIN
+AUTH_EMAIL_NOT_VERIFIED
+AUTH_USER_NOT_REGISTERED
+AUTH_ACCOUNT_DISABLED
+AUTH_SESSION_EXPIRED
+AUTH_FORBIDDEN
+AUTH_ACCOUNT_LINK_CONFLICT
+```
+
+Frontend map các mã này sang thông báo tiếng Việt.
+
+## 23. Testing matrix
+
+| Test | Kết quả mong đợi |
+| --- | --- |
+| Gmail cá nhân | Từ chối |
+| Workspace domain khác | Từ chối |
+| Domain đúng nhưng không có trong Users | Từ chối |
+| Domain đúng + User + Active | Cho phép |
+| User Disabled | Từ chối |
+| USER gọi ADMIN API | 403 |
+| ADMIN gọi ADMIN API | Cho phép |
+| Cookie/session hết hạn | 401 |
+| Google authentication fail | Từ chối an toàn |
+| Logout | Session bị hủy |
+| User bị disable khi đang login | Session/quyền truy cập bị vô hiệu |
+| Role thay đổi | Backend enforce role mới |
+| Google email thay đổi | Vẫn ưu tiên định danh bằng `sub` |
+| PostgreSQL restart | Dữ liệu không mất |
+| Backend restart | Hệ thống phục hồi |
+| Client Secret sai | Authentication fail an toàn |
+| Database unavailable | Không lộ stack trace/secret |
+| Duplicate GoogleSubject | Bị chặn |
+| Missing hd claim | Bị chặn |
+| Logout rồi dùng lại cookie | 401 |
+| Disabled user sau khi login | 403 |
+| User switch profile không thuộc mình | 403 |
+| User switch sang profile Disabled | 403 |
+| User Active nhưng ActiveProfile Disabled | 403 |
+| User có ADMIN profile, nhưng ActiveProfile = LECTURER gọi ADMIN API | 403 |
+| Switch LECTURER → ADMIN hợp lệ | Quyền ADMIN được áp dụng |
+| Admin disable profile đang active | Request sau bị reject |
+| Role profile thay đổi | Quyền mới được enforce |
+| ProfileId giả / không tồn tại | 403 hoặc 404 phù hợp |
+| User có Profile A = LECTURER (active) và Profile B = ADMIN, gọi `DELETE /api/admin/users/...` | 403 (sở hữu ADMIN profile không làm toàn bộ account thành ADMIN) |
+
+## 24. Roadmap triển khai
+
+### Phase 0 - OAuth feasibility test
+
+- Tạo Google OAuth Client.
+- Test login bằng email tổ chức.
+- Xác nhận lấy được `sub`, `email`, `email_verified`, `hd`.
+- Xác nhận Workspace không block application.
+
+### Phase 1 - Database
+
+- Tạo `Users`
+- Tạo `UserProfiles`
+- Tạo `Roles`
+- Tạo `Permissions`
+- Tạo `RolePermissions`
+- Tạo `AuthAuditLogs`
+- Migration
+- Seed roles
+- Seed profile mặc định
+- Seed/bootstrap admin
+- Unique constraints và indexes
+
+### Phase 2 - Google authentication
+
+- Tích hợp Google OIDC trong ASP.NET Core
+- Validate claims
+- Validate `email_verified`
+- Validate `hd`
+- Account linking
+- Lưu `GoogleSubject`
+
+### Phase 3 - Application access control
+
+- Allowlist
+- `IsActive`
+- `UserProfiles`
+- Roles
+- Permissions
+- Scope
+- `[Authorize]`
+- Admin policies
+
+### Phase 4 - Session
+
+- HttpOnly cookie
+- Secure cookie
+- SameSite
+- Expiration
+- Logout
+- Disabled-user validation
+- Session revocation strategy
+
+### Phase 5 - Frontend
+
+- Login page
+- Google login button
+- `/api/auth/me`
+- `/api/auth/profiles`
+- profile selector
+- switch profile flow
+- Auth state
+- Protected routes
+- Logout
+- Xử lý `401`, `403`, hết session, sai domain, account disabled
+
+### Phase 6 - User administration
+
+- Danh sách users
+- Add user
+- Enable/disable user
+- Tạo/sửa/vô hiệu profile
+- Gán role cho profile
+- Last login
+- Audit history
+
+### Phase 7 - Production hardening
+
+- HTTPS
+- Reverse proxy
+- CSRF
+- CORS nếu cần
+- Rate limiting
+- Security headers
+- Secret management
+- Structured logging
+- Audit logging
+- Database backup
+- Health checks
+- Integration tests
+
+## 25. Definition of Done
+
+Authentication chỉ được coi là hoàn thành khi:
+
+- [ ] Google Workspace login hoạt động
+- [ ] Gmail cá nhân bị từ chối
+- [ ] Workspace domain khác bị từ chối
+- [ ] Backend kiểm tra `hd`
+- [ ] Backend kiểm tra `email_verified`
+- [ ] `sub` được dùng làm định danh external ổn định
+- [ ] Allowlist hoạt động
+- [ ] User disabled không đăng nhập/sử dụng được hệ thống
+- [ ] UserProfiles được quản lý trong PostgreSQL
+- [ ] ActiveProfileId được lưu trong session
+- [ ] Authorization được enforce tại backend theo profile
+- [ ] HttpOnly, Secure cookie
+- [ ] Không lưu Google token trong localStorage
+- [ ] Logout hoạt động
+- [ ] Session expiration hoạt động
+- [ ] Session/quyền của disabled user bị vô hiệu phù hợp
+- [ ] Audit log hoạt động
+- [ ] Secret không nằm trong source/Git/Docker image
+- [ ] HTTPS production
+- [ ] CSRF protection
+- [ ] Rate limiting
+- [ ] Database backup
+- [ ] Health checks
+- [ ] Integration tests cho authentication/authorization
+- [ ] OAuth feasibility với tài khoản tổ chức đã được xác nhận
+- [ ] User có nhiều profile có thể chọn và switch đúng
+
+## Kết luận
+
+Phương án triển khai:
+
+**Google OIDC + kiểm tra `hd` + allowlist + Google `sub` + PostgreSQL Users/UserProfiles/Roles/RolePermissions + HttpOnly cookie + server-side authorization.**
+
+Kiến trúc này không yêu cầu người phát triển phải có quyền Google Workspace Admin để quản lý user và phân quyền ứng dụng.
+
+Ràng buộc không thể bỏ qua là chính sách OAuth của Google Workspace. Nếu Workspace chặn OAuth application chưa được phê duyệt, admin của tổ chức phải approve/trust ứng dụng. Sau bước đó, hệ thống vẫn quản lý user và role hoàn toàn trong ứng dụng.
+
+### Phase 1a - Seed order chuẩn
+
+- Migrate các bảng theo thứ tự: `Users` -> `Roles` -> `Permissions` -> `UserProfiles` -> `RolePermissions` -> `AuthAuditLogs`.
+- Seed `Roles` trước.
+- Seed `Permissions` tiếp theo.
+- Seed `RolePermissions` sau cùng.
+- Seed một `UserProfile` mặc định cho bootstrap admin.
+- Không cho bootstrap admin dùng trực tiếp `Role` nếu chưa có `UserProfile` tương ứng.
+
+### Constraints and indexes
+
+- `Users.GoogleSubject` unique, nullable.
+- `Users.Email` unique, not null.
+- `UserProfiles.ProfileCode` unique, not null.
+- `UserProfiles.UserId` foreign key to `Users.Id`.
+- `UserProfiles.RoleId` foreign key to `Roles.Id`.
+- `RolePermissions.RoleId` foreign key to `Roles.Id`.
+- `RolePermissions.PermissionId` foreign key to `Permissions.Id`.
+- `AuthAuditLogs.UserId` and `AuthAuditLogs.ProfileId` nullable foreign keys.
+- Index `UserProfiles(UserId, IsActive)`.
+- Index `RolePermissions(RoleId)`.
+- Index `AuthAuditLogs(UserId, CreatedAt)`.
+- Prevent duplicate active default profile per user.
