@@ -7,18 +7,63 @@ namespace API.Auth;
 
 public static class AuthEndpoints
 {
-    private const string CookieScheme = "AppCookie";
-
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/auth");
 
-        group.MapGet("/login", () =>
+        group.MapGet("/login", (GoogleAuthConfiguration googleAuth) =>
         {
-            return Results.Ok(new
+            if (!googleAuth.IsConfigured)
             {
-                message = "Google OIDC will be wired here. Use /api/auth/dev/login in Development for now."
-            });
+                return Results.Problem(
+                    title: "Google authentication is not configured.",
+                    statusCode: StatusCodes.Status503ServiceUnavailable,
+                    extensions: new Dictionary<string, object?> { ["errorCode"] = "AUTH_GOOGLE_NOT_CONFIGURED" });
+            }
+
+            var properties = new AuthenticationProperties
+            {
+                RedirectUri = "/api/auth/google-complete"
+            };
+            return Results.Challenge(properties, [AuthSchemes.Google]);
+        });
+
+        group.MapGet("/google-complete", async (
+            HttpContext httpContext,
+            IAuthService authService,
+            GoogleAuthConfiguration googleAuth) =>
+        {
+            var pending = await httpContext.AuthenticateAsync(AuthSchemes.Pending);
+            if (!pending.Succeeded || pending.Principal is null)
+            {
+                return RedirectWithError(googleAuth, AuthErrorCodes.InvalidGoogleIdentity);
+            }
+
+            var principal = pending.Principal;
+            var identity = new GoogleIdentity(
+                principal.FindFirst("sub")?.Value ?? string.Empty,
+                principal.FindFirst("email")?.Value ?? string.Empty,
+                principal.FindFirst("name")?.Value,
+                principal.FindFirst("picture")?.Value,
+                bool.TryParse(principal.FindFirst("email_verified")?.Value, out var verified) && verified,
+                principal.FindFirst("hd")?.Value);
+
+            var result = await authService.GoogleSignInAsync(identity, googleAuth.AllowedDomain);
+            if (result.Succeeded && result.Response is not null)
+            {
+                await SignInAsync(httpContext, result.Response);
+                await httpContext.SignOutAsync(AuthSchemes.Pending);
+                return Results.Redirect(googleAuth.FrontendBaseUrl);
+            }
+
+            if (result.ErrorCode == AuthErrorCodes.ProfileSelectionRequired && result.PendingUserId is not null)
+            {
+                await SignInPendingProfileAsync(httpContext, result.PendingUserId.Value);
+                return Results.Redirect($"{googleAuth.FrontendBaseUrl.TrimEnd('/')}/select-profile");
+            }
+
+            await httpContext.SignOutAsync(AuthSchemes.Pending);
+            return RedirectWithError(googleAuth, result.ErrorCode);
         });
 
         group.MapGet("/me", async (ClaimsPrincipal user, IAuthService authService) =>
@@ -37,9 +82,42 @@ public static class AuthEndpoints
             });
         });
 
+        group.MapGet("/pending-profiles", async (HttpContext httpContext, IAuthService authService) =>
+        {
+            var userId = await GetPendingUserIdAsync(httpContext);
+            if (userId is null)
+            {
+                return Results.Json(new { errorCode = AuthErrorCodes.SessionExpired }, statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            return Results.Ok(new { availableProfiles = await authService.GetAvailableProfilesAsync(userId.Value) });
+        });
+
+        group.MapPost("/select-profile", async (
+            SelectProfileRequest request,
+            HttpContext httpContext,
+            IAuthService authService) =>
+        {
+            var userId = await GetPendingUserIdAsync(httpContext);
+            if (userId is null)
+            {
+                return Results.Json(new { errorCode = AuthErrorCodes.SessionExpired }, statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            var result = await authService.SelectInitialProfileAsync(userId.Value, request.ProfileId);
+            if (!result.Succeeded || result.Response is null)
+            {
+                return Results.Json(new { errorCode = result.ErrorCode }, statusCode: MapErrorStatus(result.ErrorCode));
+            }
+
+            await SignInAsync(httpContext, result.Response);
+            await httpContext.SignOutAsync(AuthSchemes.Pending);
+            return Results.Ok(result.Response);
+        });
+
         group.MapPost("/switch-profile", [Authorize] async (
             ClaimsPrincipal user,
-            SwitchProfileRequest request,
+            SelectProfileRequest request,
             IAuthService authService,
             HttpContext httpContext) =>
         {
@@ -56,7 +134,8 @@ public static class AuthEndpoints
         group.MapPost("/logout", async (ClaimsPrincipal user, IAuthService authService, HttpContext httpContext) =>
         {
             await authService.SignOutAsync(user);
-            await httpContext.SignOutAsync(CookieScheme);
+            await httpContext.SignOutAsync(AuthSchemes.Application);
+            await httpContext.SignOutAsync(AuthSchemes.Pending);
             return Results.Ok(new { success = true });
         });
 
@@ -100,19 +179,43 @@ public static class AuthEndpoints
             new("active_profile_name", response.ActiveProfile.Name)
         };
 
-        var identity = new ClaimsIdentity(claims, CookieScheme);
+        var identity = new ClaimsIdentity(claims, AuthSchemes.Application);
         var principal = new ClaimsPrincipal(identity);
-        await httpContext.SignInAsync(CookieScheme, principal, new AuthenticationProperties
+        await httpContext.SignInAsync(AuthSchemes.Application, principal, new AuthenticationProperties
         {
             IsPersistent = true
         });
     }
+
+    private static async Task SignInPendingProfileAsync(HttpContext httpContext, Guid userId)
+    {
+        var identity = new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, userId.ToString())],
+            AuthSchemes.Pending);
+        await httpContext.SignInAsync(
+            AuthSchemes.Pending,
+            new ClaimsPrincipal(identity),
+            new AuthenticationProperties { IsPersistent = false });
+    }
+
+    private static async Task<Guid?> GetPendingUserIdAsync(HttpContext httpContext)
+    {
+        var pending = await httpContext.AuthenticateAsync(AuthSchemes.Pending);
+        return Guid.TryParse(pending.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId)
+            ? userId
+            : null;
+    }
+
+    private static IResult RedirectWithError(GoogleAuthConfiguration configuration, string? errorCode) =>
+        Results.Redirect($"{configuration.FrontendBaseUrl.TrimEnd('/')}/login?error={Uri.EscapeDataString(errorCode ?? AuthErrorCodes.InvalidGoogleIdentity)}");
 
     private static int MapErrorStatus(string? errorCode) => errorCode switch
     {
         AuthErrorCodes.UserNotRegistered => StatusCodes.Status403Forbidden,
         AuthErrorCodes.AccountDisabled => StatusCodes.Status403Forbidden,
         AuthErrorCodes.InvalidDomain => StatusCodes.Status403Forbidden,
+        AuthErrorCodes.EmailNotVerified => StatusCodes.Status403Forbidden,
+        AuthErrorCodes.InvalidGoogleIdentity => StatusCodes.Status401Unauthorized,
         AuthErrorCodes.NoProfiles => StatusCodes.Status403Forbidden,
         AuthErrorCodes.ProfileSelectionRequired => StatusCodes.Status409Conflict,
         AuthErrorCodes.ProfileNotFound => StatusCodes.Status404NotFound,
@@ -122,5 +225,5 @@ public static class AuthEndpoints
         _ => StatusCodes.Status400BadRequest
     };
 
-    public sealed record SwitchProfileRequest(Guid ProfileId);
+    public sealed record SelectProfileRequest(Guid ProfileId);
 }

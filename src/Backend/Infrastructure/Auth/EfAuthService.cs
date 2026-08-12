@@ -17,6 +17,76 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
             : await BuildResponseAsync(state.Value.User, state.Value.Profile);
     }
 
+    public async Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity, string allowedDomain)
+    {
+        if (string.IsNullOrWhiteSpace(identity.Subject) || string.IsNullOrWhiteSpace(identity.Email))
+        {
+            return new GoogleSignInResult(false, AuthErrorCodes.InvalidGoogleIdentity, null, null, null);
+        }
+
+        if (!identity.EmailVerified)
+        {
+            return new GoogleSignInResult(false, AuthErrorCodes.EmailNotVerified, null, null, null);
+        }
+
+        var normalizedDomain = allowedDomain.Trim().TrimStart('@').ToLowerInvariant();
+        var normalizedEmail = identity.Email.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(normalizedDomain)
+            || !string.Equals(identity.HostedDomain, normalizedDomain, StringComparison.OrdinalIgnoreCase)
+            || !normalizedEmail.EndsWith($"@{normalizedDomain}", StringComparison.Ordinal))
+        {
+            return new GoogleSignInResult(false, AuthErrorCodes.InvalidDomain, null, null, null);
+        }
+
+        var userBySubject = await db.Users.SingleOrDefaultAsync(x => x.GoogleSubject == identity.Subject);
+        var userByEmail = await db.Users.SingleOrDefaultAsync(x => x.Email.ToLower() == normalizedEmail);
+        if (userBySubject is not null && userBySubject.Id != userByEmail?.Id)
+        {
+            return new GoogleSignInResult(false, AuthErrorCodes.AccountLinkConflict, null, null, null);
+        }
+
+        var user = userBySubject ?? userByEmail;
+        if (user is null)
+        {
+            return new GoogleSignInResult(false, AuthErrorCodes.UserNotRegistered, null, null, null);
+        }
+
+        if (!string.IsNullOrWhiteSpace(user.GoogleSubject)
+            && !string.Equals(user.GoogleSubject, identity.Subject, StringComparison.Ordinal))
+        {
+            return new GoogleSignInResult(false, AuthErrorCodes.AccountLinkConflict, null, null, null);
+        }
+
+        if (!user.IsActive)
+        {
+            return new GoogleSignInResult(false, AuthErrorCodes.AccountDisabled, null, null, null);
+        }
+
+        user.GoogleSubject ??= identity.Subject;
+        user.DisplayName = identity.DisplayName ?? user.DisplayName;
+        user.AvatarUrl = identity.AvatarUrl ?? user.AvatarUrl;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        var profiles = await GetProfilesAsync(user.Id);
+        if (profiles.Count == 0)
+        {
+            AddAudit(user, null, "GOOGLE_LOGIN_NO_PROFILE");
+            await db.SaveChangesAsync();
+            return new GoogleSignInResult(false, AuthErrorCodes.NoProfiles, null, null, null);
+        }
+
+        if (profiles.Count > 1)
+        {
+            AddAudit(user, null, "GOOGLE_LOGIN_PROFILE_REQUIRED");
+            await db.SaveChangesAsync();
+            return new GoogleSignInResult(false, AuthErrorCodes.ProfileSelectionRequired, user.Id, null, profiles);
+        }
+
+        var profile = await db.UserProfiles.SingleAsync(x => x.Id == profiles[0].Id);
+        var response = await CompleteSignInAsync(user, profile, "LOGIN_SUCCESS");
+        return new GoogleSignInResult(true, null, null, response, profiles);
+    }
+
     public async Task<SignInResult> DevSignInAsync(string email, string? profileCode)
     {
         var user = await db.Users.SingleOrDefaultAsync(x => x.Email.ToLower() == email.ToLower());
@@ -80,8 +150,19 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
             return new ProfileSelectionResult(false, AuthErrorCodes.SessionExpired, null);
         }
 
-        var user = await db.Users.SingleOrDefaultAsync(x => x.Id == userId.Value);
-        var profile = await db.UserProfiles.SingleOrDefaultAsync(x => x.Id == profileId && x.UserId == userId.Value);
+        return await SelectProfileForUserAsync(userId.Value, profileId, "PROFILE_SWITCHED");
+    }
+
+    public Task<IReadOnlyList<AuthProfileDto>> GetAvailableProfilesAsync(Guid userId) =>
+        GetProfilesAsReadOnlyAsync(userId);
+
+    public Task<ProfileSelectionResult> SelectInitialProfileAsync(Guid userId, Guid profileId) =>
+        SelectProfileForUserAsync(userId, profileId, "LOGIN_SUCCESS");
+
+    private async Task<ProfileSelectionResult> SelectProfileForUserAsync(Guid userId, Guid profileId, string eventName)
+    {
+        var user = await db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        var profile = await db.UserProfiles.SingleOrDefaultAsync(x => x.Id == profileId && x.UserId == userId);
         if (user is null || profile is null)
         {
             return new ProfileSelectionResult(false, AuthErrorCodes.ProfileNotFound, null);
@@ -92,14 +173,7 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
             return new ProfileSelectionResult(false, AuthErrorCodes.ProfileDisabled, null);
         }
 
-        var now = DateTime.UtcNow;
-        profile.LastSelectedAt = now;
-        user.LastLoginAt = now;
-        user.UpdatedAt = now;
-        AddAudit(user, profile, "PROFILE_SWITCHED");
-        await db.SaveChangesAsync();
-
-        return new ProfileSelectionResult(true, null, await BuildResponseAsync(user, profile));
+        return new ProfileSelectionResult(true, null, await CompleteSignInAsync(user, profile, eventName));
     }
 
     public async Task<SignOutResult> SignOutAsync(ClaimsPrincipal? principal)
@@ -147,6 +221,18 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
         return user is null || profile is null ? null : (user, profile);
     }
 
+    private async Task<AuthMeResponse> CompleteSignInAsync(User user, UserProfile profile, string eventName)
+    {
+        var now = DateTime.UtcNow;
+        profile.LastSelectedAt = now;
+        user.FirstLoginAt ??= now;
+        user.LastLoginAt = now;
+        user.UpdatedAt = now;
+        AddAudit(user, profile, eventName);
+        await db.SaveChangesAsync();
+        return await BuildResponseAsync(user, profile);
+    }
+
     private async Task<AuthMeResponse> BuildResponseAsync(User user, UserProfile activeProfile)
     {
         var profiles = await GetProfilesAsync(user.Id);
@@ -172,17 +258,22 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
              profile.OrganizationUnitName,
              profile.IsDefault)).ToListAsync();
 
-    private void AddAudit(User user, UserProfile profile, string eventName)
+    private async Task<IReadOnlyList<AuthProfileDto>> GetProfilesAsReadOnlyAsync(Guid userId) =>
+        await GetProfilesAsync(userId);
+
+    private void AddAudit(User user, UserProfile? profile, string eventName)
     {
         db.AuthAuditLogs.Add(new AuthAuditLog
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
-            ProfileId = profile.Id,
+            ProfileId = profile?.Id,
             Email = user.Email,
             Event = eventName,
             CreatedAt = DateTime.UtcNow,
-            Metadata = JsonSerializer.Serialize(new { profile.ProfileCode, profile.ProfileName })
+            Metadata = profile is null
+                ? null
+                : JsonSerializer.Serialize(new { profile.ProfileCode, profile.ProfileName })
         });
     }
 

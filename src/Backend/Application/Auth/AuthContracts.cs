@@ -36,10 +36,28 @@ public sealed record ProfileSelectionResult(
 
 public sealed record SignOutResult(bool Succeeded);
 
+public sealed record GoogleIdentity(
+    string Subject,
+    string Email,
+    string? DisplayName,
+    string? AvatarUrl,
+    bool EmailVerified,
+    string? HostedDomain);
+
+public sealed record GoogleSignInResult(
+    bool Succeeded,
+    string? ErrorCode,
+    Guid? PendingUserId,
+    AuthMeResponse? Response,
+    IReadOnlyList<AuthProfileDto>? AvailableProfiles);
+
 public interface IAuthService
 {
     Task<AuthMeResponse> GetCurrentAsync(ClaimsPrincipal? principal);
+    Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity, string allowedDomain);
     Task<SignInResult> DevSignInAsync(string email, string? profileCode);
+    Task<IReadOnlyList<AuthProfileDto>> GetAvailableProfilesAsync(Guid userId);
+    Task<ProfileSelectionResult> SelectInitialProfileAsync(Guid userId, Guid profileId);
     Task<ProfileSelectionResult> SelectProfileAsync(ClaimsPrincipal? principal, Guid profileId);
     Task<SignOutResult> SignOutAsync(ClaimsPrincipal? principal);
     Task<bool> HasPermissionAsync(ClaimsPrincipal? principal, string permissionCode);
@@ -50,6 +68,8 @@ public abstract record AuthErrorCodes
     public const string UserNotRegistered = "AUTH_USER_NOT_REGISTERED";
     public const string AccountDisabled = "AUTH_ACCOUNT_DISABLED";
     public const string InvalidDomain = "AUTH_INVALID_DOMAIN";
+    public const string EmailNotVerified = "AUTH_EMAIL_NOT_VERIFIED";
+    public const string InvalidGoogleIdentity = "AUTH_INVALID_GOOGLE_IDENTITY";
     public const string NoProfiles = "AUTH_NO_PROFILE";
     public const string ProfileSelectionRequired = "AUTH_PROFILE_SELECTION_REQUIRED";
     public const string ProfileNotFound = "AUTH_PROFILE_NOT_FOUND";

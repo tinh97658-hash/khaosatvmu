@@ -29,6 +29,50 @@ public sealed class InMemoryAuthService : IAuthService
         return Task.FromResult(BuildAuthMeResponse(state.Value.User, state.Value.ActiveProfile));
     }
 
+    public async Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity, string allowedDomain)
+    {
+        if (!identity.EmailVerified)
+        {
+            return new GoogleSignInResult(false, AuthErrorCodes.EmailNotVerified, null, null, null);
+        }
+
+        if (!string.Equals(identity.HostedDomain, allowedDomain, StringComparison.OrdinalIgnoreCase))
+        {
+            return new GoogleSignInResult(false, AuthErrorCodes.InvalidDomain, null, null, null);
+        }
+
+        var result = await DevSignInAsync(identity.Email, null);
+        Guid? pendingUserId = result.ErrorCode == AuthErrorCodes.ProfileSelectionRequired
+            ? _users.Single(x => x.Email.Equals(identity.Email, StringComparison.OrdinalIgnoreCase)).Id
+            : null;
+        return new GoogleSignInResult(
+            result.Succeeded,
+            result.ErrorCode,
+            pendingUserId,
+            result.Response,
+            result.AvailableProfiles);
+    }
+
+    public Task<IReadOnlyList<AuthProfileDto>> GetAvailableProfilesAsync(Guid userId) =>
+        Task.FromResult(GetProfilesForUser(userId));
+
+    public Task<ProfileSelectionResult> SelectInitialProfileAsync(Guid userId, Guid profileId)
+    {
+        var user = _users.SingleOrDefault(x => x.Id == userId);
+        var profile = user?.Profiles.SingleOrDefault(x => x.Id == profileId);
+        if (user is null || profile is null)
+        {
+            return Task.FromResult(new ProfileSelectionResult(false, AuthErrorCodes.ProfileNotFound, null));
+        }
+
+        if (!user.IsActive || !profile.IsActive)
+        {
+            return Task.FromResult(new ProfileSelectionResult(false, AuthErrorCodes.ProfileDisabled, null));
+        }
+
+        return Task.FromResult(new ProfileSelectionResult(true, null, BuildAuthMeResponse(user, profile)));
+    }
+
     public Task<SignInResult> DevSignInAsync(string email, string? profileCode)
     {
         lock (_gate)

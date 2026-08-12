@@ -883,3 +883,11 @@ Ràng buộc không thể bỏ qua là chính sách OAuth của Google Workspace
 - Database migration and seed are executed through EF Core only.
 - Added idempotent EF seed for system roles, permissions, role-permissions and dev multi-profile user.
 - Applied the initial migration and verified dev login, profile selection and `/api/auth/me` against PostgreSQL.
+
+### Implementation status - Phase 2
+
+- Added Google OIDC authorization-code flow with PKCE and HttpOnly cookies.
+- Added validation for Google `sub`, `email_verified`, `hd`, allowlist and account linking.
+- Added separate initial profile selection and authenticated profile switching flows.
+- Kept OAuth secrets outside source; real Workspace login awaits Google Client ID/Secret.
+- Limited sample user seeding to Development only.

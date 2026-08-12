@@ -5,12 +5,18 @@ namespace Infrastructure.Persistence;
 
 public static class DatabaseSeeder
 {
-    public static async Task SeedAsync(AppDbContext db, CancellationToken cancellationToken = default)
+    public static async Task SeedAsync(
+        AppDbContext db,
+        bool includeDevelopmentData,
+        CancellationToken cancellationToken = default)
     {
         var roles = await EnsureRolesAsync(db, cancellationToken);
         var permissions = await EnsurePermissionsAsync(db, cancellationToken);
         await EnsureRolePermissionsAsync(db, roles, permissions, cancellationToken);
-        await EnsureDevUserAsync(db, roles, cancellationToken);
+        if (includeDevelopmentData)
+        {
+            await EnsureDevUserAsync(db, roles, cancellationToken);
+        }
     }
 
     private static async Task<Dictionary<string, Role>> EnsureRolesAsync(
