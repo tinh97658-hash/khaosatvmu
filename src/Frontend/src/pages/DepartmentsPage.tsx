@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import { Mail, Phone, Trash2 } from 'lucide-react';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
-import { Modal } from '../components/Modal';
+import { ConfirmDialog, Modal } from '../components/Modal';
 import type { Department, Faculty } from '../types';
 
 interface DepartmentsPageProps {
@@ -20,8 +21,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
   const [search, setSearch] = useState('');
   const [facultyFilter, setFacultyFilter] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  // Form states
+  const [departmentToDelete, setDepartmentToDelete] = useState<Department | null>(null);
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [facultyId, setFacultyId] = useState('');
@@ -31,27 +31,26 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
   const [totalLecturers, setTotalLecturers] = useState(10);
   const [totalCourses, setTotalCourses] = useState(12);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
     if (!code.trim() || !name.trim() || !facultyId) return;
 
-    const faculty = faculties.find((f) => f.id === facultyId);
+    const faculty = faculties.find((item) => item.id === facultyId);
     const newDepartment: Department = {
       id: `dept-${Date.now()}`,
-      code,
-      name,
+      code: code.trim(),
+      name: name.trim(),
       facultyId,
-      facultyName: faculty ? faculty.name : '',
-      headOfDepartment: headOfDepartment || 'Chưa cập nhật',
-      email: email || 'bomon@vimaru.edu.vn',
-      phone: phone || '0225 3829 000',
+      facultyName: faculty?.name ?? '',
+      headOfDepartment: headOfDepartment.trim() || 'Chưa cập nhật',
+      email: email.trim() || 'bomon@vimaru.edu.vn',
+      phone: phone.trim() || '0225 3829 000',
       totalLecturers: Number(totalLecturers) || 5,
       totalCourses: Number(totalCourses) || 8,
     };
 
     onAddDepartment(newDepartment);
     setIsModalOpen(false);
-    // Reset
     setCode('');
     setName('');
     setFacultyId('');
@@ -60,218 +59,165 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
     setPhone('');
   };
 
-  const filteredDepartments = departments.filter((d) => {
+  const filteredDepartments = departments.filter((department) => {
     const matchesSearch =
-      d.code.toLowerCase().includes(search.toLowerCase()) ||
-      d.name.toLowerCase().includes(search.toLowerCase()) ||
-      d.headOfDepartment.toLowerCase().includes(search.toLowerCase());
-    const matchesFaculty = facultyFilter ? d.facultyId === facultyFilter : true;
-    return matchesSearch && matchesFaculty;
+      department.code.toLowerCase().includes(search.toLowerCase()) ||
+      department.name.toLowerCase().includes(search.toLowerCase()) ||
+      department.headOfDepartment.toLowerCase().includes(search.toLowerCase());
+    return matchesSearch && (!facultyFilter || department.facultyId === facultyFilter);
   });
 
   const columns: Column<Department>[] = [
     {
       key: 'code',
-      header: 'Mã Bộ Môn',
-      render: (row) => (
-        <span style={{ fontWeight: 700, color: 'var(--vmu-navy)' }}>
-          {row.code}
-        </span>
-      ),
+      header: 'Mã bộ môn',
+      width: '110px',
+      render: (row) => <span className="catalog-code">{row.code}</span>,
     },
     {
       key: 'name',
-      header: 'Tên Bộ Môn Chuyên Môn',
+      header: 'Tên bộ môn chuyên môn',
       render: (row) => (
         <div>
-          <div style={{ fontWeight: 600, color: 'var(--vmu-navy)' }}>
-            {row.name}
-          </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            👨‍🏫 Trưởng bộ môn: {row.headOfDepartment}
-          </div>
+          <div className="catalog-cell-primary">{row.name}</div>
+          <div className="catalog-cell-meta">Trưởng bộ môn: {row.headOfDepartment}</div>
         </div>
       ),
     },
     {
       key: 'facultyName',
-      header: 'Trực Thuộc Khoa / Viện',
-      render: (row) => (
-        <span className="badge badge-info">
-          🏛️ {row.facultyName}
-        </span>
-      ),
+      header: 'Khoa / viện trực thuộc',
+      render: (row) => <span className="catalog-cell-primary">{row.facultyName}</span>,
     },
     {
       key: 'contact',
-      header: 'Thông Tin Liên Hệ',
+      header: 'Thông tin liên hệ',
       render: (row) => (
-        <div style={{ fontSize: '13px' }}>
-          <div>✉️ {row.email}</div>
-          <div style={{ color: 'var(--text-muted)' }}>📞 {row.phone}</div>
+        <div className="catalog-contact">
+          <span><Mail aria-hidden="true" size={13} />{row.email}</span>
+          <span><Phone aria-hidden="true" size={13} />{row.phone}</span>
         </div>
       ),
     },
     {
       key: 'stats',
-      header: 'Quy Mô Đào Tạo',
+      header: 'Quy mô đào tạo',
+      width: '140px',
       render: (row) => (
-        <div style={{ fontSize: '13px' }}>
-          <div><strong>{row.totalLecturers}</strong> Giảng viên</div>
-          <div style={{ color: 'var(--vmu-blue)' }}><strong>{row.totalCourses}</strong> Học phần quản lý</div>
+        <div className="catalog-stats">
+          <span className="catalog-stat-line"><strong>{row.totalLecturers}</strong> giảng viên</span>
+          <span className="catalog-stat-line"><strong>{row.totalCourses}</strong> học phần</span>
         </div>
       ),
     },
     {
       key: 'actions',
-      header: 'Thao Tác',
+      header: 'Thao tác',
+      width: '64px',
       render: (row) => (
-        <button
-          className="btn btn-danger btn-sm"
-          onClick={() => onDeleteDepartment(row.id)}
-        >
-          🗑️ Xóa
-        </button>
+        <div className="catalog-actions">
+          <button
+            type="button"
+            className="catalog-icon-button catalog-icon-button--danger"
+            onClick={() => setDepartmentToDelete(row)}
+            aria-label={`Xóa ${row.name}`}
+            title="Xóa bộ môn"
+          >
+            <Trash2 aria-hidden="true" size={15} />
+          </button>
+        </div>
       ),
     },
   ];
 
   return (
-    <div>
-      <div className="page-header">
-        <div className="page-title-group">
-          <h2>Quản Lý Bộ Môn Đào Tạo</h2>
-          <p>Danh mục các Bộ môn chuyên môn trực thuộc các Khoa/Viện đào tạo Trường Đại học Hàng hải Việt Nam</p>
+    <div className="catalog-page">
+      <header className="catalog-page-header">
+        <div>
+          <h2>Danh mục bộ môn đào tạo</h2>
+          <p>Quản lý các bộ môn chuyên môn trực thuộc khoa và viện đào tạo.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
-          + Thêm Bộ Môn Mới
-        </button>
-      </div>
+      </header>
 
       <DataTable
         columns={columns}
         data={filteredDepartments}
-        searchPlaceholder="Tìm theo mã bộ môn, tên bộ môn, trưởng bộ môn..."
+        searchPlaceholder="Tìm mã, tên hoặc trưởng bộ môn..."
         searchValue={search}
         onSearchChange={setSearch}
         filterOptions={[
-          { label: 'Tất cả Khoa / Viện', value: '' },
-          ...faculties.map((f) => ({ label: f.name, value: f.id })),
+          { label: 'Tất cả khoa / viện', value: '' },
+          ...faculties.map((faculty) => ({ label: faculty.name, value: faculty.id })),
         ]}
         currentFilter={facultyFilter}
         onFilterChange={setFacultyFilter}
         onAddNew={() => setIsModalOpen(true)}
-        addNewLabel="+ Thêm Bộ Môn"
-        emptyMessage="Chưa có bộ môn nào được khởi tạo trong danh mục."
+        addNewLabel="Thêm bộ môn"
+        emptyMessage="Chưa có bộ môn nào trong danh mục."
         keyExtractor={(item) => item.id}
       />
 
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="THÊM MỚI BỘ MÔN CHUYÊN MÔN (TRỰC THUỘC KHOA)"
-      >
-        <form onSubmit={handleSubmit}>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Thêm bộ môn chuyên môn">
+        <form className="catalog-form" onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Khoa / Viện Trực Thuộc:</label>
-            <select
-              value={facultyId}
-              onChange={(e) => setFacultyId(e.target.value)}
-              required
-            >
-              <option value="">-- Chọn Khoa / Viện quản lý --</option>
-              {faculties.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name} ({f.code})
-                </option>
-              ))}
+            <label htmlFor="department-faculty">Khoa / viện trực thuộc</label>
+            <select id="department-faculty" value={facultyId} onChange={(event) => setFacultyId(event.target.value)} required>
+              <option value="">Chọn khoa / viện quản lý</option>
+              {faculties.map((faculty) => <option key={faculty.id} value={faculty.id}>{faculty.name} ({faculty.code})</option>)}
             </select>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }} className="form-group">
-            <div>
-              <label>Mã Bộ Môn:</label>
-              <input
-                type="text"
-                placeholder="VD: BM-CNPM"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                required
-              />
+          <div className="catalog-form-grid catalog-form-grid--code-name">
+            <div className="form-group">
+              <label htmlFor="department-code">Mã bộ môn</label>
+              <input id="department-code" type="text" placeholder="BM-CNPM" value={code} onChange={(event) => setCode(event.target.value)} required />
             </div>
-            <div>
-              <label>Tên Bộ Môn Chuyên Môn:</label>
-              <input
-                type="text"
-                placeholder="VD: Bộ môn Công nghệ Phần mềm"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
+            <div className="form-group">
+              <label htmlFor="department-name">Tên bộ môn chuyên môn</label>
+              <input id="department-name" type="text" placeholder="Bộ môn Công nghệ Phần mềm" value={name} onChange={(event) => setName(event.target.value)} required />
             </div>
           </div>
-
           <div className="form-group">
-            <label>Trưởng Bộ Môn:</label>
-            <input
-              type="text"
-              placeholder="VD: TS. Nguyễn Văn A"
-              value={headOfDepartment}
-              onChange={(e) => setHeadOfDepartment(e.target.value)}
-              required
-            />
+            <label htmlFor="department-head">Trưởng bộ môn</label>
+            <input id="department-head" type="text" placeholder="TS. Nguyễn Văn A" value={headOfDepartment} onChange={(event) => setHeadOfDepartment(event.target.value)} required />
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }} className="form-group">
-            <div>
-              <label>Email Liên Hệ:</label>
-              <input
-                type="email"
-                placeholder="bomon@vimaru.edu.vn"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
+          <div className="catalog-form-grid catalog-form-grid--2">
+            <div className="form-group">
+              <label htmlFor="department-email">Email liên hệ</label>
+              <input id="department-email" type="email" placeholder="bomon@vimaru.edu.vn" value={email} onChange={(event) => setEmail(event.target.value)} />
             </div>
-            <div>
-              <label>Số Điện Thoại:</label>
-              <input
-                type="text"
-                placeholder="0225 3829 xxx"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
+            <div className="form-group">
+              <label htmlFor="department-phone">Số điện thoại</label>
+              <input id="department-phone" type="tel" placeholder="0225 3829 xxx" value={phone} onChange={(event) => setPhone(event.target.value)} />
             </div>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }} className="form-group">
-            <div>
-              <label>Số Lượng Giảng Viên:</label>
-              <input
-                type="number"
-                value={totalLecturers}
-                onChange={(e) => setTotalLecturers(Number(e.target.value))}
-              />
+          <div className="catalog-form-grid catalog-form-grid--2">
+            <div className="form-group">
+              <label htmlFor="department-lecturers">Số lượng giảng viên</label>
+              <input id="department-lecturers" type="number" value={totalLecturers} onChange={(event) => setTotalLecturers(Number(event.target.value))} />
             </div>
-            <div>
-              <label>Số Học Phần Quản Lý:</label>
-              <input
-                type="number"
-                value={totalCourses}
-                onChange={(e) => setTotalCourses(Number(e.target.value))}
-              />
+            <div className="form-group">
+              <label htmlFor="department-courses">Số học phần quản lý</label>
+              <input id="department-courses" type="number" value={totalCourses} onChange={(event) => setTotalCourses(Number(event.target.value))} />
             </div>
           </div>
-
-          <div className="modal-footer" style={{ padding: '16px 0 0 0', backgroundColor: 'transparent', borderTop: 'none' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>
-              Hủy
-            </button>
-            <button type="submit" className="btn btn-primary">
-              Lưu Bộ Môn
-            </button>
+          <div className="modal-footer catalog-form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>Hủy</button>
+            <button type="submit" className="btn btn-primary">Lưu bộ môn</button>
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={departmentToDelete !== null}
+        onClose={() => setDepartmentToDelete(null)}
+        onConfirm={() => {
+          if (departmentToDelete) onDeleteDepartment(departmentToDelete.id);
+          setDepartmentToDelete(null);
+        }}
+        title="Xóa bộ môn?"
+        recordName={departmentToDelete?.name ?? ''}
+        confirmText="Xóa bộ môn"
+      />
     </div>
   );
 };

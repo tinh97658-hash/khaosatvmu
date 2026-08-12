@@ -967,3 +967,10 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Standardized the light application shell, spacing and responsive header behavior.
 - Added focused keyboard states and mobile content constraints.
 - Kept final visual verification pending until the parallel page updates are complete.
+
+### Implementation status - Frontend catalog and access refresh
+
+- Standardized catalog pages as compact searchable data tables with responsive overflow.
+- Added accessible form dialogs, validation and named deletion confirmations.
+- Rebuilt login, profile selection and user administration states without changing API contracts.
+- Verified the integrated frontend build and lint checks.

@@ -1,9 +1,18 @@
+import { LoaderCircle, ShieldCheck } from 'lucide-react';
+import '../styles/auth-admin.css';
+
 export function AuthLoading() {
   return (
     <main className="auth-loading" aria-live="polite">
-      <div className="auth-brand-mark compact">VMU</div>
-      <div className="auth-loading-line" />
-      <p>Đang kiểm tra phiên đăng nhập...</p>
+      <div className="auth-loading-panel">
+        <div className="auth-brand-mark compact" aria-hidden="true">VMU</div>
+        <div className="auth-loading-copy">
+          <span><ShieldCheck aria-hidden="true" /> CỔNG XÁC THỰC</span>
+          <strong>Đang kiểm tra phiên đăng nhập</strong>
+          <p>Vui lòng chờ trong giây lát.</p>
+        </div>
+        <LoaderCircle className="auth-spin auth-loading-spinner" aria-hidden="true" />
+      </div>
     </main>
   );
 }

@@ -1,4 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
+  Eye,
+  FileClock,
+  Filter,
+  LoaderCircle,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  ShieldPlus,
+  UserCheck,
+  UsersRound,
+  UserX,
+} from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { adminApi } from '../services/adminApi';
 import { ApiError } from '../services/apiClient';
@@ -10,8 +30,13 @@ import type {
   AdminUser,
   SaveAdminProfile,
 } from '../types';
+import '../styles/auth-admin.css';
 
 type AdminView = 'users' | 'audit';
+type StatusConfirmation =
+  | { type: 'user'; item: AdminUser }
+  | { type: 'profile'; item: AdminProfile }
+  | null;
 
 const emptyProfile: SaveAdminProfile = {
   name: '',
@@ -80,6 +105,7 @@ export function UsersAdminPage() {
   const [editingProfile, setEditingProfile] = useState<AdminProfile | null>(null);
   const [profileForm, setProfileForm] = useState<SaveAdminProfile>(emptyProfile);
   const [showProfileForm, setShowProfileForm] = useState(false);
+  const [statusConfirmation, setStatusConfirmation] = useState<StatusConfirmation>(null);
 
   const activeFilter = statusFilter === 'all' ? null : statusFilter === 'active';
 
@@ -108,9 +134,17 @@ export function UsersAdminPage() {
     }
   }, [auditPageNumber]);
 
-  useEffect(() => {
-    void adminApi.roles().then(setRoles).catch((requestError) => setError(messageFrom(requestError)));
+  const loadRoles = useCallback(async () => {
+    try {
+      setRoles(await adminApi.roles());
+    } catch (requestError) {
+      setError(messageFrom(requestError));
+    }
   }, []);
+
+  useEffect(() => {
+    void loadRoles();
+  }, [loadRoles]);
 
   useEffect(() => {
     if (view !== 'users') return;
@@ -169,12 +203,11 @@ export function UsersAdminPage() {
   };
 
   const handleUserStatus = async (user: AdminUser) => {
-    const action = user.isActive ? 'vô hiệu' : 'kích hoạt';
-    if (!window.confirm(`Xác nhận ${action} tài khoản ${user.email}?`)) return;
     setBusy(true);
     setError(null);
     try {
       replaceUser(await adminApi.setUserStatus(user.id, !user.isActive));
+      setStatusConfirmation(null);
     } catch (requestError) {
       setError(messageFrom(requestError));
     } finally {
@@ -217,12 +250,11 @@ export function UsersAdminPage() {
 
   const handleProfileStatus = async (profile: AdminProfile) => {
     if (!selectedUser) return;
-    const action = profile.isActive ? 'vô hiệu' : 'kích hoạt';
-    if (!window.confirm(`Xác nhận ${action} profile ${profile.name}?`)) return;
     setBusy(true);
     setError(null);
     try {
       replaceProfile(await adminApi.setProfileStatus(selectedUser.id, profile.id, !profile.isActive));
+      setStatusConfirmation(null);
     } catch (requestError) {
       setError(messageFrom(requestError));
     } finally {
@@ -230,83 +262,138 @@ export function UsersAdminPage() {
     }
   };
 
+  const retryCurrentView = () => {
+    if (roles.length === 0) void loadRoles();
+    if (view === 'users') {
+      void loadUsers();
+    } else {
+      void loadAudit();
+    }
+  };
+
+  const hasUserFilters = search.trim().length > 0 || statusFilter !== 'all';
+  const confirmationItem = statusConfirmation?.item;
+  const confirmationIsActive = confirmationItem?.isActive ?? false;
+
   return (
     <div className="admin-users-page">
-      <div className="page-header admin-page-header">
-        <div className="page-title-group">
-          <h2>Quản trị người dùng và phân quyền</h2>
-          <p>Quản lý allowlist tài khoản Google, profile làm việc và lịch sử xác thực.</p>
+      <header className="admin-workspace-header">
+        <div>
+          <span className="admin-section-label">QUẢN TRỊ TRUY CẬP</span>
+          <h2>Người dùng và phân quyền</h2>
+          <p>Quản lý tài khoản Google, hồ sơ làm việc và lịch sử xác thực.</p>
         </div>
         {view === 'users' && (
-          <button className="btn btn-primary" onClick={() => setIsAddUserOpen(true)}>
-            + Thêm người dùng
+          <button
+            type="button"
+            className="btn btn-primary admin-primary-action"
+            onClick={() => { setError(null); setIsAddUserOpen(true); }}
+          >
+            <Plus aria-hidden="true" />
+            Thêm người dùng
           </button>
         )}
-      </div>
+      </header>
 
       <div className="admin-view-tabs" role="tablist" aria-label="Chế độ quản trị người dùng">
         <button
+          id="admin-users-tab"
+          type="button"
           className={view === 'users' ? 'active' : ''}
-          onClick={() => setView('users')}
+          onClick={() => { setView('users'); setError(null); }}
           role="tab"
           aria-selected={view === 'users'}
+          aria-controls="admin-users-panel"
         >
-          Tài khoản &amp; profile
+          <UsersRound aria-hidden="true" />
+          Tài khoản và hồ sơ
         </button>
         <button
+          id="admin-audit-tab"
+          type="button"
           className={view === 'audit' ? 'active' : ''}
-          onClick={() => setView('audit')}
+          onClick={() => { setView('audit'); setError(null); }}
           role="tab"
           aria-selected={view === 'audit'}
+          aria-controls="admin-audit-panel"
         >
-          Nhật ký audit
+          <FileClock aria-hidden="true" />
+          Nhật ký hệ thống
         </button>
       </div>
 
-      {error && <div className="admin-alert" role="alert">{error}</div>}
+      {error && !isAddUserOpen && !selectedUser && !statusConfirmation && (
+        <div className="admin-alert admin-alert-action" role="alert">
+          <CircleAlert aria-hidden="true" />
+          <span>{error}</span>
+          <button type="button" onClick={retryCurrentView} disabled={loading}>
+            <RefreshCw aria-hidden="true" />
+            Thử lại
+          </button>
+        </div>
+      )}
 
       {view === 'users' ? (
-        <section className="admin-table-section">
-          <div className="table-toolbar">
-            <div className="search-box">
-              <span aria-hidden="true">⌕</span>
+        <section
+          id="admin-users-panel"
+          className="admin-table-section"
+          role="tabpanel"
+          aria-labelledby="admin-users-tab"
+        >
+          <div className="table-toolbar admin-table-toolbar">
+            <label className="search-box admin-search-box">
+              <Search aria-hidden="true" />
+              <span className="admin-visually-hidden">Tìm người dùng</span>
               <input
                 type="search"
                 value={search}
                 onChange={(event) => { setSearch(event.target.value); setPage(1); }}
-                placeholder="Tìm theo email hoặc họ tên..."
-                aria-label="Tìm người dùng"
+                placeholder="Tìm theo email hoặc họ tên"
               />
+            </label>
+            <div className="admin-toolbar-end">
+              <span className="admin-result-count" aria-live="polite">
+                {loading ? 'Đang cập nhật' : `${usersPage?.totalCount ?? 0} tài khoản`}
+              </span>
+              <label className="admin-filter-control">
+                <Filter aria-hidden="true" />
+                <span className="admin-visually-hidden">Lọc trạng thái tài khoản</span>
+                <select
+                  className="filter-select"
+                  value={statusFilter}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value as typeof statusFilter);
+                    setPage(1);
+                  }}
+                >
+                  <option value="all">Tất cả trạng thái</option>
+                  <option value="active">Đang hoạt động</option>
+                  <option value="disabled">Đã vô hiệu</option>
+                </select>
+              </label>
             </div>
-            <select
-              className="filter-select"
-              value={statusFilter}
-              onChange={(event) => {
-                setStatusFilter(event.target.value as typeof statusFilter);
-                setPage(1);
-              }}
-              aria-label="Lọc trạng thái tài khoản"
-            >
-              <option value="all">Tất cả trạng thái</option>
-              <option value="active">Đang hoạt động</option>
-              <option value="disabled">Đã vô hiệu</option>
-            </select>
           </div>
 
-          <div className="table-container">
+          <div className="table-container admin-table-container" aria-busy={loading}>
             <table className="vmu-table admin-users-table">
+              <caption className="admin-visually-hidden">Danh sách tài khoản được phép truy cập hệ thống</caption>
               <thead>
                 <tr>
-                  <th>Người dùng</th>
-                  <th>Trạng thái</th>
-                  <th>Profile</th>
-                  <th>Lần đăng nhập cuối</th>
-                  <th>Thao tác</th>
+                  <th scope="col">Người dùng</th>
+                  <th scope="col">Trạng thái</th>
+                  <th scope="col">Hồ sơ và vai trò</th>
+                  <th scope="col">Đăng nhập gần nhất</th>
+                  <th scope="col"><span className="admin-visually-hidden">Thao tác</span></th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={5} className="admin-empty-row">Đang tải dữ liệu...</td></tr>
+                  <tr>
+                    <td colSpan={5} className="admin-state-row">
+                      <LoaderCircle className="auth-spin" aria-hidden="true" />
+                      <strong>Đang tải danh sách người dùng</strong>
+                    </td>
+                  </tr>
                 ) : usersPage?.items.length ? usersPage.items.map((user) => (
                   <tr key={user.id}>
                     <td>
@@ -314,127 +401,262 @@ export function UsersAdminPage() {
                       <span className="admin-cell-subtitle">{user.email}</span>
                     </td>
                     <td>
-                      <span className={`badge ${user.isActive ? 'badge-success' : 'badge-danger'}`}>
+                      <span className={`admin-status ${user.isActive ? 'is-active' : 'is-disabled'}`}>
+                        <span aria-hidden="true" />
                         {user.isActive ? 'Hoạt động' : 'Vô hiệu'}
                       </span>
                     </td>
                     <td>
                       <div className="admin-profile-tags">
                         {user.profiles.length === 0
-                          ? <span className="admin-cell-subtitle">Chưa có profile</span>
+                          ? <span className="admin-cell-subtitle">Chưa có hồ sơ</span>
                           : user.profiles.map((profile) => (
                             <span
                               key={profile.id}
-                              className={`badge ${profile.isActive ? 'badge-info' : 'badge-danger'}`}
+                              className={`admin-role-label ${profile.isActive ? '' : 'is-disabled'}`}
+                              title={`${profile.name}${profile.isActive ? '' : ' - Đã vô hiệu'}`}
                             >
                               {profile.roleCode}
                             </span>
                           ))}
                       </div>
                     </td>
-                    <td>{formatDate(user.lastLoginAt)}</td>
-                    <td>
-                      <button className="btn btn-secondary btn-sm" onClick={() => {
-                        setSelectedUser(user);
-                        setShowProfileForm(false);
-                        setError(null);
-                      }}>
-                        Chi tiết
+                    <td className="admin-date-cell">{formatDate(user.lastLoginAt)}</td>
+                    <td className="admin-action-cell">
+                      <button
+                        type="button"
+                        className="admin-icon-button"
+                        title={`Xem chi tiết ${user.email}`}
+                        aria-label={`Xem chi tiết ${user.email}`}
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setShowProfileForm(false);
+                          setError(null);
+                        }}
+                      >
+                        <Eye aria-hidden="true" />
                       </button>
                     </td>
                   </tr>
                 )) : (
-                  <tr><td colSpan={5} className="admin-empty-row">Không có người dùng phù hợp.</td></tr>
+                  <tr>
+                    <td colSpan={5} className="admin-state-row admin-empty-row">
+                      <UsersRound aria-hidden="true" />
+                      <strong>{hasUserFilters ? 'Không có kết quả phù hợp' : 'Chưa có người dùng'}</strong>
+                      <span>
+                        {hasUserFilters
+                          ? 'Thử thay đổi từ khóa hoặc bộ lọc trạng thái.'
+                          : 'Thêm tài khoản Google đầu tiên để cấp quyền truy cập.'}
+                      </span>
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
           </div>
 
-          <div className="pagination">
-            <div>Trang <strong>{page}</strong> / {totalPages} · {usersPage?.totalCount ?? 0} tài khoản</div>
+          <div className="pagination admin-pagination">
+            <div>Trang <strong>{page}</strong> / {totalPages}</div>
             <div className="admin-pagination-actions">
-              <button className="btn btn-secondary btn-sm" disabled={page <= 1 || loading} onClick={() => setPage(page - 1)}>Trước</button>
-              <button className="btn btn-secondary btn-sm" disabled={page >= totalPages || loading} onClick={() => setPage(page + 1)}>Sau</button>
+              <button
+                type="button"
+                className="admin-icon-button"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage(page - 1)}
+                aria-label="Trang trước"
+                title="Trang trước"
+              >
+                <ChevronLeft aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="admin-icon-button"
+                disabled={page >= totalPages || loading}
+                onClick={() => setPage(page + 1)}
+                aria-label="Trang sau"
+                title="Trang sau"
+              >
+                <ChevronRight aria-hidden="true" />
+              </button>
             </div>
           </div>
         </section>
       ) : (
-        <section className="admin-table-section">
+        <section
+          id="admin-audit-panel"
+          className="admin-table-section"
+          role="tabpanel"
+          aria-labelledby="admin-audit-tab"
+        >
           <div className="admin-audit-heading">
             <div>
               <h3>Lịch sử xác thực và quản trị</h3>
-              <p>Các sự kiện mới nhất được ghi nhận trực tiếp từ backend.</p>
+              <p>Các sự kiện mới nhất được ghi nhận trực tiếp từ hệ thống.</p>
             </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => void loadAudit()} disabled={loading}>Làm mới</button>
+            <div className="admin-audit-actions">
+              <span className="admin-result-count" aria-live="polite">
+                {loading ? 'Đang cập nhật' : `${auditPage?.totalCount ?? 0} sự kiện`}
+              </span>
+              <button
+                type="button"
+                className="admin-icon-button"
+                onClick={() => void loadAudit()}
+                disabled={loading}
+                aria-label="Làm mới nhật ký"
+                title="Làm mới nhật ký"
+              >
+                <RefreshCw aria-hidden="true" />
+              </button>
+            </div>
           </div>
-          <div className="table-container">
+          <div className="table-container admin-table-container" aria-busy={loading}>
             <table className="vmu-table admin-audit-table">
-              <thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Tài khoản</th><th>Đối tượng</th></tr></thead>
+              <caption className="admin-visually-hidden">Nhật ký xác thực và thao tác quản trị</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Thời gian</th>
+                  <th scope="col">Sự kiện</th>
+                  <th scope="col">Tài khoản</th>
+                  <th scope="col">Đối tượng</th>
+                </tr>
+              </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={4} className="admin-empty-row">Đang tải nhật ký...</td></tr>
+                  <tr>
+                    <td colSpan={4} className="admin-state-row">
+                      <LoaderCircle className="auth-spin" aria-hidden="true" />
+                      <strong>Đang tải nhật ký hệ thống</strong>
+                    </td>
+                  </tr>
                 ) : auditPage?.items.length ? auditPage.items.map((log) => (
                   <tr key={log.id}>
-                    <td>{formatDate(log.createdAt)}</td>
-                    <td><span className="badge badge-info">{eventNames[log.event] ?? log.event}</span></td>
+                    <td className="admin-date-cell">{formatDate(log.createdAt)}</td>
+                    <td><span className="admin-event-label">{eventNames[log.event] ?? log.event}</span></td>
                     <td>{log.email ?? 'Không xác định'}</td>
-                    <td><code>{log.profileId ? `Profile ${log.profileId.slice(0, 8)}` : `User ${log.userId?.slice(0, 8) ?? '-'}`}</code></td>
+                    <td>
+                      <code>
+                        {log.profileId
+                          ? `Profile ${log.profileId.slice(0, 8)}`
+                          : `User ${log.userId?.slice(0, 8) ?? '-'}`}
+                      </code>
+                    </td>
                   </tr>
                 )) : (
-                  <tr><td colSpan={4} className="admin-empty-row">Chưa có sự kiện audit.</td></tr>
+                  <tr>
+                    <td colSpan={4} className="admin-state-row admin-empty-row">
+                      <FileClock aria-hidden="true" />
+                      <strong>Chưa có sự kiện nhật ký</strong>
+                      <span>Các hoạt động xác thực và quản trị sẽ xuất hiện tại đây.</span>
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
           </div>
-          <div className="pagination">
-            <div>Trang <strong>{auditPageNumber}</strong> / {auditTotalPages} · {auditPage?.totalCount ?? 0} sự kiện</div>
+          <div className="pagination admin-pagination">
+            <div>Trang <strong>{auditPageNumber}</strong> / {auditTotalPages}</div>
             <div className="admin-pagination-actions">
-              <button className="btn btn-secondary btn-sm" disabled={auditPageNumber <= 1 || loading} onClick={() => setAuditPageNumber(auditPageNumber - 1)}>Trước</button>
-              <button className="btn btn-secondary btn-sm" disabled={auditPageNumber >= auditTotalPages || loading} onClick={() => setAuditPageNumber(auditPageNumber + 1)}>Sau</button>
+              <button
+                type="button"
+                className="admin-icon-button"
+                disabled={auditPageNumber <= 1 || loading}
+                onClick={() => setAuditPageNumber(auditPageNumber - 1)}
+                aria-label="Trang trước"
+                title="Trang trước"
+              >
+                <ChevronLeft aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="admin-icon-button"
+                disabled={auditPageNumber >= auditTotalPages || loading}
+                onClick={() => setAuditPageNumber(auditPageNumber + 1)}
+                aria-label="Trang sau"
+                title="Trang sau"
+              >
+                <ChevronRight aria-hidden="true" />
+              </button>
             </div>
           </div>
         </section>
       )}
 
-      <Modal isOpen={isAddUserOpen} onClose={() => setIsAddUserOpen(false)} title="THÊM NGƯỜI DÙNG VÀO ALLOWLIST">
-        <form onSubmit={handleCreateUser}>
+      <Modal
+        isOpen={isAddUserOpen}
+        onClose={() => { setIsAddUserOpen(false); setError(null); }}
+        title="Thêm người dùng vào danh sách truy cập"
+      >
+        <form className="admin-form" onSubmit={handleCreateUser} aria-busy={busy}>
+          <div className="admin-form-intro">
+            <ShieldPlus aria-hidden="true" />
+            <p>Tài khoản chỉ có thể đăng nhập sau khi được tạo hồ sơ làm việc.</p>
+          </div>
           <div className="form-group">
             <label htmlFor="admin-display-name">Họ và tên</label>
-            <input id="admin-display-name" value={newUser.displayName} onChange={(event) => setNewUser({ ...newUser, displayName: event.target.value })} maxLength={200} />
+            <input
+              id="admin-display-name"
+              value={newUser.displayName}
+              onChange={(event) => setNewUser({ ...newUser, displayName: event.target.value })}
+              maxLength={200}
+              autoComplete="name"
+            />
           </div>
           <div className="form-group">
             <label htmlFor="admin-email">Email tài khoản Google</label>
-            <input id="admin-email" type="email" value={newUser.email} onChange={(event) => setNewUser({ ...newUser, email: event.target.value })} required maxLength={320} placeholder="user@gmail.com" />
+            <input
+              id="admin-email"
+              type="email"
+              value={newUser.email}
+              onChange={(event) => setNewUser({ ...newUser, email: event.target.value })}
+              required
+              maxLength={320}
+              placeholder="user@gmail.com"
+              autoComplete="email"
+            />
           </div>
-          {error && <div className="admin-alert" role="alert">{error}</div>}
+          {error && (
+            <div className="admin-alert" role="alert">
+              <CircleAlert aria-hidden="true" />
+              <span>{error}</span>
+            </div>
+          )}
           <div className="modal-footer admin-inline-footer">
-            <button type="button" className="btn btn-secondary" onClick={() => setIsAddUserOpen(false)}>Hủy</button>
-            <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Đang lưu...' : 'Tạo tài khoản'}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => { setIsAddUserOpen(false); setError(null); }}>
+              Hủy
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={busy}>
+              {busy ? <LoaderCircle className="auth-spin" aria-hidden="true" /> : <Plus aria-hidden="true" />}
+              {busy ? 'Đang lưu...' : 'Tạo tài khoản'}
+            </button>
           </div>
         </form>
       </Modal>
 
       <Modal
         isOpen={selectedUser !== null}
-        onClose={() => { setSelectedUser(null); setShowProfileForm(false); }}
-        title={showProfileForm ? (editingProfile ? 'CẬP NHẬT PROFILE' : 'TẠO PROFILE MỚI') : 'CHI TIẾT TÀI KHOẢN'}
+        onClose={() => { setSelectedUser(null); setShowProfileForm(false); setError(null); }}
+        title={showProfileForm ? (editingProfile ? 'Cập nhật hồ sơ' : 'Tạo hồ sơ mới') : 'Chi tiết tài khoản'}
       >
         {selectedUser && (showProfileForm ? (
-          <form onSubmit={handleSaveProfile}>
+          <form className="admin-form" onSubmit={handleSaveProfile} aria-busy={busy}>
+            <button type="button" className="admin-back-button" onClick={() => { setShowProfileForm(false); setError(null); }}>
+              <ArrowLeft aria-hidden="true" />
+              Quay lại tài khoản
+            </button>
             <div className="admin-form-grid">
               <div className="form-group">
-                <label htmlFor="profile-name">Tên profile</label>
+                <label htmlFor="profile-name">Tên hồ sơ</label>
                 <input id="profile-name" value={profileForm.name} onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })} required maxLength={200} />
               </div>
               <div className="form-group">
-                <label htmlFor="profile-code">Mã profile</label>
+                <label htmlFor="profile-code">Mã hồ sơ</label>
                 <input id="profile-code" value={profileForm.code} onChange={(event) => setProfileForm({ ...profileForm, code: event.target.value })} required maxLength={100} />
               </div>
             </div>
             <div className="form-group">
-              <label htmlFor="profile-role">Role được cấp</label>
+              <label htmlFor="profile-role">Vai trò được cấp</label>
               <select id="profile-role" value={profileForm.roleId} onChange={(event) => setProfileForm({ ...profileForm, roleId: event.target.value })} required>
-                <option value="">Chọn role</option>
+                <option value="">Chọn vai trò</option>
                 {roles.map((role) => <option key={role.id} value={role.id}>{role.name} ({role.code})</option>)}
               </select>
             </div>
@@ -450,33 +672,56 @@ export function UsersAdminPage() {
             </div>
             <label className="admin-checkbox-row">
               <input type="checkbox" checked={profileForm.isDefault} onChange={(event) => setProfileForm({ ...profileForm, isDefault: event.target.checked })} />
-              Đặt làm profile mặc định
+              Đặt làm hồ sơ mặc định
             </label>
-            {error && <div className="admin-alert" role="alert">{error}</div>}
+            {error && (
+              <div className="admin-alert" role="alert">
+                <CircleAlert aria-hidden="true" />
+                <span>{error}</span>
+              </div>
+            )}
             <div className="modal-footer admin-inline-footer">
-              <button type="button" className="btn btn-secondary" onClick={() => setShowProfileForm(false)}>Quay lại</button>
-              <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Đang lưu...' : 'Lưu profile'}</button>
+              <button type="button" className="btn btn-secondary" onClick={() => { setShowProfileForm(false); setError(null); }}>
+                Hủy
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                {busy ? <LoaderCircle className="auth-spin" aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
+                {busy ? 'Đang lưu...' : 'Lưu hồ sơ'}
+              </button>
             </div>
           </form>
         ) : (
-          <div>
+          <div className="admin-account-detail">
             <div className="admin-account-summary">
-              <div>
-                <strong>{selectedUser.displayName || 'Chưa cập nhật họ tên'}</strong>
-                <span>{selectedUser.email}</span>
-                <small>Đăng nhập cuối: {formatDate(selectedUser.lastLoginAt)}</small>
+              <div className="admin-account-identity">
+                <div className="admin-account-avatar" aria-hidden="true">
+                  <UsersRound />
+                </div>
+                <div>
+                  <strong>{selectedUser.displayName || 'Chưa cập nhật họ tên'}</strong>
+                  <span>{selectedUser.email}</span>
+                  <small>Đăng nhập gần nhất: {formatDate(selectedUser.lastLoginAt)}</small>
+                </div>
               </div>
               <button
+                type="button"
                 className={`btn btn-sm ${selectedUser.isActive ? 'btn-danger' : 'btn-primary'}`}
-                onClick={() => void handleUserStatus(selectedUser)}
+                onClick={() => { setError(null); setStatusConfirmation({ type: 'user', item: selectedUser }); }}
                 disabled={busy}
               >
+                {selectedUser.isActive ? <UserX aria-hidden="true" /> : <UserCheck aria-hidden="true" />}
                 {selectedUser.isActive ? 'Vô hiệu tài khoản' : 'Kích hoạt tài khoản'}
               </button>
             </div>
             <div className="admin-profile-heading">
-              <div><h4>Profile làm việc</h4><p>Mỗi profile có role và phạm vi quyền độc lập.</p></div>
-              <button className="btn btn-primary btn-sm" onClick={() => openProfileForm()}>+ Tạo profile</button>
+              <div>
+                <h4>Hồ sơ làm việc</h4>
+                <p>Mỗi hồ sơ có vai trò và phạm vi quyền độc lập.</p>
+              </div>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => openProfileForm()}>
+                <Plus aria-hidden="true" />
+                Tạo hồ sơ
+              </button>
             </div>
             <div className="admin-profile-list">
               {selectedUser.profiles.length ? selectedUser.profiles.map((profile) => (
@@ -484,24 +729,99 @@ export function UsersAdminPage() {
                   <div>
                     <div className="admin-profile-title">
                       <strong>{profile.name}</strong>
-                      {profile.isDefault && <span className="badge badge-warning">Mặc định</span>}
-                      <span className={`badge ${profile.isActive ? 'badge-success' : 'badge-danger'}`}>{profile.isActive ? 'Hoạt động' : 'Vô hiệu'}</span>
+                      {profile.isDefault && <span className="admin-role-label is-default">Mặc định</span>}
+                      <span className={`admin-status ${profile.isActive ? 'is-active' : 'is-disabled'}`}>
+                        <span aria-hidden="true" />
+                        {profile.isActive ? 'Hoạt động' : 'Vô hiệu'}
+                      </span>
                     </div>
                     <span>{profile.roleName} · {profile.code}</span>
                     <small>{profile.organizationUnitName || 'Toàn hệ thống'}{profile.organizationUnitCode ? ` (${profile.organizationUnitCode})` : ''}</small>
                   </div>
                   <div className="admin-row-actions">
-                    <button className="btn btn-secondary btn-sm" onClick={() => openProfileForm(profile)}>Sửa</button>
-                    <button className={`btn btn-sm ${profile.isActive ? 'btn-danger' : 'btn-secondary'}`} onClick={() => void handleProfileStatus(profile)} disabled={busy}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => openProfileForm(profile)}>
+                      <Pencil aria-hidden="true" />
+                      Sửa
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${profile.isActive ? 'btn-danger' : 'btn-secondary'}`}
+                      onClick={() => { setError(null); setStatusConfirmation({ type: 'profile', item: profile }); }}
+                      disabled={busy}
+                    >
+                      {profile.isActive ? <UserX aria-hidden="true" /> : <UserCheck aria-hidden="true" />}
                       {profile.isActive ? 'Vô hiệu' : 'Kích hoạt'}
                     </button>
                   </div>
                 </div>
-              )) : <div className="admin-empty-state">Tài khoản chưa có profile nên chưa thể đăng nhập hệ thống.</div>}
+              )) : (
+                <div className="admin-empty-state">
+                  <ShieldPlus aria-hidden="true" />
+                  <strong>Chưa có hồ sơ làm việc</strong>
+                  <span>Tài khoản chưa thể đăng nhập cho đến khi được cấp hồ sơ.</span>
+                </div>
+              )}
             </div>
-            {error && <div className="admin-alert" role="alert">{error}</div>}
+            {error && (
+              <div className="admin-alert" role="alert">
+                <CircleAlert aria-hidden="true" />
+                <span>{error}</span>
+              </div>
+            )}
           </div>
         ))}
+      </Modal>
+
+      <Modal
+        isOpen={statusConfirmation !== null}
+        onClose={() => { if (!busy) { setStatusConfirmation(null); setError(null); } }}
+        title={confirmationIsActive ? 'Xác nhận vô hiệu' : 'Xác nhận kích hoạt'}
+      >
+        {statusConfirmation && (
+          <div className="admin-confirmation" aria-busy={busy}>
+            <div className={`admin-confirmation-icon ${confirmationIsActive ? 'is-danger' : 'is-success'}`}>
+              {confirmationIsActive ? <UserX aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
+            </div>
+            <div>
+              <p>
+                {statusConfirmation.type === 'user'
+                  ? `${confirmationIsActive ? 'Vô hiệu' : 'Kích hoạt'} tài khoản ${statusConfirmation.item.email}?`
+                  : `${confirmationIsActive ? 'Vô hiệu' : 'Kích hoạt'} hồ sơ ${statusConfirmation.item.name}?`}
+              </p>
+              <span>
+                {confirmationIsActive
+                  ? 'Đối tượng này sẽ không thể được sử dụng cho các phiên đăng nhập mới.'
+                  : 'Đối tượng này sẽ có thể được sử dụng lại theo quyền đã cấp.'}
+              </span>
+            </div>
+            {error && (
+              <div className="admin-alert" role="alert">
+                <CircleAlert aria-hidden="true" />
+                <span>{error}</span>
+              </div>
+            )}
+            <div className="modal-footer admin-inline-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => { setStatusConfirmation(null); setError(null); }} disabled={busy}>
+                Hủy
+              </button>
+              <button
+                type="button"
+                className={`btn ${confirmationIsActive ? 'btn-danger' : 'btn-primary'}`}
+                onClick={() => {
+                  if (statusConfirmation.type === 'user') {
+                    void handleUserStatus(statusConfirmation.item);
+                  } else {
+                    void handleProfileStatus(statusConfirmation.item);
+                  }
+                }}
+                disabled={busy}
+              >
+                {busy && <LoaderCircle className="auth-spin" aria-hidden="true" />}
+                {busy ? 'Đang xử lý...' : (confirmationIsActive ? 'Xác nhận vô hiệu' : 'Xác nhận kích hoạt')}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

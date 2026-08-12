@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
-import { Modal } from '../components/Modal';
-import type { CourseClass, Course, Lecturer, ClassGroup } from '../types';
+import { ConfirmDialog, Modal } from '../components/Modal';
+import type { ClassGroup, Course, CourseClass, Lecturer } from '../types';
 
 interface ClassesPageProps {
   classes: CourseClass[];
@@ -24,117 +25,113 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  // Add Class Group Modal State
+  const [classToDelete, setClassToDelete] = useState<CourseClass | null>(null);
+  const [validationError, setValidationError] = useState('');
   const [addingGroupForClass, setAddingGroupForClass] = useState<CourseClass | null>(null);
   const [groupCode, setGroupCode] = useState('N01');
   const [selectedLecturerId, setSelectedLecturerId] = useState('');
   const [groupStudents, setGroupStudents] = useState(30);
   const [groupRoom, setGroupRoom] = useState('A6-302');
   const [groupSchedule, setGroupSchedule] = useState('Thứ 2 (Tiết 1-3)');
-
-  // Form states for creating a new Class
   const [code, setCode] = useState('');
   const [courseId, setCourseId] = useState(courses[0]?.id || '');
-  const [lecturerName, setLecturerName] = useState('');
-  const [lecturerEmail, setLecturerEmail] = useState('');
   const [semester, setSemester] = useState('Học kỳ II');
   const [academicYear, setAcademicYear] = useState('2025-2026');
   const [totalStudents, setTotalStudents] = useState('60');
   const [room, setRoom] = useState('A6-302');
 
-  const filtered = classes.filter((c) => {
-    const matchSearch =
-      c.code.toLowerCase().includes(search.toLowerCase()) ||
-      c.courseName.toLowerCase().includes(search.toLowerCase()) ||
-      c.lecturerName.toLowerCase().includes(search.toLowerCase()) ||
-      (c.groups && c.groups.some((g) => g.lecturerName.toLowerCase().includes(search.toLowerCase())));
-    const matchStatus = !statusFilter || c.surveyStatus === statusFilter;
-    return matchSearch && matchStatus;
+  const filtered = classes.filter((courseClass) => {
+    const normalizedSearch = search.toLowerCase();
+    const matchesSearch =
+      courseClass.code.toLowerCase().includes(normalizedSearch) ||
+      courseClass.courseName.toLowerCase().includes(normalizedSearch) ||
+      courseClass.lecturerName.toLowerCase().includes(normalizedSearch) ||
+      Boolean(courseClass.groups?.some((group) => group.lecturerName.toLowerCase().includes(normalizedSearch)));
+    return matchesSearch && (!statusFilter || courseClass.surveyStatus === statusFilter);
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!code.trim()) {
-      alert('Vui lòng điền mã lớp học phần!');
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!code.trim() || !courseId) {
+      setValidationError('Vui lòng nhập mã lớp và chọn học phần.');
       return;
     }
-    const selectedCourse = courses.find((crs) => crs.id === courseId);
+
+    const selectedCourse = courses.find((course) => course.id === courseId);
     const classId = `cls-${Date.now()}`;
-
-    // Auto-generate default N01 & N02 groups
-    const defaultN01: ClassGroup = {
-      id: `grp-${Date.now()}-1`,
-      classId,
-      groupCode: 'N01',
-      fullGroupCode: `${code}.N01`,
-      lecturerId: 'lec-1',
-      lecturerName: lecturerName || 'TS. Nguyễn Văn A',
-      lecturerEmail: lecturerEmail || 'anguyen@vimaru.edu.vn',
-      studentCount: Math.ceil((parseInt(totalStudents) || 60) / 2),
-      room: room || 'A6-302 (PM1)',
-      schedule: 'Thứ 2 (Tiết 1-3)',
-      surveyStatus: 'Đang khảo sát',
-      completedResponses: 0,
-    };
-
-    const defaultN02: ClassGroup = {
-      id: `grp-${Date.now()}-2`,
-      classId,
-      groupCode: 'N02',
-      fullGroupCode: `${code}.N02`,
-      lecturerId: 'lec-2',
-      lecturerName: lecturerName || 'ThS. Trần Thị B',
-      lecturerEmail: lecturerEmail || 'btran@vimaru.edu.vn',
-      studentCount: Math.floor((parseInt(totalStudents) || 60) / 2),
-      room: room || 'A6-304 (PM2)',
-      schedule: 'Thứ 4 (Tiết 4-6)',
-      surveyStatus: 'Đang khảo sát',
-      completedResponses: 0,
-    };
+    const studentCount = parseInt(totalStudents) || 60;
+    const defaultGroups: ClassGroup[] = [
+      {
+        id: `grp-${Date.now()}-1`,
+        classId,
+        groupCode: 'N01',
+        fullGroupCode: `${code.trim()}.N01`,
+        lecturerId: 'lec-1',
+        lecturerName: 'TS. Nguyễn Văn A',
+        lecturerEmail: 'anguyen@vimaru.edu.vn',
+        studentCount: Math.ceil(studentCount / 2),
+        room: room.trim() || 'A6-302 (PM1)',
+        schedule: 'Thứ 2 (Tiết 1-3)',
+        surveyStatus: 'Đang khảo sát',
+        completedResponses: 0,
+      },
+      {
+        id: `grp-${Date.now()}-2`,
+        classId,
+        groupCode: 'N02',
+        fullGroupCode: `${code.trim()}.N02`,
+        lecturerId: 'lec-2',
+        lecturerName: 'ThS. Trần Thị B',
+        lecturerEmail: 'btran@vimaru.edu.vn',
+        studentCount: Math.floor(studentCount / 2),
+        room: room.trim() || 'A6-304 (PM2)',
+        schedule: 'Thứ 4 (Tiết 4-6)',
+        surveyStatus: 'Đang khảo sát',
+        completedResponses: 0,
+      },
+    ];
 
     const newClass: CourseClass = {
       id: classId,
-      code,
+      code: code.trim(),
       courseId,
       courseCode: selectedCourse?.code || 'IT201',
       courseName: selectedCourse?.name || 'Lập trình Web nâng cao',
-      lecturerName: lecturerName || 'Phân công theo Nhóm N01, N02',
-      lecturerEmail: lecturerEmail || 'giangvien@vimaru.edu.vn',
+      lecturerName: 'Phân công theo nhóm N01, N02',
+      lecturerEmail: 'giangvien@vimaru.edu.vn',
       semester,
       academicYear,
-      totalStudents: parseInt(totalStudents) || 60,
-      room: room || 'Giảng đường',
+      totalStudents: studentCount,
+      room: room.trim() || 'Giảng đường',
       surveyStatus: 'Đang khảo sát',
       completedResponses: 0,
-      groups: [defaultN01, defaultN02],
+      groups: defaultGroups,
     };
 
     onAddClass(newClass);
     setIsModalOpen(false);
+    setValidationError('');
     setCode('');
-    setLecturerName('');
-    setLecturerEmail('');
   };
 
-  const handleAddGroupSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddGroupSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
     if (!addingGroupForClass || !selectedLecturerId) return;
 
-    const lecturer = lecturers.find((l) => l.id === selectedLecturerId);
+    const lecturer = lecturers.find((item) => item.id === selectedLecturerId);
     if (!lecturer) return;
 
     const newGroup: ClassGroup = {
       id: `grp-${Date.now()}`,
       classId: addingGroupForClass.id,
-      groupCode,
-      fullGroupCode: `${addingGroupForClass.code}.${groupCode}`,
+      groupCode: groupCode.trim(),
+      fullGroupCode: `${addingGroupForClass.code}.${groupCode.trim()}`,
       lecturerId: lecturer.id,
       lecturerName: lecturer.fullName,
       lecturerEmail: lecturer.email,
       studentCount: Number(groupStudents) || 30,
-      room: groupRoom || 'A6-302',
-      schedule: groupSchedule || 'Thứ 2 (Tiết 1-3)',
+      room: groupRoom.trim() || 'A6-302',
+      schedule: groupSchedule.trim() || 'Thứ 2 (Tiết 1-3)',
       surveyStatus: 'Đang khảo sát',
       completedResponses: 0,
     };
@@ -143,74 +140,55 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     setAddingGroupForClass(null);
   };
 
+  const openGroupModal = (courseClass: CourseClass) => {
+    const nextGroupNumber = (courseClass.groups?.length || 0) + 1;
+    setAddingGroupForClass(courseClass);
+    setGroupCode(`N${String(nextGroupNumber).padStart(2, '0')}`);
+    setSelectedLecturerId(lecturers[0]?.id || '');
+  };
+
   const columns: Column<CourseClass>[] = [
     {
       key: 'code',
-      header: 'Mã Lớp HP',
-      width: '110px',
-      render: (item) => (
-        <span className="badge badge-info" style={{ fontFamily: 'monospace', fontSize: '13px' }}>
-          {item.code}
-        </span>
-      ),
+      header: 'Mã lớp HP',
+      width: '105px',
+      render: (item) => <span className="catalog-code">{item.code}</span>,
     },
     {
       key: 'courseName',
-      header: 'Tên Học Phần',
+      header: 'Học phần',
+      width: '270px',
       render: (item) => (
         <div>
-          <strong style={{ color: 'var(--vmu-navy)', fontSize: '14px' }}>{item.courseName}</strong>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Mã môn: {item.courseCode} &bull; Sĩ số: {item.totalStudents} SV &bull; {item.semester} ({item.academicYear})
+          <div className="catalog-cell-primary">{item.courseName}</div>
+          <div className="catalog-cell-meta">
+            {item.courseCode} · {item.totalStudents} SV · {item.semester} ({item.academicYear})
           </div>
         </div>
       ),
     },
     {
       key: 'groups',
-      header: 'Phân Công Giảng Viên Theo Nhóm (N01, N02...)',
+      header: 'Phân công giảng viên theo nhóm',
+      width: '420px',
       render: (item) => {
         const groups = item.groups || [];
         return (
           <div>
             {groups.length === 0 ? (
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Chưa chia nhóm N01, N02</div>
+              <div className="catalog-cell-meta">Chưa có nhóm lớp</div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {groups.map((g) => (
-                  <div
-                    key={g.id}
-                    style={{
-                      backgroundColor: '#F8FAFC',
-                      padding: '6px 10px',
-                      borderLeft: '3px solid var(--vmu-blue)',
-                      fontSize: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '8px',
-                    }}
-                  >
-                    <div>
-                      <strong style={{ color: 'var(--vmu-navy)' }}>[{g.groupCode}]</strong> {g.lecturerName}
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        {g.schedule} &bull; Phòng: {g.room} ({g.studentCount} SV)
-                      </div>
-                    </div>
+              <div className="catalog-group-list">
+                {groups.map((group) => (
+                  <div className="catalog-group-row" key={group.id}>
+                    <div className="catalog-group-row__title">{group.groupCode} · {group.lecturerName}</div>
+                    <div className="catalog-cell-meta">{group.schedule} · Phòng {group.room} · {group.studentCount} SV</div>
                   </div>
                 ))}
               </div>
             )}
-            <button
-              className="btn btn-secondary btn-sm"
-              style={{ marginTop: '6px', fontSize: '11px', padding: '2px 8px' }}
-              onClick={() => {
-                setAddingGroupForClass(item);
-                setGroupCode(`N0${(item.groups?.length || 0) + 1}`);
-                if (lecturers.length > 0) setSelectedLecturerId(lecturers[0].id);
-              }}
-            >
-              + Phân công Nhóm Mới (N03, N04...)
+            <button type="button" className="catalog-group-add" onClick={() => openGroupModal(item)}>
+              <Plus aria-hidden="true" size={14} />Phân công nhóm
             </button>
           </div>
         );
@@ -218,228 +196,166 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     },
     {
       key: 'responses',
-      header: 'Tiến Độ Thu Phiếu',
-      width: '130px',
+      header: 'Thu phiếu',
+      width: '125px',
       render: (item) => (
-        <div>
-          <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--vmu-navy)' }}>
-            📝 {item.completedResponses} / {item.totalStudents} SV
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            ({Math.round((item.completedResponses / (item.totalStudents || 1)) * 100)}% sĩ số)
-          </div>
+        <div className="catalog-stats">
+          <span className="catalog-stat-line"><strong>{item.completedResponses}/{item.totalStudents}</strong> SV</span>
+          <span className="catalog-cell-meta">{Math.round((item.completedResponses / (item.totalStudents || 1)) * 100)}% sĩ số</span>
         </div>
       ),
     },
     {
       key: 'actions',
-      header: 'Thao Tác',
-      width: '90px',
+      header: 'Thao tác',
+      width: '64px',
       render: (item) => (
-        <button
-          className="btn btn-danger btn-sm"
-          onClick={() => {
-            if (confirm(`Xóa lớp học phần "${item.code}"?`)) {
-              onDeleteClass(item.id);
-            }
-          }}
-        >
-          🗑️ Xóa
-        </button>
+        <div className="catalog-actions">
+          <button
+            type="button"
+            className="catalog-icon-button catalog-icon-button--danger"
+            onClick={() => setClassToDelete(item)}
+            aria-label={`Xóa lớp ${item.code}`}
+            title="Xóa lớp học phần"
+          >
+            <Trash2 aria-hidden="true" size={15} />
+          </button>
+        </div>
       ),
     },
   ];
 
   return (
-    <div>
-      <div className="page-header">
-        <div className="page-title-group">
-          <h2>QUẢN LÝ LỚP HỌC PHẦN & PHÂN CÔNG NHÓM (N01, N02...)</h2>
-          <p>Chia lớp học phần thành các nhóm N01, N02... và phân công Giảng viên giảng dạy tương ứng</p>
+    <div className="catalog-page catalog-page--classes">
+      <header className="catalog-page-header">
+        <div>
+          <h2>Lớp học phần và phân công nhóm</h2>
+          <p>Quản lý lớp học phần, nhóm lớp và giảng viên phụ trách theo từng học kỳ.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
-          + Thêm Lớp Học Phần Mới
-        </button>
-      </div>
+      </header>
 
       <DataTable
         columns={columns}
         data={filtered}
         searchValue={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Tìm mã lớp HP, tên giảng viên nhóm N01/N02, tên môn..."
+        searchPlaceholder="Tìm mã lớp, học phần hoặc giảng viên..."
         filterOptions={[
-          { label: '-- Tất cả trạng thái --', value: '' },
+          { label: 'Tất cả trạng thái', value: '' },
           { label: 'Đang khảo sát', value: 'Đang khảo sát' },
           { label: 'Đã hoàn thành', value: 'Đã hoàn thành' },
           { label: 'Chưa khảo sát', value: 'Chưa khảo sát' },
         ]}
         currentFilter={statusFilter}
         onFilterChange={setStatusFilter}
-        onAddNew={() => setIsModalOpen(true)}
-        addNewLabel="+ Thêm Lớp HP"
+        onAddNew={() => {
+          setValidationError('');
+          setIsModalOpen(true);
+        }}
+        addNewLabel="Thêm lớp học phần"
+        emptyMessage="Chưa có lớp học phần nào trong danh mục."
         keyExtractor={(item) => item.id}
       />
 
-      {/* MODAL 1: Create New Master Class */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="THÊM MỚI LỚP HỌC PHẦN (TỰ ĐỘNG KHỞI TẠO NHÓM N01, N02)"
-      >
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Mã Lớp Học Phần Tổng:</label>
-            <input
-              type="text"
-              placeholder="Ví dụ: IT201.01, NAV101.02..."
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label>Chọn Học Phần / Môn Học:</label>
-            <select value={courseId} onChange={(e) => setCourseId(e.target.value)} required>
-              {courses.map((crs) => (
-                <option key={crs.id} value={crs.id}>
-                  [{crs.code}] {crs.name} ({crs.credits} tín chỉ)
-                </option>
-              ))}
-            </select>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }} className="form-group">
-            <div>
-              <label>Học Kỳ:</label>
-              <select value={semester} onChange={(e) => setSemester(e.target.value)}>
-                <option value="Học kỳ I">Học kỳ I</option>
-                <option value="Học kỳ II">Học kỳ II</option>
-                <option value="Học kỳ Hè">Học kỳ Hè</option>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Thêm lớp học phần">
+        <form className="catalog-form" onSubmit={handleSubmit}>
+          {validationError && <div className="catalog-validation-error" role="alert">{validationError}</div>}
+          <div className="catalog-form-grid catalog-form-grid--code-name">
+            <div className="form-group">
+              <label htmlFor="class-code">Mã lớp học phần</label>
+              <input id="class-code" type="text" placeholder="IT201.01" value={code} onChange={(event) => setCode(event.target.value)} required />
+            </div>
+            <div className="form-group">
+              <label htmlFor="class-course">Học phần / môn học</label>
+              <select id="class-course" value={courseId} onChange={(event) => setCourseId(event.target.value)} required>
+                {courses.map((course) => <option key={course.id} value={course.id}>[{course.code}] {course.name} ({course.credits} tín chỉ)</option>)}
               </select>
             </div>
-            <div>
-              <label>Năm Học:</label>
-              <input
-                type="text"
-                value={academicYear}
-                onChange={(e) => setAcademicYear(e.target.value)}
-                required
-              />
+          </div>
+          <div className="catalog-form-grid catalog-form-grid--2">
+            <div className="form-group">
+              <label htmlFor="class-semester">Học kỳ</label>
+              <select id="class-semester" value={semester} onChange={(event) => setSemester(event.target.value)}>
+                <option value="Học kỳ I">Học kỳ I</option><option value="Học kỳ II">Học kỳ II</option><option value="Học kỳ Hè">Học kỳ Hè</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="class-year">Năm học</label>
+              <input id="class-year" type="text" value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} required />
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }} className="form-group">
-            <div>
-              <label>Tổng Sĩ Số Sinh Viên:</label>
-              <input
-                type="number"
-                value={totalStudents}
-                onChange={(e) => setTotalStudents(e.target.value)}
-                required
-              />
+          <div className="catalog-form-grid catalog-form-grid--2">
+            <div className="form-group">
+              <label htmlFor="class-students">Tổng sĩ số sinh viên</label>
+              <input id="class-students" type="number" value={totalStudents} onChange={(event) => setTotalStudents(event.target.value)} required />
             </div>
-            <div>
-              <label>Phòng Học Chính:</label>
-              <input
-                type="text"
-                value={room}
-                onChange={(e) => setRoom(e.target.value)}
-                required
-              />
+            <div className="form-group">
+              <label htmlFor="class-room">Phòng học chính</label>
+              <input id="class-room" type="text" value={room} onChange={(event) => setRoom(event.target.value)} required />
             </div>
           </div>
-
-          <div className="modal-footer" style={{ padding: '16px 0 0 0', backgroundColor: 'transparent', borderTop: 'none' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>
-              Hủy
-            </button>
-            <button type="submit" className="btn btn-primary">
-              Khởi Tạo Lớp & Tạo Nhóm N01, N02
-            </button>
+          <div className="catalog-context-band">Hệ thống sẽ tự tạo hai nhóm N01 và N02 cho lớp học phần mới.</div>
+          <div className="modal-footer catalog-form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>Hủy</button>
+            <button type="submit" className="btn btn-primary">Khởi tạo lớp</button>
           </div>
         </form>
       </Modal>
 
-      {/* MODAL 2: Assign Lecturer to Sub-group N01, N02, N03... */}
-      {addingGroupForClass && (
-        <Modal
-          isOpen={!!addingGroupForClass}
-          onClose={() => setAddingGroupForClass(null)}
-          title={`PHÂN CÔNG GIẢNG VIÊN CHO NHÓM LỚP (LỚP ${addingGroupForClass.code})`}
-        >
-          <form onSubmit={handleAddGroupSubmit}>
-            <div style={{ marginBottom: '14px', fontSize: '13px', color: 'var(--vmu-navy)', backgroundColor: 'var(--vmu-blue-light)', padding: '10px' }}>
-              📚 Học phần: <strong>{addingGroupForClass.courseName} ({addingGroupForClass.courseCode})</strong>
+      <Modal
+        isOpen={addingGroupForClass !== null}
+        onClose={() => setAddingGroupForClass(null)}
+        title={`Phân công nhóm lớp ${addingGroupForClass?.code ?? ''}`}
+      >
+        <form className="catalog-form" onSubmit={handleAddGroupSubmit}>
+          <div className="catalog-context-band">
+            Học phần: <strong>{addingGroupForClass?.courseName}</strong> ({addingGroupForClass?.courseCode})
+          </div>
+          <div className="catalog-form-grid catalog-form-grid--code-name">
+            <div className="form-group">
+              <label htmlFor="group-code">Ký hiệu nhóm</label>
+              <input id="group-code" type="text" placeholder="N03" value={groupCode} onChange={(event) => setGroupCode(event.target.value)} required />
             </div>
+            <div className="form-group">
+              <label htmlFor="group-lecturer">Giảng viên đảm nhận</label>
+              <select id="group-lecturer" value={selectedLecturerId} onChange={(event) => setSelectedLecturerId(event.target.value)} required>
+                <option value="">Chọn giảng viên</option>
+                {lecturers.map((lecturer) => <option key={lecturer.id} value={lecturer.id}>{lecturer.fullName} [{lecturer.code}] ({lecturer.facultyName})</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="catalog-form-grid catalog-form-grid--3">
+            <div className="form-group">
+              <label htmlFor="group-students">Sĩ số nhóm</label>
+              <input id="group-students" type="number" value={groupStudents} onChange={(event) => setGroupStudents(Number(event.target.value))} required />
+            </div>
+            <div className="form-group">
+              <label htmlFor="group-room">Phòng học</label>
+              <input id="group-room" type="text" value={groupRoom} onChange={(event) => setGroupRoom(event.target.value)} placeholder="A6-302" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="group-schedule">Lịch học</label>
+              <input id="group-schedule" type="text" value={groupSchedule} onChange={(event) => setGroupSchedule(event.target.value)} placeholder="Thứ 2 (Tiết 1-3)" />
+            </div>
+          </div>
+          <div className="modal-footer catalog-form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setAddingGroupForClass(null)}>Hủy</button>
+            <button type="submit" className="btn btn-primary">Lưu phân công</button>
+          </div>
+        </form>
+      </Modal>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }} className="form-group">
-              <div>
-                <label>Ký Hiệu Nhóm Lớp:</label>
-                <input
-                  type="text"
-                  placeholder="N01, N02, N03..."
-                  value={groupCode}
-                  onChange={(e) => setGroupCode(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <label>Chọn Giảng Viên Đảm Nhận:</label>
-                <select
-                  value={selectedLecturerId}
-                  onChange={(e) => setSelectedLecturerId(e.target.value)}
-                  required
-                >
-                  <option value="">-- Chọn Giảng viên từ Danh mục --</option>
-                  {lecturers.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.fullName} [{l.code}] ({l.facultyName})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }} className="form-group">
-              <div>
-                <label>Sĩ Số Nhóm (SV):</label>
-                <input
-                  type="number"
-                  value={groupStudents}
-                  onChange={(e) => setGroupStudents(Number(e.target.value))}
-                  required
-                />
-              </div>
-              <div>
-                <label>Phòng Học Thực Hành:</label>
-                <input
-                  type="text"
-                  value={groupRoom}
-                  onChange={(e) => setGroupRoom(e.target.value)}
-                  placeholder="A6-302 (PM1)"
-                />
-              </div>
-              <div>
-                <label>Lịch Học:</label>
-                <input
-                  type="text"
-                  value={groupSchedule}
-                  onChange={(e) => setGroupSchedule(e.target.value)}
-                  placeholder="Thứ 2 (Tiết 1-3)"
-                />
-              </div>
-            </div>
-
-            <div className="modal-footer" style={{ padding: '16px 0 0 0', backgroundColor: 'transparent', borderTop: 'none' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setAddingGroupForClass(null)}>
-                Hủy
-              </button>
-              <button type="submit" className="btn btn-primary">
-                Lưu Phân Công Giảng Viên
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
+      <ConfirmDialog
+        isOpen={classToDelete !== null}
+        onClose={() => setClassToDelete(null)}
+        onConfirm={() => {
+          if (classToDelete) onDeleteClass(classToDelete.id);
+          setClassToDelete(null);
+        }}
+        title="Xóa lớp học phần?"
+        recordName={classToDelete?.code ?? ''}
+        confirmText="Xóa lớp"
+      />
     </div>
   );
 };
