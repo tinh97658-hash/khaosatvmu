@@ -60,6 +60,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refresh,
     devLogin: async () => {
       const response = await authApi.devLogin();
+      if ('profileSelectionRequired' in response) {
+        setSession(anonymousState);
+        setStatus('anonymous');
+        window.location.replace('/select-profile');
+        return;
+      }
       await applyAuthenticatedSession(response);
     },
     loadPendingProfiles: () => authApi.pendingProfiles(),

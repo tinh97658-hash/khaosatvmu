@@ -419,79 +419,240 @@ textarea:focus-visible {
   height: 17px;
 }
 
-.user-badge {
-  display: flex;
+.user-account {
+  position: relative;
+  min-width: 0;
+}
+
+.user-account__trigger {
+  width: 222px;
+  max-width: 100%;
+  height: 40px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 16px;
   align-items: center;
   gap: 8px;
-  min-width: 0;
-  height: 40px;
-  padding: 3px 4px 3px 5px;
+  padding: 4px 7px 4px 5px;
   border: 1px solid var(--border-color);
   border-radius: 3px;
   background: #FAFBFC;
+  color: var(--text-dark);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
 }
 
-.avatar {
+.user-account__trigger:hover:not(:disabled),
+.user-account__trigger[aria-expanded='true'] {
+  border-color: #8EC8D9;
+  background: #F5FBFD;
+}
+
+.user-account__trigger:focus-visible,
+.user-account__actions button:focus-visible {
+  outline: 2px solid var(--sidebar-accent-strong);
+  outline-offset: 2px;
+}
+
+.user-account__trigger:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.user-account__avatar {
   width: 30px;
   height: 30px;
-  flex: 0 0 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   border-radius: 3px;
+  object-fit: cover;
   background: var(--vmu-navy);
-  color: #FFFFFF;
-  font-size: 11px;
-  font-weight: 600;
 }
 
-.user-info {
+.user-account__avatar.initials {
+  display: grid;
+  place-items: center;
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.user-account__identity {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  min-width: 90px;
-  max-width: 140px;
 }
 
-.user-name {
+.user-account__identity strong,
+.user-account__identity > span {
   overflow: hidden;
-  color: var(--text-dark);
-  font-size: 11px;
-  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.user-role {
+.user-account__identity strong {
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.user-account__identity > span {
+  margin-top: 1px;
   color: var(--text-muted);
   font-size: 9px;
 }
 
-.header-logout-button {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
-  display: inline-grid;
+.user-account__chevron {
+  width: 15px;
+  height: 15px;
+  color: #66727A;
+  transition: transform 140ms ease;
+}
+
+.user-account__trigger[aria-expanded='true'] .user-account__chevron {
+  transform: rotate(180deg);
+}
+
+.user-account__menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 80;
+  width: 318px;
+  max-width: calc(100vw - 24px);
+  overflow: hidden;
+  border: 1px solid #CDD7DC;
+  border-radius: 4px;
+  background: #FFFFFF;
+  box-shadow: 0 14px 34px rgba(22, 37, 48, 0.18);
+  animation: user-account-menu-in 140ms ease-out;
+}
+
+.user-account__summary {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-bottom: 1px solid var(--border-color);
+  background: #F7FAFB;
+}
+
+.user-account__summary-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
   place-items: center;
-  padding: 0;
-  border: 1px solid #F1C7C7;
+  border: 1px solid #B8DCE7;
+  border-radius: 3px;
+  background: #EAF6FA;
+  color: var(--sidebar-accent-strong);
+}
+
+.user-account__summary-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.user-account__summary > span:last-child,
+.user-account__summary strong,
+.user-account__summary small,
+.user-account__summary > span:last-child > span {
+  min-width: 0;
+  display: block;
+}
+
+.user-account__summary small {
+  color: var(--sidebar-accent-strong);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.user-account__summary strong {
+  overflow: hidden;
+  margin-top: 2px;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-account__summary > span:last-child > span {
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-account__actions {
+  padding: 5px;
+}
+
+.user-account__actions button {
+  width: 100%;
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border: 1px solid transparent;
   border-radius: 3px;
   background: #FFFFFF;
-  color: #A12020;
+  color: var(--text-dark);
+  text-align: left;
   cursor: pointer;
 }
 
-.header-logout-button svg {
-  width: 16px;
-  height: 16px;
+.user-account__actions button:hover {
+  border-color: #C5DEE6;
+  background: #F5FBFD;
 }
 
-.header-logout-button:hover:not(:disabled) {
-  background: #FFF2F2;
+.user-account__actions button + button {
+  border-top-color: #EEF1F3;
 }
 
-.header-logout-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+.user-account__actions button > svg {
+  width: 18px;
+  height: 18px;
+  justify-self: center;
+  color: var(--sidebar-accent-strong);
+}
+
+.user-account__actions button > span,
+.user-account__actions strong,
+.user-account__actions small {
+  display: block;
+  min-width: 0;
+}
+
+.user-account__actions strong {
+  font-size: 11px;
+}
+
+.user-account__actions small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.user-account__actions button.is-danger {
+  color: #972828;
+}
+
+.user-account__actions button.is-danger:hover {
+  border-color: #ECC8C8;
+  background: #FFF7F7;
+}
+
+.user-account__actions button.is-danger > svg {
+  color: #A92E2E;
+}
+
+@keyframes user-account-menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Main Content Area */
@@ -1206,87 +1367,6 @@ textarea:focus-visible {
   padding-top: 16px;
 }
 
-.profile-selection-shell {
-  min-height: 100vh;
-  background: #F4F6F9;
-}
-
-.profile-selection-header {
-  min-height: 150px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 28px max(32px, calc((100% - 920px) / 2));
-  background: var(--vmu-navy-dark);
-  color: #FFFFFF;
-  border-top: 6px solid var(--vmu-gold);
-}
-
-.profile-selection-header p {
-  color: #D6E0EA;
-  font-size: 11px;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.profile-selection-header h1 {
-  font-size: 25px;
-}
-
-.profile-selection-content {
-  width: min(calc(100% - 40px), 920px);
-  margin: 0 auto;
-  padding: 38px 0 60px;
-}
-
-.profile-list {
-  display: grid;
-  gap: 14px;
-}
-
-.profile-option {
-  display: grid;
-  grid-template-columns: 54px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 18px;
-  background: #FFFFFF;
-  border: 1px solid var(--border-color);
-  border-left: 4px solid var(--vmu-blue);
-  padding: 20px;
-}
-
-.profile-option-mark {
-  width: 54px;
-  height: 54px;
-  display: grid;
-  place-items: center;
-  background: var(--vmu-blue-light);
-  color: var(--vmu-navy);
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.profile-option-body {
-  min-width: 0;
-}
-
-.profile-option-body h2 {
-  color: var(--vmu-navy);
-  font-size: 16px;
-  margin-bottom: 2px;
-}
-
-.profile-option-body p {
-  color: var(--text-dark);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.profile-option-body span {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
 .auth-loading {
   min-height: 100vh;
   display: flex;
@@ -1383,8 +1463,12 @@ textarea:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .sidebar,
   .sidebar-overlay,
-  .menu-item {
+  .menu-item,
+  .user-account__trigger,
+  .user-account__chevron,
+  .user-account__menu {
     transition: none;
+    animation: none;
   }
 }
 
@@ -1398,27 +1482,38 @@ textarea:focus-visible {
     display: none;
   }
 
-  .user-badge {
-    min-width: 0;
+  .user-account__trigger {
+    width: 190px;
   }
 }
 
 @media (max-width: 1040px) {
-  .user-info {
+  .user-account__identity {
     display: none;
+  }
+
+  .user-account__trigger {
+    width: 60px;
+    grid-template-columns: 30px 16px;
   }
 }
 
 @media (max-width: 640px) {
   .header-title-area,
-  .header-preview-button,
-  .avatar {
+  .header-preview-button {
     display: none;
   }
 
-  .header-actions,
-  .user-badge {
+  .header-actions {
     width: 100%;
+  }
+
+  .user-account {
+    margin-left: auto;
+  }
+
+  .user-account__menu {
+    width: min(318px, calc(100vw - 76px));
   }
 
   .content-area {
@@ -1457,20 +1552,6 @@ textarea:focus-visible {
     padding: 28px 22px;
   }
 
-  .profile-option {
-    grid-template-columns: 48px minmax(0, 1fr);
-  }
-
-  .profile-option-mark {
-    width: 48px;
-    height: 48px;
-  }
-
-  .profile-option .btn {
-    grid-column: 1 / -1;
-    width: 100%;
-    justify-content: center;
-  }
 }
 
 /* User administration */

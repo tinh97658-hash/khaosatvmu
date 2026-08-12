@@ -46,4 +46,11 @@
 - Verified row-level skipped reasons and the compact result summary.
 - Rechecked the dialog at `1440x900` and `390x844` with no page or dialog overflow.
 
+## Profile session selection verification
+
+- Verified the mandatory initial dialog over a blurred, non-interactive workspace preview.
+- Verified the account menu and change-session dialog with the current profile clearly identified.
+- Checked keyboard focus, non-dismissible initial selection, dismissible switching and mobile fitting.
+- Confirmed the backend denies authenticated access until a pending profile is selected.
+
 Final result: passed

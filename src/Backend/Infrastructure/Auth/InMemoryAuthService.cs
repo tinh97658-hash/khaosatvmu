@@ -61,14 +61,11 @@ public sealed class InMemoryAuthService : IAuthService
             return new GoogleSignInResult(false, AuthErrorCodes.EmailNotVerified, null, null, null);
         }
 
-        var result = await DevSignInAsync(identity.Email, null);
-        Guid? pendingUserId = result.ErrorCode == AuthErrorCodes.ProfileSelectionRequired
-            ? _users.Single(x => x.Email.Equals(identity.Email, StringComparison.OrdinalIgnoreCase)).Id
-            : null;
+        var result = await DevSignInAsync(identity.Email);
         return new GoogleSignInResult(
             result.Succeeded,
             result.ErrorCode,
-            pendingUserId,
+            result.PendingUserId,
             result.Response,
             result.AvailableProfiles);
     }
@@ -93,7 +90,7 @@ public sealed class InMemoryAuthService : IAuthService
         return Task.FromResult(new ProfileSelectionResult(true, null, BuildAuthMeResponse(user, profile)));
     }
 
-    public Task<SignInResult> DevSignInAsync(string email, string? profileCode)
+    public Task<SignInResult> DevSignInAsync(string email)
     {
         lock (_gate)
         {
@@ -114,38 +111,12 @@ public sealed class InMemoryAuthService : IAuthService
                 return Task.FromResult(new SignInResult(false, AuthErrorCodes.NoProfiles, null, null));
             }
 
-            if (profiles.Count > 1 && string.IsNullOrWhiteSpace(profileCode))
-            {
-                return Task.FromResult(new SignInResult(false, AuthErrorCodes.ProfileSelectionRequired, null, profiles));
-            }
-
-            UserProfile? selected = null;
-            if (!string.IsNullOrWhiteSpace(profileCode))
-            {
-                selected = user.Profiles.SingleOrDefault(x => x.ProfileCode.Equals(profileCode, StringComparison.OrdinalIgnoreCase));
-                if (selected is null)
-                {
-                    return Task.FromResult(new SignInResult(false, AuthErrorCodes.ProfileNotFound, null, profiles));
-                }
-            }
-            else
-            {
-                selected = user.Profiles.Single(x => x.IsDefault);
-            }
-
-            selected.LastSelectedAt = DateTime.UtcNow;
-            user.FirstLoginAt ??= DateTime.UtcNow;
-            user.LastLoginAt = DateTime.UtcNow;
-            user.UpdatedAt = DateTime.UtcNow;
-
-            AddAudit(user.Id, selected.Id, user.Email, "LOGIN_SUCCESS", null, null, new
-            {
-                selected.ProfileCode,
-                selected.ProfileName
-            });
-
-            var response = BuildAuthMeResponse(user, selected);
-            return Task.FromResult(new SignInResult(true, null, response, profiles));
+            return Task.FromResult(new SignInResult(
+                false,
+                AuthErrorCodes.ProfileSelectionRequired,
+                null,
+                profiles,
+                user.Id));
         }
     }
 

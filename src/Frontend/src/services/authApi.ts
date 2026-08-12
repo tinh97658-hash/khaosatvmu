@@ -8,6 +8,10 @@ import { ApiError, apiRequest, csrfRequest } from './apiClient';
 
 export { ApiError as AuthApiError };
 
+interface DevProfileSelectionResponse {
+  profileSelectionRequired: true;
+}
+
 export const authApi = {
   configuration: () => apiRequest<AuthConfiguration>('/api/auth/config'),
   me: () => apiRequest<AuthMeResponse>('/api/auth/me'),
@@ -21,8 +25,8 @@ export const authApi = {
   switchProfile: (profileId: string) =>
     csrfRequest<AuthMeResponse>('/api/auth/switch-profile', 'POST', { profileId }),
   logout: () => csrfRequest<{ success: boolean }>('/api/auth/logout', 'POST'),
-  devLogin: (profileCode = 'SURVEY_ADMIN') =>
-    apiRequest<AuthMeResponse>(
-      `/api/auth/dev/login?email=abc%40vmu.edu.vn&profileCode=${encodeURIComponent(profileCode)}`,
+  devLogin: () =>
+    apiRequest<AuthMeResponse | DevProfileSelectionResponse>(
+      '/api/auth/dev/login?email=abc%40vmu.edu.vn',
     ),
 };

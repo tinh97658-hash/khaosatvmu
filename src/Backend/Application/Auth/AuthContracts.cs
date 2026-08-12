@@ -33,7 +33,8 @@ public sealed record SignInResult(
     bool Succeeded,
     string? ErrorCode,
     AuthMeResponse? Response,
-    IReadOnlyList<AuthProfileDto>? AvailableProfiles);
+    IReadOnlyList<AuthProfileDto>? AvailableProfiles,
+    Guid? PendingUserId = null);
 
 public sealed record ProfileSelectionResult(
     bool Succeeded,
@@ -61,7 +62,7 @@ public interface IAuthService
     Task<AuthMeResponse> GetCurrentAsync(ClaimsPrincipal? principal);
     Task<AuthAccessResponse?> GetAccessAsync(ClaimsPrincipal? principal);
     Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity);
-    Task<SignInResult> DevSignInAsync(string email, string? profileCode);
+    Task<SignInResult> DevSignInAsync(string email);
     Task<IReadOnlyList<AuthProfileDto>> GetAvailableProfilesAsync(Guid userId);
     Task<ProfileSelectionResult> SelectInitialProfileAsync(Guid userId, Guid profileId);
     Task<ProfileSelectionResult> SelectProfileAsync(ClaimsPrincipal? principal, Guid profileId);

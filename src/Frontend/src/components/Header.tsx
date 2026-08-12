@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ChevronRight, LogOut, QrCode } from 'lucide-react';
+import { ChevronRight, QrCode } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AuthProfile, AuthUser } from '../types';
-import { ProfileSwitcher } from './ProfileSwitcher';
+import { ProfileSelectionDialog } from './ProfileSelectionDialog';
+import { UserAccountMenu } from './UserAccountMenu';
 
 interface HeaderProps {
   currentTab: string;
@@ -54,32 +55,30 @@ export function Header({
   onLogout,
 }: HeaderProps) {
   const [busy, setBusy] = useState(false);
+  const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
+  const [switchingProfileId, setSwitchingProfileId] = useState<string | null>(null);
   const context = tabContexts[currentTab] ?? {
     section: 'Hệ thống khảo sát',
     title: 'Trường Đại học Hàng hải Việt Nam',
   };
-  const initials = (user.displayName ?? user.email)
-    .split(' ')
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-
   const handleSwitch = async (profileId: string) => {
     if (profileId === activeProfile.id) return;
     setBusy(true);
+    setSwitchingProfileId(profileId);
     try {
       await onSwitchProfile(profileId);
       const selectedProfile = availableProfiles.find((profile) => profile.id === profileId);
       toast.success('Đã chuyển hồ sơ làm việc', {
         description: selectedProfile?.name,
       });
+      setIsProfileDialogOpen(false);
     } catch {
       toast.error('Không thể đổi hồ sơ', {
         description: 'Hãy kiểm tra lại phiên đăng nhập và thử lại.',
       });
     } finally {
       setBusy(false);
+      setSwitchingProfileId(null);
     }
   };
 
@@ -119,33 +118,30 @@ export function Header({
           <span>Xem bản khảo sát</span>
         </button>
 
-        <div className="user-badge">
-          <div className="avatar" aria-hidden="true">{initials}</div>
-          <div className="user-info">
-            <span className="user-name">{user.displayName ?? user.email}</span>
-            <span className="user-role">
-              {roleNames[activeProfile.roleCode] ?? activeProfile.roleCode}
-            </span>
-          </div>
-          <ProfileSwitcher
-            activeProfile={activeProfile}
-            profiles={availableProfiles}
-            disabled={busy}
-            roleNames={roleNames}
-            onSelect={(profileId) => void handleSwitch(profileId)}
-          />
-          <button
-            type="button"
-            className="header-logout-button"
-            aria-label="Đăng xuất"
-            title="Đăng xuất"
-            onClick={() => void handleLogout()}
-            disabled={busy}
-          >
-            <LogOut aria-hidden="true" />
-          </button>
-        </div>
+        <UserAccountMenu
+          user={user}
+          activeProfile={activeProfile}
+          roleName={roleNames[activeProfile.roleCode] ?? activeProfile.roleCode}
+          busy={busy}
+          onChangeProfile={() => setIsProfileDialogOpen(true)}
+          onLogout={() => void handleLogout()}
+        />
       </div>
+
+      {isProfileDialogOpen && (
+        <ProfileSelectionDialog
+          profiles={availableProfiles}
+          selectedId={switchingProfileId}
+          currentProfileId={activeProfile.id}
+          dismissible
+          title="Thay đổi phiên làm việc"
+          description="Quyền và dữ liệu hiển thị sẽ được cập nhật theo profile bạn chọn."
+          onSelect={(profileId) => void handleSwitch(profileId)}
+          onClose={() => {
+            if (!busy) setIsProfileDialogOpen(false);
+          }}
+        />
+      )}
     </header>
   );
 }

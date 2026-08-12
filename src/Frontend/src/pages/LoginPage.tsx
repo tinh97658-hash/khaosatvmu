@@ -25,7 +25,6 @@ export function LoginPage() {
     setLocalError(null);
     try {
       await auth.devLogin();
-      window.history.replaceState(null, '', '/');
     } catch {
       setLocalError('AUTH_REQUEST_FAILED');
     } finally {

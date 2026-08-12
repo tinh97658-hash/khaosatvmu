@@ -1023,3 +1023,10 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Added `.xlsx` parsing, file validation, data preview and row-level results on the frontend.
 - Batched database checks and writes without changing the database schema.
 - Verified CSRF, duplicate/invalid row handling and desktop/mobile dialog states.
+
+### Implementation status - Mandatory profile session selection
+
+- Required every fresh Google or development login to select a profile before an active session is issued.
+- Replaced the header profile combobox with a user menu containing change-session and logout actions.
+- Added a shared profile dialog with a blurred workspace backdrop for initial selection and profile switching.
+- Verified pending-profile access, pre-selection `401`, responsive layouts and production builds without a schema change.

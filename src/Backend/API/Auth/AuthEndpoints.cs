@@ -67,6 +67,7 @@ public static class AuthEndpoints
 
             if (result.ErrorCode == AuthErrorCodes.ProfileSelectionRequired && result.PendingUserId is not null)
             {
+                await httpContext.SignOutAsync(AuthSchemes.Application);
                 await SignInPendingProfileAsync(httpContext, result.PendingUserId.Value);
                 return Results.Redirect($"{googleAuth.FrontendBaseUrl.TrimEnd('/')}/select-profile");
             }
@@ -185,19 +186,21 @@ public static class AuthEndpoints
         {
             group.MapGet("/dev/login", async (
                 string email,
-                string? profileCode,
                 IAuthService authService,
-                IAuthSessionService sessionService,
                 HttpContext httpContext) =>
             {
-                var result = await authService.DevSignInAsync(email, profileCode);
-                if (!result.Succeeded || result.Response is null)
+                var result = await authService.DevSignInAsync(email);
+                if (result.ErrorCode == AuthErrorCodes.ProfileSelectionRequired
+                    && result.PendingUserId is not null)
                 {
-                    return Results.Json(new { errorCode = result.ErrorCode, availableProfiles = result.AvailableProfiles }, statusCode: MapErrorStatus(result.ErrorCode));
+                    await httpContext.SignOutAsync(AuthSchemes.Application);
+                    await SignInPendingProfileAsync(httpContext, result.PendingUserId.Value);
+                    return Results.Ok(new { profileSelectionRequired = true });
                 }
 
-                await SignInAsync(httpContext, result.Response, sessionService);
-                return Results.Ok(result.Response);
+                return Results.Json(
+                    new { errorCode = result.ErrorCode, availableProfiles = result.AvailableProfiles },
+                    statusCode: MapErrorStatus(result.ErrorCode));
             });
 
             group.MapGet("/dev/access/{organizationUnitCode}", (string organizationUnitCode) =>

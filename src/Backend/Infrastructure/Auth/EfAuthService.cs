@@ -87,19 +87,12 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
             return new GoogleSignInResult(false, AuthErrorCodes.NoProfiles, null, null, null);
         }
 
-        if (profiles.Count > 1)
-        {
-            AddAudit(user, null, "GOOGLE_LOGIN_PROFILE_REQUIRED");
-            await db.SaveChangesAsync();
-            return new GoogleSignInResult(false, AuthErrorCodes.ProfileSelectionRequired, user.Id, null, profiles);
-        }
-
-        var profile = await db.UserProfiles.SingleAsync(x => x.Id == profiles[0].Id);
-        var response = await CompleteSignInAsync(user, profile, "LOGIN_SUCCESS");
-        return new GoogleSignInResult(true, null, null, response, profiles);
+        AddAudit(user, null, "GOOGLE_LOGIN_PROFILE_REQUIRED");
+        await db.SaveChangesAsync();
+        return new GoogleSignInResult(false, AuthErrorCodes.ProfileSelectionRequired, user.Id, null, profiles);
     }
 
-    public async Task<SignInResult> DevSignInAsync(string email, string? profileCode)
+    public async Task<SignInResult> DevSignInAsync(string email)
     {
         var user = await db.Users.SingleOrDefaultAsync(x => x.Email.ToLower() == email.ToLower());
         if (user is null)
@@ -118,40 +111,12 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
             return new SignInResult(false, AuthErrorCodes.NoProfiles, null, null);
         }
 
-        UserProfile? selected;
-        if (string.IsNullOrWhiteSpace(profileCode))
-        {
-            if (profiles.Count > 1)
-            {
-                return new SignInResult(false, AuthErrorCodes.ProfileSelectionRequired, null, profiles);
-            }
-
-            selected = await db.UserProfiles.SingleAsync(x => x.Id == profiles[0].Id);
-        }
-        else
-        {
-            selected = await db.UserProfiles.SingleOrDefaultAsync(x =>
-                x.UserId == user.Id && x.ProfileCode.ToLower() == profileCode.ToLower());
-            if (selected is null)
-            {
-                return new SignInResult(false, AuthErrorCodes.ProfileNotFound, null, profiles);
-            }
-        }
-
-        if (!selected.IsActive)
-        {
-            return new SignInResult(false, AuthErrorCodes.ProfileDisabled, null, profiles);
-        }
-
-        var now = DateTime.UtcNow;
-        selected.LastSelectedAt = now;
-        user.FirstLoginAt ??= now;
-        user.LastLoginAt = now;
-        user.UpdatedAt = now;
-        AddAudit(user, selected, "LOGIN_SUCCESS");
-        await db.SaveChangesAsync();
-
-        return new SignInResult(true, null, await BuildResponseAsync(user, selected), profiles);
+        return new SignInResult(
+            false,
+            AuthErrorCodes.ProfileSelectionRequired,
+            null,
+            profiles,
+            user.Id);
     }
 
     public async Task<ProfileSelectionResult> SelectProfileAsync(ClaimsPrincipal? principal, Guid profileId)
