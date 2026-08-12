@@ -816,7 +816,7 @@ Frontend map các mã này sang thông báo tiếng Việt.
 
 Authentication chỉ được coi là hoàn thành khi:
 
-- [ ] Google OAuth login hoạt động với Audience `External`
+- [x] Google OAuth login hoạt động với Audience `External`
 - [ ] Gmail trong allowlist đăng nhập được
 - [ ] Google Account thuộc domain khác trong allowlist đăng nhập được
 - [ ] Google Account ngoài allowlist bị từ chối
@@ -840,7 +840,7 @@ Authentication chỉ được coi là hoàn thành khi:
 - [ ] Database backup
 - [ ] Health checks
 - [ ] Integration tests cho authentication/authorization
-- [ ] OAuth feasibility với Google Account thật đã được xác nhận
+- [x] OAuth feasibility với Google Account thật đã được xác nhận
 - [ ] User có nhiều profile có thể chọn và switch đúng
 
 ## Kết luận
@@ -931,7 +931,7 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Standardized the local callback as `http://localhost:5115/signin-google`.
 - Added the Google Auth Platform External-audience and real-login verification checklist.
 - Removed the Workspace domain and administrator-policy dependency.
-- Real Google login verification remains pending local `.env` credentials and an interactive login.
+- Real Google login was verified successfully on local with credentials loaded from `.env`.
 
 ### Implementation status - External Google Account access
 
@@ -939,7 +939,7 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Kept verified email, stable Google `sub`, allowlist and active-profile enforcement.
 - Allowed administrators to add Google Account emails from any domain.
 - Updated frontend messages and configuration for External Google OAuth.
-- Verified an `@gmail.com` allowlist entry against PostgreSQL; interactive OAuth remains pending local secrets.
+- Verified an `@gmail.com` allowlist entry against PostgreSQL and completed an interactive Google login on local.
 
 ### Implementation status - Shared local environment
 
@@ -947,3 +947,9 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Added a committed `.env.example` contract for all developers.
 - Kept each developer's real `.env` and OAuth credentials outside Git.
 - Verified the API starts successfully from the root `.env` configuration.
+
+### Implementation status - Real Google OAuth verification
+
+- Configured an External Google OAuth client through local `.env` credentials.
+- Successfully completed an interactive Google Account login on local.
+- Kept negative access cases and multi-profile switching as separate verification items.

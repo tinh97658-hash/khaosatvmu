@@ -90,3 +90,11 @@ variables thật có độ ưu tiên cao hơn giá trị trong file.
 - Google Account trong allowlist đăng nhập thành công.
 - Google Account ngoài allowlist bị từ chối.
 - Tài khoản có nhiều profile chọn và chuyển profile đúng quyền.
+
+## 8. Trạng thái kiểm thử local
+
+- [x] OAuth Client dùng Audience `External` và credential từ `.env`.
+- [x] Google Account thật trong allowlist đăng nhập thành công trên local.
+- [ ] Google Account ngoài allowlist bị từ chối.
+- [ ] Tài khoản bị vô hiệu hoặc không có profile hoạt động bị từ chối.
+- [ ] Tài khoản có nhiều profile chọn và chuyển profile đúng quyền.
