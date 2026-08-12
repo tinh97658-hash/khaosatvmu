@@ -220,6 +220,26 @@ export interface AdminUser {
   profiles: AdminProfile[];
 }
 
+export interface ImportAdminUserRow {
+  rowNumber: number;
+  email: string;
+  displayName: string;
+}
+
+export interface AdminUserImportItem {
+  rowNumber: number;
+  email: string;
+  succeeded: boolean;
+  errorCode: string | null;
+}
+
+export interface AdminUserImportResult {
+  totalCount: number;
+  createdCount: number;
+  skippedCount: number;
+  items: AdminUserImportItem[];
+}
+
 export interface AdminRole {
   id: string;
   code: string;

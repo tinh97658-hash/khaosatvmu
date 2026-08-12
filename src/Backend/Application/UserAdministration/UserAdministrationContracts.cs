@@ -41,6 +41,20 @@ public sealed record AdminPage<T>(IReadOnlyList<T> Items, int Page, int PageSize
 
 public sealed record CreateAdminUserCommand(string Email, string? DisplayName);
 
+public sealed record ImportAdminUserRowCommand(int RowNumber, string Email, string? DisplayName);
+
+public sealed record AdminUserImportItemDto(
+    int RowNumber,
+    string Email,
+    bool Succeeded,
+    string? ErrorCode);
+
+public sealed record AdminUserImportDto(
+    int TotalCount,
+    int CreatedCount,
+    int SkippedCount,
+    IReadOnlyList<AdminUserImportItemDto> Items);
+
 public sealed record SaveAdminProfileCommand(
     string Name,
     string Code,
@@ -62,6 +76,11 @@ public interface IUserAdministrationService
 
     Task<AdminOperationResult<AdminUserDto>> CreateUserAsync(
         CreateAdminUserCommand command,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default);
+
+    Task<AdminOperationResult<AdminUserImportDto>> ImportUsersAsync(
+        IReadOnlyList<ImportAdminUserRowCommand> commands,
         Guid actorUserId,
         CancellationToken cancellationToken = default);
 
@@ -107,6 +126,11 @@ public static class UserAdministrationErrorCodes
     public const string InvalidRequest = "ADMIN_INVALID_REQUEST";
     public const string UserNotFound = "ADMIN_USER_NOT_FOUND";
     public const string UserEmailExists = "ADMIN_USER_EMAIL_EXISTS";
+    public const string ImportTooManyRows = "ADMIN_IMPORT_TOO_MANY_ROWS";
+    public const string ImportEmailRequired = "ADMIN_IMPORT_EMAIL_REQUIRED";
+    public const string ImportEmailInvalid = "ADMIN_IMPORT_EMAIL_INVALID";
+    public const string ImportDisplayNameInvalid = "ADMIN_IMPORT_DISPLAY_NAME_INVALID";
+    public const string ImportDuplicateEmail = "ADMIN_IMPORT_DUPLICATE_EMAIL";
     public const string CannotDisableSelf = "ADMIN_CANNOT_DISABLE_SELF";
     public const string ProfileNotFound = "ADMIN_PROFILE_NOT_FOUND";
     public const string ProfileCodeExists = "ADMIN_PROFILE_CODE_EXISTS";

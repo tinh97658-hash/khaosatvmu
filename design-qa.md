@@ -39,4 +39,11 @@
 - Verified the shared `/vmu-logo.png` asset loads at its natural resolution without distortion.
 - Verified the browser favicon references the same VMU logo asset.
 
+## Bulk user import verification
+
+- Verified the Excel import trigger beside the add-user action.
+- Parsed a real `.xlsx` fixture and previewed its first rows with no console errors.
+- Verified row-level skipped reasons and the compact result summary.
+- Rechecked the dialog at `1440x900` and `390x844` with no page or dialog overflow.
+
 Final result: passed

@@ -1016,3 +1016,10 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Replaced text placeholders in the sidebar and authentication screens with the real logo.
 - Reused the same logo as the browser favicon.
 - Verified successful loading and rendering without console errors.
+
+### Implementation status - Bulk user import
+
+- Added a dedicated `ADMIN_ACCESS` API for importing up to 500 users per request.
+- Added `.xlsx` parsing, file validation, data preview and row-level results on the frontend.
+- Batched database checks and writes without changing the database schema.
+- Verified CSRF, duplicate/invalid row handling and desktop/mobile dialog states.

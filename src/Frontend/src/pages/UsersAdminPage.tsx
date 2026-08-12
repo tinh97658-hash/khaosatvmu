@@ -7,6 +7,7 @@ import {
   CircleAlert,
   Eye,
   FileClock,
+  FileUp,
   Filter,
   LoaderCircle,
   Pencil,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Modal } from '../components/Modal';
+import { UserImportDialog } from '../components/UserImportDialog';
 import { adminApi } from '../services/adminApi';
 import { ApiError } from '../services/apiClient';
 import type {
@@ -50,6 +52,7 @@ const emptyProfile: SaveAdminProfile = {
 
 const eventNames: Record<string, string> = {
   ADMIN_USER_CREATED: 'Tạo tài khoản',
+  ADMIN_USER_IMPORTED: 'Import tài khoản',
   ADMIN_USER_ENABLED: 'Kích hoạt tài khoản',
   ADMIN_USER_DISABLED: 'Vô hiệu tài khoản',
   ADMIN_PROFILE_CREATED: 'Tạo profile',
@@ -101,6 +104,7 @@ export function UsersAdminPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [isImportUsersOpen, setIsImportUsersOpen] = useState(false);
   const [newUser, setNewUser] = useState({ displayName: '', email: '' });
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [editingProfile, setEditingProfile] = useState<AdminProfile | null>(null);
@@ -317,14 +321,24 @@ export function UsersAdminPage() {
           </button>
         </div>
         {view === 'users' && (
-          <button
-            type="button"
-            className="btn btn-primary admin-primary-action"
-            onClick={() => { setError(null); setIsAddUserOpen(true); }}
-          >
-            <Plus aria-hidden="true" />
-            Thêm người dùng
-          </button>
+          <div className="admin-view-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => { setError(null); setIsImportUsersOpen(true); }}
+            >
+              <FileUp aria-hidden="true" />
+              Import Excel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary admin-primary-action"
+              onClick={() => { setError(null); setIsAddUserOpen(true); }}
+            >
+              <Plus aria-hidden="true" />
+              Thêm người dùng
+            </button>
+          </div>
         )}
       </div>
 
@@ -637,6 +651,15 @@ export function UsersAdminPage() {
           </div>
         </form>
       </Modal>
+
+      <UserImportDialog
+        isOpen={isImportUsersOpen}
+        onClose={() => setIsImportUsersOpen(false)}
+        onImported={() => {
+          if (page === 1) void loadUsers();
+          else setPage(1);
+        }}
+      />
 
       <Modal
         isOpen={selectedUser !== null}

@@ -10,6 +10,7 @@ namespace Infrastructure.UserAdministration;
 public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdministrationService
 {
     private const int MaximumPageSize = 100;
+    private const int MaximumImportRows = 500;
 
     public async Task<AdminPage<AdminUserDto>> GetUsersAsync(
         string? search,
@@ -51,10 +52,7 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
         CancellationToken cancellationToken = default)
     {
         var email = command.Email.Trim().ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(email)
-            || email.Length > 320
-            || !MailAddress.TryCreate(email, out var parsedEmail)
-            || !string.Equals(parsedEmail.Address, email, StringComparison.OrdinalIgnoreCase)
+        if (!IsValidEmail(email)
             || !IsValidDisplayName(command.DisplayName))
         {
             return Failure<AdminUserDto>(UserAdministrationErrorCodes.InvalidRequest);
@@ -79,6 +77,76 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
         AddAudit(user, null, "ADMIN_USER_CREATED", actorUserId, new { user.Email });
         await db.SaveChangesAsync(cancellationToken);
         return Success(await BuildUserAsync(user, cancellationToken));
+    }
+
+    public async Task<AdminOperationResult<AdminUserImportDto>> ImportUsersAsync(
+        IReadOnlyList<ImportAdminUserRowCommand> commands,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        if (commands.Count == 0)
+        {
+            return Failure<AdminUserImportDto>(UserAdministrationErrorCodes.InvalidRequest);
+        }
+
+        if (commands.Count > MaximumImportRows)
+        {
+            return Failure<AdminUserImportDto>(UserAdministrationErrorCodes.ImportTooManyRows);
+        }
+
+        var normalizedEmails = commands
+            .Select(x => (x.Email ?? string.Empty).Trim().ToLowerInvariant())
+            .Where(IsValidEmail)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var existingEmails = normalizedEmails.Length == 0
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : (await db.Users
+                .AsNoTracking()
+                .Where(x => normalizedEmails.Contains(x.Email.ToLower()))
+                .Select(x => x.Email)
+                .ToListAsync(cancellationToken))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var seenEmails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var items = new List<AdminUserImportItemDto>(commands.Count);
+        var createdCount = 0;
+        foreach (var command in commands.OrderBy(x => x.RowNumber))
+        {
+            var email = (command.Email ?? string.Empty).Trim().ToLowerInvariant();
+            var errorCode = ValidateImportRow(command, email, seenEmails, existingEmails);
+            if (errorCode is not null)
+            {
+                items.Add(new AdminUserImportItemDto(command.RowNumber, email, false, errorCode));
+                continue;
+            }
+
+            var now = DateTime.UtcNow;
+            var user = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = email,
+                DisplayName = NormalizeOptional(command.DisplayName),
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            db.Users.Add(user);
+            AddAudit(user, null, "ADMIN_USER_IMPORTED", actorUserId, new { command.RowNumber, user.Email });
+            items.Add(new AdminUserImportItemDto(command.RowNumber, email, true, null));
+            createdCount++;
+        }
+
+        if (createdCount > 0)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return Success(new AdminUserImportDto(
+            commands.Count,
+            createdCount,
+            commands.Count - createdCount,
+            items));
     }
 
     public async Task<AdminOperationResult<AdminUserDto>> SetUserStatusAsync(
@@ -547,6 +615,43 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
 
     private static bool IsValidDisplayName(string? value) =>
         string.IsNullOrWhiteSpace(value) || value.Trim().Length <= 200;
+
+    private static bool IsValidEmail(string value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && value.Length <= 320
+        && MailAddress.TryCreate(value, out var parsedEmail)
+        && string.Equals(parsedEmail.Address, value, StringComparison.OrdinalIgnoreCase);
+
+    private static string? ValidateImportRow(
+        ImportAdminUserRowCommand command,
+        string email,
+        ISet<string> seenEmails,
+        IReadOnlySet<string> existingEmails)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return UserAdministrationErrorCodes.ImportEmailRequired;
+        }
+
+        if (!IsValidEmail(email))
+        {
+            return UserAdministrationErrorCodes.ImportEmailInvalid;
+        }
+
+        if (!IsValidDisplayName(command.DisplayName))
+        {
+            return UserAdministrationErrorCodes.ImportDisplayNameInvalid;
+        }
+
+        if (!seenEmails.Add(email))
+        {
+            return UserAdministrationErrorCodes.ImportDuplicateEmail;
+        }
+
+        return existingEmails.Contains(email)
+            ? UserAdministrationErrorCodes.UserEmailExists
+            : null;
+    }
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

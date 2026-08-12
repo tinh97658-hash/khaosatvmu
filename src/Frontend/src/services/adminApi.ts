@@ -4,6 +4,8 @@ import type {
   AdminProfile,
   AdminRole,
   AdminUser,
+  AdminUserImportResult,
+  ImportAdminUserRow,
   SaveAdminProfile,
 } from '../types';
 import { apiRequest, csrfRequest } from './apiClient';
@@ -25,6 +27,8 @@ export const adminApi = {
     ),
   createUser: (email: string, displayName: string) =>
     csrfRequest<AdminUser>('/api/admin/users', 'POST', { email, displayName }),
+  importUsers: (users: ImportAdminUserRow[]) =>
+    csrfRequest<AdminUserImportResult>('/api/admin/users/import', 'POST', { users }),
   setUserStatus: (userId: string, isActive: boolean) =>
     csrfRequest<AdminUser>(`/api/admin/users/${userId}/status`, 'PATCH', { isActive }),
   roles: () => apiRequest<AdminRole[]>('/api/admin/roles'),

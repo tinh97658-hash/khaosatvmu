@@ -35,6 +35,22 @@ public static class UserAdministrationEndpoints
             return ToResult(result);
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
+        group.MapPost("/users/import", async (
+            ImportUsersRequest request,
+            ClaimsPrincipal principal,
+            IUserAdministrationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var commands = request.Users?
+                .Select(x => new ImportAdminUserRowCommand(x.RowNumber, x.Email ?? string.Empty, x.DisplayName))
+                .ToList() ?? [];
+            var result = await service.ImportUsersAsync(
+                commands,
+                GetRequiredGuidClaim(principal, ClaimTypes.NameIdentifier),
+                cancellationToken);
+            return ToResult(result);
+        }).AddEndpointFilter<RequireAntiforgeryFilter>();
+
         group.MapPatch("/users/{userId:guid}/status", async (
             Guid userId,
             SetStatusRequest request,
@@ -145,6 +161,10 @@ public static class UserAdministrationEndpoints
             : throw new InvalidOperationException($"Required claim '{claimType}' is missing.");
 
     public sealed record CreateUserRequest(string Email, string? DisplayName);
+
+    public sealed record ImportUsersRequest(IReadOnlyList<ImportUserRowRequest>? Users);
+
+    public sealed record ImportUserRowRequest(int RowNumber, string Email, string? DisplayName);
 
     public sealed record SetStatusRequest(bool IsActive);
 
