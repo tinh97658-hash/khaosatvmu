@@ -1002,3 +1002,10 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Removed duplicate page titles while retaining action bars, tabs and section headings.
 - Adjusted mobile toast placement and campaign filter sizing to avoid overlap.
 - Verified zero shell gaps, no horizontal overflow and no console errors on desktop and mobile.
+
+### Implementation status - Frontend toolbar alignment
+
+- Moved progress export into the search and status-filter toolbar.
+- Moved campaign, criteria and user actions to the right side of their tab bars.
+- Positioned table pagination at the bottom of pages when result sets are short.
+- Verified the updated toolbars and pagination on desktop and mobile.

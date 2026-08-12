@@ -202,20 +202,6 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({ classes 
 
   return (
     <div className="survey-operations-page operations-table-page survey-progress-page">
-      <header className="page-header operations-page-header">
-        <div className="page-title-group">
-          <h2>Theo dõi tiến độ thu phiếu khảo sát</h2>
-          <p>Giám sát số lượng và tỷ lệ sinh viên hoàn thành theo lớp học phần và từng nhóm lớp.</p>
-        </div>
-        <button
-          className="btn btn-primary"
-          onClick={handleExportCsv}
-        >
-          <Download className="operation-icon" aria-hidden="true" />
-          Xuất báo cáo Excel
-        </button>
-      </header>
-
       <section className="operations-metrics" aria-label="Tổng quan tiến độ">
         <div className="operation-metric">
           <span className="operation-metric-icon"><Target className="operation-icon" aria-hidden="true" /></span>
@@ -258,6 +244,12 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({ classes 
         ]}
         currentFilter={statusFilter}
         onFilterChange={setStatusFilter}
+        toolbarActions={(
+          <button className="btn btn-primary btn-sm" onClick={handleExportCsv}>
+            <Download className="operation-icon" aria-hidden="true" />
+            Xuất báo cáo Excel
+          </button>
+        )}
         emptyMessage="Không tìm thấy lớp hoặc nhóm phù hợp."
         keyExtractor={(item) => item.id}
       />

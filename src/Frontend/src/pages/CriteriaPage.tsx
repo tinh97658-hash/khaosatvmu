@@ -132,26 +132,8 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
 
   return (
     <div className="survey-operations-page operations-table-page criteria-page">
-      <header className="page-header operations-page-header">
-        <div className="page-title-group">
-          <h2>
-            {activeTab === 'Học phần'
-              ? 'Bộ tiêu chí đánh giá học phần'
-              : 'Bộ tiêu chí đánh giá chương trình đào tạo'}
-          </h2>
-          <p>
-            {activeTab === 'Học phần'
-              ? 'Chuẩn hóa tiêu chí đánh giá hoạt động giảng dạy, học liệu, phòng thực hành và trải nghiệm môn học'
-              : 'Chuẩn hóa tiêu chí đánh giá chuẩn đầu ra (PLO), khung chương trình, trải nghiệm sinh viên và sự đáp ứng của doanh nghiệp'}
-          </p>
-        </div>
-        <button className="btn btn-primary" onClick={handleOpenModal}>
-          <Plus className="operation-icon" aria-hidden="true" />
-          Thêm tiêu chí
-        </button>
-      </header>
-
-      <div className="operations-tabs" role="tablist" aria-label="Loại bộ tiêu chí">
+      <div className="operations-tabs-bar">
+        <div className="operations-tabs" role="tablist" aria-label="Loại bộ tiêu chí">
         <button
           className={`operations-tab ${activeTab === 'Học phần' ? 'is-active' : ''}`}
           role="tab"
@@ -176,6 +158,13 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
             {criteria.filter((c) => c.category === 'Chương trình đào tạo').length}
           </span>
         </button>
+        </div>
+        <div className="operations-tab-actions">
+          <button className="btn btn-primary" onClick={handleOpenModal}>
+            <Plus className="operation-icon" aria-hidden="true" />
+            Thêm tiêu chí
+          </button>
+        </div>
       </div>
 
       <DataTable
@@ -184,8 +173,6 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder={`Tìm tiêu chí ${activeTab}...`}
-        onAddNew={handleOpenModal}
-        addNewLabel={`Thêm tiêu chí ${activeTab}`}
         emptyMessage="Không tìm thấy tiêu chí phù hợp."
         keyExtractor={(item) => item.id}
       />

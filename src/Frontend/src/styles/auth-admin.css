@@ -544,47 +544,26 @@
   width: 100%;
   min-height: 100%;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--ops-canvas);
   color: var(--ops-text);
 }
 
-.admin-workspace-header {
+.admin-view-tabs-bar {
   min-height: 52px;
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-bottom: 0;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--ops-border);
+  align-items: flex-end;
+  gap: 12px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--ops-border-strong);
   background: var(--ops-surface);
-}
-
-.admin-workspace-header > div:first-child {
-  display: none;
-}
-
-.admin-workspace-header:not(:has(.admin-primary-action)) {
-  display: none;
-}
-
-.admin-workspace-header h2 {
-  margin-top: 3px;
-  color: var(--ops-text);
-  font-size: 20px;
-  line-height: 1.35;
-  letter-spacing: 0;
-}
-
-.admin-workspace-header p {
-  margin-top: 3px;
-  color: var(--ops-muted);
-  font-size: 12px;
 }
 
 .admin-primary-action {
   min-height: 36px;
   flex: 0 0 auto;
+  margin: 0 0 8px auto;
   padding: 7px 13px;
   border-radius: 3px !important;
   background: var(--ops-primary);
@@ -597,11 +576,11 @@
 }
 
 .admin-view-tabs {
-  width: 100%;
+  min-width: 0;
   display: flex;
+  align-self: stretch;
   margin: 0;
   border: 0;
-  border-bottom: 1px solid var(--ops-border-strong);
   background: transparent;
 }
 
@@ -675,7 +654,10 @@
 }
 
 .admin-table-section {
-  margin: 12px 0 24px;
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  margin: 12px 0 0;
   overflow: hidden;
   border: 1px solid var(--ops-border-strong);
   background: var(--ops-surface);
@@ -778,7 +760,8 @@
 }
 
 .admin-table-container {
-  max-height: min(62vh, 640px);
+  flex: 1 0 auto;
+  max-height: none;
   overflow: auto;
 }
 
@@ -1001,6 +984,7 @@
   border-top: 1px solid var(--ops-border);
   background: var(--ops-surface);
   font-size: 11px;
+  margin-top: auto;
 }
 
 .admin-audit-heading {
@@ -1433,7 +1417,6 @@
     min-height: 44px;
   }
 
-  .admin-workspace-header,
   .admin-audit-heading,
   .admin-account-summary,
   .admin-profile-heading {
@@ -1441,7 +1424,6 @@
     flex-direction: column;
   }
 
-  .admin-primary-action,
   .admin-account-summary > .btn,
   .admin-profile-heading .btn {
     width: 100%;
@@ -1453,6 +1435,23 @@
     flex: 1;
     justify-content: center;
     padding-inline: 8px;
+  }
+
+  .admin-view-tabs-bar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+  }
+
+  .admin-view-tabs {
+    width: 100%;
+  }
+
+  .admin-view-tabs-bar .admin-primary-action {
+    width: auto;
+    min-height: 44px;
+    margin: 8px 10px 8px auto;
   }
 
   .admin-table-toolbar {
@@ -1523,14 +1522,6 @@
 }
 
 @media (max-width: 520px) {
-  .admin-workspace-header h2 {
-    font-size: 18px;
-  }
-
-  .admin-workspace-header p {
-    line-height: 1.45;
-  }
-
   .admin-view-tabs button {
     font-size: 11px;
   }

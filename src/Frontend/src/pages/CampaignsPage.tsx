@@ -181,18 +181,34 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
 
   return (
     <div className="survey-operations-page campaigns-page">
-      <header className="page-header operations-page-header">
-        <div className="page-title-group">
-          <h2>
-            {activeTab === 'Học phần'
-              ? 'Quản lý đợt khảo sát học phần'
-              : 'Quản lý đợt khảo sát chương trình đào tạo'}
-          </h2>
-          <p>
-            Theo dõi theo năm học, học kỳ và từng bài khảo sát có liên kết cùng mã QR riêng.
-          </p>
+      <div className="operations-tabs-bar">
+        <div className="operations-tabs" role="tablist" aria-label="Loại khảo sát">
+          <button
+            className={`operations-tab ${activeTab === 'Học phần' ? 'is-active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === 'Học phần'}
+            onClick={() => setActiveTab('Học phần')}
+          >
+            <BookOpen className="operation-icon" aria-hidden="true" />
+            Học phần
+            <span className="operations-tab-count">
+              {campaigns.filter((c) => c.type === 'Học phần').length}
+            </span>
+          </button>
+          <button
+            className={`operations-tab ${activeTab === 'Chương trình đào tạo' ? 'is-active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === 'Chương trình đào tạo'}
+            onClick={() => setActiveTab('Chương trình đào tạo')}
+          >
+            <GraduationCap className="operation-icon" aria-hidden="true" />
+            Chương trình đào tạo
+            <span className="operations-tab-count">
+              {campaigns.filter((c) => c.type === 'Chương trình đào tạo').length}
+            </span>
+          </button>
         </div>
-        <div className="operations-header-actions">
+        <div className="operations-tab-actions">
           <button className="btn btn-secondary" onClick={handleExportCampaigns}>
             <Download className="operation-icon" aria-hidden="true" />
             Xuất danh sách
@@ -202,33 +218,6 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
             Tạo đợt khảo sát
           </button>
         </div>
-      </header>
-
-      <div className="operations-tabs" role="tablist" aria-label="Loại khảo sát">
-        <button
-          className={`operations-tab ${activeTab === 'Học phần' ? 'is-active' : ''}`}
-          role="tab"
-          aria-selected={activeTab === 'Học phần'}
-          onClick={() => setActiveTab('Học phần')}
-        >
-          <BookOpen className="operation-icon" aria-hidden="true" />
-          Học phần
-          <span className="operations-tab-count">
-            {campaigns.filter((c) => c.type === 'Học phần').length}
-          </span>
-        </button>
-        <button
-          className={`operations-tab ${activeTab === 'Chương trình đào tạo' ? 'is-active' : ''}`}
-          role="tab"
-          aria-selected={activeTab === 'Chương trình đào tạo'}
-          onClick={() => setActiveTab('Chương trình đào tạo')}
-        >
-          <GraduationCap className="operation-icon" aria-hidden="true" />
-          Chương trình đào tạo
-          <span className="operations-tab-count">
-            {campaigns.filter((c) => c.type === 'Chương trình đào tạo').length}
-          </span>
-        </button>
       </div>
 
       <section className="operations-toolbar" aria-label="Bộ lọc chiến dịch">

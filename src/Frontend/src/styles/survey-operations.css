@@ -13,35 +13,6 @@
   color: var(--operations-text);
 }
 
-.survey-operations-page .operations-page-header {
-  min-height: 52px;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-bottom: 0;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--operations-border);
-  background: var(--operations-surface);
-}
-
-.survey-operations-page .page-title-group {
-  display: none;
-}
-
-.survey-operations-page .page-title-group h2 {
-  color: var(--operations-text);
-  font-size: 20px;
-  line-height: 1.3;
-  letter-spacing: 0;
-}
-
-.survey-operations-page .page-title-group p {
-  max-width: 760px;
-  color: var(--operations-text-muted);
-  font-size: 13px;
-}
-
-.operations-header-actions,
 .operations-actions,
 .operations-inline-actions,
 .operations-form-actions,
@@ -49,11 +20,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.operations-header-actions {
-  flex: 0 0 auto;
-  justify-content: flex-end;
 }
 
 .survey-operations-page .btn {
@@ -103,12 +69,30 @@
   padding: 0 !important;
 }
 
-.operations-tabs {
+.operations-tabs-bar {
+  min-height: 52px;
   display: flex;
-  gap: 0;
+  align-items: flex-end;
+  gap: 12px;
   margin-bottom: 12px;
-  overflow-x: auto;
+  padding: 0 10px;
   border-bottom: 1px solid var(--operations-border);
+  background: var(--operations-surface);
+}
+
+.operations-tabs {
+  min-width: 0;
+  display: flex;
+  align-self: stretch;
+  gap: 0;
+  overflow-x: auto;
+}
+
+.operations-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px auto;
 }
 
 .operations-tab {
@@ -136,6 +120,11 @@
 .operations-tab.is-active {
   border-bottom-color: var(--operations-primary);
   color: var(--operations-primary-dark);
+}
+
+.operations-table-page {
+  display: flex;
+  flex-direction: column;
 }
 
 .operations-tab-count,
@@ -1207,7 +1196,6 @@
 }
 
 @media (max-width: 760px) {
-  .survey-operations-page .operations-page-header,
   .operations-toolbar,
   .campaign-year-header,
   .campaign-semester-header,
@@ -1218,7 +1206,6 @@
     align-items: stretch;
   }
 
-  .survey-operations-page .operations-page-header,
   .operations-toolbar,
   .campaign-year-header,
   .campaign-semester-header,
@@ -1227,7 +1214,7 @@
     flex-direction: column;
   }
 
-  .operations-header-actions,
+  .operations-tab-actions,
   .campaign-year-actions,
   .campaign-semester-actions,
   .wizard-header .operations-actions {
@@ -1235,7 +1222,7 @@
     flex-wrap: wrap;
   }
 
-  .operations-header-actions .btn,
+  .operations-tab-actions .btn,
   .campaign-year-actions .btn,
   .campaign-semester-actions .btn,
   .wizard-header .btn,
@@ -1245,6 +1232,24 @@
 
   .operations-toolbar {
     align-items: stretch;
+  }
+
+  .operations-tabs-bar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+  }
+
+  .operations-tabs {
+    width: 100%;
+  }
+
+  .operations-tab-actions {
+    justify-content: flex-end;
+    margin: 0;
+    padding: 8px 10px;
+    border-top: 1px solid var(--operations-border);
   }
 
   .operations-field--search {

@@ -289,11 +289,32 @@ export function UsersAdminPage() {
 
   return (
     <div className="admin-users-page">
-      <header className="admin-workspace-header">
-        <div>
-          <span className="admin-section-label">QUẢN TRỊ TRUY CẬP</span>
-          <h2>Người dùng và phân quyền</h2>
-          <p>Quản lý tài khoản Google, hồ sơ làm việc và lịch sử xác thực.</p>
+      <div className="admin-view-tabs-bar">
+        <div className="admin-view-tabs" role="tablist" aria-label="Chế độ quản trị người dùng">
+          <button
+            id="admin-users-tab"
+            type="button"
+            className={view === 'users' ? 'active' : ''}
+            onClick={() => { setView('users'); setError(null); }}
+            role="tab"
+            aria-selected={view === 'users'}
+            aria-controls="admin-users-panel"
+          >
+            <UsersRound aria-hidden="true" />
+            Tài khoản và hồ sơ
+          </button>
+          <button
+            id="admin-audit-tab"
+            type="button"
+            className={view === 'audit' ? 'active' : ''}
+            onClick={() => { setView('audit'); setError(null); }}
+            role="tab"
+            aria-selected={view === 'audit'}
+            aria-controls="admin-audit-panel"
+          >
+            <FileClock aria-hidden="true" />
+            Nhật ký hệ thống
+          </button>
         </div>
         {view === 'users' && (
           <button
@@ -305,33 +326,6 @@ export function UsersAdminPage() {
             Thêm người dùng
           </button>
         )}
-      </header>
-
-      <div className="admin-view-tabs" role="tablist" aria-label="Chế độ quản trị người dùng">
-        <button
-          id="admin-users-tab"
-          type="button"
-          className={view === 'users' ? 'active' : ''}
-          onClick={() => { setView('users'); setError(null); }}
-          role="tab"
-          aria-selected={view === 'users'}
-          aria-controls="admin-users-panel"
-        >
-          <UsersRound aria-hidden="true" />
-          Tài khoản và hồ sơ
-        </button>
-        <button
-          id="admin-audit-tab"
-          type="button"
-          className={view === 'audit' ? 'active' : ''}
-          onClick={() => { setView('audit'); setError(null); }}
-          role="tab"
-          aria-selected={view === 'audit'}
-          aria-controls="admin-audit-panel"
-        >
-          <FileClock aria-hidden="true" />
-          Nhật ký hệ thống
-        </button>
       </div>
 
       {error && !isAddUserOpen && !selectedUser && !statusConfirmation && (

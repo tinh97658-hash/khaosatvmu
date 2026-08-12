@@ -26,4 +26,11 @@
 - Removed duplicate page-level titles while preserving action bars, tabs and section headings.
 - Corrected the mobile campaign search field sizing and rechecked at `390x844`.
 
+## Toolbar and pagination verification
+
+- Verified progress export beside the progress filter in the shared table toolbar.
+- Verified campaign, criteria and user actions at the right edge of their tab bars.
+- Verified pagination at the bottom of progress, criteria and administration pages.
+- Rechecked desktop and mobile with no page-level overflow or browser console errors.
+
 Final result: passed

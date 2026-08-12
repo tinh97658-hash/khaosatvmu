@@ -20,6 +20,7 @@ interface DataTableProps<T> {
   onFilterChange?: (val: string) => void;
   onAddNew?: () => void;
   addNewLabel?: string;
+  toolbarActions?: ReactNode;
   emptyMessage?: string;
   keyExtractor: (item: T) => string;
 }
@@ -35,6 +36,7 @@ export function DataTable<T>({
   onFilterChange,
   onAddNew,
   addNewLabel = 'Thêm mới',
+  toolbarActions,
   emptyMessage = 'Chưa có dữ liệu trong danh mục này.',
   keyExtractor,
 }: DataTableProps<T>) {
@@ -86,6 +88,8 @@ export function DataTable<T>({
               <span>{resolvedAddLabel}</span>
             </button>
           )}
+
+          {toolbarActions}
         </div>
       </div>
 
