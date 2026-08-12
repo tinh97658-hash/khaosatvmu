@@ -953,3 +953,10 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Configured an External Google OAuth client through local `.env` credentials.
 - Successfully completed an interactive Google Account login on local.
 - Kept negative access cases and multi-profile switching as separate verification items.
+
+### Implementation status - Frontend sidebar refresh
+
+- Rebuilt the sidebar as a compact, light, data-first navigation surface.
+- Replaced emoji navigation with typed Lucide icons and concise Vietnamese labels.
+- Added active, count, focus, mobile drawer, overlay and Escape-key states.
+- Verified the sidebar visually on desktop and mobile viewports.
