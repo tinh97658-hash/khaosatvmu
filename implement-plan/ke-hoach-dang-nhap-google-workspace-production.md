@@ -960,3 +960,10 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Replaced emoji navigation with typed Lucide icons and concise Vietnamese labels.
 - Added active, count, focus, mobile drawer, overlay and Escape-key states.
 - Verified the sidebar visually on desktop and mobile viewports.
+
+### Implementation status - Frontend application shell refresh
+
+- Rebuilt the header with compact breadcrumbs, profile controls and Lucide actions.
+- Standardized the light application shell, spacing and responsive header behavior.
+- Added focused keyboard states and mobile content constraints.
+- Kept final visual verification pending until the parallel page updates are complete.

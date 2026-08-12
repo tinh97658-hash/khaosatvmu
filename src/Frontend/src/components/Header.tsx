@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { ChevronRight, LogOut, QrCode } from 'lucide-react';
 import type { AuthProfile, AuthUser } from '../types';
 
 interface HeaderProps {
@@ -11,39 +12,27 @@ interface HeaderProps {
   onLogout: () => Promise<void>;
 }
 
-const tabTitles: Record<string, { title: string; subtitle: string }> = {
-  overview: {
-    title: 'Tổng Quan Hệ Thống Đánh Giá VMU',
-    subtitle: 'Thống kê & Theo dõi tiến độ khảo sát kết quả học phần và chương trình đào tạo',
-  },
-  faculties: {
-    title: 'Quản Lý Danh Mục Khoa / Viện',
-    subtitle: 'Danh sách các Khoa chuyên ngành & Viện đào tạo thuộc Trường ĐH Hàng hải VN',
-  },
-  majors: {
-    title: 'Quản Lý Ngành & Chương Trình Đào Tạo',
-    subtitle: 'Danh mục Ngành học, trình độ và chuẩn đầu ra đào tạo (PLO)',
-  },
-  courses: {
-    title: 'Quản Lý Học Phần & Môn Học',
-    subtitle: 'Danh mục Học phần, số tín chỉ và chuẩn đầu ra học phần (CLO)',
-  },
-  classes: {
-    title: 'Quản Lý Lớp Học Phần & Giảng Viên',
-    subtitle: 'Danh sách Lớp học phần mở khảo sát theo Học kỳ & Năm học',
-  },
-  criteria: {
-    title: 'Quản Lý Bộ Tiêu Chí & Mẫu Phiếu Khảo Sát',
-    subtitle: 'Bộ câu hỏi đánh giá chất lượng dạy - học & CSVC',
-  },
-  campaigns: {
-    title: 'Quản Lý Đợt Khảo Sát & Mã QR Code',
-    subtitle: 'Thiết lập đợt đánh giá và xuất Mã QR cho Sinh viên truy cập bài khảo sát',
-  },
-  'users-admin': {
-    title: 'Quản Trị Người Dùng & Phân Quyền',
-    subtitle: 'Allowlist tài khoản Google, profile làm việc, role và lịch sử xác thực',
-  },
+interface TabContext {
+  section: string;
+  title: string;
+}
+
+const tabContexts: Record<string, TabContext> = {
+  overview: { section: 'Tổng quan', title: 'Bảng điều khiển' },
+  progress: { section: 'Tổng quan', title: 'Tiến độ thu phiếu' },
+  faculties: { section: 'Danh mục đào tạo', title: 'Khoa / Viện' },
+  departments: { section: 'Danh mục đào tạo', title: 'Bộ môn' },
+  lecturers: { section: 'Danh mục đào tạo', title: 'Giảng viên' },
+  majors: { section: 'Danh mục đào tạo', title: 'Ngành đào tạo' },
+  courses: { section: 'Danh mục đào tạo', title: 'Học phần' },
+  classes: { section: 'Danh mục đào tạo', title: 'Lớp học phần' },
+  criteria: { section: 'Khảo sát học phần', title: 'Tiêu chí học phần' },
+  campaigns: { section: 'Khảo sát học phần', title: 'Đợt khảo sát học phần' },
+  'course-criteria': { section: 'Khảo sát học phần', title: 'Tiêu chí học phần' },
+  'course-campaigns': { section: 'Khảo sát học phần', title: 'Đợt khảo sát học phần' },
+  'program-criteria': { section: 'Khảo sát chương trình', title: 'Tiêu chí CTĐT' },
+  'program-campaigns': { section: 'Khảo sát chương trình', title: 'Đợt khảo sát CTĐT' },
+  'users-admin': { section: 'Quản trị', title: 'Người dùng & phân quyền' },
 };
 
 const roleNames: Record<string, string> = {
@@ -53,7 +42,7 @@ const roleNames: Record<string, string> = {
   SURVEY_ADMIN: 'Quản trị khảo sát',
 };
 
-export const Header: React.FC<HeaderProps> = ({
+export function Header({
   currentTab,
   onOpenStudentView,
   user,
@@ -61,12 +50,12 @@ export const Header: React.FC<HeaderProps> = ({
   availableProfiles,
   onSwitchProfile,
   onLogout,
-}) => {
+}: HeaderProps) {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const info = tabTitles[currentTab] || {
-    title: 'Hệ Thống Đánh Giá VMU',
-    subtitle: 'Trường Đại học Hàng hải Việt Nam',
+  const context = tabContexts[currentTab] ?? {
+    section: 'Hệ thống khảo sát',
+    title: 'Trường Đại học Hàng hải Việt Nam',
   };
   const initials = (user.displayName ?? user.email)
     .split(' ')
@@ -103,26 +92,33 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="top-header">
       <div className="header-title-area">
-        <h1>{info.title}</h1>
         <div className="header-breadcrumb">
-          TRƯỜNG ĐẠI HỌC HÀNG HẢI VIỆT NAM &bull; {info.subtitle}
+          <span>Hệ thống khảo sát</span>
+          <ChevronRight aria-hidden="true" />
+          <span>{context.section}</span>
         </div>
+        <h1>{context.title}</h1>
       </div>
 
       <div className="header-actions">
         <button
-          className="btn btn-qr btn-sm"
+          type="button"
+          className="header-preview-button"
           onClick={onOpenStudentView}
-          title="Thử nghiệm giao diện sinh viên khi quét mã QR"
+          title="Xem giao diện khảo sát của sinh viên"
         >
-          <span>📱</span> Xem Giao Diện Quét QR Sinh Viên
+          <QrCode aria-hidden="true" />
+          <span>Xem bản khảo sát</span>
         </button>
 
         <div className="user-badge">
-          <div className="avatar">{initials}</div>
+          <div className="avatar" aria-hidden="true">{initials}</div>
           <div className="user-info">
             <span className="user-name">{user.displayName ?? user.email}</span>
-            <span className={`user-role ${actionError ? 'error' : ''}`}>
+            <span
+              className={`user-role ${actionError ? 'error' : ''}`}
+              role={actionError ? 'alert' : undefined}
+            >
               {actionError ?? roleNames[activeProfile.roleCode] ?? activeProfile.roleCode}
             </span>
           </div>
@@ -140,14 +136,15 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             type="button"
             className="header-logout-button"
+            aria-label="Đăng xuất"
             title="Đăng xuất"
             onClick={() => void handleLogout()}
             disabled={busy}
           >
-            Đăng xuất
+            <LogOut aria-hidden="true" />
           </button>
         </div>
       </div>
     </header>
   );
-};
+}
