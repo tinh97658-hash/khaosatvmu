@@ -18,4 +18,12 @@
 - Browser console exceptions/errors: none during the QA navigation run.
 - Build and lint: passed.
 
+## Workspace polish verification
+
+- Verified the custom profile combobox in open and closed states on desktop and mobile.
+- Verified success toast placement on desktop and moved mobile notifications below header controls.
+- Measured `0px` gaps between the main content, header and desktop sidebar.
+- Removed duplicate page-level titles while preserving action bars, tabs and section headings.
+- Corrected the mobile campaign search field sizing and rechecked at `390x844`.
+
 Final result: passed

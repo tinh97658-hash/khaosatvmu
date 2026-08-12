@@ -6,18 +6,26 @@
   --operations-border: #dfe4e8;
   --operations-text: #20262c;
   --operations-text-muted: #68737d;
+  width: 100%;
+  min-height: 100%;
   min-width: 0;
+  background: var(--operations-muted);
   color: var(--operations-text);
 }
 
 .survey-operations-page .operations-page-header {
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 16px;
+  min-height: 52px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--operations-border);
+  background: var(--operations-surface);
 }
 
 .survey-operations-page .page-title-group {
-  min-width: 0;
+  display: none;
 }
 
 .survey-operations-page .page-title-group h2 {
@@ -1241,6 +1249,7 @@
 
   .operations-field--search {
     min-width: 0;
+    flex: 0 0 auto;
   }
 
   .campaign-semester-toggle {
