@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { ChevronRight, LogOut, QrCode } from 'lucide-react';
+import { toast } from 'sonner';
 import type { AuthProfile, AuthUser } from '../types';
+import { ProfileSwitcher } from './ProfileSwitcher';
 
 interface HeaderProps {
   currentTab: string;
@@ -52,7 +54,6 @@ export function Header({
   onLogout,
 }: HeaderProps) {
   const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
   const context = tabContexts[currentTab] ?? {
     section: 'Hệ thống khảo sát',
     title: 'Trường Đại học Hàng hải Việt Nam',
@@ -67,11 +68,16 @@ export function Header({
   const handleSwitch = async (profileId: string) => {
     if (profileId === activeProfile.id) return;
     setBusy(true);
-    setActionError(null);
     try {
       await onSwitchProfile(profileId);
+      const selectedProfile = availableProfiles.find((profile) => profile.id === profileId);
+      toast.success('Đã chuyển hồ sơ làm việc', {
+        description: selectedProfile?.name,
+      });
     } catch {
-      setActionError('Không thể đổi hồ sơ');
+      toast.error('Không thể đổi hồ sơ', {
+        description: 'Hãy kiểm tra lại phiên đăng nhập và thử lại.',
+      });
     } finally {
       setBusy(false);
     }
@@ -79,11 +85,13 @@ export function Header({
 
   const handleLogout = async () => {
     setBusy(true);
-    setActionError(null);
     try {
       await onLogout();
+      toast.success('Đã đăng xuất');
     } catch {
-      setActionError('Không thể đăng xuất');
+      toast.error('Không thể đăng xuất', {
+        description: 'Hãy thử lại sau ít phút.',
+      });
     } finally {
       setBusy(false);
     }
@@ -115,24 +123,17 @@ export function Header({
           <div className="avatar" aria-hidden="true">{initials}</div>
           <div className="user-info">
             <span className="user-name">{user.displayName ?? user.email}</span>
-            <span
-              className={`user-role ${actionError ? 'error' : ''}`}
-              role={actionError ? 'alert' : undefined}
-            >
-              {actionError ?? roleNames[activeProfile.roleCode] ?? activeProfile.roleCode}
+            <span className="user-role">
+              {roleNames[activeProfile.roleCode] ?? activeProfile.roleCode}
             </span>
           </div>
-          <select
-            className="profile-switcher"
-            aria-label="Hồ sơ làm việc"
-            value={activeProfile.id}
+          <ProfileSwitcher
+            activeProfile={activeProfile}
+            profiles={availableProfiles}
             disabled={busy}
-            onChange={(event) => void handleSwitch(event.target.value)}
-          >
-            {availableProfiles.map((profile) => (
-              <option key={profile.id} value={profile.id}>{profile.name}</option>
-            ))}
-          </select>
+            roleNames={roleNames}
+            onSelect={(profileId) => void handleSwitch(profileId)}
+          />
           <button
             type="button"
             className="header-logout-button"

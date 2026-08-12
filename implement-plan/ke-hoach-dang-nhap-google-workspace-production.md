@@ -988,3 +988,10 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Migrated catalog, survey, QR and administration success feedback to typed toasts.
 - Kept field validation inline and destructive confirmation in named dialogs.
 - Verified no native browser `alert()` or `confirm()` remains in the frontend source.
+
+### Implementation status - Frontend profile switcher
+
+- Replaced the native profile select with an accessible custom combobox.
+- Added profile names, role context, selected state and responsive dropdown behavior.
+- Added keyboard navigation, outside-click dismissal and busy state handling.
+- Routed profile-switch and logout feedback through the shared toast system.
