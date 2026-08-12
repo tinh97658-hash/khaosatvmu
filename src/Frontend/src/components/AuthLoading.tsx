@@ -5,7 +5,7 @@ export function AuthLoading() {
   return (
     <main className="auth-loading" aria-live="polite">
       <div className="auth-loading-panel">
-        <div className="auth-brand-mark compact" aria-hidden="true">VMU</div>
+        <img className="auth-brand-mark compact" src="/vmu-logo.png" alt="" aria-hidden="true" />
         <div className="auth-loading-copy">
           <span><ShieldCheck aria-hidden="true" /> CỔNG XÁC THỰC</span>
           <strong>Đang kiểm tra phiên đăng nhập</strong>

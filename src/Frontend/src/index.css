@@ -99,15 +99,12 @@ textarea:focus-visible {
   width: 38px;
   height: 38px;
   flex: 0 0 38px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--sidebar-accent-soft);
+  display: block;
+  padding: 2px;
+  object-fit: contain;
+  background: #ffffff;
   border: 1px solid #9CCFDF;
   border-radius: 3px !important;
-  color: var(--sidebar-accent-strong);
-  font-size: 12px;
-  font-weight: 800;
 }
 
 .sidebar-header-text {
@@ -1028,13 +1025,11 @@ textarea:focus-visible {
 .auth-brand-mark {
   width: 84px;
   height: 84px;
-  display: grid;
-  place-items: center;
-  background: var(--vmu-gold);
-  color: var(--vmu-navy-dark);
+  display: block;
+  padding: 3px;
+  object-fit: contain;
+  background: #ffffff;
   border: 4px solid #FFFFFF;
-  font-size: 24px;
-  font-weight: 800;
 }
 
 .auth-brand-mark.compact {

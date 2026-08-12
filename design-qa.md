@@ -33,4 +33,10 @@
 - Verified pagination at the bottom of progress, criteria and administration pages.
 - Rechecked desktop and mobile with no page-level overflow or browser console errors.
 
+## VMU brand asset verification
+
+- Verified the supplied transparent VMU logo in the authentication header and main sidebar.
+- Verified the shared `/vmu-logo.png` asset loads at its natural resolution without distortion.
+- Verified the browser favicon references the same VMU logo asset.
+
 Final result: passed

@@ -71,13 +71,11 @@
   width: 42px;
   height: 42px;
   flex: 0 0 42px;
-  display: grid;
-  place-items: center;
+  display: block;
+  padding: 2px;
+  object-fit: contain;
   border: 1px solid #9ccfdf;
-  background: var(--ops-primary-soft);
-  color: var(--ops-primary-dark);
-  font-size: 12px;
-  font-weight: 800;
+  background: var(--ops-surface);
 }
 
 .auth-brand-lockup p {

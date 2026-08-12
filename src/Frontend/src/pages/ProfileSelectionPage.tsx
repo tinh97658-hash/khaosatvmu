@@ -48,7 +48,7 @@ export function ProfileSelectionPage() {
     <main className="profile-selection-shell">
       <header className="profile-selection-header">
         <div className="auth-brand-lockup">
-          <div className="auth-brand-mark compact" aria-hidden="true">VMU</div>
+          <img className="auth-brand-mark compact" src="/vmu-logo.png" alt="" aria-hidden="true" />
           <div>
             <p>TRƯỜNG ĐẠI HỌC HÀNG HẢI VIỆT NAM</p>
             <span>Hệ thống Đánh giá chất lượng đào tạo</span>

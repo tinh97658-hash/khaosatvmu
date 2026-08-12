@@ -1009,3 +1009,10 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Moved campaign, criteria and user actions to the right side of their tab bars.
 - Positioned table pagination at the bottom of pages when result sets are short.
 - Verified the updated toolbars and pagination on desktop and mobile.
+
+### Implementation status - VMU brand asset
+
+- Moved the supplied VMU logo into the frontend public assets.
+- Replaced text placeholders in the sidebar and authentication screens with the real logo.
+- Reused the same logo as the browser favicon.
+- Verified successful loading and rendering without console errors.

@@ -137,7 +137,7 @@ export function Sidebar({
         className={`sidebar ${isMobileOpen ? 'is-mobile-open' : ''}`}
       >
         <div className="sidebar-header">
-          <div className="vmu-logo-icon" aria-hidden="true">VMU</div>
+          <img className="vmu-logo-icon" src="/vmu-logo.png" alt="" aria-hidden="true" />
           <div className="sidebar-header-text">
             <h2>KHẢO SÁT VMU</h2>
             <p>Quản lý chất lượng đào tạo</p>
