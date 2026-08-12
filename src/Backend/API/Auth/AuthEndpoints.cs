@@ -12,6 +12,14 @@ public static class AuthEndpoints
     {
         var group = endpoints.MapGroup("/api/auth");
 
+        group.MapGet("/config", (GoogleAuthConfiguration googleAuth, IHostEnvironment environment) =>
+            Results.Ok(new
+            {
+                googleConfigured = googleAuth.IsConfigured,
+                googleAuth.AllowedDomain,
+                development = environment.IsDevelopment()
+            }));
+
         group.MapGet("/login", (GoogleAuthConfiguration googleAuth) =>
         {
             if (!googleAuth.IsConfigured)

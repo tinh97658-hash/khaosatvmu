@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useAuth } from './auth/authContext';
+import { AuthLoading } from './components/AuthLoading';
 
 // Shared Components
 import { Header } from './components/Header';
@@ -17,6 +19,8 @@ import { CriteriaPage } from './pages/CriteriaPage';
 import { CampaignsPage } from './pages/CampaignsPage';
 import { SurveyProgressPage } from './pages/SurveyProgressPage';
 import { StudentSurveyView } from './pages/StudentSurveyView';
+import { LoginPage } from './pages/LoginPage';
+import { ProfileSelectionPage } from './pages/ProfileSelectionPage';
 
 // Mock Data & Types
 import {
@@ -42,7 +46,8 @@ import type {
   SurveyCampaign,
 } from './types';
 
-export function App() {
+function DashboardApp() {
+  const auth = useAuth();
   const [currentTab, setCurrentTab] = useState<string>('overview');
   const [isStudentView, setIsStudentView] = useState<boolean>(false);
 
@@ -197,6 +202,11 @@ export function App() {
         <Header
           currentTab={currentTab}
           onOpenStudentView={() => setIsStudentView(true)}
+          user={auth.user!}
+          activeProfile={auth.activeProfile!}
+          availableProfiles={auth.availableProfiles}
+          onSwitchProfile={auth.switchProfile}
+          onLogout={auth.logout}
         />
 
         <main className="content-area">
@@ -335,6 +345,25 @@ export function App() {
       />
     </div>
   );
+}
+
+export function App() {
+  const auth = useAuth();
+  const isProfileSelection = window.location.pathname === '/select-profile';
+
+  if (auth.status === 'loading') {
+    return <AuthLoading />;
+  }
+
+  if (isProfileSelection && auth.status !== 'authenticated') {
+    return <ProfileSelectionPage />;
+  }
+
+  if (auth.status !== 'authenticated') {
+    return <LoginPage />;
+  }
+
+  return <DashboardApp />;
 }
 
 export default App;

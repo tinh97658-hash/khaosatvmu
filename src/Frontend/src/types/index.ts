@@ -154,3 +154,40 @@ export interface SystemStats {
   overallSatisfaction: number; // e.g. 4.65 / 5.0
   qrScanCount: number;
 }
+
+export interface AuthProfile {
+  id: string;
+  name: string;
+  code: string;
+  roleCode: string;
+  organizationUnitCode: string | null;
+  organizationUnitName: string | null;
+  isDefault: boolean;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+}
+
+export interface AuthMeResponse {
+  authenticated: boolean;
+  user: AuthUser | null;
+  activeProfile: AuthProfile | null;
+  availableProfiles: AuthProfile[];
+}
+
+export interface AuthAccess {
+  profileId: string;
+  roleCode: string;
+  organizationUnitCode: string | null;
+  permissions: string[];
+}
+
+export interface AuthConfiguration {
+  googleConfigured: boolean;
+  allowedDomain: string;
+  development: boolean;
+}

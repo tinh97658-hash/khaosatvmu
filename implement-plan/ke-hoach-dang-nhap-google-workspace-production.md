@@ -921,3 +921,11 @@ Ràng buộc không thể bỏ qua là chính sách OAuth của Google Workspace
 - Added server-side logout revocation and support for revoking all user sessions.
 - Added CSRF tokens for profile selection, profile switching and logout.
 - Verified valid profile switching and rejected replay of a revoked cookie.
+
+### Implementation status - Phase 5
+
+- Added frontend auth state sourced from `/api/auth/me` and `/api/auth/access`.
+- Added Google login, Development login and protected dashboard states.
+- Added initial profile selection, header profile switching and CSRF logout.
+- Added Vietnamese auth error mapping and expired-session handling.
+- Verified desktop/mobile login layouts and the full auth flow through the Vite proxy.
