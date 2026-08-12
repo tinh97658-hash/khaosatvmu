@@ -37,7 +37,7 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
             permissions);
     }
 
-    public async Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity, string allowedDomain)
+    public async Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity)
     {
         if (string.IsNullOrWhiteSpace(identity.Subject) || string.IsNullOrWhiteSpace(identity.Email))
         {
@@ -49,15 +49,7 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
             return new GoogleSignInResult(false, AuthErrorCodes.EmailNotVerified, null, null, null);
         }
 
-        var normalizedDomain = allowedDomain.Trim().TrimStart('@').ToLowerInvariant();
         var normalizedEmail = identity.Email.Trim().ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(normalizedDomain)
-            || !string.Equals(identity.HostedDomain, normalizedDomain, StringComparison.OrdinalIgnoreCase)
-            || !normalizedEmail.EndsWith($"@{normalizedDomain}", StringComparison.Ordinal))
-        {
-            return new GoogleSignInResult(false, AuthErrorCodes.InvalidDomain, null, null, null);
-        }
-
         var userBySubject = await db.Users.SingleOrDefaultAsync(x => x.GoogleSubject == identity.Subject);
         var userByEmail = await db.Users.SingleOrDefaultAsync(x => x.Email.ToLower() == normalizedEmail);
         if (userBySubject is not null && userBySubject.Id != userByEmail?.Id)

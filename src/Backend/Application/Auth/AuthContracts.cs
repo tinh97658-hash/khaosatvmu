@@ -47,8 +47,7 @@ public sealed record GoogleIdentity(
     string Email,
     string? DisplayName,
     string? AvatarUrl,
-    bool EmailVerified,
-    string? HostedDomain);
+    bool EmailVerified);
 
 public sealed record GoogleSignInResult(
     bool Succeeded,
@@ -61,7 +60,7 @@ public interface IAuthService
 {
     Task<AuthMeResponse> GetCurrentAsync(ClaimsPrincipal? principal);
     Task<AuthAccessResponse?> GetAccessAsync(ClaimsPrincipal? principal);
-    Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity, string allowedDomain);
+    Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity);
     Task<SignInResult> DevSignInAsync(string email, string? profileCode);
     Task<IReadOnlyList<AuthProfileDto>> GetAvailableProfilesAsync(Guid userId);
     Task<ProfileSelectionResult> SelectInitialProfileAsync(Guid userId, Guid profileId);
@@ -77,7 +76,6 @@ public abstract record AuthErrorCodes
 {
     public const string UserNotRegistered = "AUTH_USER_NOT_REGISTERED";
     public const string AccountDisabled = "AUTH_ACCOUNT_DISABLED";
-    public const string InvalidDomain = "AUTH_INVALID_DOMAIN";
     public const string EmailNotVerified = "AUTH_EMAIL_NOT_VERIFIED";
     public const string InvalidGoogleIdentity = "AUTH_INVALID_GOOGLE_IDENTITY";
     public const string NoProfiles = "AUTH_NO_PROFILE";

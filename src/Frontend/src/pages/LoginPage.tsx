@@ -49,7 +49,7 @@ export function LoginPage() {
           </div>
 
           <p className="auth-panel-copy">
-            Sử dụng tài khoản Google Workspace do nhà trường cấp.
+            Sử dụng tài khoản Google đã được cấp quyền truy cập hệ thống.
           </p>
 
           {error && <div className="auth-alert" role="alert">{error}</div>}
@@ -91,7 +91,7 @@ export function LoginPage() {
           )}
 
           <div className="auth-domain-note">
-            Chỉ chấp nhận tài khoản @{auth.configuration?.allowedDomain || 'vmu.edu.vn'}
+            Chấp nhận Gmail và các tài khoản Google đã có trong allowlist.
           </div>
         </div>
       </section>

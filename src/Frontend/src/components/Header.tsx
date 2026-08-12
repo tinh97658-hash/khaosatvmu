@@ -42,7 +42,7 @@ const tabTitles: Record<string, { title: string; subtitle: string }> = {
   },
   'users-admin': {
     title: 'Quản Trị Người Dùng & Phân Quyền',
-    subtitle: 'Allowlist Google Workspace, profile làm việc, role và lịch sử xác thực',
+    subtitle: 'Allowlist tài khoản Google, profile làm việc, role và lịch sử xác thực',
   },
 };
 

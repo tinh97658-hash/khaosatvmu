@@ -24,13 +24,12 @@ public static class UserAdministrationEndpoints
         group.MapPost("/users", async (
             CreateUserRequest request,
             ClaimsPrincipal principal,
-            GoogleAuthConfiguration googleAuth,
             IUserAdministrationService service,
             CancellationToken cancellationToken) =>
         {
             var actorUserId = GetRequiredGuidClaim(principal, ClaimTypes.NameIdentifier);
             var result = await service.CreateUserAsync(
-                new CreateAdminUserCommand(request.Email, request.DisplayName, googleAuth.AllowedDomain),
+                new CreateAdminUserCommand(request.Email, request.DisplayName),
                 actorUserId,
                 cancellationToken);
             return ToResult(result);
@@ -135,7 +134,6 @@ public static class UserAdministrationEndpoints
             UserAdministrationErrorCodes.ProfileAssignmentExists => StatusCodes.Status409Conflict,
             UserAdministrationErrorCodes.CannotDisableSelf => StatusCodes.Status409Conflict,
             UserAdministrationErrorCodes.CannotModifyActiveProfile => StatusCodes.Status409Conflict,
-            UserAdministrationErrorCodes.InvalidEmailDomain => StatusCodes.Status400BadRequest,
             _ => StatusCodes.Status400BadRequest
         };
         return Results.Json(new { errorCode = result.ErrorCode }, statusCode: statusCode);

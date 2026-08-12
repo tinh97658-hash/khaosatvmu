@@ -1,12 +1,12 @@
-# Kế hoạch triển khai đăng nhập Google Workspace - Production
+# Kế hoạch triển khai đăng nhập Google OAuth - Production
 
 ## 1. Mục tiêu
 
 Hệ thống cần:
 
-- Cho phép người dùng đăng nhập bằng tài khoản Google Workspace của tổ chức.
-- Chỉ chấp nhận tài khoản thuộc domain được phép.
-- Không yêu cầu developer phải có quyền Google Workspace Admin.
+- Cho phép người dùng đăng nhập bằng Gmail hoặc Google Account thuộc bất kỳ domain nào.
+- Chỉ cho phép email đã được cấp quyền trong allowlist của ứng dụng.
+- Không phụ thuộc Google Workspace hoặc quản trị viên tổ chức.
 - Google chỉ xác minh danh tính, còn ứng dụng tự quản lý quyền truy cập.
 - Dữ liệu người dùng, role, trạng thái và audit log do backend + PostgreSQL quản lý.
 - Một Google account có thể có nhiều profile làm việc khác nhau.
@@ -19,13 +19,13 @@ Nguyên tắc:
 ## 2. Kiến trúc tổng thể
 
 ```text
-Google Account / Google Workspace
+Google Account
           |
           | OIDC
           v
 ASP.NET Core Backend
           |
-          | Validate claims + domain + allowlist + active status
+          | Validate claims + allowlist + active status
           v
 PostgreSQL
   Users / UserProfiles / Roles / Permissions / RolePermissions / AuthAuditLogs
@@ -40,12 +40,11 @@ Frontend
 **Google**
 
 - Xác thực danh tính.
-- Cung cấp `sub`, `email`, `email_verified`, `hd`, tên và avatar.
+- Cung cấp `sub`, `email`, `email_verified`, tên và avatar.
 - Không quản lý role của ứng dụng.
 
 **Backend + PostgreSQL**
 
-- Kiểm tra domain.
 - Kiểm tra allowlist.
 - Kiểm tra trạng thái `IsActive`.
 - Quản lý nhiều profile trên cùng một Google account.
@@ -64,7 +63,6 @@ Frontend
   - `/signin-google`: callback từ Google.
   - `/api/auth/me`: lấy session hiện tại.
   - `/api/auth/logout`: hủy session.
-- `hd` chỉ là một lớp kiểm tra phụ.
 - Quyết định cuối phải dựa trên `sub` + allowlist + `IsActive`.
 - `sub` là định danh Google ổn định sau khi link xong.
 - Bootstrap admin phải có cơ chế tắt sau khi môi trường production đã khởi tạo.
@@ -98,51 +96,38 @@ Backend thực hiện:
 3. Validate audience.
 4. Validate expiration.
 5. Kiểm tra `email_verified`.
-6. Kiểm tra `hd`.
-7. Lấy `sub`.
-8. Tìm user theo `sub`.
-9. Nếu chưa có `sub`, thử link theo email nhưng chỉ khi email đã nằm trong allowlist.
-10. Kiểm tra `IsActive`.
-11. Load các profile khả dụng của user.
-12. Nếu không có profile nào thì từ chối.
-13. Nếu chỉ có một profile thì tự động chọn.
-14. Nếu có nhiều profile thì chuyển sang màn hình chọn profile.
-15. Tạo session cookie `HttpOnly` với `ActiveProfileId`.
-16. Ghi audit log.
-17. Redirect về frontend.
+6. Lấy `sub`.
+7. Tìm user theo `sub`.
+8. Nếu chưa có `sub`, thử link theo email nhưng chỉ khi email đã nằm trong allowlist.
+9. Kiểm tra `IsActive`.
+10. Load các profile khả dụng của user.
+11. Nếu không có profile nào thì từ chối.
+12. Nếu chỉ có một profile thì tự động chọn.
+13. Nếu có nhiều profile thì chuyển sang màn hình chọn profile.
+14. Tạo session cookie `HttpOnly` với `ActiveProfileId`.
+15. Ghi audit log.
+16. Redirect về frontend.
 
-## 5. Kiểm tra domain tổ chức
+## 5. Xác thực Google Account
 
-Ví dụ domain:
+Backend không giới hạn domain email và không yêu cầu claim `hd`. Mọi Google Account
+có thể hoàn tất bước xác thực, nhưng quyền truy cập ứng dụng vẫn phụ thuộc allowlist.
 
-```text
-vmu.edu.vn
-```
+Backend bắt buộc kiểm tra:
 
-Backend phải kiểm tra:
-
-```text
-hd == "vmu.edu.vn"
-```
-
-Không được chỉ kiểm tra:
-
-```csharp
-email.EndsWith("@vmu.edu.vn")
-```
-
-Nếu `hd` không tồn tại hoặc Google không trả claim này thì request phải bị từ chối an toàn.
+- `sub` tồn tại và được dùng làm external identity ổn định.
+- `email` tồn tại.
+- `email_verified = true`.
+- User tương ứng đã tồn tại trong database và đang hoạt động.
 
 ## 6. Allowlist, user database và profile
 
-Domain đúng không đồng nghĩa với việc được truy cập.
+Google xác thực thành công không đồng nghĩa với việc được truy cập.
 
 Luồng:
 
 ```text
 Google login
-  |
-hd đúng domain?
   |
 User có trong database?
   |
@@ -155,7 +140,7 @@ Nếu user chưa có `sub`:
 
 - Chỉ được link một lần.
 - Chỉ link khi email đã tồn tại trong allowlist.
-- Không cho tự do tạo account mới chỉ vì đúng domain.
+- Không tự động tạo account mới chỉ vì Google đã xác thực email.
 
 Sau khi user được xác thực, hệ thống phải load danh sách `UserProfiles`.
 
@@ -186,7 +171,7 @@ Ví dụ:
 
 ```text
 User:
-Email = user1@vmu.edu.vn
+Email = user1@gmail.com
 GoogleSubject = NULL
 IsActive = true
 
@@ -200,9 +185,8 @@ Lần đăng nhập đầu:
 
 ```text
 Google:
-email = user1@vmu.edu.vn
+email = user1@gmail.com
 sub   = 123456789
-hd    = vmu.edu.vn
 ```
 
 Backend:
@@ -210,7 +194,7 @@ Backend:
 ```text
 Không tìm thấy GoogleSubject = 123456789
   |
-Tìm Email = user1@vmu.edu.vn
+Tìm Email = user1@gmail.com
   |
 Email tồn tại + IsActive
   |
@@ -668,7 +652,6 @@ Nginx
 - [ ] CSRF protection
 - [ ] OIDC validation
 - [ ] `email_verified` validation
-- [ ] `hd` validation
 - [ ] Allowlist
 - [ ] `IsActive`
 - [ ] Server-side authorization
@@ -692,7 +675,6 @@ Backend nên trả machine-readable code:
 
 ```text
 AUTH_GOOGLE_FAILED
-AUTH_INVALID_DOMAIN
 AUTH_EMAIL_NOT_VERIFIED
 AUTH_USER_NOT_REGISTERED
 AUTH_ACCOUNT_DISABLED
@@ -707,10 +689,9 @@ Frontend map các mã này sang thông báo tiếng Việt.
 
 | Test | Kết quả mong đợi |
 | --- | --- |
-| Gmail cá nhân | Từ chối |
-| Workspace domain khác | Từ chối |
-| Domain đúng nhưng không có trong Users | Từ chối |
-| Domain đúng + User + Active | Cho phép |
+| Gmail trong allowlist + User Active | Cho phép |
+| Google Account domain khác trong allowlist | Cho phép |
+| Google Account không có trong Users | Từ chối |
 | User Disabled | Từ chối |
 | USER gọi ADMIN API | 403 |
 | ADMIN gọi ADMIN API | Cho phép |
@@ -725,7 +706,7 @@ Frontend map các mã này sang thông báo tiếng Việt.
 | Client Secret sai | Authentication fail an toàn |
 | Database unavailable | Không lộ stack trace/secret |
 | Duplicate GoogleSubject | Bị chặn |
-| Missing hd claim | Bị chặn |
+| Missing `email_verified` hoặc giá trị false | Bị chặn |
 | Logout rồi dùng lại cookie | 401 |
 | Disabled user sau khi login | 403 |
 | User switch profile không thuộc mình | 403 |
@@ -743,9 +724,9 @@ Frontend map các mã này sang thông báo tiếng Việt.
 ### Phase 0 - OAuth feasibility test
 
 - Tạo Google OAuth Client.
-- Test login bằng email tổ chức.
-- Xác nhận lấy được `sub`, `email`, `email_verified`, `hd`.
-- Xác nhận Workspace không block application.
+- Cấu hình Audience `External` và callback chính xác.
+- Test login bằng Gmail hoặc Google Account thật.
+- Xác nhận lấy được `sub`, `email`, `email_verified`.
 
 ### Phase 1 - Database
 
@@ -766,7 +747,6 @@ Frontend map các mã này sang thông báo tiếng Việt.
 - Tích hợp Google OIDC trong ASP.NET Core
 - Validate claims
 - Validate `email_verified`
-- Validate `hd`
 - Account linking
 - Lưu `GoogleSubject`
 
@@ -833,10 +813,10 @@ Frontend map các mã này sang thông báo tiếng Việt.
 
 Authentication chỉ được coi là hoàn thành khi:
 
-- [ ] Google Workspace login hoạt động
-- [ ] Gmail cá nhân bị từ chối
-- [ ] Workspace domain khác bị từ chối
-- [ ] Backend kiểm tra `hd`
+- [ ] Google OAuth login hoạt động với Audience `External`
+- [ ] Gmail trong allowlist đăng nhập được
+- [ ] Google Account thuộc domain khác trong allowlist đăng nhập được
+- [ ] Google Account ngoài allowlist bị từ chối
 - [ ] Backend kiểm tra `email_verified`
 - [ ] `sub` được dùng làm định danh external ổn định
 - [ ] Allowlist hoạt động
@@ -857,18 +837,17 @@ Authentication chỉ được coi là hoàn thành khi:
 - [ ] Database backup
 - [ ] Health checks
 - [ ] Integration tests cho authentication/authorization
-- [ ] OAuth feasibility với tài khoản tổ chức đã được xác nhận
+- [ ] OAuth feasibility với Google Account thật đã được xác nhận
 - [ ] User có nhiều profile có thể chọn và switch đúng
 
 ## Kết luận
 
 Phương án triển khai:
 
-**Google OIDC + kiểm tra `hd` + allowlist + Google `sub` + PostgreSQL Users/UserProfiles/Roles/RolePermissions + HttpOnly cookie + server-side authorization.**
+**Google OIDC External + allowlist + Google `sub` + PostgreSQL Users/UserProfiles/Roles/RolePermissions + HttpOnly cookie + server-side authorization.**
 
-Kiến trúc này không yêu cầu người phát triển phải có quyền Google Workspace Admin để quản lý user và phân quyền ứng dụng.
-
-Ràng buộc không thể bỏ qua là chính sách OAuth của Google Workspace. Nếu Workspace chặn OAuth application chưa được phê duyệt, admin của tổ chức phải approve/trust ứng dụng. Sau bước đó, hệ thống vẫn quản lý user và role hoàn toàn trong ứng dụng.
+Kiến trúc này không yêu cầu Google Workspace Admin. Google xác thực danh tính cho mọi
+Google Account, còn hệ thống tự quản lý allowlist, profile, role và permission.
 
 ### Phase 1a - Seed order chuẩn
 
@@ -906,9 +885,9 @@ Ràng buộc không thể bỏ qua là chính sách OAuth của Google Workspace
 ### Implementation status - Phase 2
 
 - Added Google OIDC authorization-code flow with PKCE and HttpOnly cookies.
-- Added validation for Google `sub`, `email_verified`, `hd`, allowlist and account linking.
+- Added validation for Google `sub`, `email_verified`, allowlist and account linking.
 - Added separate initial profile selection and authenticated profile switching flows.
-- Kept OAuth secrets outside source; real Workspace login awaits Google Client ID/Secret.
+- Kept OAuth secrets outside source through .NET User Secrets and production secret injection.
 - Limited sample user seeding to Development only.
 
 ### Implementation status - Phase 3
@@ -943,9 +922,18 @@ Ràng buộc không thể bỏ qua là chính sách OAuth của Google Workspace
 - Limited the administration menu and backend actions to the active admin profile.
 - Verified CRUD flow, CSRF enforcement, audit records and non-admin `403` responses against PostgreSQL.
 
-### Google Workspace verification preparation
+### External Google OAuth verification preparation
 
 - Enabled .NET User Secrets for local Google OAuth credentials.
 - Standardized the local callback as `http://localhost:5115/signin-google`.
-- Added the Cloud Console, Workspace Admin and real-login verification checklist.
-- Real Workspace verification remains pending OAuth Client credentials and administrator policy confirmation.
+- Added the Google Auth Platform External-audience and real-login verification checklist.
+- Removed the Workspace domain and administrator-policy dependency.
+- Real Google login verification remains pending local User Secrets and an interactive login.
+
+### Implementation status - External Google Account access
+
+- Removed the `hd` and email-domain restrictions from backend authentication.
+- Kept verified email, stable Google `sub`, allowlist and active-profile enforcement.
+- Allowed administrators to add Google Account emails from any domain.
+- Updated frontend messages and configuration for External Google OAuth.
+- Verified an `@gmail.com` allowlist entry against PostgreSQL; interactive OAuth remains pending local secrets.

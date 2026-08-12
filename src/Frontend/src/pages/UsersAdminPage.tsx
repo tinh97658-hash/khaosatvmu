@@ -39,7 +39,6 @@ const eventNames: Record<string, string> = {
 
 const errorMessages: Record<string, string> = {
   ADMIN_INVALID_REQUEST: 'Dữ liệu chưa hợp lệ. Vui lòng kiểm tra lại các trường.',
-  ADMIN_INVALID_EMAIL_DOMAIN: 'Email phải thuộc đúng tên miền Google Workspace của trường.',
   ADMIN_USER_EMAIL_EXISTS: 'Email này đã có trong hệ thống.',
   ADMIN_CANNOT_DISABLE_SELF: 'Bạn không thể vô hiệu chính tài khoản đang sử dụng.',
   ADMIN_PROFILE_CODE_EXISTS: 'Mã profile đã tồn tại.',
@@ -236,7 +235,7 @@ export function UsersAdminPage() {
       <div className="page-header admin-page-header">
         <div className="page-title-group">
           <h2>Quản trị người dùng và phân quyền</h2>
-          <p>Quản lý allowlist Google Workspace, profile làm việc và lịch sử xác thực.</p>
+          <p>Quản lý allowlist tài khoản Google, profile làm việc và lịch sử xác thực.</p>
         </div>
         {view === 'users' && (
           <button className="btn btn-primary" onClick={() => setIsAddUserOpen(true)}>
@@ -404,8 +403,8 @@ export function UsersAdminPage() {
             <input id="admin-display-name" value={newUser.displayName} onChange={(event) => setNewUser({ ...newUser, displayName: event.target.value })} maxLength={200} />
           </div>
           <div className="form-group">
-            <label htmlFor="admin-email">Email Google Workspace</label>
-            <input id="admin-email" type="email" value={newUser.email} onChange={(event) => setNewUser({ ...newUser, email: event.target.value })} required maxLength={320} placeholder="user@vmu.edu.vn" />
+            <label htmlFor="admin-email">Email tài khoản Google</label>
+            <input id="admin-email" type="email" value={newUser.email} onChange={(event) => setNewUser({ ...newUser, email: event.target.value })} required maxLength={320} placeholder="user@gmail.com" />
           </div>
           {error && <div className="admin-alert" role="alert">{error}</div>}
           <div className="modal-footer admin-inline-footer">

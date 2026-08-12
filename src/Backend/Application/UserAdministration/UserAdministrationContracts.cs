@@ -39,7 +39,7 @@ public sealed record AdminAuditLogDto(
 
 public sealed record AdminPage<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount);
 
-public sealed record CreateAdminUserCommand(string Email, string? DisplayName, string AllowedDomain);
+public sealed record CreateAdminUserCommand(string Email, string? DisplayName);
 
 public sealed record SaveAdminProfileCommand(
     string Name,
@@ -105,7 +105,6 @@ public interface IUserAdministrationService
 public static class UserAdministrationErrorCodes
 {
     public const string InvalidRequest = "ADMIN_INVALID_REQUEST";
-    public const string InvalidEmailDomain = "ADMIN_INVALID_EMAIL_DOMAIN";
     public const string UserNotFound = "ADMIN_USER_NOT_FOUND";
     public const string UserEmailExists = "ADMIN_USER_EMAIL_EXISTS";
     public const string CannotDisableSelf = "ADMIN_CANNOT_DISABLE_SELF";

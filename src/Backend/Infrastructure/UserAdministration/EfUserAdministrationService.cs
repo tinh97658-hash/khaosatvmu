@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Net.Mail;
 using Application.UserAdministration;
 using Domain;
 using Infrastructure.Persistence;
@@ -50,20 +51,13 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
         CancellationToken cancellationToken = default)
     {
         var email = command.Email.Trim().ToLowerInvariant();
-        var allowedDomain = command.AllowedDomain.Trim().TrimStart('@').ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(email)
             || email.Length > 320
-            || string.IsNullOrWhiteSpace(allowedDomain)
-            || !email.EndsWith($"@{allowedDomain}", StringComparison.Ordinal)
-            || email.Count(x => x == '@') != 1
-            || email.StartsWith('@')
+            || !MailAddress.TryCreate(email, out var parsedEmail)
+            || !string.Equals(parsedEmail.Address, email, StringComparison.OrdinalIgnoreCase)
             || !IsValidDisplayName(command.DisplayName))
         {
-            var error = !string.IsNullOrWhiteSpace(allowedDomain)
-                && !email.EndsWith($"@{allowedDomain}", StringComparison.Ordinal)
-                ? UserAdministrationErrorCodes.InvalidEmailDomain
-                : UserAdministrationErrorCodes.InvalidRequest;
-            return Failure<AdminUserDto>(error);
+            return Failure<AdminUserDto>(UserAdministrationErrorCodes.InvalidRequest);
         }
 
         if (await db.Users.AnyAsync(x => x.Email.ToLower() == email, cancellationToken))

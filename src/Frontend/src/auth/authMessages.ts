@@ -1,7 +1,6 @@
 const messages: Record<string, string> = {
   AUTH_USER_NOT_REGISTERED: 'Tài khoản chưa được cấp quyền sử dụng hệ thống.',
   AUTH_ACCOUNT_DISABLED: 'Tài khoản đã bị vô hiệu hóa.',
-  AUTH_INVALID_DOMAIN: 'Vui lòng đăng nhập bằng tài khoản Google Workspace của VMU.',
   AUTH_EMAIL_NOT_VERIFIED: 'Địa chỉ email Google chưa được xác minh.',
   AUTH_NO_PROFILE: 'Tài khoản chưa có hồ sơ làm việc khả dụng.',
   AUTH_PROFILE_DISABLED: 'Hồ sơ làm việc đã bị vô hiệu hóa.',

@@ -54,16 +54,11 @@ public sealed class InMemoryAuthService : IAuthService
             permissions));
     }
 
-    public async Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity, string allowedDomain)
+    public async Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity)
     {
         if (!identity.EmailVerified)
         {
             return new GoogleSignInResult(false, AuthErrorCodes.EmailNotVerified, null, null, null);
-        }
-
-        if (!string.Equals(identity.HostedDomain, allowedDomain, StringComparison.OrdinalIgnoreCase))
-        {
-            return new GoogleSignInResult(false, AuthErrorCodes.InvalidDomain, null, null, null);
         }
 
         var result = await DevSignInAsync(identity.Email, null);

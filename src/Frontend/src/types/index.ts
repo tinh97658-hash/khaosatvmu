@@ -188,7 +188,7 @@ export interface AuthAccess {
 
 export interface AuthConfiguration {
   googleConfigured: boolean;
-  allowedDomain: string;
+  allowAnyGoogleAccount: boolean;
   development: boolean;
 }
 

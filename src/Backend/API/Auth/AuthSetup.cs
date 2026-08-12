@@ -19,7 +19,6 @@ public static class AuthClaimTypes
 
 public sealed record GoogleAuthConfiguration(
     bool IsConfigured,
-    string AllowedDomain,
     string FrontendBaseUrl);
 
 public static class AuthSetup
@@ -31,13 +30,11 @@ public static class AuthSetup
     {
         var clientId = configuration["Authentication:Google:ClientId"];
         var clientSecret = configuration["Authentication:Google:ClientSecret"];
-        var allowedDomain = configuration["Authentication:Google:AllowedDomain"] ?? string.Empty;
         var frontendBaseUrl = configuration["Authentication:FrontendBaseUrl"] ?? "http://localhost:5173";
         var googleConfigured = !string.IsNullOrWhiteSpace(clientId)
-            && !string.IsNullOrWhiteSpace(clientSecret)
-            && !string.IsNullOrWhiteSpace(allowedDomain);
+            && !string.IsNullOrWhiteSpace(clientSecret);
 
-        services.AddSingleton(new GoogleAuthConfiguration(googleConfigured, allowedDomain, frontendBaseUrl));
+        services.AddSingleton(new GoogleAuthConfiguration(googleConfigured, frontendBaseUrl));
 
         var authentication = services.AddAuthentication(options =>
             {
@@ -91,11 +88,6 @@ public static class AuthSetup
                 options.TokenValidationParameters.NameClaimType = "name";
                 options.Events = new OpenIdConnectEvents
                 {
-                    OnRedirectToIdentityProvider = context =>
-                    {
-                        context.ProtocolMessage.SetParameter("hd", allowedDomain);
-                        return Task.CompletedTask;
-                    },
                     OnRemoteFailure = context =>
                     {
                         context.HandleResponse();

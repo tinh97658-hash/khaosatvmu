@@ -16,7 +16,7 @@ public static class AuthEndpoints
             Results.Ok(new
             {
                 googleConfigured = googleAuth.IsConfigured,
-                googleAuth.AllowedDomain,
+                allowAnyGoogleAccount = true,
                 development = environment.IsDevelopment()
             }));
 
@@ -55,10 +55,9 @@ public static class AuthEndpoints
                 principal.FindFirst("email")?.Value ?? string.Empty,
                 principal.FindFirst("name")?.Value,
                 principal.FindFirst("picture")?.Value,
-                bool.TryParse(principal.FindFirst("email_verified")?.Value, out var verified) && verified,
-                principal.FindFirst("hd")?.Value);
+                bool.TryParse(principal.FindFirst("email_verified")?.Value, out var verified) && verified);
 
-            var result = await authService.GoogleSignInAsync(identity, googleAuth.AllowedDomain);
+            var result = await authService.GoogleSignInAsync(identity);
             if (result.Succeeded && result.Response is not null)
             {
                 await SignInAsync(httpContext, result.Response, sessionService);
@@ -283,7 +282,6 @@ public static class AuthEndpoints
     {
         AuthErrorCodes.UserNotRegistered => StatusCodes.Status403Forbidden,
         AuthErrorCodes.AccountDisabled => StatusCodes.Status403Forbidden,
-        AuthErrorCodes.InvalidDomain => StatusCodes.Status403Forbidden,
         AuthErrorCodes.EmailNotVerified => StatusCodes.Status403Forbidden,
         AuthErrorCodes.InvalidGoogleIdentity => StatusCodes.Status401Unauthorized,
         AuthErrorCodes.NoProfiles => StatusCodes.Status403Forbidden,
