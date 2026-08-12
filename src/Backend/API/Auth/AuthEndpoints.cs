@@ -82,6 +82,14 @@ public static class AuthEndpoints
             });
         });
 
+        group.MapGet("/access", [Authorize] async (ClaimsPrincipal user, IAuthService authService) =>
+        {
+            var access = await authService.GetAccessAsync(user);
+            return access is null
+                ? Results.Json(new { errorCode = AuthErrorCodes.SessionExpired }, statusCode: StatusCodes.Status401Unauthorized)
+                : Results.Ok(access);
+        });
+
         group.MapGet("/pending-profiles", async (HttpContext httpContext, IAuthService authService) =>
         {
             var userId = await GetPendingUserIdAsync(httpContext);
@@ -156,6 +164,10 @@ public static class AuthEndpoints
                 await SignInAsync(httpContext, result.Response);
                 return Results.Ok(result.Response);
             });
+
+            group.MapGet("/dev/access/{organizationUnitCode}", (string organizationUnitCode) =>
+                    Results.Ok(new { organizationUnitCode, authorized = true }))
+                .RequireAuthorization(AuthPolicies.SurveyManageInOrganization);
         }
 
         return endpoints;

@@ -53,7 +53,6 @@ public sealed class RolePermission
     public Guid Id { get; set; }
     public Guid RoleId { get; set; }
     public Guid PermissionId { get; set; }
-    public string? ScopeCode { get; set; }
     public bool IsGranted { get; set; } = true;
     public DateTime CreatedAt { get; set; }
 }

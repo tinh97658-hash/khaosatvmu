@@ -106,7 +106,7 @@ public static class DatabaseSeeder
             var role = roles[definition.RoleCode];
             var permission = permissions[definition.PermissionCode];
             var exists = await db.RolePermissions.AnyAsync(x =>
-                x.RoleId == role.Id && x.PermissionId == permission.Id && x.ScopeCode == null,
+                x.RoleId == role.Id && x.PermissionId == permission.Id,
                 cancellationToken);
 
             if (!exists)

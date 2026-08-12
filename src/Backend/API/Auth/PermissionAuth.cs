@@ -4,7 +4,16 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace API.Auth;
 
-public sealed record PermissionRequirement(string PermissionCode) : IAuthorizationRequirement;
+public static class AuthPolicies
+{
+    public const string AdminAccess = "PERMISSION_ADMIN_ACCESS";
+    public const string SurveyManage = "PERMISSION_SURVEY_MANAGE";
+    public const string SurveyManageInOrganization = "PERMISSION_SURVEY_MANAGE_IN_ORGANIZATION";
+}
+
+public sealed record PermissionRequirement(
+    string PermissionCode,
+    string? OrganizationUnitRouteValue = null) : IAuthorizationRequirement;
 
 public sealed class PermissionAuthorizationHandler : AuthorizationHandler<PermissionRequirement>
 {
@@ -22,7 +31,14 @@ public sealed class PermissionAuthorizationHandler : AuthorizationHandler<Permis
             return;
         }
 
-        var allowed = await _authService.HasPermissionAsync(context.User, requirement.PermissionCode);
+        var organizationUnitCode = requirement.OrganizationUnitRouteValue is not null
+            && context.Resource is HttpContext httpContext
+            ? httpContext.Request.RouteValues[requirement.OrganizationUnitRouteValue]?.ToString()
+            : null;
+        var allowed = await _authService.HasPermissionAsync(
+            context.User,
+            requirement.PermissionCode,
+            organizationUnitCode);
         if (allowed)
         {
             context.Succeed(requirement);

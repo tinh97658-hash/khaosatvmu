@@ -23,6 +23,12 @@ public sealed record AuthMeResponse(
     AuthProfileDto? ActiveProfile,
     IReadOnlyList<AuthProfileDto> AvailableProfiles);
 
+public sealed record AuthAccessResponse(
+    Guid ProfileId,
+    string RoleCode,
+    string? OrganizationUnitCode,
+    IReadOnlyList<string> Permissions);
+
 public sealed record SignInResult(
     bool Succeeded,
     string? ErrorCode,
@@ -54,13 +60,17 @@ public sealed record GoogleSignInResult(
 public interface IAuthService
 {
     Task<AuthMeResponse> GetCurrentAsync(ClaimsPrincipal? principal);
+    Task<AuthAccessResponse?> GetAccessAsync(ClaimsPrincipal? principal);
     Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity, string allowedDomain);
     Task<SignInResult> DevSignInAsync(string email, string? profileCode);
     Task<IReadOnlyList<AuthProfileDto>> GetAvailableProfilesAsync(Guid userId);
     Task<ProfileSelectionResult> SelectInitialProfileAsync(Guid userId, Guid profileId);
     Task<ProfileSelectionResult> SelectProfileAsync(ClaimsPrincipal? principal, Guid profileId);
     Task<SignOutResult> SignOutAsync(ClaimsPrincipal? principal);
-    Task<bool> HasPermissionAsync(ClaimsPrincipal? principal, string permissionCode);
+    Task<bool> HasPermissionAsync(
+        ClaimsPrincipal? principal,
+        string permissionCode,
+        string? resourceOrganizationUnitCode = null);
 }
 
 public abstract record AuthErrorCodes

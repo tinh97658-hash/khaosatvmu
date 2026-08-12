@@ -29,6 +29,31 @@ public sealed class InMemoryAuthService : IAuthService
         return Task.FromResult(BuildAuthMeResponse(state.Value.User, state.Value.ActiveProfile));
     }
 
+    public Task<AuthAccessResponse?> GetAccessAsync(ClaimsPrincipal? principal)
+    {
+        var state = ResolvePrincipalState(principal);
+        if (state is null)
+        {
+            return Task.FromResult<AuthAccessResponse?>(null);
+        }
+
+        var role = _roles.Single(x => x.Id == state.Value.ActiveProfile.RoleId);
+        var permissionIds = _rolePermissions
+            .Where(x => x.RoleId == role.Id && x.IsGranted)
+            .Select(x => x.PermissionId)
+            .ToHashSet();
+        var permissions = _permissions
+            .Where(x => permissionIds.Contains(x.Id))
+            .Select(x => x.Code)
+            .OrderBy(x => x)
+            .ToList();
+        return Task.FromResult<AuthAccessResponse?>(new AuthAccessResponse(
+            state.Value.ActiveProfile.Id,
+            role.Code,
+            state.Value.ActiveProfile.OrganizationUnitCode,
+            permissions));
+    }
+
     public async Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity, string allowedDomain)
     {
         if (!identity.EmailVerified)
@@ -178,7 +203,10 @@ public sealed class InMemoryAuthService : IAuthService
         return Task.FromResult(new SignOutResult(true));
     }
 
-    public Task<bool> HasPermissionAsync(ClaimsPrincipal? principal, string permissionCode)
+    public Task<bool> HasPermissionAsync(
+        ClaimsPrincipal? principal,
+        string permissionCode,
+        string? resourceOrganizationUnitCode = null)
     {
         var state = ResolvePrincipalState(principal);
         if (state is null)
@@ -202,6 +230,15 @@ public sealed class InMemoryAuthService : IAuthService
             x.RoleId == role.Id &&
             x.PermissionId == permission.Id &&
             x.IsGranted);
+
+        if (granted && !string.IsNullOrWhiteSpace(resourceOrganizationUnitCode))
+        {
+            granted = string.IsNullOrWhiteSpace(state.Value.ActiveProfile.OrganizationUnitCode)
+                || string.Equals(
+                    state.Value.ActiveProfile.OrganizationUnitCode,
+                    resourceOrganizationUnitCode,
+                    StringComparison.OrdinalIgnoreCase);
+        }
 
         return Task.FromResult(granted);
     }
@@ -302,8 +339,8 @@ public sealed class InMemoryAuthService : IAuthService
         _permissions.AddRange([adminAccess, surveyManage]);
 
         _rolePermissions.AddRange([
-            new RolePermission { Id = Guid.NewGuid(), RoleId = admin.Id, PermissionId = adminAccess.Id, ScopeCode = null, IsGranted = true, CreatedAt = DateTime.UtcNow },
-            new RolePermission { Id = Guid.NewGuid(), RoleId = surveyAdmin.Id, PermissionId = surveyManage.Id, ScopeCode = null, IsGranted = true, CreatedAt = DateTime.UtcNow }
+            new RolePermission { Id = Guid.NewGuid(), RoleId = admin.Id, PermissionId = adminAccess.Id, IsGranted = true, CreatedAt = DateTime.UtcNow },
+            new RolePermission { Id = Guid.NewGuid(), RoleId = surveyAdmin.Id, PermissionId = surveyManage.Id, IsGranted = true, CreatedAt = DateTime.UtcNow }
         ]);
 
         var user = new User

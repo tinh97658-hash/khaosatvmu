@@ -69,8 +69,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.ToTable("RolePermissions");
             entity.HasKey(x => x.Id);
-            entity.Property(x => x.ScopeCode).HasMaxLength(100);
-            entity.HasIndex(x => new { x.RoleId, x.PermissionId, x.ScopeCode }).IsUnique();
+            entity.HasIndex(x => new { x.RoleId, x.PermissionId }).IsUnique();
             entity.HasOne<Role>().WithMany().HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<Permission>().WithMany().HasForeignKey(x => x.PermissionId).OnDelete(DeleteBehavior.Cascade);
         });

@@ -15,8 +15,13 @@ builder.Services.AddApplicationAuthentication(builder.Configuration, builder.Env
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("PERMISSION_ADMIN_ACCESS", policy =>
+    options.AddPolicy(AuthPolicies.AdminAccess, policy =>
         policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement("ADMIN_ACCESS")));
+    options.AddPolicy(AuthPolicies.SurveyManage, policy =>
+        policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement("SURVEY_MANAGE")));
+    options.AddPolicy(AuthPolicies.SurveyManageInOrganization, policy =>
+        policy.RequireAuthenticatedUser().AddRequirements(
+            new PermissionRequirement("SURVEY_MANAGE", "organizationUnitCode")));
 });
 
 builder.Services.AddScoped<IAuthService, EfAuthService>();

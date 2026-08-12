@@ -51,6 +51,19 @@ public static class AuthSetup
                 options.ExpireTimeSpan = TimeSpan.FromHours(8);
                 options.LoginPath = "/api/auth/login";
                 options.LogoutPath = "/api/auth/logout";
+                options.Events = new CookieAuthenticationEvents
+                {
+                    OnRedirectToLogin = context =>
+                    {
+                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        return Task.CompletedTask;
+                    },
+                    OnRedirectToAccessDenied = context =>
+                    {
+                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                        return Task.CompletedTask;
+                    }
+                };
             })
             .AddCookie(AuthSchemes.Pending, options =>
             {

@@ -891,3 +891,11 @@ Ràng buộc không thể bỏ qua là chính sách OAuth của Google Workspace
 - Added separate initial profile selection and authenticated profile switching flows.
 - Kept OAuth secrets outside source; real Workspace login awaits Google Client ID/Secret.
 - Limited sample user seeding to Development only.
+
+### Implementation status - Phase 3
+
+- Added server-side permission policies based on the active profile role.
+- Enforced organization scope through `UserProfiles.OrganizationUnitCode`.
+- Removed the redundant `RolePermissions.ScopeCode` through EF migration.
+- Added `/api/auth/access` for the current authorization context.
+- Verified `401`, `403`, permission grants and organization-scope isolation against PostgreSQL.

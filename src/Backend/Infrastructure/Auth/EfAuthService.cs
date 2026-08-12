@@ -17,6 +17,26 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
             : await BuildResponseAsync(state.Value.User, state.Value.Profile);
     }
 
+    public async Task<AuthAccessResponse?> GetAccessAsync(ClaimsPrincipal? principal)
+    {
+        var state = await ResolvePrincipalStateAsync(principal);
+        if (state is null)
+        {
+            return null;
+        }
+
+        var roleCode = await db.Roles
+            .Where(x => x.Id == state.Value.Profile.RoleId)
+            .Select(x => x.Code)
+            .SingleAsync();
+        var permissions = await GetPermissionCodesAsync(state.Value.Profile.RoleId);
+        return new AuthAccessResponse(
+            state.Value.Profile.Id,
+            roleCode,
+            state.Value.Profile.OrganizationUnitCode,
+            permissions);
+    }
+
     public async Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity, string allowedDomain)
     {
         if (string.IsNullOrWhiteSpace(identity.Subject) || string.IsNullOrWhiteSpace(identity.Email))
@@ -189,7 +209,10 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
         return new SignOutResult(true);
     }
 
-    public async Task<bool> HasPermissionAsync(ClaimsPrincipal? principal, string permissionCode)
+    public async Task<bool> HasPermissionAsync(
+        ClaimsPrincipal? principal,
+        string permissionCode,
+        string? resourceOrganizationUnitCode = null)
     {
         var state = await ResolvePrincipalStateAsync(principal);
         if (state is null)
@@ -197,13 +220,24 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
             return false;
         }
 
-        return await (
+        var hasPermission = await (
             from rolePermission in db.RolePermissions
             join permission in db.Permissions on rolePermission.PermissionId equals permission.Id
             where rolePermission.RoleId == state.Value.Profile.RoleId
                   && permission.Code == permissionCode
                   && rolePermission.IsGranted
             select rolePermission.Id).AnyAsync();
+
+        if (!hasPermission || string.IsNullOrWhiteSpace(resourceOrganizationUnitCode))
+        {
+            return hasPermission;
+        }
+
+        return string.IsNullOrWhiteSpace(state.Value.Profile.OrganizationUnitCode)
+            || string.Equals(
+                state.Value.Profile.OrganizationUnitCode,
+                resourceOrganizationUnitCode,
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<(User User, UserProfile Profile)?> ResolvePrincipalStateAsync(ClaimsPrincipal? principal)
@@ -257,6 +291,13 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
              profile.OrganizationUnitCode,
              profile.OrganizationUnitName,
              profile.IsDefault)).ToListAsync();
+
+    private Task<List<string>> GetPermissionCodesAsync(Guid roleId) =>
+        (from rolePermission in db.RolePermissions
+         join permission in db.Permissions on rolePermission.PermissionId equals permission.Id
+         where rolePermission.RoleId == roleId && rolePermission.IsGranted
+         orderby permission.Code
+         select permission.Code).ToListAsync();
 
     private async Task<IReadOnlyList<AuthProfileDto>> GetProfilesAsReadOnlyAsync(Guid userId) =>
         await GetProfilesAsync(userId);
