@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Mail, Phone, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
@@ -59,6 +60,7 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
     };
 
     onAddLecturer(newLecturer);
+    toast.success('Đã thêm giảng viên', { description: newLecturer.fullName });
     setIsModalOpen(false);
     setCode('');
     setFullName('');
@@ -220,7 +222,10 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
         isOpen={lecturerToDelete !== null}
         onClose={() => setLecturerToDelete(null)}
         onConfirm={() => {
-          if (lecturerToDelete) onDeleteLecturer(lecturerToDelete.id);
+          if (lecturerToDelete) {
+            onDeleteLecturer(lecturerToDelete.id);
+            toast.success('Đã xóa giảng viên', { description: lecturerToDelete.fullName });
+          }
           setLecturerToDelete(null);
         }}
         title="Xóa giảng viên?"

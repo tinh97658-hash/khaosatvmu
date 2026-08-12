@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { CheckCircle2, CircleAlert, Copy, Download, Smartphone } from 'lucide-react';
+import React from 'react';
+import { Copy, Download, Smartphone } from 'lucide-react';
+import { toast } from 'sonner';
 import { Modal } from './Modal';
 
 interface QRCodeModalProps {
@@ -21,14 +22,14 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   surveyLink,
   onOpenSurveySimulator,
 }) => {
-  const [copyStatus, setCopyStatus] = useState<'success' | 'error' | null>(null);
-
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(surveyLink);
-      setCopyStatus('success');
+      toast.success('Đã sao chép đường dẫn khảo sát');
     } catch {
-      setCopyStatus('error');
+      toast.error('Không thể sao chép tự động', {
+        description: 'Hãy chọn và sao chép đường dẫn trong ô bên cạnh.',
+      });
     }
   };
 
@@ -60,21 +61,6 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
               Sao chép
             </button>
           </div>
-          {copyStatus && (
-            <div
-              className={`operations-feedback operations-feedback--${copyStatus}`}
-              role={copyStatus === 'error' ? 'alert' : 'status'}
-            >
-              {copyStatus === 'success'
-                ? <CheckCircle2 aria-hidden="true" />
-                : <CircleAlert aria-hidden="true" />}
-              <span>
-                {copyStatus === 'success'
-                  ? 'Đã sao chép đường dẫn khảo sát.'
-                  : 'Không thể sao chép tự động. Hãy chọn và sao chép đường dẫn.'}
-              </span>
-            </div>
-          )}
         </div>
 
         <div className="qr-modal-actions">

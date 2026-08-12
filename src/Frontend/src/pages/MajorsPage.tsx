@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
@@ -60,6 +61,7 @@ export const MajorsPage: React.FC<MajorsPageProps> = ({
     };
 
     onAddMajor(newMajor);
+    toast.success('Đã thêm ngành đào tạo', { description: newMajor.name });
     setIsModalOpen(false);
     setValidationError('');
     setCode('');
@@ -205,7 +207,10 @@ export const MajorsPage: React.FC<MajorsPageProps> = ({
         isOpen={majorToDelete !== null}
         onClose={() => setMajorToDelete(null)}
         onConfirm={() => {
-          if (majorToDelete) onDeleteMajor(majorToDelete.id);
+          if (majorToDelete) {
+            onDeleteMajor(majorToDelete.id);
+            toast.success('Đã xóa ngành đào tạo', { description: majorToDelete.name });
+          }
           setMajorToDelete(null);
         }}
         title="Xóa ngành đào tạo?"

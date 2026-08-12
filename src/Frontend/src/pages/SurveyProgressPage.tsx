@@ -8,6 +8,7 @@ import {
   TriangleAlert,
   UserRound,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import type { CourseClass } from '../types';
@@ -20,7 +21,6 @@ interface SurveyProgressPageProps {
 export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({ classes }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [notice, setNotice] = useState<string | null>(null);
 
   // Flatten Class Groups into distinct progress items for granular group N01, N02 tracking
   const progressItems = classes.flatMap((cls) => {
@@ -100,7 +100,9 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({ classes 
     anchor.download = 'tien-do-thu-phieu-khao-sat.csv';
     anchor.click();
     URL.revokeObjectURL(url);
-    setNotice(`Đã xuất ${filtered.length} dòng tiến độ theo bộ lọc hiện tại.`);
+    toast.success('Đã xuất báo cáo tiến độ', {
+      description: `${filtered.length} dòng theo bộ lọc hiện tại.`,
+    });
   };
 
   const columns: Column<(typeof progressItems)[0]>[] = [
@@ -187,7 +189,9 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({ classes 
       render: (item) => (
         <button
           className="btn btn-secondary btn-sm"
-          onClick={() => setNotice(`Đã ghi nhận yêu cầu nhắc nộp cho lớp hoặc nhóm ${item.code}.`)}
+          onClick={() => toast.success('Đã ghi nhận yêu cầu nhắc nộp', {
+            description: `Lớp hoặc nhóm ${item.code}`,
+          })}
         >
           <Bell className="operation-icon" aria-hidden="true" />
           Nhắc nộp
@@ -211,13 +215,6 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({ classes 
           Xuất báo cáo Excel
         </button>
       </header>
-
-      {notice && (
-        <div className="operations-feedback operations-feedback--success" role="status">
-          <CheckCircle2 aria-hidden="true" />
-          <span>{notice}</span>
-        </div>
-      )}
 
       <section className="operations-metrics" aria-label="Tổng quan tiến độ">
         <div className="operation-metric">

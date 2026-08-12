@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BookOpen, GraduationCap, Plus, Save, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
@@ -71,6 +72,7 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
       status: 'Kích hoạt',
     };
     onAddCriterion(newCriterion);
+    toast.success('Đã thêm tiêu chí', { description: `${newCriterion.code} - ${newCriterion.groupName}` });
     setIsModalOpen(false);
     setCode('');
     setQuestion('');
@@ -284,6 +286,7 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
         onConfirm={() => {
           if (!deletingCriterion) return;
           onDeleteCriterion(deletingCriterion.id);
+          toast.success('Đã xóa tiêu chí', { description: deletingCriterion.code });
           setDeletingCriterion(null);
         }}
         title="Xóa tiêu chí khảo sát"

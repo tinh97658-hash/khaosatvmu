@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Mail, Phone, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
@@ -50,6 +51,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
     };
 
     onAddDepartment(newDepartment);
+    toast.success('Đã thêm bộ môn', { description: newDepartment.name });
     setIsModalOpen(false);
     setCode('');
     setName('');
@@ -211,7 +213,10 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
         isOpen={departmentToDelete !== null}
         onClose={() => setDepartmentToDelete(null)}
         onConfirm={() => {
-          if (departmentToDelete) onDeleteDepartment(departmentToDelete.id);
+          if (departmentToDelete) {
+            onDeleteDepartment(departmentToDelete.id);
+            toast.success('Đã xóa bộ môn', { description: departmentToDelete.name });
+          }
           setDepartmentToDelete(null);
         }}
         title="Xóa bộ môn?"

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
@@ -63,6 +64,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     };
 
     onAddCourse(newCourse);
+    toast.success('Đã thêm học phần', { description: newCourse.name });
     setIsModalOpen(false);
     setValidationError('');
     setCode('');
@@ -219,7 +221,10 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
         isOpen={courseToDelete !== null}
         onClose={() => setCourseToDelete(null)}
         onConfirm={() => {
-          if (courseToDelete) onDeleteCourse(courseToDelete.id);
+          if (courseToDelete) {
+            onDeleteCourse(courseToDelete.id);
+            toast.success('Đã xóa học phần', { description: courseToDelete.name });
+          }
           setCourseToDelete(null);
         }}
         title="Xóa học phần?"

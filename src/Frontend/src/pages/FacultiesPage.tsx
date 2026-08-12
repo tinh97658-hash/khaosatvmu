@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BookOpen, Building2, GraduationCap, Mail, Phone, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
@@ -54,6 +55,7 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
     };
 
     onAddFaculty(newFaculty);
+    toast.success('Đã thêm khoa / viện', { description: newFaculty.name });
     setIsModalOpen(false);
     setValidationError('');
     setCode('');
@@ -189,7 +191,10 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
         isOpen={facultyToDelete !== null}
         onClose={() => setFacultyToDelete(null)}
         onConfirm={() => {
-          if (facultyToDelete) onDeleteFaculty(facultyToDelete.id);
+          if (facultyToDelete) {
+            onDeleteFaculty(facultyToDelete.id);
+            toast.success('Đã xóa khoa / viện', { description: facultyToDelete.name });
+          }
           setFacultyToDelete(null);
         }}
         title="Xóa khoa / viện?"

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
@@ -109,6 +110,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     };
 
     onAddClass(newClass);
+    toast.success('Đã thêm lớp học phần', { description: newClass.code });
     setIsModalOpen(false);
     setValidationError('');
     setCode('');
@@ -137,6 +139,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     };
 
     onAddClassGroup(addingGroupForClass.id, newGroup);
+    toast.success('Đã phân công nhóm lớp', { description: newGroup.fullGroupCode });
     setAddingGroupForClass(null);
   };
 
@@ -349,7 +352,10 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
         isOpen={classToDelete !== null}
         onClose={() => setClassToDelete(null)}
         onConfirm={() => {
-          if (classToDelete) onDeleteClass(classToDelete.id);
+          if (classToDelete) {
+            onDeleteClass(classToDelete.id);
+            toast.success('Đã xóa lớp học phần', { description: classToDelete.code });
+          }
           setClassToDelete(null);
         }}
         title="Xóa lớp học phần?"

@@ -981,3 +981,10 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Replaced browser alerts with inline feedback and named confirmation dialogs.
 - Added working CSV exports for campaign links and filtered survey progress.
 - Passed desktop/mobile visual QA with no page overflow or console errors.
+
+### Implementation status - Frontend toast notifications
+
+- Added a shared Sonner toaster styled for the compact VMU operations interface.
+- Migrated catalog, survey, QR and administration success feedback to typed toasts.
+- Kept field validation inline and destructive confirmation in named dialogs.
+- Verified no native browser `alert()` or `confirm()` remains in the frontend source.

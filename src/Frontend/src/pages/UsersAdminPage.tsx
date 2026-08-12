@@ -19,6 +19,7 @@ import {
   UsersRound,
   UserX,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Modal } from '../components/Modal';
 import { adminApi } from '../services/adminApi';
 import { ApiError } from '../services/apiClient';
@@ -195,6 +196,7 @@ export function UsersAdminPage() {
       setIsAddUserOpen(false);
       setPage(1);
       await loadUsers();
+      toast.success('Đã thêm người dùng', { description: newUser.email });
     } catch (requestError) {
       setError(messageFrom(requestError));
     } finally {
@@ -208,6 +210,9 @@ export function UsersAdminPage() {
     try {
       replaceUser(await adminApi.setUserStatus(user.id, !user.isActive));
       setStatusConfirmation(null);
+      toast.success(user.isActive ? 'Đã vô hiệu tài khoản' : 'Đã kích hoạt tài khoản', {
+        description: user.email,
+      });
     } catch (requestError) {
       setError(messageFrom(requestError));
     } finally {
@@ -235,12 +240,16 @@ export function UsersAdminPage() {
     setBusy(true);
     setError(null);
     try {
+      const wasEditing = editingProfile !== null;
       const saved = editingProfile
         ? await adminApi.updateProfile(selectedUser.id, editingProfile.id, profileForm)
         : await adminApi.createProfile(selectedUser.id, profileForm);
       replaceProfile(saved);
       setShowProfileForm(false);
       setEditingProfile(null);
+      toast.success(wasEditing ? 'Đã cập nhật hồ sơ' : 'Đã thêm hồ sơ', {
+        description: saved.name,
+      });
     } catch (requestError) {
       setError(messageFrom(requestError));
     } finally {
@@ -255,6 +264,9 @@ export function UsersAdminPage() {
     try {
       replaceProfile(await adminApi.setProfileStatus(selectedUser.id, profile.id, !profile.isActive));
       setStatusConfirmation(null);
+      toast.success(profile.isActive ? 'Đã vô hiệu hồ sơ' : 'Đã kích hoạt hồ sơ', {
+        description: profile.name,
+      });
     } catch (requestError) {
       setError(messageFrom(requestError));
     } finally {

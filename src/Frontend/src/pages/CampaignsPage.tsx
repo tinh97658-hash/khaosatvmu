@@ -4,10 +4,8 @@ import {
   Building2,
   CalendarClock,
   CalendarDays,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
-  CircleAlert,
   Copy,
   Download,
   FileText,
@@ -22,6 +20,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { InlineTreeWizard } from '../components/InlineTreeWizard';
 import type { SurveyCampaign, Major, CourseClass, Criterion } from '../types';
@@ -79,7 +78,6 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   const [deletingCampaign, setDeletingCampaign] = useState<SurveyCampaign | null>(null);
   const [editStartDate, setEditStartDate] = useState('');
   const [editEndDate, setEditEndDate] = useState('');
-  const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const handleOpenWizard = (semester?: string, academicYear?: string) => {
     if (academicYear && semester) {
@@ -103,9 +101,8 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
       newCampaigns.forEach((cmp) => onAddCampaign(cmp));
     }
     setActiveWizardTarget(null);
-    setNotice({
-      type: 'success',
-      message: `Đã tạo ${newCampaigns.length} bài khảo sát trong thư mục đã chọn.`,
+    toast.success('Đã tạo đợt khảo sát', {
+      description: `${newCampaigns.length} bài khảo sát đã được thêm vào thư mục đã chọn.`,
     });
   };
 
@@ -113,6 +110,9 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
     e.preventDefault();
     if (editingCampaign) {
       onUpdateCampaignDates(editingCampaign.id, editStartDate, editEndDate);
+      toast.success('Đã cập nhật lịch khảo sát', {
+        description: editingCampaign.title,
+      });
       setEditingCampaign(null);
     }
   };
@@ -120,11 +120,10 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   const handleCopyLink = async (link: string) => {
     try {
       await navigator.clipboard.writeText(link);
-      setNotice({ type: 'success', message: 'Đã sao chép đường dẫn bài khảo sát.' });
+      toast.success('Đã sao chép đường dẫn khảo sát');
     } catch {
-      setNotice({
-        type: 'error',
-        message: 'Không thể sao chép tự động. Hãy chọn đường dẫn trong bảng và sao chép thủ công.',
+      toast.error('Không thể sao chép tự động', {
+        description: 'Hãy chọn đường dẫn trong bảng và sao chép thủ công.',
       });
     }
   };
@@ -148,9 +147,8 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
     anchor.download = 'danh-sach-duong-dan-khao-sat.csv';
     anchor.click();
     URL.revokeObjectURL(url);
-    setNotice({
-      type: 'success',
-      message: `Đã xuất ${filteredCampaigns.length} đường dẫn khảo sát.`,
+    toast.success('Đã xuất danh sách khảo sát', {
+      description: `${filteredCampaigns.length} đường dẫn theo bộ lọc hiện tại.`,
     });
   };
 
@@ -205,21 +203,6 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
           </button>
         </div>
       </header>
-
-      {notice && (
-        <div
-          className={`operations-feedback operations-feedback--${notice.type}`}
-          role={notice.type === 'error' ? 'alert' : 'status'}
-        >
-          {notice.type === 'success'
-            ? <CheckCircle2 aria-hidden="true" />
-            : <CircleAlert aria-hidden="true" />}
-          <span>{notice.message}</span>
-          <button type="button" onClick={() => setNotice(null)} aria-label="Đóng thông báo" title="Đóng">
-            <X aria-hidden="true" />
-          </button>
-        </div>
-      )}
 
       <div className="operations-tabs" role="tablist" aria-label="Loại khảo sát">
         <button
@@ -551,7 +534,9 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
         onConfirm={() => {
           if (!deletingCampaign) return;
           onDeleteCampaign(deletingCampaign.id);
-          setNotice({ type: 'success', message: `Đã xóa đợt khảo sát “${deletingCampaign.title}”.` });
+          toast.success('Đã xóa đợt khảo sát', {
+            description: deletingCampaign.title,
+          });
           setDeletingCampaign(null);
         }}
         title="Xóa đợt khảo sát"
