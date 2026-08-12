@@ -582,7 +582,13 @@ OAuth Client nên là:
 Development callback:
 
 ```text
-https://localhost:<backend-port>/signin-google
+http://localhost:5115/signin-google
+```
+
+Nếu chạy launch profile HTTPS thì đăng ký thêm callback tương ứng:
+
+```text
+https://localhost:7031/signin-google
 ```
 
 Production:
@@ -601,18 +607,17 @@ Không xin thêm Gmail, Drive, Calendar, Contacts nếu ứng dụng không dùn
 
 ## 19. Secret management
 
-Local `.env`:
+Local Development dùng .NET User Secrets:
 
-```env
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_ALLOWED_DOMAIN=vmu.edu.vn
-BOOTSTRAP_ADMIN_EMAIL=
+```powershell
+dotnet user-secrets set "Authentication:Google:ClientId" "<client-id>" --project src/Backend/API/API.csproj
+dotnet user-secrets set "Authentication:Google:ClientSecret" "<client-secret>" --project src/Backend/API/API.csproj
 ```
 
 Yêu cầu:
 
-- `.env` phải nằm trong `.gitignore`
+- Không gửi Client Secret qua chat hoặc lưu vào file trong repo
+- User Secrets chỉ dùng cho Development, không phải kho secret production
 - Không commit secret
 - Không hard-code secret trong source
 - Không đưa secret vào Docker image
@@ -937,3 +942,10 @@ Ràng buộc không thể bỏ qua là chính sách OAuth của Google Workspace
 - Added the user, profile and audit administration workspace on the frontend.
 - Limited the administration menu and backend actions to the active admin profile.
 - Verified CRUD flow, CSRF enforcement, audit records and non-admin `403` responses against PostgreSQL.
+
+### Google Workspace verification preparation
+
+- Enabled .NET User Secrets for local Google OAuth credentials.
+- Standardized the local callback as `http://localhost:5115/signin-google`.
+- Added the Cloud Console, Workspace Admin and real-login verification checklist.
+- Real Workspace verification remains pending OAuth Client credentials and administrator policy confirmation.
