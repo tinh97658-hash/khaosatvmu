@@ -974,3 +974,10 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Added accessible form dialogs, validation and named deletion confirmations.
 - Rebuilt login, profile selection and user administration states without changing API contracts.
 - Verified the integrated frontend build and lint checks.
+
+### Implementation status - Frontend survey operations refresh
+
+- Rebuilt campaign, criteria, progress, QR and student survey workflows in the shared data-first style.
+- Replaced browser alerts with inline feedback and named confirmation dialogs.
+- Added working CSV exports for campaign links and filtered survey progress.
+- Passed desktop/mobile visual QA with no page overflow or console errors.

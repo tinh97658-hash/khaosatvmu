@@ -1,4 +1,18 @@
 import React, { useState } from 'react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  BarChart3,
+  Check,
+  CircleAlert,
+  ClipboardList,
+  FileSpreadsheet,
+  GitBranch,
+  GraduationCap,
+  Info,
+  Rocket,
+  X,
+} from 'lucide-react';
 import type { SurveyCampaign, CourseClass, Criterion, Major } from '../types';
 
 interface InlineTreeWizardProps {
@@ -43,6 +57,7 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
   );
   const [selectedMajorId, setSelectedMajorId] = useState<string>(majors[0]?.id || '');
   const [isImported, setIsImported] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // Step 3 States
   const [selectedCriterionTemplate, setSelectedCriterionTemplate] = useState<string>(
@@ -52,7 +67,7 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
   // Excel Import Simulation
   const handleSimulateExcelImport = () => {
     setIsImported(true);
-    alert('📥 Đã Import thành công 5 Lớp Học Phần và 10 Nhóm lớp (N01, N02) từ tệp Excel Dữ liệu Đào tạo VMU!');
+    setValidationError(null);
   };
 
   const handleToggleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,12 +76,14 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
     } else {
       setSelectedClassIds([]);
     }
+    setValidationError(null);
   };
 
   const handleToggleClass = (id: string) => {
     setSelectedClassIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
+    setValidationError(null);
   };
 
   // Generate campaigns and add directly to tree
@@ -161,130 +178,76 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
     }
 
     onCreateCampaigns(generated);
-    alert(`🎉 Đã tự động khởi tạo thành công ${generated.length} bài khảo sát trực tiếp vào Cây Thư Mục!`);
   };
 
   return (
-    <div
-      style={{
-        border: '2px dashed var(--vmu-blue)',
-        backgroundColor: '#F0F7FF',
-        padding: '16px',
-        margin: '8px 0 16px 0',
-        boxShadow: '0 4px 12px rgba(0, 32, 96, 0.08)',
-        position: 'relative',
-      }}
-    >
-      {/* Node Header Label */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          backgroundColor: 'var(--vmu-navy)',
-          color: '#FFFFFF',
-          padding: '8px 12px',
-          fontWeight: 700,
-          fontSize: '13px',
-          marginBottom: '14px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span>🌱 WORKFLOW KHỞI TẠO TRỰC TIẾP TRÊN CÂY:</span>
-          <span style={{ color: 'var(--accent-gold)', fontWeight: 600 }}>
+    <section className="inline-tree-wizard" aria-label="Quy trình khởi tạo đợt khảo sát">
+      <header className="wizard-header">
+        <div className="wizard-header-title">
+          <GitBranch className="operation-icon" aria-hidden="true" />
+          <span>Khởi tạo đợt khảo sát</span>
+          <span className="wizard-header-context">
             {semester} ({academicYear})
           </span>
         </div>
         <button
+          type="button"
+          className="btn btn-secondary btn-sm"
           onClick={onCancel}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#FFFFFF',
-            fontSize: '14px',
-            cursor: 'pointer',
-            fontWeight: 700,
-          }}
           title="Hủy khởi tạo trên cây"
         >
-          ✕ Đóng Workflow
+          <X className="operation-icon" aria-hidden="true" />
+          Đóng
         </button>
-      </div>
+      </header>
 
-      {/* Step Indicator Bar */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          marginBottom: '16px',
-          backgroundColor: '#FFFFFF',
-          padding: '10px 14px',
-          border: '1px solid var(--border-color)',
-        }}
-      >
-        {[
-          { num: 1, label: '1. Thời gian & Tên đợt' },
-          { num: 2, label: surveyType === 'Học phần' ? '2. Import / Chọn Lớp HP' : '2. Chọn Ngành' },
-          { num: 3, label: '3. Chọn Tiêu chí' },
-          { num: 4, label: '4. Sinh QR & Link Cây' },
-        ].map((s) => (
-          <div
-            key={s.num}
-            style={{
-              fontWeight: step === s.num ? 700 : 500,
-              color: step === s.num ? 'var(--vmu-blue)' : step > s.num ? 'var(--accent-green)' : 'var(--text-muted)',
-              fontSize: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <span
-              style={{
-                width: '20px',
-                height: '20px',
-                borderRadius: '50%',
-                backgroundColor: step === s.num ? 'var(--vmu-blue)' : step > s.num ? 'var(--accent-green)' : '#CBD5E1',
-                color: '#FFF',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '11px',
-                fontWeight: 700,
-              }}
+      <div className="wizard-steps-wrap">
+        <ol className="wizard-steps">
+          {[
+            { num: 1, label: 'Thời gian và tên đợt' },
+            { num: 2, label: surveyType === 'Học phần' ? 'Chọn lớp học phần' : 'Chọn ngành' },
+            { num: 3, label: 'Chọn tiêu chí' },
+            { num: 4, label: 'Xác nhận và tạo' },
+          ].map((item) => (
+            <li
+              key={item.num}
+              className={`wizard-step ${step === item.num ? 'is-active' : ''} ${step > item.num ? 'is-complete' : ''}`}
+              aria-current={step === item.num ? 'step' : undefined}
             >
-              {step > s.num ? '✓' : s.num}
-            </span>
-            <span>{s.label}</span>
-          </div>
-        ))}
+              <span className="wizard-step-number">
+                {step > item.num ? <Check className="operation-icon" aria-hidden="true" /> : item.num}
+              </span>
+              <span>{item.label}</span>
+            </li>
+          ))}
+        </ol>
       </div>
 
-      {/* STEP 1: Basic Info & Duration */}
       {step === 1 && (
-        <div style={{ backgroundColor: '#FFFFFF', padding: '14px', border: '1px solid var(--border-color)' }}>
-          <div style={{ marginBottom: '12px', fontSize: '13px', color: 'var(--vmu-navy)', backgroundColor: 'var(--vmu-blue-light)', padding: '8px 12px' }}>
-            📌 <strong>Bước 1:</strong> Thiết lập đợt khảo sát cho <strong>{semester} ({academicYear})</strong> và thời gian quét QR Code.
+        <div className="wizard-panel">
+          <div className="wizard-notice">
+            <Info className="operation-icon" aria-hidden="true" />
+            <span>Thiết lập tên đợt, học kỳ và thời gian cho phép người tham gia quét mã QR.</span>
           </div>
 
-          <div className="form-group" style={{ marginBottom: '12px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 600 }}>Tên Tổng Thể Đợt Khảo Sát:</label>
+          <div className="form-group">
+            <label htmlFor="wizard-campaign-title">Tên đợt khảo sát</label>
             <input
+              id="wizard-campaign-title"
               type="text"
               value={campaignTitle}
               onChange={(e) => setCampaignTitle(e.target.value)}
-              style={{ width: '100%', padding: '6px 10px', fontSize: '13px', border: '1px solid var(--border-color)' }}
               required
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }} className="form-group">
+          <div className="form-group wizard-form-grid">
             <div>
-              <label style={{ fontSize: '12px', fontWeight: 600 }}>Học Kỳ Được Chọn:</label>
+              <label htmlFor="wizard-semester">Học kỳ</label>
               <select
+                id="wizard-semester"
                 value={semester}
                 onChange={(e) => setSemester(e.target.value)}
-                style={{ width: '100%', padding: '6px 10px', fontSize: '13px', border: '1px solid var(--border-color)' }}
               >
                 <option value="Học kỳ I">Học kỳ I</option>
                 <option value="Học kỳ II">Học kỳ II</option>
@@ -292,11 +255,11 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
               </select>
             </div>
             <div>
-              <label style={{ fontSize: '12px', fontWeight: 600 }}>Năm Học Được Chọn:</label>
+              <label htmlFor="wizard-academic-year">Năm học</label>
               <select
+                id="wizard-academic-year"
                 value={academicYear}
                 onChange={(e) => setAcademicYear(e.target.value)}
-                style={{ width: '100%', padding: '6px 10px', fontSize: '13px', border: '1px solid var(--border-color)' }}
               >
                 <option value="2025-2026">2025-2026</option>
                 <option value="2026-2027">2026-2027</option>
@@ -304,103 +267,109 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }} className="form-group">
+          <div className="form-group wizard-form-grid">
             <div>
-              <label style={{ fontSize: '12px', fontWeight: 600 }}>Ngày Bắt Đầu Cho Phép Quét QR:</label>
+              <label htmlFor="wizard-start-date">Ngày bắt đầu quét QR</label>
               <input
+                id="wizard-start-date"
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                style={{ width: '100%', padding: '6px 10px', fontSize: '13px', border: '1px solid var(--border-color)' }}
                 required
               />
             </div>
             <div>
-              <label style={{ fontSize: '12px', fontWeight: 600 }}>Ngày Kết Thúc Cho Phép Quét QR:</label>
+              <label htmlFor="wizard-end-date">Ngày kết thúc quét QR</label>
               <input
+                id="wizard-end-date"
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                style={{ width: '100%', padding: '6px 10px', fontSize: '13px', border: '1px solid var(--border-color)' }}
                 required
               />
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
+          <div className="operations-actions wizard-actions">
             <button className="btn btn-secondary btn-sm" onClick={onCancel}>
               Hủy
             </button>
             <button className="btn btn-primary btn-sm" onClick={() => setStep(2)}>
-              Tiếp Theo: Import Lớp HP &rarr;
+              Tiếp theo
+              <ArrowRight className="operation-icon" aria-hidden="true" />
             </button>
           </div>
         </div>
       )}
 
-      {/* STEP 2: Import & Select Classes / Majors */}
       {step === 2 && (
-        <div style={{ backgroundColor: '#FFFFFF', padding: '14px', border: '1px solid var(--border-color)' }}>
+        <div className="wizard-panel">
           {surveyType === 'Học phần' ? (
             <>
-              <div style={{ marginBottom: '12px', fontSize: '13px', color: 'var(--vmu-navy)', backgroundColor: 'var(--vmu-blue-light)', padding: '8px 12px' }}>
-                📥 <strong>Bước 2:</strong> Import danh sách Lớp HP của {semester} ({academicYear}) từ Excel hoặc tích chọn bên dưới:
+              <div className="wizard-notice">
+                <FileSpreadsheet className="operation-icon" aria-hidden="true" />
+                <span>Import danh sách lớp học phần của {semester} ({academicYear}) hoặc chọn trực tiếp bên dưới.</span>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+              <div className="wizard-import-row">
                 <button className="btn btn-secondary btn-sm" onClick={handleSimulateExcelImport}>
-                  📥 Import Tệp Excel (.xlsx) Lớp HP & Giảng Viên
+                  <FileSpreadsheet className="operation-icon" aria-hidden="true" />
+                  Import tệp Excel
                 </button>
                 {isImported && (
-                  <span className="badge badge-success" style={{ alignSelf: 'center', fontSize: '11px' }}>
-                    ✓ Đã kết nối dữ liệu Excel Đào tạo
+                  <span className="operations-status operations-status--success">
+                    Đã kết nối dữ liệu đào tạo
                   </span>
                 )}
               </div>
 
-              <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border-color)', marginBottom: '14px' }}>
-                <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+              <div className="wizard-table-scroll">
+                <table className="wizard-table">
                   <thead>
-                    <tr style={{ backgroundColor: '#F1F5F9', borderBottom: '1px solid var(--border-color)' }}>
-                      <th style={{ padding: '6px', textAlign: 'center', width: '35px' }}>
+                    <tr>
+                      <th>
                         <input
                           type="checkbox"
                           checked={selectedClassIds.length === classes.length}
                           onChange={handleToggleSelectAll}
+                          aria-label="Chọn tất cả lớp học phần"
                         />
                       </th>
-                      <th style={{ padding: '6px', textAlign: 'left' }}>Mã Lớp HP</th>
-                      <th style={{ padding: '6px', textAlign: 'left' }}>Tên Học Phần</th>
-                      <th style={{ padding: '6px', textAlign: 'left' }}>Nhóm & GV</th>
-                      <th style={{ padding: '6px', textAlign: 'center' }}>Sĩ số</th>
+                      <th>Mã lớp HP</th>
+                      <th>Tên học phần</th>
+                      <th>Nhóm và giảng viên</th>
+                      <th>Sĩ số</th>
                     </tr>
                   </thead>
                   <tbody>
                     {classes.map((cls) => {
                       const isSelected = selectedClassIds.includes(cls.id);
                       return (
-                        <tr key={cls.id} style={{ borderBottom: '1px solid #E2E8F0' }}>
-                          <td style={{ textAlign: 'center', padding: '6px' }}>
+                        <tr key={cls.id}>
+                          <td>
                             <input
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => handleToggleClass(cls.id)}
+                              aria-label={`Chọn lớp ${cls.code}`}
                             />
                           </td>
-                          <td style={{ padding: '6px', fontFamily: 'monospace', fontWeight: 600 }}>{cls.code}</td>
-                          <td style={{ padding: '6px' }}>{cls.courseName}</td>
-                          <td style={{ padding: '6px', fontSize: '11px' }}>
+                          <td><span className="operations-code">{cls.code}</span></td>
+                          <td>{cls.courseName}</td>
+                          <td>
                             {cls.groups && cls.groups.length > 0 ? (
-                              cls.groups.map((g) => (
-                                <span key={g.id} className="badge badge-info" style={{ marginRight: '3px', fontSize: '10px' }}>
-                                  {g.groupCode}: {g.lecturerName}
-                                </span>
-                              ))
+                              <div className="wizard-lecturer-list">
+                                {cls.groups.map((g) => (
+                                  <span key={g.id} className="operations-count">
+                                    {g.groupCode}: {g.lecturerName}
+                                  </span>
+                                ))}
+                              </div>
                             ) : (
                               <span>{cls.lecturerName}</span>
                             )}
                           </td>
-                          <td style={{ textAlign: 'center', padding: '6px' }}>{cls.totalStudents} SV</td>
+                          <td>{cls.totalStudents}</td>
                         </tr>
                       );
                     })}
@@ -410,16 +379,17 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
             </>
           ) : (
             <>
-              <div style={{ marginBottom: '12px', fontSize: '13px', color: 'var(--vmu-navy)', backgroundColor: 'var(--vmu-blue-light)', padding: '8px 12px' }}>
-                🎓 <strong>Bước 2:</strong> Chọn Ngành Đào Tạo để khởi tạo khảo sát CTĐT:
+              <div className="wizard-notice">
+                <GraduationCap className="operation-icon" aria-hidden="true" />
+                <span>Chọn ngành đào tạo để khởi tạo khảo sát chương trình đào tạo.</span>
               </div>
 
-              <div className="form-group" style={{ marginBottom: '14px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>Ngành Học Đánh Giá:</label>
+              <div className="form-group">
+                <label htmlFor="wizard-major">Ngành học đánh giá</label>
                 <select
+                  id="wizard-major"
                   value={selectedMajorId}
                   onChange={(e) => setSelectedMajorId(e.target.value)}
-                  style={{ width: '100%', padding: '6px 10px', fontSize: '13px', border: '1px solid var(--border-color)' }}
                 >
                   {majors.map((m) => (
                     <option key={m.id} value={m.id}>
@@ -431,39 +401,47 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
             </>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <div className="operations-actions wizard-actions">
+            {validationError && (
+              <div className="operations-feedback operations-feedback--error wizard-validation" role="alert">
+                <CircleAlert aria-hidden="true" />
+                <span>{validationError}</span>
+              </div>
+            )}
             <button className="btn btn-secondary btn-sm" onClick={() => setStep(1)}>
-              &larr; Quay lại
+              <ArrowLeft className="operation-icon" aria-hidden="true" />
+              Quay lại
             </button>
             <button
               className="btn btn-primary btn-sm"
               onClick={() => {
                 if (surveyType === 'Học phần' && selectedClassIds.length === 0) {
-                  alert('Vui lòng chọn ít nhất 1 Lớp HP!');
+                  setValidationError('Vui lòng chọn ít nhất một lớp học phần.');
                   return;
                 }
                 setStep(3);
               }}
             >
-              Tiếp Theo: Chọn Tiêu Chí &rarr;
+              Tiếp theo
+              <ArrowRight className="operation-icon" aria-hidden="true" />
             </button>
           </div>
         </div>
       )}
 
-      {/* STEP 3: Select Survey Questionnaire Template */}
       {step === 3 && (
-        <div style={{ backgroundColor: '#FFFFFF', padding: '14px', border: '1px solid var(--border-color)' }}>
-          <div style={{ marginBottom: '12px', fontSize: '13px', color: 'var(--vmu-navy)', backgroundColor: 'var(--vmu-blue-light)', padding: '8px 12px' }}>
-            📋 <strong>Bước 3:</strong> Chọn Bộ tiêu chí câu hỏi đánh giá chuẩn hóa được áp dụng cho đợt này:
+        <div className="wizard-panel">
+          <div className="wizard-notice">
+            <ClipboardList className="operation-icon" aria-hidden="true" />
+            <span>Chọn bộ tiêu chí đánh giá được áp dụng cho đợt khảo sát này.</span>
           </div>
 
-          <div className="form-group" style={{ marginBottom: '12px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 600 }}>Mẫu Phiếu Khảo Sát Khung Tiêu Chí:</label>
+          <div className="form-group">
+            <label htmlFor="wizard-criteria-template">Mẫu phiếu khảo sát</label>
             <select
+              id="wizard-criteria-template"
               value={selectedCriterionTemplate}
               onChange={(e) => setSelectedCriterionTemplate(e.target.value)}
-              style={{ width: '100%', padding: '6px 10px', fontSize: '13px', border: '1px solid var(--border-color)' }}
             >
               <option value="Mẫu tiêu chuẩn KHP VMU 2026">
                 Mẫu Tiêu Chuẩn Đánh Giá Học Phần Likert 1-5 (Nội dung, Giảng viên, CSVC)
@@ -474,61 +452,58 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
             </select>
           </div>
 
-          <div style={{ backgroundColor: '#F8FAFC', padding: '10px', border: '1px dashed var(--border-color)', marginBottom: '14px' }}>
-            <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--vmu-navy)', marginBottom: '6px' }}>
-              Danh sách {criteria.length} tiêu chí câu hỏi sẽ nhúng vào Mã QR trên Cây Thư Mục:
-            </div>
-            <ul style={{ paddingLeft: '18px', margin: 0, fontSize: '11px', color: 'var(--text-dark)' }}>
+          <div className="wizard-criteria-preview">
+            <h4>{criteria.length} tiêu chí sẽ được dùng trong phiếu khảo sát</h4>
+            <ul>
               {criteria.slice(0, 4).map((c) => (
-                <li key={c.id} style={{ marginBottom: '3px' }}>
+                <li key={c.id}>
                   <strong>[{c.code}]</strong> {c.question}
                 </li>
               ))}
             </ul>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <div className="operations-actions wizard-actions">
             <button className="btn btn-secondary btn-sm" onClick={() => setStep(2)}>
-              &larr; Quay lại
+              <ArrowLeft className="operation-icon" aria-hidden="true" />
+              Quay lại
             </button>
             <button className="btn btn-primary btn-sm" onClick={() => setStep(4)}>
-              Tiếp Theo: Sinh Mã QR & Link &rarr;
+              Tiếp theo
+              <ArrowRight className="operation-icon" aria-hidden="true" />
             </button>
           </div>
         </div>
       )}
 
-      {/* STEP 4: Confirm and Generate Tree Nodes */}
       {step === 4 && (
-        <div style={{ backgroundColor: '#FFFFFF', padding: '14px', border: '1px solid var(--border-color)' }}>
-          <div style={{ marginBottom: '12px', fontSize: '13px', color: 'var(--vmu-navy)', backgroundColor: '#E0F2FE', padding: '8px 12px' }}>
-            ⚡ <strong>Bước 4 (Hoàn tất):</strong> Xác nhận để tự động sinh các nút đợt khảo sát mới trực tiếp vào nhánh Cây Thư Mục.
+        <div className="wizard-panel">
+          <div className="wizard-notice">
+            <BarChart3 className="operation-icon" aria-hidden="true" />
+            <span>Kiểm tra thông tin trước khi tạo các đợt khảo sát trong thư mục đã chọn.</span>
           </div>
 
-          <div style={{ backgroundColor: '#F8FAFC', padding: '12px', borderLeft: '4px solid var(--vmu-blue)', marginBottom: '14px' }}>
-            <div style={{ fontWeight: 700, color: 'var(--vmu-navy)', fontSize: '14px', marginBottom: '6px' }}>
-              📊 TỔNG QUAN ĐỢT KHẢO SÁT SẼ KHỞI TẠO TRÊN CÂY:
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '12px' }}>
-              <div>• <strong>Tên đợt:</strong> {campaignTitle}</div>
-              <div>• <strong>Học kỳ & Năm:</strong> {semester} ({academicYear})</div>
-              <div>• <strong>Lịch quét QR:</strong> {startDate} ~ {endDate}</div>
-              <div>• <strong>Bộ tiêu chí:</strong> {selectedCriterionTemplate}</div>
-              <div>• <strong>Số lớp/nhóm được tạo:</strong> {selectedClassIds.length} đợt khảo sát</div>
-              <div>• <strong>Vị trí nhúng:</strong> <span style={{ color: 'var(--accent-green)', fontWeight: 700 }}>Thư mục {semester} ({academicYear})</span></div>
-            </div>
-          </div>
+          <dl className="wizard-summary">
+            <div><dt>Tên đợt</dt><dd>{campaignTitle}</dd></div>
+            <div><dt>Học kỳ và năm</dt><dd>{semester} ({academicYear})</dd></div>
+            <div><dt>Lịch quét QR</dt><dd>{startDate} đến {endDate}</dd></div>
+            <div><dt>Bộ tiêu chí</dt><dd>{selectedCriterionTemplate}</dd></div>
+            <div><dt>Số lớp hoặc nhóm</dt><dd>{selectedClassIds.length} đợt khảo sát</dd></div>
+            <div><dt>Vị trí</dt><dd>Thư mục {semester} ({academicYear})</dd></div>
+          </dl>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <div className="operations-actions wizard-actions">
             <button className="btn btn-secondary btn-sm" onClick={() => setStep(3)}>
-              &larr; Quay lại
+              <ArrowLeft className="operation-icon" aria-hidden="true" />
+              Quay lại
             </button>
             <button className="btn btn-primary btn-sm" onClick={handleCompleteWizard}>
-              🚀 Khởi Tạo & Tự Động Sinh Nhánh Cây Thư Mục
+              <Rocket className="operation-icon" aria-hidden="true" />
+              Khởi tạo đợt khảo sát
             </button>
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 };

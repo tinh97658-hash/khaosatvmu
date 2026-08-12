@@ -117,7 +117,7 @@
 }
 
 .auth-login-content {
-  width: min(100% - 40px, 980px);
+  width: min(calc(100% - 40px), 980px);
   margin: auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
@@ -327,7 +327,7 @@
 }
 
 .profile-selection-content {
-  width: min(100% - 40px, 840px);
+  width: min(calc(100% - 40px), 840px);
   margin: 0 auto;
   padding: 42px 0 60px;
 }
@@ -1370,7 +1370,7 @@
   }
 
   .auth-login-content {
-    width: min(100% - 24px, 440px);
+    width: min(calc(100% - 24px), 440px);
     grid-template-columns: 1fr;
     gap: 24px;
     padding: 28px 0 36px;
@@ -1404,7 +1404,7 @@
   }
 
   .profile-selection-content {
-    width: min(100% - 24px, 840px);
+    width: min(calc(100% - 24px), 840px);
     padding: 28px 0 40px;
   }
 

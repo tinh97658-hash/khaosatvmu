@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { BookOpen, GraduationCap, Plus, Save, Trash2 } from 'lucide-react';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
-import { Modal } from '../components/Modal';
+import { ConfirmDialog, Modal } from '../components/Modal';
 import type { Criterion } from '../types';
+import '../styles/survey-operations.css';
 
 interface CriteriaPageProps {
   criteria: Criterion[];
@@ -22,6 +24,8 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
   );
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [deletingCriterion, setDeletingCriterion] = useState<Criterion | null>(null);
 
   // Form states
   const [category, setCategory] = useState<'Học phần' | 'Chương trình đào tạo'>(activeTab);
@@ -32,6 +36,7 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
 
   // Keep category in form synced with activeTab when modal opens
   const handleOpenModal = () => {
+    setValidationError(null);
     setCategory(activeTab);
     if (activeTab === 'Học phần') {
       setGroupName('Nội dung & Phương pháp giảng dạy');
@@ -53,7 +58,7 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim() || !question.trim()) {
-      alert('Vui lòng điền mã tiêu chí và nội dung câu hỏi khảo sát!');
+      setValidationError('Vui lòng điền mã tiêu chí và nội dung câu hỏi khảo sát.');
       return;
     }
     const newCriterion: Criterion = {
@@ -76,47 +81,31 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
       key: 'code',
       header: 'Mã Tiêu Chí',
       width: '110px',
-      render: (item) => (
-        <span className="badge badge-info" style={{ fontFamily: 'monospace', fontSize: '13px' }}>
-          {item.code}
-        </span>
-      ),
+      render: (item) => <span className="operations-code">{item.code}</span>,
     },
     {
       key: 'groupName',
       header: 'Nhóm Tiêu Chí Đánh Giá',
       width: '240px',
-      render: (item) => (
-        <div>
-          <strong style={{ color: 'var(--vmu-navy)' }}>{item.groupName}</strong>
-        </div>
-      ),
+      render: (item) => <span className="operations-primary-text">{item.groupName}</span>,
     },
     {
       key: 'question',
       header: 'Nội Dung Câu Hỏi Khảo Sát (Mức độ đồng ý Likert 1-5)',
-      render: (item) => (
-        <span style={{ fontSize: '14px', color: 'var(--vmu-navy)', fontWeight: 500 }}>
-          {item.question}
-        </span>
-      ),
+      render: (item) => <span className="operations-primary-text">{item.question}</span>,
     },
     {
       key: 'weight',
       header: 'Trọng Số',
       width: '90px',
-      render: (item) => (
-        <span style={{ fontWeight: 600, color: 'var(--text-dark)' }}>{item.weight}</span>
-      ),
+      render: (item) => <span className="operations-primary-text">{item.weight}</span>,
     },
     {
       key: 'status',
       header: 'Trạng Thái',
       width: '110px',
       render: (item) => (
-        <span
-          className={`badge ${item.status === 'Kích hoạt' ? 'badge-success' : 'badge-danger'}`}
-        >
+        <span className={`operations-status ${item.status === 'Kích hoạt' ? 'operations-status--success' : 'operations-status--danger'}`}>
           {item.status}
         </span>
       ),
@@ -127,27 +116,26 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
       width: '90px',
       render: (item) => (
         <button
+          type="button"
           className="btn btn-danger btn-sm"
-          onClick={() => {
-            if (confirm(`Xóa tiêu chí "${item.code}"?`)) {
-              onDeleteCriterion(item.id);
-            }
-          }}
+          onClick={() => setDeletingCriterion(item)}
+          aria-label={`Xóa tiêu chí ${item.code}`}
         >
-          🗑️ Xóa
+          <Trash2 className="operation-icon" aria-hidden="true" />
+          Xóa
         </button>
       ),
     },
   ];
 
   return (
-    <div>
-      <div className="page-header">
+    <div className="survey-operations-page operations-table-page criteria-page">
+      <header className="page-header operations-page-header">
         <div className="page-title-group">
           <h2>
             {activeTab === 'Học phần'
-              ? 'BỘ TIÊU CHÍ ĐÁNH GIÁ HỌC PHẦN & MÔN HỌC'
-              : 'BỘ TIÊU CHÍ ĐÁNH GIÁ CHƯƠNG TRÌNH ĐÀO TẠO'}
+              ? 'Bộ tiêu chí đánh giá học phần'
+              : 'Bộ tiêu chí đánh giá chương trình đào tạo'}
           </h2>
           <p>
             {activeTab === 'Học phần'
@@ -156,23 +144,35 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
           </p>
         </div>
         <button className="btn btn-primary" onClick={handleOpenModal}>
-          + Thêm Tiêu Chí {activeTab}
+          <Plus className="operation-icon" aria-hidden="true" />
+          Thêm tiêu chí
         </button>
-      </div>
+      </header>
 
-      {/* Sub-tab Switcher Bar */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '2px solid var(--border-color)', paddingBottom: '8px' }}>
+      <div className="operations-tabs" role="tablist" aria-label="Loại bộ tiêu chí">
         <button
-          className={`btn ${activeTab === 'Học phần' ? 'btn-primary' : 'btn-secondary'}`}
+          className={`operations-tab ${activeTab === 'Học phần' ? 'is-active' : ''}`}
+          role="tab"
+          aria-selected={activeTab === 'Học phần'}
           onClick={() => setActiveTab('Học phần')}
         >
-          📚 Tiêu Chí Đánh Giá Môn Học ({criteria.filter((c) => c.category === 'Học phần').length})
+          <BookOpen className="operation-icon" aria-hidden="true" />
+          Học phần
+          <span className="operations-tab-count">
+            {criteria.filter((c) => c.category === 'Học phần').length}
+          </span>
         </button>
         <button
-          className={`btn ${activeTab === 'Chương trình đào tạo' ? 'btn-primary' : 'btn-secondary'}`}
+          className={`operations-tab ${activeTab === 'Chương trình đào tạo' ? 'is-active' : ''}`}
+          role="tab"
+          aria-selected={activeTab === 'Chương trình đào tạo'}
           onClick={() => setActiveTab('Chương trình đào tạo')}
         >
-          🎓 Tiêu Chí Đánh Giá CT Đào Tạo ({criteria.filter((c) => c.category === 'Chương trình đào tạo').length})
+          <GraduationCap className="operation-icon" aria-hidden="true" />
+          Chương trình đào tạo
+          <span className="operations-tab-count">
+            {criteria.filter((c) => c.category === 'Chương trình đào tạo').length}
+          </span>
         </button>
       </div>
 
@@ -183,22 +183,31 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
         onSearchChange={setSearch}
         searchPlaceholder={`Tìm tiêu chí ${activeTab}...`}
         onAddNew={handleOpenModal}
-        addNewLabel={`+ Thêm Tiêu Chí ${activeTab}`}
+        addNewLabel={`Thêm tiêu chí ${activeTab}`}
+        emptyMessage="Không tìm thấy tiêu chí phù hợp."
         keyExtractor={(item) => item.id}
       />
 
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setValidationError(null);
+        }}
         title={`THÊM MỚI TIÊU CHÍ ĐÁNH GIÁ - ${activeTab.toUpperCase()}`}
       >
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }} className="form-group">
+          {validationError && (
+            <div className="operations-feedback operations-feedback--error" role="alert">
+              {validationError}
+            </div>
+          )}
+          <div className="form-group operations-form-grid">
             <div>
-              <label>Phân Loại Tiêu Chí:</label>
+              <label>Phân loại tiêu chí</label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as any)}
+                onChange={(e) => setCategory(e.target.value as 'Học phần' | 'Chương trình đào tạo')}
                 required
               >
                 <option value="Học phần">Đánh giá Học phần (Môn học)</option>
@@ -206,7 +215,7 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
               </select>
             </div>
             <div>
-              <label>Mã Tiêu Chí (Kí hiệu):</label>
+              <label>Mã tiêu chí</label>
               <input
                 type="text"
                 placeholder={category === 'Học phần' ? 'VD: HP06' : 'VD: CTDT05'}
@@ -218,7 +227,7 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
           </div>
 
           <div className="form-group">
-            <label>Nhóm Đánh Giá:</label>
+            <label>Nhóm đánh giá</label>
             <input
               type="text"
               placeholder={
@@ -233,7 +242,7 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
           </div>
 
           <div className="form-group">
-            <label>Nội Dung Câu Hỏi Khảo Sát (Mức độ đồng ý Likert 1-5):</label>
+            <label>Nội dung câu hỏi khảo sát (Likert 1-5)</label>
             <textarea
               rows={3}
               placeholder={
@@ -248,7 +257,7 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
           </div>
 
           <div className="form-group">
-            <label>Trọng Số Tiêu Chí (Độ ưu tiên):</label>
+            <label>Trọng số tiêu chí</label>
             <input
               type="number"
               step="0.1"
@@ -257,16 +266,29 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
             />
           </div>
 
-          <div className="modal-footer" style={{ padding: '16px 0 0 0', backgroundColor: 'transparent', borderTop: 'none' }}>
+          <div className="operations-form-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>
               Hủy
             </button>
             <button type="submit" className="btn btn-primary">
-              Lưu Tiêu Chí
+              <Save className="operation-icon" aria-hidden="true" />
+              Lưu tiêu chí
             </button>
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={deletingCriterion !== null}
+        onClose={() => setDeletingCriterion(null)}
+        onConfirm={() => {
+          if (!deletingCriterion) return;
+          onDeleteCriterion(deletingCriterion.id);
+          setDeletingCriterion(null);
+        }}
+        title="Xóa tiêu chí khảo sát"
+        recordName={deletingCriterion ? `${deletingCriterion.code} - ${deletingCriterion.question}` : ''}
+      />
     </div>
   );
 };

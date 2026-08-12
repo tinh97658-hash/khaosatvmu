@@ -185,7 +185,7 @@ function DashboardApp() {
   // Render Student View Mode
   if (isStudentView) {
     return (
-      <div style={{ backgroundColor: '#F8FAFC', minHeight: '100vh', paddingBottom: '40px' }}>
+      <div className="student-survey-shell">
         <StudentSurveyView
           criteria={criteria}
           onCloseStudentView={() => setIsStudentView(false)}

@@ -1255,7 +1255,7 @@ textarea:focus-visible {
 }
 
 .profile-selection-content {
-  width: min(100% - 40px, 920px);
+  width: min(calc(100% - 40px), 920px);
   margin: 0 auto;
   padding: 38px 0 60px;
 }
