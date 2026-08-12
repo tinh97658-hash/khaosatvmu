@@ -69,3 +69,14 @@ public sealed class AuthAuditLog
     public string? Metadata { get; set; }
     public DateTime CreatedAt { get; set; }
 }
+
+public sealed class AuthSession
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid ActiveProfileId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public DateTime? RevokedAt { get; set; }
+    public string? RevokedReason { get; set; }
+}

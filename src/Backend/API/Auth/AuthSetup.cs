@@ -11,6 +11,12 @@ public static class AuthSchemes
     public const string Google = "GoogleOIDC";
 }
 
+public static class AuthClaimTypes
+{
+    public const string SessionId = "session_id";
+    public const string ActiveProfileId = "active_profile_id";
+}
+
 public sealed record GoogleAuthConfiguration(
     bool IsConfigured,
     string AllowedDomain,
@@ -47,23 +53,11 @@ public static class AuthSetup
                 options.Cookie.SecurePolicy = environment.IsDevelopment()
                     ? CookieSecurePolicy.SameAsRequest
                     : CookieSecurePolicy.Always;
-                options.SlidingExpiration = true;
+                options.SlidingExpiration = false;
                 options.ExpireTimeSpan = TimeSpan.FromHours(8);
                 options.LoginPath = "/api/auth/login";
                 options.LogoutPath = "/api/auth/logout";
-                options.Events = new CookieAuthenticationEvents
-                {
-                    OnRedirectToLogin = context =>
-                    {
-                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                        return Task.CompletedTask;
-                    },
-                    OnRedirectToAccessDenied = context =>
-                    {
-                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                        return Task.CompletedTask;
-                    }
-                };
+                options.EventsType = typeof(ApplicationCookieEvents);
             })
             .AddCookie(AuthSchemes.Pending, options =>
             {

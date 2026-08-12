@@ -320,6 +320,20 @@ Metadata JSON/JSONB NULL
 CreatedAt TIMESTAMP NOT NULL
 ```
 
+### AuthSessions
+
+```text
+Id UUID PK
+UserId UUID NOT NULL FK -> Users.Id
+ActiveProfileId UUID NOT NULL FK -> UserProfiles.Id
+CreatedAt TIMESTAMP NOT NULL
+ExpiresAt TIMESTAMP NOT NULL
+RevokedAt TIMESTAMP NULL
+RevokedReason VARCHAR NULL
+```
+
+Cookie chỉ lưu `session_id`, `UserId` và `ActiveProfileId` đã được ASP.NET Core Data Protection bảo vệ. Backend phải đối chiếu cả ba giá trị với `AuthSessions` trên mỗi request có cookie.
+
 ## 9. Authorization
 
 Authentication và Authorization phải tách biệt.
@@ -899,3 +913,11 @@ Ràng buộc không thể bỏ qua là chính sách OAuth của Google Workspace
 - Removed the redundant `RolePermissions.ScopeCode` through EF migration.
 - Added `/api/auth/access` for the current authorization context.
 - Verified `401`, `403`, permission grants and organization-scope isolation against PostgreSQL.
+
+### Implementation status - Phase 4
+
+- Added PostgreSQL-backed `AuthSessions` with fixed 8-hour expiration.
+- Added per-request session, user and active-profile validation.
+- Added server-side logout revocation and support for revoking all user sessions.
+- Added CSRF tokens for profile selection, profile switching and logout.
+- Verified valid profile switching and rejected replay of a revoked cookie.

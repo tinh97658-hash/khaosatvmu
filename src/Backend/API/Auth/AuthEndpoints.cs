@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Application.Auth;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 
 namespace API.Auth;
@@ -31,6 +32,7 @@ public static class AuthEndpoints
         group.MapGet("/google-complete", async (
             HttpContext httpContext,
             IAuthService authService,
+            IAuthSessionService sessionService,
             GoogleAuthConfiguration googleAuth) =>
         {
             var pending = await httpContext.AuthenticateAsync(AuthSchemes.Pending);
@@ -51,7 +53,7 @@ public static class AuthEndpoints
             var result = await authService.GoogleSignInAsync(identity, googleAuth.AllowedDomain);
             if (result.Succeeded && result.Response is not null)
             {
-                await SignInAsync(httpContext, result.Response);
+                await SignInAsync(httpContext, result.Response, sessionService);
                 await httpContext.SignOutAsync(AuthSchemes.Pending);
                 return Results.Redirect(googleAuth.FrontendBaseUrl);
             }
@@ -70,6 +72,12 @@ public static class AuthEndpoints
         {
             var response = await authService.GetCurrentAsync(user);
             return Results.Ok(response);
+        });
+
+        group.MapGet("/csrf", (HttpContext httpContext, IAntiforgery antiforgery) =>
+        {
+            var tokens = antiforgery.GetAndStoreTokens(httpContext);
+            return Results.Ok(new { token = tokens.RequestToken });
         });
 
         group.MapGet("/profiles", [Authorize] async (ClaimsPrincipal user, IAuthService authService) =>
@@ -104,7 +112,8 @@ public static class AuthEndpoints
         group.MapPost("/select-profile", async (
             SelectProfileRequest request,
             HttpContext httpContext,
-            IAuthService authService) =>
+            IAuthService authService,
+            IAuthSessionService sessionService) =>
         {
             var userId = await GetPendingUserIdAsync(httpContext);
             if (userId is null)
@@ -118,15 +127,16 @@ public static class AuthEndpoints
                 return Results.Json(new { errorCode = result.ErrorCode }, statusCode: MapErrorStatus(result.ErrorCode));
             }
 
-            await SignInAsync(httpContext, result.Response);
+            await SignInAsync(httpContext, result.Response, sessionService);
             await httpContext.SignOutAsync(AuthSchemes.Pending);
             return Results.Ok(result.Response);
-        });
+        }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
         group.MapPost("/switch-profile", [Authorize] async (
             ClaimsPrincipal user,
             SelectProfileRequest request,
             IAuthService authService,
+            IAuthSessionService sessionService,
             HttpContext httpContext) =>
         {
             var result = await authService.SelectProfileAsync(user, request.ProfileId);
@@ -135,17 +145,34 @@ public static class AuthEndpoints
                 return Results.Json(new { errorCode = result.ErrorCode }, statusCode: MapErrorStatus(result.ErrorCode));
             }
 
-            await SignInAsync(httpContext, result.Response);
-            return Results.Ok(result.Response);
-        });
+            var sessionId = GetGuidClaim(user, AuthClaimTypes.SessionId);
+            if (sessionId is null
+                || !await SignInAsync(httpContext, result.Response, sessionService, sessionId.Value))
+            {
+                return Results.Json(new { errorCode = AuthErrorCodes.SessionExpired }, statusCode: StatusCodes.Status401Unauthorized);
+            }
 
-        group.MapPost("/logout", async (ClaimsPrincipal user, IAuthService authService, HttpContext httpContext) =>
+            return Results.Ok(result.Response);
+        }).AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapPost("/logout", [Authorize] async (
+            ClaimsPrincipal user,
+            IAuthService authService,
+            IAuthSessionService sessionService,
+            HttpContext httpContext) =>
         {
             await authService.SignOutAsync(user);
+            var sessionId = GetGuidClaim(user, AuthClaimTypes.SessionId);
+            var userId = GetGuidClaim(user, ClaimTypes.NameIdentifier);
+            if (sessionId is not null && userId is not null)
+            {
+                await sessionService.RevokeAsync(sessionId.Value, userId.Value, "LOGOUT");
+            }
+
             await httpContext.SignOutAsync(AuthSchemes.Application);
             await httpContext.SignOutAsync(AuthSchemes.Pending);
             return Results.Ok(new { success = true });
-        });
+        }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
         if (endpoints.ServiceProvider.GetRequiredService<IHostEnvironment>().IsDevelopment())
         {
@@ -153,6 +180,7 @@ public static class AuthEndpoints
                 string email,
                 string? profileCode,
                 IAuthService authService,
+                IAuthSessionService sessionService,
                 HttpContext httpContext) =>
             {
                 var result = await authService.DevSignInAsync(email, profileCode);
@@ -161,7 +189,7 @@ public static class AuthEndpoints
                     return Results.Json(new { errorCode = result.ErrorCode, availableProfiles = result.AvailableProfiles }, statusCode: MapErrorStatus(result.ErrorCode));
                 }
 
-                await SignInAsync(httpContext, result.Response);
+                await SignInAsync(httpContext, result.Response, sessionService);
                 return Results.Ok(result.Response);
             });
 
@@ -173,19 +201,35 @@ public static class AuthEndpoints
         return endpoints;
     }
 
-    private static async Task SignInAsync(HttpContext httpContext, AuthMeResponse response)
+    private static async Task<bool> SignInAsync(
+        HttpContext httpContext,
+        AuthMeResponse response,
+        IAuthSessionService sessionService,
+        Guid? existingSessionId = null)
     {
         if (response.User is null || response.ActiveProfile is null)
         {
             throw new InvalidOperationException("Cannot sign in without an active profile.");
         }
 
+        var session = existingSessionId is null
+            ? await sessionService.CreateAsync(response.User.Id, response.ActiveProfile.Id)
+            : await sessionService.SwitchProfileAsync(
+                existingSessionId.Value,
+                response.User.Id,
+                response.ActiveProfile.Id);
+        if (session is null)
+        {
+            return false;
+        }
+
         var claims = new List<Claim>
         {
+            new(AuthClaimTypes.SessionId, session.Id.ToString()),
             new(ClaimTypes.NameIdentifier, response.User.Id.ToString()),
             new(ClaimTypes.Email, response.User.Email),
             new(ClaimTypes.Name, response.User.DisplayName ?? response.User.Email),
-            new("active_profile_id", response.ActiveProfile.Id.ToString()),
+            new(AuthClaimTypes.ActiveProfileId, response.ActiveProfile.Id.ToString()),
             new("active_profile_code", response.ActiveProfile.Code),
             new("active_role_code", response.ActiveProfile.RoleCode),
             new("active_profile_name", response.ActiveProfile.Name)
@@ -195,8 +239,11 @@ public static class AuthEndpoints
         var principal = new ClaimsPrincipal(identity);
         await httpContext.SignInAsync(AuthSchemes.Application, principal, new AuthenticationProperties
         {
-            IsPersistent = true
+            IsPersistent = true,
+            AllowRefresh = false,
+            ExpiresUtc = new DateTimeOffset(session.ExpiresAt)
         });
+        return true;
     }
 
     private static async Task SignInPendingProfileAsync(HttpContext httpContext, Guid userId)
@@ -217,6 +264,9 @@ public static class AuthEndpoints
             ? userId
             : null;
     }
+
+    private static Guid? GetGuidClaim(ClaimsPrincipal? principal, string claimType) =>
+        Guid.TryParse(principal?.FindFirst(claimType)?.Value, out var value) ? value : null;
 
     private static IResult RedirectWithError(GoogleAuthConfiguration configuration, string? errorCode) =>
         Results.Redirect($"{configuration.FrontendBaseUrl.TrimEnd('/')}/login?error={Uri.EscapeDataString(errorCode ?? AuthErrorCodes.InvalidGoogleIdentity)}");
