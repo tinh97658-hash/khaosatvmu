@@ -40,18 +40,21 @@ Checklist này áp dụng cho backend local tại `http://localhost:5115` và fr
 
 ## 4. Lưu secret trên máy phát triển
 
-Chạy tại thư mục gốc repo. Không gửi Client Secret qua chat và không ghi vào
-`appsettings*.json`.
+Tạo `.env` từ `.env.example` tại thư mục gốc repo. File `.env` đã nằm trong
+`.gitignore`, mỗi developer giữ một bản riêng và nhận Client Secret qua kênh bảo mật.
 
-```powershell
-dotnet user-secrets set "Authentication:Google:ClientId" "<client-id>" --project src/Backend/API/API.csproj
-dotnet user-secrets set "Authentication:Google:ClientSecret" "<client-secret>" --project src/Backend/API/API.csproj
-dotnet user-secrets list --project src/Backend/API/API.csproj
+```env
+Authentication__Google__ClientId=<client-id>
+Authentication__Google__ClientSecret=<client-secret>
 ```
+
+Không gửi Client Secret qua chat, không ghi vào `appsettings*.json` và không ép Git
+theo dõi `.env`. API chỉ tự nạp `.env` trong môi trường Development; environment
+variables thật có độ ưu tiên cao hơn giá trị trong file.
 
 ## 5. Kiểm thử luồng thật
 
-1. Khởi động lại backend sau khi lưu User Secrets.
+1. Khởi động lại backend sau khi cập nhật `.env`.
 2. Kiểm tra cấu hình không lộ credential:
 
    ```text

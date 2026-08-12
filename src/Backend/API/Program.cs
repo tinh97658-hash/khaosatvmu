@@ -8,6 +8,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Infrastructure.Persistence;
 
+var environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+    ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
+if (string.Equals(environmentName, Environments.Development, StringComparison.OrdinalIgnoreCase))
+{
+    DotNetEnv.Env.NoClobber().TraversePath().Load();
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();

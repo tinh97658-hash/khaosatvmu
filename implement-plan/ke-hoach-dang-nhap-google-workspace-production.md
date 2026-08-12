@@ -591,17 +591,20 @@ Không xin thêm Gmail, Drive, Calendar, Contacts nếu ứng dụng không dùn
 
 ## 19. Secret management
 
-Local Development dùng .NET User Secrets:
+Local Development dùng file `.env` riêng cho từng developer:
 
-```powershell
-dotnet user-secrets set "Authentication:Google:ClientId" "<client-id>" --project src/Backend/API/API.csproj
-dotnet user-secrets set "Authentication:Google:ClientSecret" "<client-secret>" --project src/Backend/API/API.csproj
+```env
+Authentication__Google__ClientId=<client-id>
+Authentication__Google__ClientSecret=<client-secret>
 ```
 
 Yêu cầu:
 
-- Không gửi Client Secret qua chat hoặc lưu vào file trong repo
-- User Secrets chỉ dùng cho Development, không phải kho secret production
+- `.env.example` chỉ chứa tên biến và giá trị mẫu, không chứa secret thật
+- Mỗi developer giữ `.env` riêng và nhận secret qua kênh bảo mật
+- API chỉ nạp `.env` trong Development
+- Environment variables thật ưu tiên hơn `.env`
+- Không gửi Client Secret qua chat
 - Không commit secret
 - Không hard-code secret trong source
 - Không đưa secret vào Docker image
@@ -887,7 +890,7 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Added Google OIDC authorization-code flow with PKCE and HttpOnly cookies.
 - Added validation for Google `sub`, `email_verified`, allowlist and account linking.
 - Added separate initial profile selection and authenticated profile switching flows.
-- Kept OAuth secrets outside source through .NET User Secrets and production secret injection.
+- Kept OAuth secrets outside source through local Development secrets and production secret injection.
 - Limited sample user seeding to Development only.
 
 ### Implementation status - Phase 3
@@ -924,11 +927,11 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 
 ### External Google OAuth verification preparation
 
-- Enabled .NET User Secrets for local Google OAuth credentials.
+- Added Development-only `.env` loading and a shared `.env.example` contract.
 - Standardized the local callback as `http://localhost:5115/signin-google`.
 - Added the Google Auth Platform External-audience and real-login verification checklist.
 - Removed the Workspace domain and administrator-policy dependency.
-- Real Google login verification remains pending local User Secrets and an interactive login.
+- Real Google login verification remains pending local `.env` credentials and an interactive login.
 
 ### Implementation status - External Google Account access
 
@@ -937,3 +940,10 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Allowed administrators to add Google Account emails from any domain.
 - Updated frontend messages and configuration for External Google OAuth.
 - Verified an `@gmail.com` allowlist entry against PostgreSQL; interactive OAuth remains pending local secrets.
+
+### Implementation status - Shared local environment
+
+- Added Development-only `.env` loading with OS environment variables taking precedence.
+- Added a committed `.env.example` contract for all developers.
+- Kept each developer's real `.env` and OAuth credentials outside Git.
+- Verified the API starts successfully from the root `.env` configuration.
