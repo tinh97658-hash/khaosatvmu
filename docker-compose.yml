@@ -27,6 +27,9 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=${POSTGRES_DB:-khaosatvmu};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-khaosatvmu@123}
+      - AgentMemory__BaseUrl=http://host.docker.internal:3111
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - db
     networks:
@@ -48,9 +51,28 @@ services:
     networks:
       - app-network
 
+  # 4. AgentMemory: Local AI Agent Persistent Memory & Dashboard
+  # Khởi chạy qua script: scripts/start-agentmemory.cmd
+  # Hoặc dùng Docker Compose Profile: docker compose --profile agentmemory up -d
+  agentmemory:
+    image: iiidev/iii:${AGENTMEMORY_III_VERSION:-0.11.2}
+    container_name: khaosatvmu_agentmemory
+    profiles: ["agentmemory"]
+    user: "65532:65532"
+    ports:
+      - "${AGENTMEMORY_PORT:-3111}:3111"
+      - "${AGENTMEMORY_DASHBOARD_PORT:-3113}:3113"
+    volumes:
+      - agentmemory_data:/data
+    restart: unless-stopped
+    networks:
+      - app-network
+
 volumes:
   postgres_data:
+  agentmemory_data:
 
 networks:
   app-network:
     driver: bridge
+

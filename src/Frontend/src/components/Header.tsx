@@ -1,4 +1,5 @@
 import React from 'react';
+import { AgentMemoryWidget } from './AgentMemoryWidget';
 
 interface HeaderProps {
   currentTab: string;
@@ -52,6 +53,8 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onOpenStudentView })
       </div>
 
       <div className="header-actions">
+        <AgentMemoryWidget />
+
         <button
           className="btn btn-qr btn-sm"
           onClick={onOpenStudentView}
