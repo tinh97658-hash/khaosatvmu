@@ -169,6 +169,17 @@ public static class DatabaseSeeder
             "Phong khao sat",
             isDefault: false,
             cancellationToken);
+
+        await EnsureProfileAsync(
+            db,
+            user,
+            roles["ADMIN"],
+            "ADMIN_SYSTEM",
+            "Quan tri he thong",
+            null,
+            null,
+            isDefault: false,
+            cancellationToken);
     }
 
     private static async Task EnsureProfileAsync(
@@ -177,8 +188,8 @@ public static class DatabaseSeeder
         Role role,
         string profileCode,
         string profileName,
-        string organizationUnitCode,
-        string organizationUnitName,
+        string? organizationUnitCode,
+        string? organizationUnitName,
         bool isDefault,
         CancellationToken cancellationToken)
     {

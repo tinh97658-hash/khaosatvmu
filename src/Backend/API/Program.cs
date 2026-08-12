@@ -1,6 +1,9 @@
 using API.Auth;
+using API.UserAdministration;
 using Application.Auth;
+using Application.UserAdministration;
 using Infrastructure.Auth;
+using Infrastructure.UserAdministration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Infrastructure.Persistence;
@@ -36,6 +39,7 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddScoped<IAuthService, EfAuthService>();
 builder.Services.AddScoped<IAuthSessionService, EfAuthSessionService>();
+builder.Services.AddScoped<IUserAdministrationService, EfUserAdministrationService>();
 builder.Services.AddScoped<ApplicationCookieEvents>();
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
@@ -63,6 +67,7 @@ app.MapGet("/", () => Results.Ok(new
 }));
 
 app.MapAuthEndpoints();
+app.MapUserAdministrationEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
 

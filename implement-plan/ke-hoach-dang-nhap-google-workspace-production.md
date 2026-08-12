@@ -929,3 +929,11 @@ Ràng buộc không thể bỏ qua là chính sách OAuth của Google Workspace
 - Added initial profile selection, header profile switching and CSRF logout.
 - Added Vietnamese auth error mapping and expired-session handling.
 - Verified desktop/mobile login layouts and the full auth flow through the Vite proxy.
+
+### Implementation status - Phase 6
+
+- Added `ADMIN_ACCESS` APIs for user allowlist, account status, profiles, roles and audit history.
+- Added EF validation, audit events and session revocation for account/profile permission changes.
+- Added the user, profile and audit administration workspace on the frontend.
+- Limited the administration menu and backend actions to the active admin profile.
+- Verified CRUD flow, CSRF enforcement, audit records and non-admin `403` responses against PostgreSQL.

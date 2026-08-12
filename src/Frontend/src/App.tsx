@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from './auth/authContext';
 import { AuthLoading } from './components/AuthLoading';
 
@@ -21,6 +21,7 @@ import { SurveyProgressPage } from './pages/SurveyProgressPage';
 import { StudentSurveyView } from './pages/StudentSurveyView';
 import { LoginPage } from './pages/LoginPage';
 import { ProfileSelectionPage } from './pages/ProfileSelectionPage';
+import { UsersAdminPage } from './pages/UsersAdminPage';
 
 // Mock Data & Types
 import {
@@ -50,6 +51,13 @@ function DashboardApp() {
   const auth = useAuth();
   const [currentTab, setCurrentTab] = useState<string>('overview');
   const [isStudentView, setIsStudentView] = useState<boolean>(false);
+  const canManageUsers = auth.access?.permissions.includes('ADMIN_ACCESS') ?? false;
+
+  useEffect(() => {
+    if (currentTab === 'users-admin' && !canManageUsers) {
+      setCurrentTab('overview');
+    }
+  }, [canManageUsers, currentTab]);
 
   // System Catalog States
   const [stats, setStats] = useState(initialStats);
@@ -195,6 +203,7 @@ function DashboardApp() {
         currentTab={currentTab}
         onSelectTab={(tab) => setCurrentTab(tab)}
         activeCampaignsCount={stats.activeCampaigns}
+        canManageUsers={canManageUsers}
       />
 
       {/* Main Content Area */}
@@ -328,6 +337,8 @@ function DashboardApp() {
               onOpenQR={handleOpenCampaignQR}
             />
           )}
+
+          {currentTab === 'users-admin' && canManageUsers && <UsersAdminPage />}
         </main>
       </div>
 

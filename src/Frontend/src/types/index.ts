@@ -191,3 +191,64 @@ export interface AuthConfiguration {
   allowedDomain: string;
   development: boolean;
 }
+
+export interface AdminProfile {
+  id: string;
+  name: string;
+  code: string;
+  roleId: string;
+  roleCode: string;
+  roleName: string;
+  organizationUnitCode: string | null;
+  organizationUnitName: string | null;
+  isActive: boolean;
+  isDefault: boolean;
+  lastSelectedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  displayName: string | null;
+  isActive: boolean;
+  firstLoginAt: string | null;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  profiles: AdminProfile[];
+}
+
+export interface AdminRole {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+}
+
+export interface AdminAuditLog {
+  id: string;
+  userId: string | null;
+  profileId: string | null;
+  email: string | null;
+  event: string;
+  metadata: string | null;
+  createdAt: string;
+}
+
+export interface AdminPage<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+}
+
+export interface SaveAdminProfile {
+  name: string;
+  code: string;
+  roleId: string;
+  organizationUnitCode: string | null;
+  organizationUnitName: string | null;
+  isDefault: boolean;
+}

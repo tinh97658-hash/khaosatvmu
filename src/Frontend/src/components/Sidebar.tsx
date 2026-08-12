@@ -4,12 +4,14 @@ interface SidebarProps {
   currentTab: string;
   onSelectTab: (tab: string) => void;
   activeCampaignsCount: number;
+  canManageUsers: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
   onSelectTab,
   activeCampaignsCount,
+  canManageUsers,
 }) => {
   const menuItems = [
     {
@@ -49,6 +51,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'program-criteria', label: 'Bộ Tiêu chí CT Đào tạo', icon: '📜' },
       ],
     },
+    ...(canManageUsers ? [{
+      section: 'QUẢN TRỊ HỆ THỐNG',
+      items: [
+        { id: 'users-admin', label: 'Người dùng & phân quyền', icon: 'ID' },
+      ],
+    }] : []),
   ];
 
   return (

@@ -40,6 +40,10 @@ const tabTitles: Record<string, { title: string; subtitle: string }> = {
     title: 'Quản Lý Đợt Khảo Sát & Mã QR Code',
     subtitle: 'Thiết lập đợt đánh giá và xuất Mã QR cho Sinh viên truy cập bài khảo sát',
   },
+  'users-admin': {
+    title: 'Quản Trị Người Dùng & Phân Quyền',
+    subtitle: 'Allowlist Google Workspace, profile làm việc, role và lịch sử xác thực',
+  },
 };
 
 const roleNames: Record<string, string> = {
