@@ -874,3 +874,12 @@ Ràng buộc không thể bỏ qua là chính sách OAuth của Google Workspace
 - Index `RolePermissions(RoleId)`.
 - Index `AuthAuditLogs(UserId, CreatedAt)`.
 - Prevent duplicate active default profile per user.
+
+### Implementation status - Phase 1
+
+- Added `AppDbContext` with the complete auth schema and constraints.
+- Created `InitialAuthSchema` EF migration.
+- Switched `IAuthService` from in-memory storage to EF Core/PostgreSQL.
+- Database migration and seed are executed through EF Core only.
+- Added idempotent EF seed for system roles, permissions, role-permissions and dev multi-profile user.
+- Applied the initial migration and verified dev login, profile selection and `/api/auth/me` against PostgreSQL.
