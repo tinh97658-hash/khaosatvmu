@@ -153,15 +153,19 @@
 }
 
 .catalog-page--classes .catalog-table {
-  min-width: 1120px;
+  min-width: 1280px;
+}
+
+.catalog-page--wide .catalog-table {
+  min-width: 1420px;
 }
 
 .catalog-table th {
   position: sticky;
   top: 0;
   z-index: 1;
-  height: 38px;
-  padding: 7px 10px;
+  height: 32px;
+  padding: 5px 10px;
   border-right: 1px solid #e5e9ec;
   border-bottom: 1px solid #cfd7dc;
   background: #f7f9fa;
@@ -174,12 +178,12 @@
 }
 
 .catalog-table td {
-  min-height: 44px;
-  padding: 8px 10px;
+  height: 32px;
+  padding: 4px 10px;
   border-right: 1px solid #e8ecef;
   border-bottom: 1px solid #e3e7ea;
   vertical-align: middle;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .catalog-table th:last-child,
@@ -291,12 +295,15 @@
 }
 
 .catalog-actions {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
 .catalog-icon-button {
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   display: inline-grid;
   place-items: center;
   padding: 0;
@@ -312,6 +319,11 @@
   border-color: #bac5cb;
   background: #f7f9fa;
   color: #20262c;
+}
+
+.catalog-icon-button--sm {
+  width: 24px;
+  height: 24px;
 }
 
 .catalog-icon-button--danger:hover {
@@ -375,6 +387,12 @@
   gap: 4px;
 }
 
+.catalog-page-total {
+  color: #68737d;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 .catalog-page-button,
 .catalog-page-number {
   width: 30px;
@@ -387,6 +405,15 @@
   color: #40505a;
 }
 
+.catalog-page-button {
+  cursor: pointer;
+}
+
+.catalog-page-button:not(:disabled):hover {
+  border-color: #94a7b1;
+  background: #f7f9fa;
+}
+
 .catalog-page-button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -397,6 +424,267 @@
   background: #0788b8;
   color: #ffffff;
   font-weight: 650;
+}
+
+/* ---------------------------------------------------------------------------
+   Trang lớp học phần: cột trái là cây năm học -> học kỳ, cột phải là nội dung.
+   --------------------------------------------------------------------------- */
+
+.term-layout {
+  flex: 1 0 auto;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 0;
+  border-bottom: 1px solid #dfe4e8;
+}
+
+.term-tree {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid #dfe4e8;
+  background: #ffffff;
+}
+
+.term-tree__header {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-bottom: 1px solid #dfe4e8;
+}
+
+.term-tree__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #20262c;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.term-tree__title svg {
+  color: #0788b8;
+}
+
+.term-tree__add {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 3px;
+  background: #0788b8;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.term-tree__add:hover {
+  background: #06719a;
+}
+
+.term-tree__error {
+  margin: 0;
+  padding: 8px 12px;
+  color: #b52d2d;
+  font-size: 11px;
+}
+
+.term-tree__empty {
+  margin: 0;
+  padding: 14px 12px;
+  color: #8c969f;
+  font-size: 11px;
+  text-align: center;
+}
+
+.term-tree__empty--nested {
+  padding: 6px 12px 6px 30px;
+  text-align: left;
+}
+
+.term-tree__list,
+.term-tree__semesters {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.term-tree__year,
+.term-tree__semester {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+}
+
+.term-tree__year:hover,
+.term-tree__semester:hover {
+  background: #f7f9fa;
+}
+
+.term-tree__year.is-selected {
+  background: #eef6f9;
+}
+
+.term-tree__semester.is-selected {
+  background: #0788b8;
+}
+
+.term-tree__semester.is-selected .term-tree__semester-button {
+  color: #ffffff;
+  font-weight: 650;
+}
+
+.term-tree__year-button,
+.term-tree__semester-button {
+  min-width: 0;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 4px 7px 10px;
+  border: 0;
+  background: transparent;
+  color: #20262c;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.term-tree__semester-button {
+  padding-left: 26px;
+  color: #40505a;
+}
+
+.term-tree__year-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+}
+
+.term-tree__count {
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: #eef2f4;
+  color: #68737d;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.term-tree__row-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.term-tree__year:hover .term-tree__row-actions,
+.term-tree__semester:hover .term-tree__row-actions {
+  display: inline-flex;
+}
+
+.term-detail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #ffffff;
+}
+
+.term-detail__header {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #dfe4e8;
+}
+
+.term-detail__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #20262c;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.term-detail__title svg {
+  color: #0788b8;
+}
+
+.term-detail__badge {
+  padding: 2px 8px;
+  border-radius: 9px;
+  background: #eef6f9;
+  color: #0b6f95;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.term-detail__context {
+  color: #68737d;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.term-detail__hint {
+  margin: 0;
+  padding: 48px 16px;
+  color: #8c969f;
+  font-size: 12px;
+  text-align: center;
+}
+
+.term-detail__semesters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px;
+}
+
+.term-detail__semester-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid #d7dee2;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #20262c;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.term-detail__semester-card:hover {
+  border-color: #0788b8;
+  background: #f2f8fa;
+}
+
+.term-detail__semester-card svg {
+  color: #0788b8;
+}
+
+@media (max-width: 900px) {
+  .term-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .term-tree {
+    border-right: 0;
+    border-bottom: 1px solid #dfe4e8;
+  }
+
+  .term-tree__row-actions {
+    display: inline-flex;
+  }
 }
 
 .catalog-modal-backdrop.modal-backdrop {
@@ -568,9 +856,17 @@
 }
 
 .catalog-group-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 5px 7px;
   border-left: 2px solid #0788b8;
   background: #f7f9fa;
+}
+
+.catalog-group-row__body {
+  min-width: 0;
 }
 
 .catalog-group-row__title {
@@ -600,6 +896,31 @@
   background: #f7f9fa;
 }
 
+.import-template-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px dashed #cfd7dc;
+  border-radius: 3px;
+  background: #f7f9fa;
+  color: #40505a;
+  font-size: 12px;
+}
+
+.import-template-row .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .import-template-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .catalog-confirm {
   display: flex;
   align-items: flex-start;
@@ -611,6 +932,13 @@
 .catalog-confirm svg {
   flex: 0 0 auto;
   color: #b52d2d;
+}
+
+.catalog-confirm__warning {
+  margin-top: 6px;
+  color: #8d2525;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .catalog-danger-button.btn {
@@ -728,5 +1056,220 @@
   .catalog-modal-card.modal-card {
     animation: none;
     transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Bộ câu hỏi khảo sát ("SurveyTemplates" / "SurveyQuestions"): trình soạn câu
+   hỏi, hộp thoại import Excel và bảng quản lý thang trả lời.
+   --------------------------------------------------------------------------- */
+
+.survey-template-import-fields {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 2fr) minmax(150px, 1fr);
+}
+
+.survey-question-editor {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #dfe4e8;
+  background: #f7f9fa;
+}
+
+.survey-question-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.survey-question-editor-header strong {
+  color: #20262c;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.survey-question-counter {
+  padding: 2px 8px;
+  border: 1px solid #d7e7ed;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #40505a;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.survey-question-counter.is-full {
+  border-color: #e6c3c3;
+  background: #fcebec;
+  color: #8d2525;
+}
+
+.survey-question-rows {
+  display: grid;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.survey-question-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border-left: 2px solid #0788b8;
+  background: #ffffff;
+}
+
+.survey-question-row-index {
+  min-width: 22px;
+  padding-top: 6px;
+  color: #68737d;
+  font-size: 11px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.survey-question-row textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  padding: 6px 8px;
+  border: 1px solid #d7dee2;
+  border-radius: 3px;
+  background: #ffffff;
+  color: #20262c;
+  font-family: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.survey-question-row textarea:focus {
+  border-color: #0788b8;
+  box-shadow: 0 0 0 2px rgba(7, 136, 184, 0.14);
+  outline: 0;
+}
+
+.survey-question-preview-scale {
+  margin: 0 0 8px;
+  color: #40505a;
+  font-size: 12px;
+}
+
+.survey-question-preview ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.survey-question-preview li {
+  color: #20262c;
+  font-size: 12px;
+}
+
+.answer-scale-manager {
+  display: grid;
+  gap: 12px;
+}
+
+.answer-scale-list {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.answer-scale-empty {
+  margin: 0;
+  color: #68737d;
+  font-size: 12px;
+}
+
+.answer-scale-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border-left: 2px solid #0788b8;
+  background: #f7f9fa;
+}
+
+.answer-scale-row-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.answer-scale-row-body strong {
+  color: #20262c;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.answer-scale-row-body span {
+  color: #68737d;
+  font-size: 11px;
+}
+
+.answer-scale-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #8d2525;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.answer-scale-options {
+  display: grid;
+  gap: 6px;
+}
+
+.answer-scale-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.answer-scale-option-value {
+  min-width: 22px;
+  color: #68737d;
+  font-size: 11px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.answer-scale-option-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #d7dee2;
+  border-radius: 3px;
+  background: #ffffff;
+  color: #20262c;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.answer-scale-option-row input:focus {
+  border-color: #0788b8;
+  box-shadow: 0 0 0 2px rgba(7, 136, 184, 0.14);
+  outline: 0;
+}
+
+.answer-scale-option-actions {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 760px) {
+  .survey-template-import-fields {
+    grid-template-columns: 1fr;
   }
 }

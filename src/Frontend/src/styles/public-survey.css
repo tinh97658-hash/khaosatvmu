@@ -1,0 +1,468 @@
+/* ---------------------------------------------------------------------------
+   Phiếu khảo sát công khai: sinh viên mở bằng link riêng hoặc mã QR của lớp.
+   --------------------------------------------------------------------------- */
+
+.public-survey {
+  min-height: 100vh;
+  padding: 28px 16px 40px;
+  background: #f5f7f8;
+  color: #20262c;
+  font-size: 13px;
+}
+
+.public-survey-card {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+  border: 1px solid #dfe4e8;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.public-survey-header {
+  text-align: center;
+}
+
+.public-survey-header h1 {
+  margin: 0 0 6px;
+  color: #123f57;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.public-survey-header h1::after {
+  display: block;
+  width: 56px;
+  height: 3px;
+  margin: 10px auto 0;
+  background: #0788b8;
+  content: '';
+}
+
+.public-survey-header > p {
+  margin: 12px 0 0;
+  color: #68737d;
+}
+
+.public-survey-context {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 16px;
+  margin-top: 14px;
+}
+
+.public-survey-context span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid #d7e7ed;
+  border-radius: 999px;
+  background: #f2f8fa;
+  color: #40505a;
+  font-size: 12px;
+}
+
+.public-survey-context svg {
+  width: 14px;
+  height: 14px;
+  color: #0788b8;
+}
+
+.public-survey-note {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 12px;
+  border-left: 3px solid #0788b8;
+  background: #f2f8fa;
+}
+
+.public-survey-note svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: #0788b8;
+}
+
+.public-survey-note strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+}
+
+.public-survey-note p {
+  margin: 0;
+  color: #40505a;
+  font-size: 12px;
+}
+
+.public-survey-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  color: #68737d;
+  font-size: 12px;
+}
+
+.public-survey-progress-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: #e5eaee;
+  overflow: hidden;
+}
+
+.public-survey-progress-bar > span {
+  display: block;
+  height: 100%;
+  background: #0788b8;
+  transition: width 0.2s ease;
+}
+
+.public-survey-table-scroll {
+  margin-top: 16px;
+  overflow-x: auto;
+}
+
+.public-survey-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.public-survey-table th,
+.public-survey-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5eaee;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.public-survey-table thead th {
+  background: #f7f9fa;
+  color: #40505a;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.public-survey-table thead th small {
+  display: block;
+  color: #8c969f;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.public-survey-table thead th:first-child,
+.public-survey-table tbody th {
+  min-width: 260px;
+  text-align: left;
+  font-weight: 500;
+}
+
+.public-survey-table tbody th {
+  color: #20262c;
+  font-size: 12px;
+}
+
+.public-survey-table tbody tr:hover {
+  background: #f7f9fa;
+}
+
+.public-survey-radio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.public-survey-radio input {
+  width: 16px;
+  height: 16px;
+  accent-color: #0788b8;
+  cursor: pointer;
+}
+
+.public-survey-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.public-survey-comments {
+  position: relative;
+  margin-top: 20px;
+}
+
+.public-survey-comments label {
+  display: block;
+  margin-bottom: 6px;
+  color: #40505a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.public-survey-comments textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #d7dee2;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #20262c;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.public-survey-comments textarea:focus {
+  border-color: #0788b8;
+  box-shadow: 0 0 0 2px rgba(7, 136, 184, 0.14);
+  outline: 0;
+}
+
+.public-survey-counter {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  color: #8c969f;
+  font-size: 11px;
+}
+
+.public-survey-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-left: 3px solid #b52d2d;
+  background: #fcebec;
+  color: #8d2525;
+  font-size: 12px;
+}
+
+.public-survey-alert svg {
+  width: 16px;
+  height: 16px;
+}
+
+.public-survey-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.public-survey-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 4px;
+  background: #0788b8;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.public-survey-actions .btn:disabled {
+  background: #9dc4d4;
+  cursor: not-allowed;
+}
+
+.public-survey-actions .btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.public-survey-footer {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid #e5eaee;
+  color: #8c969f;
+  font-size: 11px;
+  text-align: center;
+}
+
+.public-survey-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 560px;
+  margin: 60px auto;
+  padding: 20px;
+  border: 1px solid #dfe4e8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #40505a;
+}
+
+.public-survey-state--error {
+  border-color: #e6c3c3;
+  background: #fcebec;
+  color: #8d2525;
+}
+
+.public-survey-success {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.public-survey-success svg {
+  width: 42px;
+  height: 42px;
+  color: #137b3b;
+}
+
+.public-survey-success h1 {
+  margin: 0;
+  color: #123f57;
+  font-size: 20px;
+}
+
+.public-survey-success p {
+  margin: 0;
+  color: #68737d;
+}
+
+/* Bố cục cho màn hình hẹp: mỗi câu hỏi là một thẻ, các mức xếp ngang thành
+   hàng nút tròn đủ lớn để bấm bằng ngón tay. */
+
+.public-survey-cards {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.public-survey-question-card {
+  padding: 12px;
+  border: 1px solid #e5eaee;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.public-survey-question-text {
+  margin: 0 0 10px;
+  color: #20262c;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.public-survey-option-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.public-survey-option {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.public-survey-option-value {
+  color: #40505a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.public-survey-option input {
+  width: 22px;
+  height: 22px;
+  accent-color: #0788b8;
+  cursor: pointer;
+}
+
+.public-survey-option-legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  color: #8c969f;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.public-survey-option-legend span:last-child {
+  text-align: right;
+}
+
+@media (max-width: 760px) {
+  .public-survey {
+    padding: 12px 10px 28px;
+  }
+
+  .public-survey-card {
+    padding: 14px;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .public-survey-header h1 {
+    font-size: 18px;
+  }
+
+  .public-survey-context {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .public-survey-context span {
+    font-size: 11px;
+  }
+
+  .public-survey-progress {
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .public-survey-comments textarea {
+    font-size: 16px; /* dưới 16px Safari iOS tự phóng to trang khi gõ */
+  }
+
+  .public-survey-actions {
+    position: sticky;
+    bottom: 0;
+    margin: 20px -14px -14px;
+    padding: 10px 14px;
+    border-top: 1px solid #e5eaee;
+    background: #ffffff;
+  }
+
+  .public-survey-actions .btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 380px) {
+  .public-survey-option input {
+    width: 20px;
+    height: 20px;
+  }
+
+  .public-survey-option-legend {
+    font-size: 10px;
+  }
+}

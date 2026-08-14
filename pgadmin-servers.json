@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "khaosatvmu",
+      "Group": "Servers",
+      "Host": "db",
+      "Port": 5432,
+      "MaintenanceDB": "khaosatvmu",
+      "Username": "postgres",
+      "SSLMode": "prefer",
+      "Comment": "PostgreSQL cua he thong khao sat VMU. Mat khau lay tu POSTGRES_PASSWORD trong .env"
+    }
+  }
+}

@@ -52,8 +52,8 @@ const quickActions: QuickAction[] = [
     tone: 'green',
   },
   {
-    tab: 'criteria',
-    title: 'Tiêu chí khảo sát',
+    tab: 'course-question-sets',
+    title: 'Bộ câu hỏi khảo sát',
     description: 'Bộ câu hỏi và thang đánh giá',
     icon: ListChecks,
     tone: 'amber',
@@ -194,7 +194,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <button
               type="button"
               className="dashboard-manage-button"
-              onClick={() => onNavigateTab('campaigns')}
+              onClick={() => onNavigateTab('course-campaigns')}
             >
               Quản lý tất cả
               <ArrowRight aria-hidden="true" />

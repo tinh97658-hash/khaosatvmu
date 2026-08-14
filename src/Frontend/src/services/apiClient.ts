@@ -34,7 +34,7 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
 
 export async function csrfRequest<T>(
   path: string,
-  method: 'POST' | 'PUT' | 'PATCH',
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   body?: unknown,
 ): Promise<T> {
   const { token } = await apiRequest<{ token: string }>('/api/auth/csrf');

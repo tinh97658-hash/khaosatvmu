@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { useAuth } from './auth/authContext';
 import { AuthLoading } from './components/AuthLoading';
 
@@ -16,6 +17,9 @@ import { MajorsPage } from './pages/MajorsPage';
 import { CoursesPage } from './pages/CoursesPage';
 import { ClassesPage } from './pages/ClassesPage';
 import { CriteriaPage } from './pages/CriteriaPage';
+import { SurveyTemplatesPage } from './pages/SurveyTemplatesPage';
+import { CourseSurveysPage } from './pages/CourseSurveysPage';
+import { PublicSurveyPage } from './pages/PublicSurveyPage';
 import { CampaignsPage } from './pages/CampaignsPage';
 import { SurveyProgressPage } from './pages/SurveyProgressPage';
 import { StudentSurveyView } from './pages/StudentSurveyView';
@@ -23,28 +27,30 @@ import { LoginPage } from './pages/LoginPage';
 import { ProfileSelectionPage } from './pages/ProfileSelectionPage';
 import { UsersAdminPage } from './pages/UsersAdminPage';
 
-// Mock Data & Types
+// Services & Types
+import { ApiError } from './services/apiClient';
 import {
-  initialStats,
-  initialFaculties,
-  initialDepartments,
-  initialLecturers,
-  initialMajors,
-  initialCourses,
-  initialClasses,
-  initialCriteria,
-  initialCampaigns,
-} from './services/mockData';
+  catalogApi,
+  type SaveCoursePayload,
+  type SaveLecturerPayload,
+} from './services/catalogApi';
+import type { ImportFacultyRow } from './utils/facultyImportExcel';
+import type { ImportDepartmentRow } from './utils/departmentImportExcel';
+import type { ImportMajorRow } from './utils/majorImportExcel';
+import type { ImportCourseRow } from './utils/courseImportExcel';
+import type { ImportLecturerRow } from './utils/lecturerImportExcel';
 import type {
   Faculty,
   Department,
   Lecturer,
-  ClassGroup,
   Major,
   Course,
-  CourseClass,
+  CourseSection,
+  Curriculum,
+  CurriculumCourse,
   Criterion,
   SurveyCampaign,
+  SystemStats,
 } from './types';
 
 function DashboardApp() {
@@ -59,16 +65,76 @@ function DashboardApp() {
     }
   }, [canManageUsers, currentTab]);
 
-  // System Catalog States
-  const [stats, setStats] = useState(initialStats);
-  const [faculties, setFaculties] = useState<Faculty[]>(initialFaculties);
-  const [departments, setDepartments] = useState<Department[]>(initialDepartments);
-  const [lecturers, setLecturers] = useState<Lecturer[]>(initialLecturers);
-  const [majors, setMajors] = useState<Major[]>(initialMajors);
-  const [courses, setCourses] = useState<Course[]>(initialCourses);
-  const [classes, setClasses] = useState<CourseClass[]>(initialClasses);
-  const [criteria, setCriteria] = useState<Criterion[]>(initialCriteria);
-  const [campaigns, setCampaigns] = useState<SurveyCampaign[]>(initialCampaigns);
+  // Nạp danh mục đã lưu trong database khi vào hệ thống.
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const [
+          nextFaculties,
+          nextDepartments,
+          nextMajors,
+          nextCourses,
+          nextLecturers,
+          nextSections,
+        ] = await Promise.all([
+          catalogApi.faculties(),
+          catalogApi.departments(),
+          catalogApi.majors(),
+          catalogApi.courses(),
+          catalogApi.lecturers(),
+          catalogApi.courseSections(),
+        ]);
+        if (cancelled) return;
+        setFaculties(nextFaculties);
+        setDepartments(nextDepartments);
+        setMajors(nextMajors);
+        setCourses(nextCourses);
+        setLecturers(nextLecturers);
+        setSections(nextSections);
+      } catch {
+        if (!cancelled) {
+          toast.error('Không tải được danh mục từ máy chủ');
+        }
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Danh mục đào tạo. Mọi danh mục bắt đầu rỗng, dữ liệu chỉ nằm trong phiên
+  // làm việc cho tới khi backend có API cho các bảng này.
+  const [faculties, setFaculties] = useState<Faculty[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [lecturers, setLecturers] = useState<Lecturer[]>([]);
+  const [majors, setMajors] = useState<Major[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [sections, setSections] = useState<CourseSection[]>([]);
+  // Hai bảng khung chương trình, cần để đếm số nhóm lớp của một ngành học.
+  // Chưa có màn hình quản lý nên hiện luôn rỗng.
+  const [curricula] = useState<Curriculum[]>([]);
+  const [curriculumCourses] = useState<CurriculumCourse[]>([]);
+  const [criteria, setCriteria] = useState<Criterion[]>([]);
+  const [campaigns, setCampaigns] = useState<SurveyCampaign[]>([]);
+  const [surveyCounters, setSurveyCounters] = useState({ totalResponses: 0, qrScanCount: 0 });
+
+  const stats: SystemStats = useMemo(
+    () => ({
+      totalFaculties: faculties.length,
+      totalMajors: majors.length,
+      totalCourses: courses.length,
+      totalClasses: sections.length,
+      activeCampaigns: campaigns.filter((campaign) => campaign.status === 'Đang diễn ra').length,
+      totalResponses: surveyCounters.totalResponses,
+      overallSatisfaction: 0,
+      qrScanCount: surveyCounters.qrScanCount,
+    }),
+    [faculties, majors, courses, sections, campaigns, surveyCounters]
+  );
 
   // QR Modal state
   const [qrModalData, setQrModalData] = useState<{
@@ -85,44 +151,201 @@ function DashboardApp() {
     surveyLink: '',
   });
 
-  // Handlers for Faculty
-  const handleAddFaculty = (newFaculty: Faculty) => {
-    setFaculties((prev) => [newFaculty, ...prev]);
-    setStats((prev) => ({ ...prev, totalFaculties: prev.totalFaculties + 1 }));
-  };
-  const handleDeleteFaculty = (id: string) => {
-    setFaculties((prev) => prev.filter((f) => f.id !== id));
-    setStats((prev) => ({ ...prev, totalFaculties: Math.max(0, prev.totalFaculties - 1) }));
+  // ---------------------------------------------------------------------------
+  // Danh mục khoa viện / bộ môn / ngành học đi qua API /api/catalog và được lưu
+  // trong PostgreSQL. Sau mỗi thao tác ghi, danh sách được nạp lại từ server để
+  // id do database sinh ra luôn khớp với những gì đang hiển thị.
+  // ---------------------------------------------------------------------------
+  const errorCodeOf = (error: unknown): string =>
+    error instanceof ApiError ? error.errorCode : 'API_REQUEST_FAILED';
+
+  const handleSaveFaculty = async (
+    facultyId: number | null,
+    facultyName: string
+  ): Promise<string | null> => {
+    try {
+      if (facultyId === null) {
+        await catalogApi.createFaculty(facultyName);
+      } else {
+        await catalogApi.updateFaculty(facultyId, facultyName);
+      }
+      setFaculties(await catalogApi.faculties());
+      return null;
+    } catch (error) {
+      return errorCodeOf(error);
+    }
   };
 
-  // Handlers for Major
-  const handleAddMajor = (newMajor: Major) => {
-    setMajors((prev) => [newMajor, ...prev]);
-    setStats((prev) => ({ ...prev, totalMajors: prev.totalMajors + 1 }));
-  };
-  const handleDeleteMajor = (id: string) => {
-    setMajors((prev) => prev.filter((m) => m.id !== id));
-    setStats((prev) => ({ ...prev, totalMajors: Math.max(0, prev.totalMajors - 1) }));
+  const handleImportFaculties = async (rows: ImportFacultyRow[]) => {
+    const result = await catalogApi.importFaculties(rows);
+    setFaculties(await catalogApi.faculties());
+    return result;
   };
 
-  // Handlers for Course
-  const handleAddCourse = (newCourse: Course) => {
-    setCourses((prev) => [newCourse, ...prev]);
-    setStats((prev) => ({ ...prev, totalCourses: prev.totalCourses + 1 }));
-  };
-  const handleDeleteCourse = (id: string) => {
-    setCourses((prev) => prev.filter((c) => c.id !== id));
-    setStats((prev) => ({ ...prev, totalCourses: Math.max(0, prev.totalCourses - 1) }));
+  const handleDeleteFaculty = async (facultyId: number): Promise<string | null> => {
+    try {
+      await catalogApi.deleteFaculty(facultyId);
+      // Departments.FacultyId là ON DELETE SET NULL, Majors là CASCADE.
+      const [nextFaculties, nextDepartments, nextMajors] = await Promise.all([
+        catalogApi.faculties(),
+        catalogApi.departments(),
+        catalogApi.majors(),
+      ]);
+      setFaculties(nextFaculties);
+      setDepartments(nextDepartments);
+      setMajors(nextMajors);
+      return null;
+    } catch (error) {
+      return errorCodeOf(error);
+    }
   };
 
-  // Handlers for Class
-  const handleAddClass = (newClass: CourseClass) => {
-    setClasses((prev) => [newClass, ...prev]);
-    setStats((prev) => ({ ...prev, totalClasses: prev.totalClasses + 1 }));
+  const handleSaveDepartment = async (
+    departmentId: number | null,
+    departmentName: string,
+    facultyId: number | null
+  ): Promise<string | null> => {
+    try {
+      if (departmentId === null) {
+        await catalogApi.createDepartment(departmentName, facultyId);
+      } else {
+        await catalogApi.updateDepartment(departmentId, departmentName, facultyId);
+      }
+      setDepartments(await catalogApi.departments());
+      return null;
+    } catch (error) {
+      return errorCodeOf(error);
+    }
   };
-  const handleDeleteClass = (id: string) => {
-    setClasses((prev) => prev.filter((c) => c.id !== id));
-    setStats((prev) => ({ ...prev, totalClasses: Math.max(0, prev.totalClasses - 1) }));
+
+  const handleImportDepartments = async (rows: ImportDepartmentRow[]) => {
+    const result = await catalogApi.importDepartments(rows);
+    setDepartments(await catalogApi.departments());
+    return result;
+  };
+
+  const handleDeleteDepartment = async (departmentId: number): Promise<string | null> => {
+    try {
+      await catalogApi.deleteDepartment(departmentId);
+      setDepartments(await catalogApi.departments());
+      return null;
+    } catch (error) {
+      return errorCodeOf(error);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Lecturers. CourseSectionLecturers: ON DELETE CASCADE.
+  // ---------------------------------------------------------------------------
+  const handleSaveLecturer = async (
+    lecturerId: number | null,
+    lecturer: SaveLecturerPayload
+  ): Promise<string | null> => {
+    try {
+      if (lecturerId === null) {
+        await catalogApi.createLecturer(lecturer);
+      } else {
+        await catalogApi.updateLecturer(lecturerId, lecturer);
+      }
+      setLecturers(await catalogApi.lecturers());
+      return null;
+    } catch (error) {
+      return errorCodeOf(error);
+    }
+  };
+
+  const handleImportLecturers = async (rows: ImportLecturerRow[]) => {
+    const result = await catalogApi.importLecturers(rows);
+    setLecturers(await catalogApi.lecturers());
+    return result;
+  };
+
+  const handleDeleteLecturer = async (lecturerId: number): Promise<string | null> => {
+    try {
+      await catalogApi.deleteLecturer(lecturerId);
+      setLecturers(await catalogApi.lecturers());
+      // "CourseSections"."LecturerId" là ON DELETE RESTRICT nên nếu giảng viên
+      // còn lớp học phần thì API đã trả lỗi ở trên, danh sách lớp không đổi.
+      return null;
+    } catch (error) {
+      return errorCodeOf(error);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Majors.
+  // ---------------------------------------------------------------------------
+  const handleSaveMajor = async (
+    majorId: number | null,
+    majorName: string,
+    facultyId: number
+  ): Promise<string | null> => {
+    try {
+      if (majorId === null) {
+        await catalogApi.createMajor(majorName, facultyId);
+      } else {
+        await catalogApi.updateMajor(majorId, majorName, facultyId);
+      }
+      setMajors(await catalogApi.majors());
+      return null;
+    } catch (error) {
+      return errorCodeOf(error);
+    }
+  };
+
+  const handleImportMajors = async (rows: ImportMajorRow[]) => {
+    const result = await catalogApi.importMajors(rows);
+    setMajors(await catalogApi.majors());
+    return result;
+  };
+
+  const handleDeleteMajor = async (majorId: number): Promise<string | null> => {
+    try {
+      await catalogApi.deleteMajor(majorId);
+      setMajors(await catalogApi.majors());
+      return null;
+    } catch (error) {
+      return errorCodeOf(error);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Courses. CourseSections: ON DELETE CASCADE.
+  // PrerequisiteCourseId: ON DELETE RESTRICT.
+  // ---------------------------------------------------------------------------
+  const handleSaveCourse = async (
+    courseId: number | null,
+    course: SaveCoursePayload
+  ): Promise<string | null> => {
+    try {
+      if (courseId === null) {
+        await catalogApi.createCourse(course);
+      } else {
+        await catalogApi.updateCourse(courseId, course);
+      }
+      setCourses(await catalogApi.courses());
+      return null;
+    } catch (error) {
+      return errorCodeOf(error);
+    }
+  };
+
+  const handleImportCourses = async (rows: ImportCourseRow[]) => {
+    const result = await catalogApi.importCourses(rows);
+    setCourses(await catalogApi.courses());
+    return result;
+  };
+
+  const handleDeleteCourse = async (courseId: number): Promise<string | null> => {
+    try {
+      await catalogApi.deleteCourse(courseId);
+      setCourses(await catalogApi.courses());
+      // CourseSections tham chiếu Courses với ON DELETE CASCADE.
+      setSections((prev) => prev.filter((section) => section.courseId !== courseId));
+      return null;
+    } catch (error) {
+      return errorCodeOf(error);
+    }
   };
 
   // Handlers for Criteria
@@ -136,11 +359,9 @@ function DashboardApp() {
   // Handlers for Campaigns
   const handleAddCampaign = (newCampaign: SurveyCampaign) => {
     setCampaigns((prev) => [newCampaign, ...prev]);
-    setStats((prev) => ({ ...prev, activeCampaigns: prev.activeCampaigns + 1 }));
   };
   const handleDeleteCampaign = (id: string) => {
     setCampaigns((prev) => prev.filter((c) => c.id !== id));
-    setStats((prev) => ({ ...prev, activeCampaigns: Math.max(0, prev.activeCampaigns - 1) }));
   };
 
   const handleAddMultipleCampaigns = (newCampaigns: SurveyCampaign[]) => {
@@ -150,16 +371,6 @@ function DashboardApp() {
   const handleUpdateCampaignDates = (id: string, startDate: string, endDate: string) => {
     setCampaigns((prev) =>
       prev.map((cmp) => (cmp.id === id ? { ...cmp, startDate, endDate } : cmp))
-    );
-  };
-
-  const handleAddClassGroup = (classId: string, group: ClassGroup) => {
-    setClasses((prev) =>
-      prev.map((c) =>
-        c.id === classId
-          ? { ...c, groups: [...(c.groups || []), group] }
-          : c
-      )
     );
   };
 
@@ -175,8 +386,7 @@ function DashboardApp() {
   };
 
   const handleSurveySubmitted = () => {
-    setStats((prev) => ({
-      ...prev,
+    setSurveyCounters((prev) => ({
       totalResponses: prev.totalResponses + 1,
       qrScanCount: prev.qrScanCount + 1,
     }));
@@ -230,15 +440,20 @@ function DashboardApp() {
 
           {currentTab === 'progress' && (
             <SurveyProgressPage
-              classes={classes}
+              sections={sections}
+              courses={courses}
+              lecturers={lecturers}
             />
           )}
 
           {currentTab === 'faculties' && (
             <FacultiesPage
               faculties={faculties}
-              onAddFaculty={handleAddFaculty}
+              majors={majors}
+              departments={departments}
+              onSaveFaculty={handleSaveFaculty}
               onDeleteFaculty={handleDeleteFaculty}
+              onImportFaculties={handleImportFaculties}
             />
           )}
 
@@ -246,8 +461,11 @@ function DashboardApp() {
             <DepartmentsPage
               departments={departments}
               faculties={faculties}
-              onAddDepartment={(newDept) => setDepartments((prev) => [newDept, ...prev])}
-              onDeleteDepartment={(id) => setDepartments((prev) => prev.filter((d) => d.id !== id))}
+              courses={courses}
+              lecturers={lecturers}
+              onSaveDepartment={handleSaveDepartment}
+              onDeleteDepartment={handleDeleteDepartment}
+              onImportDepartments={handleImportDepartments}
             />
           )}
 
@@ -256,8 +474,9 @@ function DashboardApp() {
               lecturers={lecturers}
               faculties={faculties}
               departments={departments}
-              onAddLecturer={(newLec) => setLecturers((prev) => [newLec, ...prev])}
-              onDeleteLecturer={(id) => setLecturers((prev) => prev.filter((l) => l.id !== id))}
+              onSaveLecturer={handleSaveLecturer}
+              onDeleteLecturer={handleDeleteLecturer}
+              onImportLecturers={handleImportLecturers}
             />
           )}
 
@@ -265,8 +484,12 @@ function DashboardApp() {
             <MajorsPage
               majors={majors}
               faculties={faculties}
-              onAddMajor={handleAddMajor}
+              curricula={curricula}
+              curriculumCourses={curriculumCourses}
+              sections={sections}
+              onSaveMajor={handleSaveMajor}
               onDeleteMajor={handleDeleteMajor}
+              onImportMajors={handleImportMajors}
             />
           )}
 
@@ -274,29 +497,19 @@ function DashboardApp() {
             <CoursesPage
               courses={courses}
               faculties={faculties}
-              onAddCourse={handleAddCourse}
+              departments={departments}
+              onSaveCourse={handleSaveCourse}
               onDeleteCourse={handleDeleteCourse}
+              onImportCourses={handleImportCourses}
             />
           )}
 
           {currentTab === 'classes' && (
-            <ClassesPage
-              classes={classes}
-              courses={courses}
-              lecturers={lecturers}
-              onAddClass={handleAddClass}
-              onDeleteClass={handleDeleteClass}
-              onAddClassGroup={handleAddClassGroup}
-            />
+            <ClassesPage courses={courses} lecturers={lecturers} />
           )}
 
-          {(currentTab === 'course-criteria' || currentTab === 'criteria') && (
-            <CriteriaPage
-              criteria={criteria}
-              surveyType="Học phần"
-              onAddCriterion={handleAddCriterion}
-              onDeleteCriterion={handleDeleteCriterion}
-            />
+          {(currentTab === 'course-question-sets' || currentTab === 'criteria') && (
+            <SurveyTemplatesPage />
           )}
 
           {currentTab === 'program-criteria' && (
@@ -309,25 +522,16 @@ function DashboardApp() {
           )}
 
           {(currentTab === 'course-campaigns' || currentTab === 'campaigns') && (
-            <CampaignsPage
-              campaigns={campaigns}
-              majors={majors}
-              classes={classes}
-              criteria={criteria}
-              surveyType="Học phần"
-              onAddCampaign={handleAddCampaign}
-              onAddMultipleCampaigns={handleAddMultipleCampaigns}
-              onDeleteCampaign={handleDeleteCampaign}
-              onUpdateCampaignDates={handleUpdateCampaignDates}
-              onOpenQR={handleOpenCampaignQR}
-            />
+            <CourseSurveysPage />
           )}
 
           {currentTab === 'program-campaigns' && (
             <CampaignsPage
               campaigns={campaigns}
               majors={majors}
-              classes={classes}
+              sections={sections}
+              courses={courses}
+              lecturers={lecturers}
               criteria={criteria}
               surveyType="Chương trình đào tạo"
               onAddCampaign={handleAddCampaign}
@@ -361,6 +565,15 @@ function DashboardApp() {
 export function App() {
   const auth = useAuth();
   const isProfileSelection = window.location.pathname === '/select-profile';
+
+  // Link và mã QR của từng lớp học phần trỏ vào /survey/{LinkToken}. Sinh viên
+  // làm bài ẩn danh nên màn hình này đứng trước mọi bước kiểm tra đăng nhập.
+  const publicSurveyToken = window.location.pathname.startsWith('/survey/')
+    ? decodeURIComponent(window.location.pathname.slice('/survey/'.length))
+    : '';
+  if (publicSurveyToken) {
+    return <PublicSurveyPage linkToken={publicSurveyToken} />;
+  }
 
   if (auth.status === 'loading') {
     return <AuthLoading />;

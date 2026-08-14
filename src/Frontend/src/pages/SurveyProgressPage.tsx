@@ -11,55 +11,46 @@ import {
 import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
-import type { CourseClass } from '../types';
+import type { Course, CourseSection, Lecturer } from '../types';
 import '../styles/survey-operations.css';
 
 interface SurveyProgressPageProps {
-  classes: CourseClass[];
+  sections: CourseSection[];
+  courses: Course[];
+  lecturers: Lecturer[];
 }
 
-export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({ classes }) => {
+export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
+  sections,
+  courses,
+  lecturers,
+}) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
-  // Flatten Class Groups into distinct progress items for granular group N01, N02 tracking
-  const progressItems = classes.flatMap((cls) => {
-    const groups = cls.groups || [];
-    if (groups.length === 0) {
-      const rate = Math.round((cls.completedResponses / (cls.totalStudents || 1)) * 100);
-      return [
-        {
-          id: cls.id,
-          code: cls.code,
-          name: cls.courseName,
-          type: 'Học phần' as const,
-          groupCode: 'Toàn lớp',
-          lecturerName: cls.lecturerName,
-          semester: `${cls.semester} (${cls.academicYear})`,
-          targetCount: cls.totalStudents,
-          actualCount: cls.completedResponses,
-          rate,
-          status: rate >= 80 ? 'Hoàn thành' : rate >= 40 ? 'Đang thu' : 'Chậm tiến độ',
-        },
-      ];
-    }
+  // Mỗi lớp học phần là một dòng theo dõi. Số phiếu đã nộp lấy từ bảng
+  // "SurveyResponses", chưa có API nên tạm là 0.
+  const progressItems = sections.map((section) => {
+    const course = courses.find((item) => item.courseId === section.courseId);
+    const lecturerName =
+      lecturers.find((lecturer) => lecturer.lecturerId === section.lecturerId)?.fullName ??
+      'Chưa phân công';
+    const actualCount = 0;
+    const rate = Math.round((actualCount / (section.classSize || 1)) * 100);
 
-    return groups.map((g) => {
-      const rate = Math.round((g.completedResponses / (g.studentCount || 1)) * 100);
-      return {
-        id: g.id,
-        code: g.fullGroupCode,
-        name: `${cls.courseName} [Nhóm ${g.groupCode}]`,
-        type: 'Học phần' as const,
-        groupCode: g.groupCode,
-        lecturerName: g.lecturerName,
-        semester: `${cls.semester} (${cls.academicYear})`,
-        targetCount: g.studentCount,
-        actualCount: g.completedResponses,
-        rate,
-        status: rate >= 80 ? 'Hoàn thành' : rate >= 40 ? 'Đang thu' : 'Chậm tiến độ',
-      };
-    });
+    return {
+      id: String(section.courseSectionId),
+      code: section.sectionName,
+      name: course?.courseName ?? '—',
+      type: 'Học phần' as const,
+      groupCode: section.sectionName,
+      lecturerName,
+      semester: `SemesterId ${section.semesterId}`,
+      targetCount: section.classSize,
+      actualCount,
+      rate,
+      status: rate >= 80 ? 'Hoàn thành' : rate >= 40 ? 'Đang thu' : 'Chậm tiến độ',
+    };
   });
 
   // Calculate Overall Progress Metrics

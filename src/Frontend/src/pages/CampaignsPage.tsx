@@ -23,13 +23,22 @@ import {
 import { toast } from 'sonner';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { InlineTreeWizard } from '../components/InlineTreeWizard';
-import type { SurveyCampaign, Major, CourseClass, Criterion } from '../types';
+import type {
+  SurveyCampaign,
+  Major,
+  Course,
+  CourseSection,
+  Lecturer,
+  Criterion,
+} from '../types';
 import '../styles/survey-operations.css';
 
 interface CampaignsPageProps {
   campaigns: SurveyCampaign[];
   majors: Major[];
-  classes: CourseClass[];
+  sections: CourseSection[];
+  courses: Course[];
+  lecturers: Lecturer[];
   criteria: Criterion[];
   surveyType?: 'Học phần' | 'Chương trình đào tạo';
   onAddCampaign: (campaign: SurveyCampaign) => void;
@@ -42,7 +51,9 @@ interface CampaignsPageProps {
 export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   campaigns,
   majors,
-  classes,
+  sections,
+  courses,
+  lecturers,
   criteria,
   surveyType,
   onAddCampaign,
@@ -360,7 +371,9 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                                 initialSemester={activeWizardTarget.semester || semesterName}
                                 initialAcademicYear={activeWizardTarget.academicYear || year}
                                 majors={majors}
-                                classes={classes}
+                                sections={sections}
+                                courses={courses}
+                                lecturers={lecturers}
                                 criteria={criteria}
                                 onCreateCampaigns={handleCreateMultipleFromWizard}
                                 onCancel={() => setActiveWizardTarget(null)}

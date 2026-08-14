@@ -1,119 +1,155 @@
 import React, { useState } from 'react';
-import { BookOpen, Building2, GraduationCap, Mail, Phone, Trash2 } from 'lucide-react';
+import { FileSpreadsheet, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
-import type { Faculty } from '../types';
+import { FacultyImportDialog } from '../components/FacultyImportDialog';
+import { catalogErrorMessage, type CatalogImportResponse } from '../services/catalogApi';
+import type { ImportFacultyRow } from '../utils/facultyImportExcel';
+import type { Department, Faculty, Major } from '../types';
 
 interface FacultiesPageProps {
   faculties: Faculty[];
-  onAddFaculty: (faculty: Faculty) => void;
-  onDeleteFaculty: (id: string) => void;
+  majors: Major[];
+  departments: Department[];
+  /** Trả về mã lỗi của API, null nếu lưu thành công. */
+  onSaveFaculty: (facultyId: number | null, facultyName: string) => Promise<string | null>;
+  onDeleteFaculty: (facultyId: number) => Promise<string | null>;
+  onImportFaculties: (rows: ImportFacultyRow[]) => Promise<CatalogImportResponse>;
 }
 
 export const FacultiesPage: React.FC<FacultiesPageProps> = ({
   faculties,
-  onAddFaculty,
+  majors,
+  departments,
+  onSaveFaculty,
   onDeleteFaculty,
+  onImportFaculties,
 }) => {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [facultyToDelete, setFacultyToDelete] = useState<Faculty | null>(null);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [editing, setEditing] = useState<Faculty | null>(null);
+  const [toDelete, setToDelete] = useState<Faculty | null>(null);
   const [validationError, setValidationError] = useState('');
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
-  const [dean, setDean] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [year, setYear] = useState('1990');
+  const [saving, setSaving] = useState(false);
+  const [facultyName, setFacultyName] = useState('');
 
-  const filtered = faculties.filter(
-    (faculty) =>
-      faculty.name.toLowerCase().includes(search.toLowerCase()) ||
-      faculty.code.toLowerCase().includes(search.toLowerCase()) ||
-      faculty.dean.toLowerCase().includes(search.toLowerCase())
-  );
+  const majorCountOf = (facultyId: number) =>
+    majors.filter((major) => major.facultyId === facultyId).length;
+  const departmentCountOf = (facultyId: number) =>
+    departments.filter((department) => department.facultyId === facultyId).length;
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const openCreate = () => {
+    setEditing(null);
+    setFacultyName('');
+    setValidationError('');
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (faculty: Faculty) => {
+    setEditing(faculty);
+    setFacultyName(faculty.facultyName);
+    setValidationError('');
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!code.trim() || !name.trim()) {
-      setValidationError('Vui lòng nhập mã và tên khoa hoặc viện.');
+    const name = facultyName.trim();
+
+    if (!name) {
+      setValidationError('Vui lòng nhập tên khoa / viện.');
       return;
     }
 
-    const newFaculty: Faculty = {
-      id: `fac-${Date.now()}`,
-      code: code.trim(),
-      name: name.trim(),
-      dean: dean.trim() || 'Đang cập nhật',
-      email: email.trim() || `${code.toLowerCase()}@vimaru.edu.vn`,
-      phone: phone.trim() || '0225 3829xxx',
-      establishedYear: parseInt(year) || 1990,
-      totalCourses: 0,
-      totalStudents: 0,
-    };
+    setSaving(true);
+    const errorCode = await onSaveFaculty(editing?.facultyId ?? null, name);
+    setSaving(false);
+    if (errorCode) {
+      setValidationError(catalogErrorMessage(errorCode));
+      return;
+    }
 
-    onAddFaculty(newFaculty);
-    toast.success('Đã thêm khoa / viện', { description: newFaculty.name });
+    toast.success(editing ? 'Đã cập nhật khoa / viện' : 'Đã thêm khoa / viện', { description: name });
     setIsModalOpen(false);
+    setEditing(null);
+    setFacultyName('');
     setValidationError('');
-    setCode('');
-    setName('');
-    setDean('');
-    setEmail('');
-    setPhone('');
   };
+
+  const handleDelete = async () => {
+    if (!toDelete) return;
+    const errorCode = await onDeleteFaculty(toDelete.facultyId);
+    if (errorCode) {
+      toast.error('Không thể xóa khoa / viện', { description: catalogErrorMessage(errorCode) });
+    } else {
+      toast.success('Đã xóa khoa / viện', { description: toDelete.facultyName });
+    }
+    setToDelete(null);
+  };
+
+  const handleImport = async (rows: ImportFacultyRow[]): Promise<CatalogImportResponse> => {
+    const result = await onImportFaculties(rows);
+    if (result.createdCount > 0) {
+      toast.success(`Đã import ${result.createdCount} khoa / viện`, {
+        description: result.skippedCount > 0 ? `${result.skippedCount} dòng bị bỏ qua` : undefined,
+      });
+    } else {
+      toast.error('Không có dòng nào được thêm', {
+        description: `${result.skippedCount} dòng bị bỏ qua`,
+      });
+    }
+    return result;
+  };
+
+  const normalized = search.trim().toLowerCase();
+  const filtered = faculties.filter(
+    (faculty) => !normalized || faculty.facultyName.toLowerCase().includes(normalized)
+  );
 
   const columns: Column<Faculty>[] = [
     {
-      key: 'code',
-      header: 'Mã khoa/viện',
-      width: '110px',
-      render: (item) => <span className="catalog-code">{item.code}</span>,
+      key: 'facultyName',
+      header: 'Tên khoa viện',
+      render: (item) => <span className="catalog-cell-primary">{item.facultyName}</span>,
     },
     {
-      key: 'name',
-      header: 'Tên khoa / viện đào tạo',
-      render: (item) => <span className="catalog-cell-primary">{item.name}</span>,
+      key: 'majorCount',
+      header: 'Số ngành học',
+      width: '130px',
+      render: (item) => <span className="catalog-cell-primary">{majorCountOf(item.facultyId)}</span>,
     },
     {
-      key: 'dean',
-      header: 'Trưởng đơn vị',
-    },
-    {
-      key: 'contact',
-      header: 'Thông tin liên hệ',
+      key: 'departmentCount',
+      header: 'Số bộ môn',
+      width: '120px',
       render: (item) => (
-        <div className="catalog-contact">
-          <span><Mail aria-hidden="true" size={13} />{item.email}</span>
-          <span><Phone aria-hidden="true" size={13} />{item.phone}</span>
-        </div>
-      ),
-    },
-    {
-      key: 'stats',
-      header: 'Quy mô',
-      width: '180px',
-      render: (item) => (
-        <div className="catalog-stats">
-          <span className="catalog-inline-meta"><Building2 aria-hidden="true" size={13} /><strong>{item.departmentsCount || 2}</strong> bộ môn</span>
-          <span className="catalog-inline-meta"><BookOpen aria-hidden="true" size={13} /><strong>{item.totalCourses}</strong> HP <GraduationCap aria-hidden="true" size={13} /><strong>{item.totalStudents}</strong> SV</span>
-        </div>
+        <span className="catalog-cell-primary">{departmentCountOf(item.facultyId)}</span>
       ),
     },
     {
       key: 'actions',
-      header: 'Thao tác',
-      width: '64px',
+      header: 'Hành động',
+      width: '92px',
       render: (item) => (
         <div className="catalog-actions">
           <button
             type="button"
+            className="catalog-icon-button"
+            onClick={() => openEdit(item)}
+            aria-label={`Sửa ${item.facultyName}`}
+            title="Sửa"
+          >
+            <Pencil aria-hidden="true" size={15} />
+          </button>
+          <button
+            type="button"
             className="catalog-icon-button catalog-icon-button--danger"
-            onClick={() => setFacultyToDelete(item)}
-            aria-label={`Xóa ${item.name}`}
-            title="Xóa khoa / viện"
+            onClick={() => setToDelete(item)}
+            aria-label={`Xóa ${item.facultyName}`}
+            title="Xóa"
           >
             <Trash2 aria-hidden="true" size={15} />
           </button>
@@ -126,8 +162,8 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
     <div className="catalog-page">
       <header className="catalog-page-header">
         <div>
-          <h2>Danh mục khoa và viện đào tạo</h2>
-          <p>Quản lý các đơn vị giảng dạy thuộc Trường Đại học Hàng hải Việt Nam.</p>
+          <h2>Danh mục khoa và viện</h2>
+          <p>Bảng "Faculties".</p>
         </div>
       </header>
 
@@ -136,70 +172,68 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
         data={filtered}
         searchValue={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Tìm tên, mã hoặc trưởng đơn vị..."
-        onAddNew={() => {
-          setValidationError('');
-          setIsModalOpen(true);
-        }}
-        addNewLabel="Thêm khoa / viện"
-        keyExtractor={(item) => item.id}
+        searchPlaceholder="Tìm nhanh theo tên khoa viện..."
+        onAddNew={openCreate}
+        addNewLabel="Thêm khoa viện"
+        toolbarActions={(
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm catalog-add-button"
+            onClick={() => setIsImportOpen(true)}
+          >
+            <FileSpreadsheet aria-hidden="true" size={16} />
+            <span>Import Excel</span>
+          </button>
+        )}
+        emptyMessage="Chưa có khoa / viện nào trong danh mục."
+        keyExtractor={(item) => String(item.facultyId)}
+        pageSize={20}
       />
 
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Thêm khoa / viện đào tạo"
+        title={editing ? 'Sửa khoa viện' : 'Thêm khoa viện'}
       >
-        <form className="catalog-form" onSubmit={handleSubmit}>
-          {validationError && <div className="catalog-validation-error" role="alert">{validationError}</div>}
-          <div className="catalog-form-grid catalog-form-grid--2">
-            <div className="form-group">
-              <label htmlFor="faculty-code">Mã khoa / viện</label>
-              <input id="faculty-code" type="text" placeholder="Ví dụ: CNTT" value={code} onChange={(event) => setCode(event.target.value)} required />
-            </div>
-            <div className="form-group">
-              <label htmlFor="faculty-year">Năm thành lập</label>
-              <input id="faculty-year" type="number" value={year} onChange={(event) => setYear(event.target.value)} />
-            </div>
-          </div>
+        <form className="catalog-form" onSubmit={(event) => void handleSubmit(event)}>
+          {validationError && (
+            <div className="catalog-validation-error" role="alert">{validationError}</div>
+          )}
           <div className="form-group">
-            <label htmlFor="faculty-name">Tên đầy đủ</label>
-            <input id="faculty-name" type="text" placeholder="Ví dụ: Khoa Công nghệ Thông tin" value={name} onChange={(event) => setName(event.target.value)} required />
-          </div>
-          <div className="form-group">
-            <label htmlFor="faculty-dean">Trưởng khoa / viện</label>
-            <input id="faculty-dean" type="text" placeholder="Ví dụ: TS. Nguyễn Văn Hải" value={dean} onChange={(event) => setDean(event.target.value)} />
-          </div>
-          <div className="catalog-form-grid catalog-form-grid--2">
-            <div className="form-group">
-              <label htmlFor="faculty-email">Email liên hệ</label>
-              <input id="faculty-email" type="email" placeholder="cntt@vimaru.edu.vn" value={email} onChange={(event) => setEmail(event.target.value)} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="faculty-phone">Số điện thoại</label>
-              <input id="faculty-phone" type="tel" placeholder="0225 3829xxx" value={phone} onChange={(event) => setPhone(event.target.value)} />
-            </div>
+            <label htmlFor="faculty-name">Tên khoa viện</label>
+            <input
+              id="faculty-name"
+              type="text"
+              placeholder="Khoa Công nghệ Thông tin"
+              value={facultyName}
+              onChange={(event) => setFacultyName(event.target.value)}
+              required
+            />
           </div>
           <div className="modal-footer catalog-form-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>Hủy</button>
-            <button type="submit" className="btn btn-primary">Lưu khoa / viện</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>
+              Hủy
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Đang lưu...' : editing ? 'Cập nhật' : 'Lưu'}
+            </button>
           </div>
         </form>
       </Modal>
 
+      <FacultyImportDialog
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImport={handleImport}
+      />
+
       <ConfirmDialog
-        isOpen={facultyToDelete !== null}
-        onClose={() => setFacultyToDelete(null)}
-        onConfirm={() => {
-          if (facultyToDelete) {
-            onDeleteFaculty(facultyToDelete.id);
-            toast.success('Đã xóa khoa / viện', { description: facultyToDelete.name });
-          }
-          setFacultyToDelete(null);
-        }}
+        isOpen={toDelete !== null}
+        onClose={() => setToDelete(null)}
+        onConfirm={() => void handleDelete()}
         title="Xóa khoa / viện?"
-        recordName={facultyToDelete?.name ?? ''}
-        confirmText="Xóa khoa / viện"
+        recordName={toDelete?.facultyName ?? ''}
+        confirmText="Xóa"
       />
     </div>
   );

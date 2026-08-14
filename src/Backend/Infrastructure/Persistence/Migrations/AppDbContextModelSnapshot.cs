@@ -22,6 +22,78 @@ namespace Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.AcademicYear", b =>
+                {
+                    b.Property<int>("AcademicYearId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("AcademicYearId"));
+
+                    b.Property<string>("AcademicYearName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("AcademicYearId");
+
+                    b.HasIndex("AcademicYearName")
+                        .IsUnique();
+
+                    b.ToTable("AcademicYears", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.AnswerScale", b =>
+                {
+                    b.Property<int>("AnswerScaleId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("AnswerScaleId"));
+
+                    b.Property<string>("AnswerScaleName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("AnswerScaleId");
+
+                    b.ToTable("AnswerScales", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.AnswerScaleOption", b =>
+                {
+                    b.Property<int>("AnswerScaleOptionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("AnswerScaleOptionId"));
+
+                    b.Property<int>("AnswerScaleId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DisplayText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Value")
+                        .HasColumnType("integer");
+
+                    b.HasKey("AnswerScaleOptionId");
+
+                    b.HasIndex("AnswerScaleId", "Value")
+                        .IsUnique();
+
+                    b.ToTable("AnswerScaleOptions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AnswerScaleOptions_Value", "\"Value\" BETWEEN 1 AND 5");
+                        });
+                });
+
             modelBuilder.Entity("Domain.AuthAuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -100,6 +172,233 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "RevokedAt", "ExpiresAt");
 
                     b.ToTable("AuthSessions", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Course", b =>
+                {
+                    b.Property<int>("CourseId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("CourseId"));
+
+                    b.Property<string>("CourseCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CourseName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CourseType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("");
+
+                    b.Property<int>("Credits")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FacultyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PrerequisiteCourseId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("CourseId");
+
+                    b.HasIndex("CourseCode")
+                        .IsUnique();
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("FacultyId");
+
+                    b.HasIndex("PrerequisiteCourseId");
+
+                    b.ToTable("Courses", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.CourseSection", b =>
+                {
+                    b.Property<int>("CourseSectionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("CourseSectionId"));
+
+                    b.Property<int>("ClassSize")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CourseId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LecturerId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SectionName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SemesterId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("CourseSectionId");
+
+                    b.HasIndex("LecturerId");
+
+                    b.HasIndex("SemesterId");
+
+                    b.HasIndex("CourseId", "SemesterId", "SectionName")
+                        .IsUnique();
+
+                    b.ToTable("CourseSections", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.CourseSectionSurvey", b =>
+                {
+                    b.Property<int>("CourseSectionSurveyId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("CourseSectionSurveyId"));
+
+                    b.Property<int>("CourseSectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("EndTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LinkToken")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SemesterSurveyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("CourseSectionSurveyId");
+
+                    b.HasIndex("CourseSectionId");
+
+                    b.HasIndex("LinkToken")
+                        .IsUnique();
+
+                    b.HasIndex("SemesterSurveyId", "CourseSectionId")
+                        .IsUnique();
+
+                    b.ToTable("CourseSectionSurveys", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CourseSectionSurveys_TimeRange", "\"EndTime\" > \"StartTime\"");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.Department", b =>
+                {
+                    b.Property<int>("DepartmentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("DepartmentId"));
+
+                    b.Property<string>("DepartmentName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("FacultyId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("DepartmentId");
+
+                    b.HasIndex("FacultyId");
+
+                    b.ToTable("Departments", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Faculty", b =>
+                {
+                    b.Property<int>("FacultyId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("FacultyId"));
+
+                    b.Property<string>("FacultyName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("FacultyId");
+
+                    b.HasIndex("FacultyName")
+                        .IsUnique();
+
+                    b.ToTable("Faculties", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Lecturer", b =>
+                {
+                    b.Property<int>("LecturerId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("LecturerId"));
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Email")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("FacultyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasColumnType("text");
+
+                    b.HasKey("LecturerId");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.HasIndex("FacultyId");
+
+                    b.ToTable("Lecturers", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Major", b =>
+                {
+                    b.Property<int>("MajorId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("MajorId"));
+
+                    b.Property<int>("FacultyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MajorName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("MajorId");
+
+                    b.HasIndex("FacultyId");
+
+                    b.ToTable("Majors", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Permission", b =>
@@ -187,6 +486,150 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("RolePermissions", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Semester", b =>
+                {
+                    b.Property<int>("SemesterId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("SemesterId"));
+
+                    b.Property<int>("AcademicYearId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SemesterName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("SemesterId");
+
+                    b.HasIndex("AcademicYearId", "SemesterName")
+                        .IsUnique();
+
+                    b.ToTable("Semesters", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.SemesterSurvey", b =>
+                {
+                    b.Property<int>("SemesterSurveyId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("SemesterSurveyId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SemesterId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SurveyTemplateId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("SemesterSurveyId");
+
+                    b.HasIndex("SemesterId");
+
+                    b.HasIndex("SurveyTemplateId");
+
+                    b.ToTable("SemesterSurveys", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.SurveyQuestion", b =>
+                {
+                    b.Property<int>("QuestionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("QuestionId"));
+
+                    b.Property<string>("QuestionText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SurveyTemplateId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("QuestionId");
+
+                    b.HasIndex("SurveyTemplateId");
+
+                    b.ToTable("SurveyQuestions", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.SurveyResponse", b =>
+                {
+                    b.Property<int>("ResponseId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("ResponseId"));
+
+                    b.Property<string>("AdditionalComments")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CourseSectionSurveyId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Score")
+                        .HasColumnType("numeric(4,2)");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ResponseId");
+
+                    b.HasIndex("CourseSectionSurveyId");
+
+                    b.ToTable("SurveyResponses", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.SurveyResponseAnswer", b =>
+                {
+                    b.Property<int>("ResponseId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuestionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SelectedValue")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ResponseId", "QuestionId");
+
+                    b.HasIndex("QuestionId");
+
+                    b.ToTable("SurveyResponseAnswers", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SurveyResponseAnswers_SelectedValue", "\"SelectedValue\" BETWEEN 1 AND 5");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.SurveyTemplate", b =>
+                {
+                    b.Property<int>("SurveyTemplateId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("SurveyTemplateId"));
+
+                    b.Property<int>("AnswerScaleId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TemplateName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("SurveyTemplateId");
+
+                    b.HasIndex("AnswerScaleId");
+
+                    b.ToTable("SurveyTemplates", (string)null);
                 });
 
             modelBuilder.Entity("Domain.User", b =>
@@ -303,6 +746,15 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("UserProfiles", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.AnswerScaleOption", b =>
+                {
+                    b.HasOne("Domain.AnswerScale", null)
+                        .WithMany()
+                        .HasForeignKey("AnswerScaleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Domain.AuthAuditLog", b =>
                 {
                     b.HasOne("Domain.UserProfile", null)
@@ -331,6 +783,90 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Domain.Course", b =>
+                {
+                    b.HasOne("Domain.Department", null)
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Domain.Faculty", null)
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Domain.Course", null)
+                        .WithMany()
+                        .HasForeignKey("PrerequisiteCourseId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Domain.CourseSection", b =>
+                {
+                    b.HasOne("Domain.Course", null)
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Lecturer", null)
+                        .WithMany()
+                        .HasForeignKey("LecturerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Semester", null)
+                        .WithMany()
+                        .HasForeignKey("SemesterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Domain.CourseSectionSurvey", b =>
+                {
+                    b.HasOne("Domain.CourseSection", null)
+                        .WithMany()
+                        .HasForeignKey("CourseSectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.SemesterSurvey", null)
+                        .WithMany()
+                        .HasForeignKey("SemesterSurveyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Domain.Department", b =>
+                {
+                    b.HasOne("Domain.Faculty", null)
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Domain.Lecturer", b =>
+                {
+                    b.HasOne("Domain.Department", null)
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Domain.Faculty", null)
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Domain.Major", b =>
+                {
+                    b.HasOne("Domain.Faculty", null)
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Domain.RolePermission", b =>
                 {
                     b.HasOne("Domain.Permission", null)
@@ -343,6 +879,72 @@ namespace Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Domain.Semester", b =>
+                {
+                    b.HasOne("Domain.AcademicYear", null)
+                        .WithMany()
+                        .HasForeignKey("AcademicYearId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Domain.SemesterSurvey", b =>
+                {
+                    b.HasOne("Domain.Semester", null)
+                        .WithMany()
+                        .HasForeignKey("SemesterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.SurveyTemplate", null)
+                        .WithMany()
+                        .HasForeignKey("SurveyTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Domain.SurveyQuestion", b =>
+                {
+                    b.HasOne("Domain.SurveyTemplate", null)
+                        .WithMany()
+                        .HasForeignKey("SurveyTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Domain.SurveyResponse", b =>
+                {
+                    b.HasOne("Domain.CourseSectionSurvey", null)
+                        .WithMany()
+                        .HasForeignKey("CourseSectionSurveyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Domain.SurveyResponseAnswer", b =>
+                {
+                    b.HasOne("Domain.SurveyQuestion", null)
+                        .WithMany()
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Domain.SurveyResponse", null)
+                        .WithMany()
+                        .HasForeignKey("ResponseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Domain.SurveyTemplate", b =>
+                {
+                    b.HasOne("Domain.AnswerScale", null)
+                        .WithMany()
+                        .HasForeignKey("AnswerScaleId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

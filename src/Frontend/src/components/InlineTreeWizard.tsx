@@ -13,14 +13,23 @@ import {
   Rocket,
   X,
 } from 'lucide-react';
-import type { SurveyCampaign, CourseClass, Criterion, Major } from '../types';
+import type {
+  SurveyCampaign,
+  Course,
+  CourseSection,
+  Criterion,
+  Lecturer,
+  Major,
+} from '../types';
 
 interface InlineTreeWizardProps {
   surveyType: 'Học phần' | 'Chương trình đào tạo';
   initialSemester?: string;
   initialAcademicYear?: string;
   majors: Major[];
-  classes: CourseClass[];
+  sections: CourseSection[];
+  courses: Course[];
+  lecturers: Lecturer[];
   criteria: Criterion[];
   onCreateCampaigns: (newCampaigns: SurveyCampaign[]) => void;
   onCancel: () => void;
@@ -31,7 +40,9 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
   initialSemester = 'Học kỳ II',
   initialAcademicYear = '2025-2026',
   majors,
-  classes,
+  sections,
+  courses,
+  lecturers,
   criteria,
   onCreateCampaigns,
   onCancel,
@@ -52,10 +63,12 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
   );
 
   // Step 2 States
-  const [selectedClassIds, setSelectedClassIds] = useState<string[]>(
-    classes.map((c) => c.id)
+  const [selectedClassIds, setSelectedClassIds] = useState<number[]>(
+    sections.map((section) => section.courseSectionId)
   );
-  const [selectedMajorId, setSelectedMajorId] = useState<string>(majors[0]?.id || '');
+  const [selectedMajorId, setSelectedMajorId] = useState<string>(
+    majors[0] ? String(majors[0].majorId) : ''
+  );
   const [isImported, setIsImported] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -72,19 +85,23 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
 
   const handleToggleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      setSelectedClassIds(classes.map((c) => c.id));
+      setSelectedClassIds(sections.map((section) => section.courseSectionId));
     } else {
       setSelectedClassIds([]);
     }
     setValidationError(null);
   };
 
-  const handleToggleClass = (id: string) => {
+  const handleToggleClass = (id: number) => {
     setSelectedClassIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
     setValidationError(null);
   };
+
+  const courseOf = (courseId: number) => courses.find((course) => course.courseId === courseId);
+  const lecturerNamesOf = (section: CourseSection) =>
+    lecturers.find((lecturer) => lecturer.lecturerId === section.lecturerId)?.fullName ?? '';
 
   // Generate campaigns and add directly to tree
   const handleCompleteWizard = () => {
@@ -92,84 +109,59 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
     const generated: SurveyCampaign[] = [];
 
     if (surveyType === 'Học phần') {
-      const selectedClasses = classes.filter((c) => selectedClassIds.includes(c.id));
+      const selectedSections = sections.filter((section) =>
+        selectedClassIds.includes(section.courseSectionId)
+      );
 
-      selectedClasses.forEach((cls, idx) => {
-        const groups = cls.groups || [];
-        if (groups.length === 0) {
-          const id = `cmp-wiz-${timestamp}-${idx}`;
-          const surveyLink = `https://khaosat.vimaru.edu.vn/survey/${id}`;
-          const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(surveyLink)}`;
+      selectedSections.forEach((section, idx) => {
+        const course = courseOf(section.courseId);
+        const courseName = course?.courseName ?? section.sectionName;
+        const lecturerName = lecturerNamesOf(section) || 'Chưa phân công';
+        const id = `cmp-wiz-${timestamp}-${idx}`;
+        const surveyLink = `https://khaosat.vimaru.edu.vn/survey/${id}`;
+        const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(surveyLink)}`;
 
-          generated.push({
-            id,
-            title: `Khảo sát Đánh giá Lớp HP ${cls.code} - ${cls.courseName}`,
-            type: 'Học phần',
-            semester,
-            academicYear,
-            courseId: cls.courseId,
-            courseCode: cls.courseCode,
-            courseName: cls.courseName,
-            classId: cls.id,
-            classCode: cls.code,
-            lecturerName: cls.lecturerName,
-            startDate,
-            endDate,
-            status: 'Đang diễn ra',
-            targetAudience: `Sinh viên Lớp HP ${cls.code} (${cls.lecturerName}) - ${semester} ${academicYear}`,
-            surveyLink,
-            qrCodeUrl,
-            totalTargetResponses: cls.totalStudents,
-            actualResponses: cls.completedResponses || 0,
-          });
-        } else {
-          groups.forEach((grp, gIdx) => {
-            const id = `cmp-wiz-${timestamp}-${idx}-${gIdx}`;
-            const surveyLink = `https://khaosat.vimaru.edu.vn/survey/${id}`;
-            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(surveyLink)}`;
-
-            generated.push({
-              id,
-              title: `Khảo sát Đánh giá Lớp HP ${grp.fullGroupCode} - ${cls.courseName}`,
-              type: 'Học phần',
-              semester,
-              academicYear,
-              courseId: cls.courseId,
-              courseCode: cls.courseCode,
-              courseName: `${cls.courseName} [Nhóm ${grp.groupCode}]`,
-              classId: cls.id,
-              classCode: grp.fullGroupCode,
-              lecturerName: grp.lecturerName,
-              startDate,
-              endDate,
-              status: 'Đang diễn ra',
-              targetAudience: `Sinh viên Nhóm ${grp.groupCode} (${grp.lecturerName}) - ${semester} ${academicYear}`,
-              surveyLink,
-              qrCodeUrl,
-              totalTargetResponses: grp.studentCount,
-              actualResponses: grp.completedResponses || 0,
-            });
-          });
-        }
+        generated.push({
+          id,
+          title: `Khảo sát Đánh giá Lớp HP ${section.sectionName} - ${courseName}`,
+          type: 'Học phần',
+          semester,
+          academicYear,
+          courseId: String(section.courseId),
+          courseCode: course?.courseCode,
+          courseName,
+          classId: String(section.courseSectionId),
+          classCode: section.sectionName,
+          lecturerName,
+          startDate,
+          endDate,
+          status: 'Đang diễn ra',
+          targetAudience: `Sinh viên Lớp HP ${section.sectionName} (${lecturerName}) - ${semester} ${academicYear}`,
+          surveyLink,
+          qrCodeUrl,
+          totalTargetResponses: section.classSize,
+          actualResponses: 0,
+        });
       });
     } else {
-      const selectedMajor = majors.find((m) => m.id === selectedMajorId) || majors[0];
+      const selectedMajor =
+        majors.find((m) => String(m.majorId) === selectedMajorId) || majors[0];
       const id = `cmp-wiz-prog-${timestamp}`;
       const surveyLink = `https://khaosat.vimaru.edu.vn/survey/${id}`;
       const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(surveyLink)}`;
 
       generated.push({
         id,
-        title: campaignTitle || `Khảo sát Đánh giá Chương trình Đào tạo Ngành ${selectedMajor?.name || 'CNTT'}`,
+        title: campaignTitle || `Khảo sát Đánh giá Chương trình Đào tạo Ngành ${selectedMajor?.majorName || ''}`,
         type: 'Chương trình đào tạo',
         semester,
         academicYear,
-        majorId: selectedMajor?.id,
-        majorName: selectedMajor?.name,
+        majorId: selectedMajor ? String(selectedMajor.majorId) : undefined,
+        majorName: selectedMajor?.majorName,
         startDate,
         endDate,
         status: 'Đang diễn ra',
-        targetAudience: `Sinh viên khóa cuối & Cựu sinh viên Ngành ${selectedMajor?.name}`,
+        targetAudience: `Sinh viên khóa cuối & Cựu sinh viên Ngành ${selectedMajor?.majorName ?? ''}`,
         surveyLink,
         qrCodeUrl,
         totalTargetResponses: 150,
@@ -330,46 +322,37 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
                       <th>
                         <input
                           type="checkbox"
-                          checked={selectedClassIds.length === classes.length}
+                          checked={
+                            sections.length > 0 && selectedClassIds.length === sections.length
+                          }
                           onChange={handleToggleSelectAll}
                           aria-label="Chọn tất cả lớp học phần"
                         />
                       </th>
-                      <th>Mã lớp HP</th>
+                      <th>Tên lớp</th>
                       <th>Tên học phần</th>
-                      <th>Nhóm và giảng viên</th>
+                      <th>Giảng viên</th>
                       <th>Sĩ số</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {classes.map((cls) => {
-                      const isSelected = selectedClassIds.includes(cls.id);
+                    {sections.map((section) => {
+                      const isSelected = selectedClassIds.includes(section.courseSectionId);
+                      const course = courseOf(section.courseId);
                       return (
-                        <tr key={cls.id}>
+                        <tr key={section.courseSectionId}>
                           <td>
                             <input
                               type="checkbox"
                               checked={isSelected}
-                              onChange={() => handleToggleClass(cls.id)}
-                              aria-label={`Chọn lớp ${cls.code}`}
+                              onChange={() => handleToggleClass(section.courseSectionId)}
+                              aria-label={`Chọn lớp ${section.sectionName}`}
                             />
                           </td>
-                          <td><span className="operations-code">{cls.code}</span></td>
-                          <td>{cls.courseName}</td>
-                          <td>
-                            {cls.groups && cls.groups.length > 0 ? (
-                              <div className="wizard-lecturer-list">
-                                {cls.groups.map((g) => (
-                                  <span key={g.id} className="operations-count">
-                                    {g.groupCode}: {g.lecturerName}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span>{cls.lecturerName}</span>
-                            )}
-                          </td>
-                          <td>{cls.totalStudents}</td>
+                          <td><span className="operations-code">{section.sectionName}</span></td>
+                          <td>{course?.courseName ?? '—'}</td>
+                          <td>{lecturerNamesOf(section) || 'Chưa phân công'}</td>
+                          <td>{section.classSize}</td>
                         </tr>
                       );
                     })}
@@ -392,8 +375,8 @@ export const InlineTreeWizard: React.FC<InlineTreeWizardProps> = ({
                   onChange={(e) => setSelectedMajorId(e.target.value)}
                 >
                   {majors.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      [{m.code}] {m.name} - Khoa: {m.facultyName}
+                    <option key={m.majorId} value={String(m.majorId)}>
+                      {m.majorName} (MajorId {m.majorId})
                     </option>
                   ))}
                 </select>

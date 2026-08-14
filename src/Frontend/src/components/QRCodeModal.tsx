@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Copy, Download, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { Modal } from './Modal';
@@ -8,7 +8,8 @@ interface QRCodeModalProps {
   onClose: () => void;
   title: string;
   subtitle: string;
-  qrUrl: string;
+  /** Ảnh QR dựng sẵn. Bỏ trống thì mã QR được sinh ngay trong trình duyệt. */
+  qrUrl?: string;
   surveyLink: string;
   onOpenSurveySimulator: () => void;
 }
@@ -22,6 +23,31 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   surveyLink,
   onOpenSurveySimulator,
 }) => {
+  // Sinh mã QR tại chỗ để không phụ thuộc dịch vụ ảnh bên ngoài.
+  const [generatedQr, setGeneratedQr] = useState('');
+
+  useEffect(() => {
+    if (!isOpen || !surveyLink) return;
+
+    let cancelled = false;
+    const generate = async () => {
+      try {
+        const { toDataURL } = await import('qrcode');
+        const dataUrl = await toDataURL(surveyLink, { width: 260, margin: 1 });
+        if (!cancelled) setGeneratedQr(dataUrl);
+      } catch {
+        if (!cancelled) setGeneratedQr('');
+      }
+    };
+
+    void generate();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, surveyLink]);
+
+  const qrImage = generatedQr || qrUrl || '';
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(surveyLink);
@@ -42,7 +68,11 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
         <p className="qr-modal-subtitle">{subtitle}</p>
 
         <div className="qr-preview-box">
-          <img src={qrUrl} alt="Mã QR Khảo sát Sinh viên" className="qr-image" />
+          {qrImage ? (
+            <img src={qrImage} alt="Mã QR Khảo sát Sinh viên" className="qr-image" />
+          ) : (
+            <div className="qr-caption">Đang tạo mã QR...</div>
+          )}
           <div className="qr-caption">
             Quét mã QR bằng điện thoại để làm bài đánh giá
           </div>
@@ -75,7 +105,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
             Mở giao diện sinh viên
           </button>
           <a
-            href={qrUrl}
+            href={qrImage}
             download="VMU_QR_Survey.png"
             target="_blank"
             rel="noreferrer"
