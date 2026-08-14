@@ -1,101 +1,97 @@
+// ---------------------------------------------------------------------------
+// DANH MỤC ĐÀO TẠO
+// Tên trường và tính nullable khớp 1-1 với cột của bảng tương ứng trong dtb.md.
+// ---------------------------------------------------------------------------
+
+/** Bảng "Faculties" */
 export interface Faculty {
-  id: string;
-  code: string;
-  name: string;
-  dean: string;
-  email: string;
-  phone: string;
-  establishedYear: number;
-  departmentsCount?: number;
-  totalCourses: number;
-  totalStudents: number;
+  facultyId: number;
+  facultyName: string;
 }
 
+/** Bảng "Departments" */
 export interface Department {
-  id: string;
-  code: string;
-  name: string;
-  facultyId: string;
-  facultyName: string;
-  headOfDepartment: string; // Trưởng bộ môn
-  email: string;
-  phone: string;
-  totalLecturers: number;
-  totalCourses: number;
+  departmentId: number;
+  departmentName: string;
+  facultyId: number | null;
 }
 
-export interface Major {
-  id: string;
-  code: string;
-  name: string;
-  facultyId: string;
-  facultyName: string;
-  degreeLevel: 'Đại học' | 'Thạc sĩ' | 'Tiến sĩ' | 'Cao đẳng';
-  durationYears: number;
-  totalCredits: number;
-  status: 'Đang đào tạo' | 'Ngừng tuyển sinh';
-}
-
-export interface Course {
-  id: string;
-  code: string;
-  name: string;
-  credits: number;
-  theoryHours: number;
-  practicalHours: number;
-  facultyId: string;
-  facultyName: string;
-  departmentId?: string;
-  departmentName?: string;
-  type: 'Bắt buộc' | 'Tự chọn';
-  description?: string;
-}
-
+/** Bảng "Lecturers" */
 export interface Lecturer {
-  id: string;
-  code: string; // Mã cán bộ/giảng viên, vd: CB01025
+  lecturerId: number;
   fullName: string;
-  academicTitle: string; // TS., PGS.TS., ThS., GS.TS.
-  facultyId: string;
-  facultyName: string;
-  departmentId?: string;
-  departmentName?: string;
-  email: string;
-  phone: string;
-  specialization: string;
-  status: 'Đang công tác' | 'Nghỉ hưu / Chuyển công tác';
+  departmentId: number | null;
+  facultyId: number | null;
+  email: string | null;
+  phoneNumber: string | null;
 }
 
-export interface ClassGroup {
-  id: string;
-  classId: string; // Lớp HP cha (vd: cls-1)
-  groupCode: string; // N01, N02, N03...
-  fullGroupCode: string; // vd: IT201.01.N01
-  lecturerId: string;
-  lecturerName: string; // Giảng viên phân công lớp N01, N02
-  lecturerEmail: string;
-  studentCount: number;
-  room: string;
-  schedule: string; // vd: Thứ 2 (Tiết 1-3)
-  surveyStatus: 'Chưa khảo sát' | 'Đang khảo sát' | 'Đã hoàn thành';
-  completedResponses: number;
+/** Bảng "Majors" */
+export interface Major {
+  majorId: number;
+  majorName: string;
+  facultyId: number;
 }
 
-export interface CourseClass {
-  id: string;
-  code: string;
-  courseId: string;
+/** Bảng "Curricula" */
+export interface Curriculum {
+  curriculumId: number;
+  majorId: number;
+  totalCredits: number;
+  requiredCredits: number;
+  minElectiveCredits: number;
+}
+
+/** Bảng "CurriculumCourses" */
+export interface CurriculumCourse {
+  id: number;
+  curriculumId: number;
+  courseId: number;
+  semesterOrder: number;
+}
+
+/** Cột "Courses"."CourseType" */
+export type CourseType = 'Required' | 'Elective';
+
+/** Bảng "Courses" */
+export interface Course {
+  courseId: number;
   courseCode: string;
   courseName: string;
-  lecturerName: string;
-  lecturerEmail: string;
-  semester: string;
-  academicYear: string;
-  totalStudents: number;
-  room: string;
-  surveyStatus: 'Chưa khảo sát' | 'Đang khảo sát' | 'Đã hoàn thành';
-  completedResponses: number;
-  groups?: ClassGroup[]; // Danh sách nhóm lớp N01, N02...
+  credits: number;
+  /** Chuỗi rỗng khi tệp import không ghi loại học phần; cột có DEFAULT ''. */
+  courseType: CourseType | '';
+  departmentId: number | null;
+  facultyId: number | null;
+  prerequisiteCourseId: number | null;
+}
+
+/** Bảng "Semesters" */
+export interface Semester {
+  semesterId: number;
+  semesterName: string;
+  academicYearId: number;
+}
+
+/** Bảng "AcademicYears", kèm học kỳ để dựng cây bên trái trang lớp học phần. */
+export interface AcademicYear {
+  academicYearId: number;
+  academicYearName: string;
+  /** YYYY-MM-DD */
+  startDate: string;
+  endDate: string;
+  semesters: Semester[];
+}
+
+/** Bảng "CourseSections" */
+export interface CourseSection {
+  courseSectionId: number;
+  courseId: number;
+  semesterId: number;
+  /** NOT NULL: mỗi lớp học phần có đúng một giảng viên. */
+  lecturerId: number;
+  sectionName: string;
+  classSize: number;
 }
 
 export interface Criterion {
@@ -106,6 +102,140 @@ export interface Criterion {
   question: string;
   weight: number;
   status: 'Kích hoạt' | 'Tạm ẩn';
+}
+
+/** Giới hạn của bảng "SurveyQuestions": mỗi bộ câu hỏi tối đa 30 câu. */
+export const maximumQuestionsPerTemplate = 30;
+
+/** Số mức tối đa của một thang trả lời ("AnswerScaleOptions"."Value" CHECK 1..5). */
+export const maximumAnswerScaleOptions = 5;
+
+/** Bảng "AnswerScaleOptions" */
+export interface AnswerScaleOption {
+  answerScaleOptionId: number;
+  answerScaleId: number;
+  /** 1..5 */
+  value: number;
+  displayText: string;
+}
+
+/** Bảng "AnswerScales", kèm các mức trả lời để hiển thị trong một lần gọi. */
+export interface AnswerScale {
+  answerScaleId: number;
+  answerScaleName: string;
+  options: AnswerScaleOption[];
+}
+
+/** Bảng "SurveyQuestions" */
+export interface SurveyQuestion {
+  questionId: number;
+  surveyTemplateId: number;
+  questionText: string;
+}
+
+/** Bảng "SurveyTemplates", kèm danh sách câu hỏi của bộ. */
+export interface SurveyTemplate {
+  surveyTemplateId: number;
+  templateName: string;
+  /** NOT NULL: cả bộ dùng chung một thang trả lời. */
+  answerScaleId: number;
+  /** ISO 8601 */
+  createdAt: string;
+  questions: SurveyQuestion[];
+}
+
+/** Bảng "SemesterSurveys", kèm số lớp và số phiếu đã thu của đợt. */
+export interface SemesterSurvey {
+  semesterSurveyId: number;
+  semesterId: number;
+  semesterName: string;
+  academicYearName: string;
+  surveyTemplateId: number;
+  templateName: string;
+  questionCount: number;
+  /** ISO 8601 */
+  createdAt: string;
+  /** Sớm nhất / muộn nhất trong các lớp của đợt. */
+  startTime: string;
+  endTime: string;
+  sectionSurveyCount: number;
+  responseCount: number;
+}
+
+/** Bảng "CourseSectionSurveys": bài khảo sát riêng của một lớp học phần. */
+export interface CourseSectionSurvey {
+  courseSectionSurveyId: number;
+  semesterSurveyId: number;
+  courseSectionId: number;
+  /** Dùng để dựng link và mã QR riêng cho lớp. */
+  linkToken: string;
+  startTime: string;
+  endTime: string;
+  courseCode: string;
+  courseName: string;
+  sectionName: string;
+  lecturerName: string;
+  classSize: number;
+  responseCount: number;
+}
+
+/** Số câu đã chọn ở một mức trả lời trong cùng một phiếu. */
+export interface SurveyResponseValueCount {
+  value: number;
+  displayText: string;
+  count: number;
+}
+
+/** Một dòng trong danh sách phiếu trả lời của bài khảo sát một lớp học phần. */
+export interface SurveyResponseSummary {
+  responseId: number;
+  courseSectionSurveyId: number;
+  /** ISO 8601 */
+  submittedAt: string;
+  score: number;
+  additionalComments: string | null;
+  answerCount: number;
+  valueCounts: SurveyResponseValueCount[];
+}
+
+export interface SurveyResponseAnswer {
+  questionId: number;
+  questionText: string;
+  selectedValue: number;
+  selectedText: string;
+}
+
+/** Toàn bộ nội dung một phiếu trả lời, dùng cho modal chỉ xem. */
+export interface SurveyResponseDetail {
+  responseId: number;
+  courseSectionSurveyId: number;
+  submittedAt: string;
+  score: number;
+  additionalComments: string | null;
+  templateName: string;
+  courseCode: string;
+  courseName: string;
+  sectionName: string;
+  lecturerName: string;
+  answerOptions: AnswerScaleOption[];
+  answers: SurveyResponseAnswer[];
+}
+
+/** Phiếu khảo sát sinh viên thấy khi mở link hoặc quét QR. */
+export interface PublicSurvey {
+  linkToken: string;
+  templateName: string;
+  courseCode: string;
+  courseName: string;
+  sectionName: string;
+  lecturerName: string;
+  semesterName: string;
+  academicYearName: string;
+  startTime: string;
+  endTime: string;
+  isOpen: boolean;
+  answerOptions: AnswerScaleOption[];
+  questions: { questionId: number; questionText: string }[];
 }
 
 export interface SurveyCampaign {

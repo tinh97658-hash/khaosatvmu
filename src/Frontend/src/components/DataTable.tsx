@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Inbox, Plus, Search } from 'lucide-react';
 import '../styles/catalogs.css';
 
@@ -23,6 +23,8 @@ interface DataTableProps<T> {
   toolbarActions?: ReactNode;
   emptyMessage?: string;
   keyExtractor: (item: T) => string;
+  /** Số dòng mỗi trang. Bỏ trống thì hiển thị toàn bộ, không phân trang. */
+  pageSize?: number;
 }
 
 export function DataTable<T>({
@@ -39,9 +41,21 @@ export function DataTable<T>({
   toolbarActions,
   emptyMessage = 'Chưa có dữ liệu trong danh mục này.',
   keyExtractor,
+  pageSize,
 }: DataTableProps<T>) {
   const hasQuery = Boolean(searchValue.trim() || currentFilter);
   const resolvedAddLabel = addNewLabel.replace(/^\+\s*/, '');
+
+  const [page, setPage] = useState(1);
+  const totalPages = pageSize ? Math.max(1, Math.ceil(data.length / pageSize)) : 1;
+
+  // Lọc hoặc xóa bớt dòng có thể làm trang hiện tại vượt quá số trang còn lại.
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
+
+  const firstIndex = pageSize ? (page - 1) * pageSize : 0;
+  const visibleRows = pageSize ? data.slice(firstIndex, firstIndex + pageSize) : data;
 
   return (
     <section className="catalog-table-shell" aria-label="Danh sách danh mục">
@@ -106,7 +120,7 @@ export function DataTable<T>({
             </tr>
           </thead>
           <tbody>
-            {data.length === 0 ? (
+            {visibleRows.length === 0 ? (
               <tr>
                 <td className="catalog-empty" colSpan={columns.length + 1}>
                   <Inbox aria-hidden="true" size={24} />
@@ -115,9 +129,9 @@ export function DataTable<T>({
                 </td>
               </tr>
             ) : (
-              data.map((item, index) => (
+              visibleRows.map((item, index) => (
                 <tr key={keyExtractor(item)}>
-                  <td className="catalog-table__index">{index + 1}</td>
+                  <td className="catalog-table__index">{firstIndex + index + 1}</td>
                   {columns.map((column) => (
                     <td key={column.key}>
                       {column.render
@@ -134,14 +148,41 @@ export function DataTable<T>({
 
       <footer className="catalog-pagination">
         <span>
-          Hiển thị <strong>{data.length}</strong> kết quả
+          {pageSize && data.length > 0 ? (
+            <>
+              Hiển thị <strong>{firstIndex + 1}</strong>–
+              <strong>{Math.min(firstIndex + pageSize, data.length)}</strong> trên{' '}
+              <strong>{data.length}</strong> kết quả
+            </>
+          ) : (
+            <>
+              Hiển thị <strong>{data.length}</strong> kết quả
+            </>
+          )}
         </span>
         <div className="catalog-pagination__controls" aria-label="Phân trang">
-          <button type="button" className="catalog-page-button" disabled aria-label="Trang trước" title="Trang trước">
+          <button
+            type="button"
+            className="catalog-page-button"
+            disabled={page <= 1}
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            aria-label="Trang trước"
+            title="Trang trước"
+          >
             <ChevronLeft aria-hidden="true" size={16} />
           </button>
-          <span className="catalog-page-number" aria-current="page">1</span>
-          <button type="button" className="catalog-page-button" disabled aria-label="Trang sau" title="Trang sau">
+          <span className="catalog-page-number" aria-current="page">{page}</span>
+          {pageSize && totalPages > 1 && (
+            <span className="catalog-page-total">/ {totalPages}</span>
+          )}
+          <button
+            type="button"
+            className="catalog-page-button"
+            disabled={page >= totalPages}
+            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            aria-label="Trang sau"
+            title="Trang sau"
+          >
             <ChevronRight aria-hidden="true" size={16} />
           </button>
         </div>

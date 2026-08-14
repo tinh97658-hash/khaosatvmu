@@ -79,13 +79,13 @@ export function Sidebar({
     {
       section: 'KHẢO SÁT HỌC PHẦN',
       items: [
+        { id: 'course-question-sets', label: 'Bộ câu hỏi khảo sát', icon: ListChecks },
         {
           id: 'course-campaigns',
-          label: 'Đợt khảo sát học phần',
+          label: 'Khảo sát học phần',
           icon: ClipboardCheck,
           badge: activeCampaignsCount > 0 ? activeCampaignsCount : undefined,
         },
-        { id: 'course-criteria', label: 'Tiêu chí học phần', icon: ListChecks },
       ],
     },
     {

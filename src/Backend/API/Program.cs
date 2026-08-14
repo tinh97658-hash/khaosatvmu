@@ -1,8 +1,14 @@
 using API.Auth;
+using API.Catalog;
+using API.Surveys;
 using API.UserAdministration;
 using Application.Auth;
+using Application.Catalog;
+using Application.Surveys;
 using Application.UserAdministration;
 using Infrastructure.Auth;
+using Infrastructure.Catalog;
+using Infrastructure.Surveys;
 using Infrastructure.UserAdministration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -47,6 +53,8 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<IAuthService, EfAuthService>();
 builder.Services.AddScoped<IAuthSessionService, EfAuthSessionService>();
 builder.Services.AddScoped<IUserAdministrationService, EfUserAdministrationService>();
+builder.Services.AddScoped<ICatalogService, EfCatalogService>();
+builder.Services.AddScoped<ISurveyService, EfSurveyService>();
 builder.Services.AddScoped<ApplicationCookieEvents>();
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
@@ -75,6 +83,8 @@ app.MapGet("/", () => Results.Ok(new
 
 app.MapAuthEndpoints();
 app.MapUserAdministrationEndpoints();
+app.MapCatalogEndpoints();
+app.MapSurveyEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
 

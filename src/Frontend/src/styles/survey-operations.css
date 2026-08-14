@@ -1367,3 +1367,312 @@
     transition: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Khảo sát học phần: thẻ đợt khảo sát theo học kỳ và bảng bài khảo sát từng lớp.
+   --------------------------------------------------------------------------- */
+
+.course-surveys-page .operations-toolbar {
+  justify-content: space-between;
+}
+
+.course-surveys-page .operations-field {
+  min-width: 260px;
+}
+
+.course-surveys-page .operations-tab-actions {
+  margin-left: auto;
+}
+
+.semester-survey-card {
+  border: 1px solid var(--operations-border);
+  background: var(--operations-surface);
+}
+
+.semester-survey-card + .semester-survey-card {
+  margin-top: 12px;
+}
+
+.semester-survey-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--operations-border);
+  background: #eef3f5;
+}
+
+.semester-survey-toggle {
+  min-width: 0;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.semester-survey-toggle:hover {
+  color: var(--operations-primary-dark);
+}
+
+.semester-survey-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--operations-text);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.semester-survey-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-left: auto;
+}
+
+.semester-survey-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--operations-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.semester-survey-card .campaign-table-scroll {
+  border: 0;
+}
+
+.semester-survey-card .campaign-table th,
+.semester-survey-card .campaign-table td {
+  vertical-align: middle;
+}
+
+.semester-survey-card .campaign-link-input {
+  min-width: 260px;
+}
+
+.semester-survey-card .campaign-row-actions .btn {
+  white-space: nowrap;
+}
+
+.semester-survey-card .campaign-row-actions a.btn {
+  text-decoration: none;
+}
+
+@media (max-width: 900px) {
+  .semester-survey-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .semester-survey-meta {
+    margin-left: 0;
+  }
+
+  .semester-survey-card .campaign-link-input {
+    min-width: 180px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Phiếu trả lời của một lớp học phần: thẻ tóm tắt, bảng phiếu và modal chỉ xem.
+   --------------------------------------------------------------------------- */
+
+.section-response-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.section-response-link .operations-count {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.section-response-link:hover .operations-count {
+  color: var(--operations-primary-dark);
+}
+
+.section-responses-back {
+  margin-bottom: 12px;
+}
+
+.section-responses-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--operations-border);
+  background: var(--operations-muted);
+}
+
+.section-responses-heading h2 {
+  margin: 0;
+  color: var(--operations-text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.section-responses-heading p {
+  margin: 4px 0 0;
+  color: var(--operations-text-muted);
+  font-size: 12px;
+}
+
+.section-responses-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.section-responses-stats > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--operations-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.response-score {
+  color: var(--operations-primary-dark);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.response-count {
+  display: inline-block;
+  min-width: 26px;
+  padding: 1px 6px;
+  border: 1px solid #d7e7ed;
+  border-radius: 999px;
+  background: #f2f8fa;
+  color: var(--operations-text);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.response-count.is-zero {
+  border-color: var(--operations-border);
+  background: #ffffff;
+  color: var(--operations-text-muted);
+  font-weight: 500;
+}
+
+.response-comment {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--operations-text);
+  font-size: 12px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.response-comment.is-empty {
+  color: var(--operations-text-muted);
+  font-style: italic;
+}
+
+.response-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.response-detail-meta {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border-left: 3px solid var(--operations-primary);
+  background: var(--operations-muted);
+  color: var(--operations-text-muted);
+  font-size: 12px;
+}
+
+.response-detail-meta strong {
+  color: var(--operations-text);
+}
+
+.response-detail-table {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.response-detail-table table {
+  width: 100%;
+}
+
+.response-detail-table th,
+.response-detail-table td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.response-detail-table thead th small {
+  display: block;
+  color: var(--operations-text-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.response-detail-question {
+  min-width: 240px;
+  text-align: left !important;
+}
+
+.response-detail-table input[type='radio'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--operations-primary);
+  cursor: not-allowed;
+}
+
+.response-detail-comment {
+  padding: 10px;
+  border: 1px solid var(--operations-border);
+  background: #ffffff;
+}
+
+.response-detail-comment strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--operations-text);
+  font-size: 12px;
+}
+
+.response-detail-comment p {
+  margin: 0;
+  color: var(--operations-text-muted);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .section-responses-summary {
+    flex-direction: column;
+  }
+}
+
+.section-survey-pagination {
+  border-top: 1px solid var(--operations-border);
+}

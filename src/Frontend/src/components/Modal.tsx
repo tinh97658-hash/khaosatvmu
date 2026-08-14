@@ -17,6 +17,8 @@ interface ConfirmDialogProps {
   title: string;
   recordName: string;
   confirmText?: string;
+  /** Cảnh báo thêm, ví dụ các bản ghi bị xóa lây theo ON DELETE CASCADE. */
+  warning?: React.ReactNode;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -139,13 +141,17 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   title,
   recordName,
   confirmText = 'Xóa',
+  warning,
 }) => (
   <Modal isOpen={isOpen} onClose={onClose} title={title}>
     <div className="catalog-confirm">
       <AlertTriangle aria-hidden="true" size={20} />
-      <p>
-        Bạn sắp xóa <strong>{recordName}</strong>. Thao tác này không thể hoàn tác.
-      </p>
+      <div>
+        <p>
+          Bạn sắp xóa <strong>{recordName}</strong>. Thao tác này không thể hoàn tác.
+        </p>
+        {warning && <p className="catalog-confirm__warning">{warning}</p>}
+      </div>
     </div>
     <div className="modal-footer catalog-form-actions">
       <button type="button" className="btn btn-secondary" onClick={onClose}>

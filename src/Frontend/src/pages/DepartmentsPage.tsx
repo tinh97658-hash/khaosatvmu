@@ -1,129 +1,189 @@
 import React, { useState } from 'react';
-import { Mail, Phone, Trash2 } from 'lucide-react';
+import { FileSpreadsheet, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
-import type { Department, Faculty } from '../types';
+import { DepartmentImportDialog } from '../components/DepartmentImportDialog';
+import { catalogErrorMessage, type CatalogImportResponse } from '../services/catalogApi';
+import type { ImportDepartmentRow } from '../utils/departmentImportExcel';
+import type { Course, Department, Faculty, Lecturer } from '../types';
 
 interface DepartmentsPageProps {
   departments: Department[];
   faculties: Faculty[];
-  onAddDepartment: (dept: Department) => void;
-  onDeleteDepartment: (id: string) => void;
+  courses: Course[];
+  lecturers: Lecturer[];
+  /** Trả về mã lỗi của API, null nếu lưu thành công. */
+  onSaveDepartment: (
+    departmentId: number | null,
+    departmentName: string,
+    facultyId: number | null,
+  ) => Promise<string | null>;
+  onDeleteDepartment: (departmentId: number) => Promise<string | null>;
+  onImportDepartments: (rows: ImportDepartmentRow[]) => Promise<CatalogImportResponse>;
 }
+
+interface DepartmentForm {
+  departmentName: string;
+  facultyId: string;
+}
+
+const emptyForm: DepartmentForm = { departmentName: '', facultyId: '' };
 
 export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
   departments,
   faculties,
-  onAddDepartment,
+  courses,
+  lecturers,
+  onSaveDepartment,
   onDeleteDepartment,
+  onImportDepartments,
 }) => {
   const [search, setSearch] = useState('');
   const [facultyFilter, setFacultyFilter] = useState('');
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [departmentToDelete, setDepartmentToDelete] = useState<Department | null>(null);
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
-  const [facultyId, setFacultyId] = useState('');
-  const [headOfDepartment, setHeadOfDepartment] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [totalLecturers, setTotalLecturers] = useState(10);
-  const [totalCourses, setTotalCourses] = useState(12);
+  const [editing, setEditing] = useState<Department | null>(null);
+  const [toDelete, setToDelete] = useState<Department | null>(null);
+  const [validationError, setValidationError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<DepartmentForm>(emptyForm);
 
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!code.trim() || !name.trim() || !facultyId) return;
+  const updateForm = (patch: Partial<DepartmentForm>) => setForm((prev) => ({ ...prev, ...patch }));
+  const facultyNameOf = (facultyId: number | null) =>
+    faculties.find((faculty) => faculty.facultyId === facultyId)?.facultyName ?? '—';
+  const courseCountOf = (departmentId: number) =>
+    courses.filter((course) => course.departmentId === departmentId).length;
+  const lecturerCountOf = (departmentId: number) =>
+    lecturers.filter((lecturer) => lecturer.departmentId === departmentId).length;
 
-    const faculty = faculties.find((item) => item.id === facultyId);
-    const newDepartment: Department = {
-      id: `dept-${Date.now()}`,
-      code: code.trim(),
-      name: name.trim(),
-      facultyId,
-      facultyName: faculty?.name ?? '',
-      headOfDepartment: headOfDepartment.trim() || 'Chưa cập nhật',
-      email: email.trim() || 'bomon@vimaru.edu.vn',
-      phone: phone.trim() || '0225 3829 000',
-      totalLecturers: Number(totalLecturers) || 5,
-      totalCourses: Number(totalCourses) || 8,
-    };
-
-    onAddDepartment(newDepartment);
-    toast.success('Đã thêm bộ môn', { description: newDepartment.name });
-    setIsModalOpen(false);
-    setCode('');
-    setName('');
-    setFacultyId('');
-    setHeadOfDepartment('');
-    setEmail('');
-    setPhone('');
+  const openCreate = () => {
+    setEditing(null);
+    setForm(emptyForm);
+    setValidationError('');
+    setIsModalOpen(true);
   };
 
-  const filteredDepartments = departments.filter((department) => {
-    const matchesSearch =
-      department.code.toLowerCase().includes(search.toLowerCase()) ||
-      department.name.toLowerCase().includes(search.toLowerCase()) ||
-      department.headOfDepartment.toLowerCase().includes(search.toLowerCase());
-    return matchesSearch && (!facultyFilter || department.facultyId === facultyFilter);
+  const openEdit = (department: Department) => {
+    setEditing(department);
+    setForm({
+      departmentName: department.departmentName,
+      facultyId: department.facultyId === null ? '' : String(department.facultyId),
+    });
+    setValidationError('');
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = form.departmentName.trim();
+
+    if (!name) {
+      setValidationError('Vui lòng nhập tên bộ môn.');
+      return;
+    }
+
+    setSaving(true);
+    const errorCode = await onSaveDepartment(
+      editing?.departmentId ?? null,
+      name,
+      form.facultyId ? Number(form.facultyId) : null
+    );
+    setSaving(false);
+    if (errorCode) {
+      setValidationError(catalogErrorMessage(errorCode));
+      return;
+    }
+
+    toast.success(editing ? 'Đã cập nhật bộ môn' : 'Đã thêm bộ môn', { description: name });
+    setIsModalOpen(false);
+    setEditing(null);
+    setForm(emptyForm);
+    setValidationError('');
+  };
+
+  const handleDelete = async () => {
+    if (!toDelete) return;
+    const errorCode = await onDeleteDepartment(toDelete.departmentId);
+    if (errorCode) {
+      toast.error('Không thể xóa bộ môn', { description: catalogErrorMessage(errorCode) });
+    } else {
+      toast.success('Đã xóa bộ môn', { description: toDelete.departmentName });
+    }
+    setToDelete(null);
+  };
+
+  const handleImport = async (rows: ImportDepartmentRow[]): Promise<CatalogImportResponse> => {
+    const result = await onImportDepartments(rows);
+    if (result.createdCount > 0) {
+      toast.success(`Đã import ${result.createdCount} bộ môn`, {
+        description: result.skippedCount > 0 ? `${result.skippedCount} dòng bị bỏ qua` : undefined,
+      });
+    } else {
+      toast.error('Không có dòng nào được thêm', {
+        description: `${result.skippedCount} dòng bị bỏ qua`,
+      });
+    }
+    return result;
+  };
+
+  const normalized = search.trim().toLowerCase();
+  const filtered = departments.filter((department) => {
+    const matchesSearch = !normalized || department.departmentName.toLowerCase().includes(normalized);
+    const matchesFaculty = !facultyFilter || String(department.facultyId) === facultyFilter;
+    return matchesSearch && matchesFaculty;
   });
 
   const columns: Column<Department>[] = [
     {
-      key: 'code',
-      header: 'Mã bộ môn',
-      width: '110px',
-      render: (row) => <span className="catalog-code">{row.code}</span>,
+      key: 'departmentName',
+      header: 'Tên bộ môn',
+      render: (row) => <span className="catalog-cell-primary">{row.departmentName}</span>,
     },
     {
-      key: 'name',
-      header: 'Tên bộ môn chuyên môn',
+      key: 'facultyId',
+      header: 'Khoa viện',
+      width: '280px',
+      render: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
+    },
+    {
+      key: 'courseCount',
+      header: 'Số môn học',
+      width: '120px',
       render: (row) => (
-        <div>
-          <div className="catalog-cell-primary">{row.name}</div>
-          <div className="catalog-cell-meta">Trưởng bộ môn: {row.headOfDepartment}</div>
-        </div>
+        <span className="catalog-cell-primary">{courseCountOf(row.departmentId)}</span>
       ),
     },
     {
-      key: 'facultyName',
-      header: 'Khoa / viện trực thuộc',
-      render: (row) => <span className="catalog-cell-primary">{row.facultyName}</span>,
-    },
-    {
-      key: 'contact',
-      header: 'Thông tin liên hệ',
+      key: 'lecturerCount',
+      header: 'Số giảng viên',
+      width: '130px',
       render: (row) => (
-        <div className="catalog-contact">
-          <span><Mail aria-hidden="true" size={13} />{row.email}</span>
-          <span><Phone aria-hidden="true" size={13} />{row.phone}</span>
-        </div>
-      ),
-    },
-    {
-      key: 'stats',
-      header: 'Quy mô đào tạo',
-      width: '140px',
-      render: (row) => (
-        <div className="catalog-stats">
-          <span className="catalog-stat-line"><strong>{row.totalLecturers}</strong> giảng viên</span>
-          <span className="catalog-stat-line"><strong>{row.totalCourses}</strong> học phần</span>
-        </div>
+        <span className="catalog-cell-primary">{lecturerCountOf(row.departmentId)}</span>
       ),
     },
     {
       key: 'actions',
-      header: 'Thao tác',
-      width: '64px',
+      header: 'Hành động',
+      width: '92px',
       render: (row) => (
         <div className="catalog-actions">
           <button
             type="button"
+            className="catalog-icon-button"
+            onClick={() => openEdit(row)}
+            aria-label={`Sửa ${row.departmentName}`}
+            title="Sửa"
+          >
+            <Pencil aria-hidden="true" size={15} />
+          </button>
+          <button
+            type="button"
             className="catalog-icon-button catalog-icon-button--danger"
-            onClick={() => setDepartmentToDelete(row)}
-            aria-label={`Xóa ${row.name}`}
-            title="Xóa bộ môn"
+            onClick={() => setToDelete(row)}
+            aria-label={`Xóa ${row.departmentName}`}
+            title="Xóa"
           >
             <Trash2 aria-hidden="true" size={15} />
           </button>
@@ -136,92 +196,102 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
     <div className="catalog-page">
       <header className="catalog-page-header">
         <div>
-          <h2>Danh mục bộ môn đào tạo</h2>
-          <p>Quản lý các bộ môn chuyên môn trực thuộc khoa và viện đào tạo.</p>
+          <h2>Danh mục bộ môn</h2>
+          <p>Bảng "Departments".</p>
         </div>
       </header>
 
       <DataTable
         columns={columns}
-        data={filteredDepartments}
-        searchPlaceholder="Tìm mã, tên hoặc trưởng bộ môn..."
+        data={filtered}
         searchValue={search}
         onSearchChange={setSearch}
+        searchPlaceholder="Tìm nhanh theo tên bộ môn..."
         filterOptions={[
           { label: 'Tất cả khoa / viện', value: '' },
-          ...faculties.map((faculty) => ({ label: faculty.name, value: faculty.id })),
+          ...faculties.map((faculty) => ({
+            label: faculty.facultyName,
+            value: String(faculty.facultyId),
+          })),
         ]}
         currentFilter={facultyFilter}
         onFilterChange={setFacultyFilter}
-        onAddNew={() => setIsModalOpen(true)}
+        onAddNew={openCreate}
         addNewLabel="Thêm bộ môn"
+        toolbarActions={(
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm catalog-add-button"
+            onClick={() => setIsImportOpen(true)}
+          >
+            <FileSpreadsheet aria-hidden="true" size={16} />
+            <span>Import Excel</span>
+          </button>
+        )}
         emptyMessage="Chưa có bộ môn nào trong danh mục."
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.departmentId)}
+        pageSize={20}
       />
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Thêm bộ môn chuyên môn">
-        <form className="catalog-form" onSubmit={handleSubmit}>
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editing ? 'Sửa bộ môn' : 'Thêm bộ môn'}
+      >
+        <form className="catalog-form" onSubmit={(event) => void handleSubmit(event)}>
+          {validationError && (
+            <div className="catalog-validation-error" role="alert">{validationError}</div>
+          )}
           <div className="form-group">
-            <label htmlFor="department-faculty">Khoa / viện trực thuộc</label>
-            <select id="department-faculty" value={facultyId} onChange={(event) => setFacultyId(event.target.value)} required>
-              <option value="">Chọn khoa / viện quản lý</option>
-              {faculties.map((faculty) => <option key={faculty.id} value={faculty.id}>{faculty.name} ({faculty.code})</option>)}
+            <label htmlFor="department-name">Tên bộ môn</label>
+            <input
+              id="department-name"
+              type="text"
+              placeholder="Bộ môn Công nghệ Phần mềm"
+              value={form.departmentName}
+              onChange={(event) => updateForm({ departmentName: event.target.value })}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="department-faculty">Khoa viện</label>
+            <select
+              id="department-faculty"
+              value={form.facultyId}
+              onChange={(event) => updateForm({ facultyId: event.target.value })}
+            >
+              <option value="">Chưa thuộc khoa viện</option>
+              {faculties.map((faculty) => (
+                <option key={faculty.facultyId} value={String(faculty.facultyId)}>
+                  {faculty.facultyName}
+                </option>
+              ))}
             </select>
           </div>
-          <div className="catalog-form-grid catalog-form-grid--code-name">
-            <div className="form-group">
-              <label htmlFor="department-code">Mã bộ môn</label>
-              <input id="department-code" type="text" placeholder="BM-CNPM" value={code} onChange={(event) => setCode(event.target.value)} required />
-            </div>
-            <div className="form-group">
-              <label htmlFor="department-name">Tên bộ môn chuyên môn</label>
-              <input id="department-name" type="text" placeholder="Bộ môn Công nghệ Phần mềm" value={name} onChange={(event) => setName(event.target.value)} required />
-            </div>
-          </div>
-          <div className="form-group">
-            <label htmlFor="department-head">Trưởng bộ môn</label>
-            <input id="department-head" type="text" placeholder="TS. Nguyễn Văn A" value={headOfDepartment} onChange={(event) => setHeadOfDepartment(event.target.value)} required />
-          </div>
-          <div className="catalog-form-grid catalog-form-grid--2">
-            <div className="form-group">
-              <label htmlFor="department-email">Email liên hệ</label>
-              <input id="department-email" type="email" placeholder="bomon@vimaru.edu.vn" value={email} onChange={(event) => setEmail(event.target.value)} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="department-phone">Số điện thoại</label>
-              <input id="department-phone" type="tel" placeholder="0225 3829 xxx" value={phone} onChange={(event) => setPhone(event.target.value)} />
-            </div>
-          </div>
-          <div className="catalog-form-grid catalog-form-grid--2">
-            <div className="form-group">
-              <label htmlFor="department-lecturers">Số lượng giảng viên</label>
-              <input id="department-lecturers" type="number" value={totalLecturers} onChange={(event) => setTotalLecturers(Number(event.target.value))} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="department-courses">Số học phần quản lý</label>
-              <input id="department-courses" type="number" value={totalCourses} onChange={(event) => setTotalCourses(Number(event.target.value))} />
-            </div>
-          </div>
           <div className="modal-footer catalog-form-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>Hủy</button>
-            <button type="submit" className="btn btn-primary">Lưu bộ môn</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>
+              Hủy
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Đang lưu...' : editing ? 'Cập nhật' : 'Lưu'}
+            </button>
           </div>
         </form>
       </Modal>
 
+      <DepartmentImportDialog
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImport={handleImport}
+      />
+
       <ConfirmDialog
-        isOpen={departmentToDelete !== null}
-        onClose={() => setDepartmentToDelete(null)}
-        onConfirm={() => {
-          if (departmentToDelete) {
-            onDeleteDepartment(departmentToDelete.id);
-            toast.success('Đã xóa bộ môn', { description: departmentToDelete.name });
-          }
-          setDepartmentToDelete(null);
-        }}
+        isOpen={toDelete !== null}
+        onClose={() => setToDelete(null)}
+        onConfirm={() => void handleDelete()}
         title="Xóa bộ môn?"
-        recordName={departmentToDelete?.name ?? ''}
-        confirmText="Xóa bộ môn"
+        recordName={toDelete?.departmentName ?? ''}
+        confirmText="Xóa"
       />
     </div>
   );
