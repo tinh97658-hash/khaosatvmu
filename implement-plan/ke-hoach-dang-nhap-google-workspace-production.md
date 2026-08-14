@@ -1030,3 +1030,8 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 - Replaced the header profile combobox with a user menu containing change-session and logout actions.
 - Added a shared profile dialog with a blurred workspace backdrop for initial selection and profile switching.
 - Verified pending-profile access, pre-selection `401`, responsive layouts and production builds without a schema change.
+
+### Implementation status - Local database compose
+
+- Removed pgAdmin from the shared Docker Compose stack; the default stack now runs only PostgreSQL.
+- Removed the tracked pgAdmin server file and ignored local copies for developers who still use pgAdmin.

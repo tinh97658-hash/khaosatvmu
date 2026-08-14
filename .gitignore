@@ -111,3 +111,6 @@ $RECYCLE.BIN/
 tmp/
 temp/
 *.tmp
+
+# Optional local database administration tools
+pgadmin-servers.json
