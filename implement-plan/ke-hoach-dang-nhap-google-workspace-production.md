@@ -1035,3 +1035,8 @@ Google Account, còn hệ thống tự quản lý allowlist, profile, role và p
 
 - Removed pgAdmin from the shared Docker Compose stack; the default stack now runs only PostgreSQL.
 - Removed the tracked pgAdmin server file and ignored local copies for developers who still use pgAdmin.
+
+### Implementation status - Local database synchronization
+
+- Applied all eight pending EF Core migrations to the local PostgreSQL database.
+- Confirmed the migration history is current, including the survey template and survey run schemas.
