@@ -281,6 +281,8 @@ export interface SystemStats {
   totalClasses: number;
   activeCampaigns: number;
   totalResponses: number;
+  /** Tổng sĩ số các lớp đã được phát phiếu, dùng để tính tỷ lệ hoàn thành. */
+  totalTargetResponses: number;
   overallSatisfaction: number; // e.g. 4.65 / 5.0
   qrScanCount: number;
 }

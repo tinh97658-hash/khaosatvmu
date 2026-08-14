@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import {
   Bell,
   CheckCircle2,
+  CircleAlert,
   ClipboardCheck,
   Download,
+  LoaderCircle,
   Target,
   TriangleAlert,
   UserRound,
@@ -11,43 +13,56 @@ import {
 import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
-import type { Course, CourseSection, Lecturer } from '../types';
+import type { CourseSectionSurvey, SemesterSurvey } from '../types';
 import '../styles/survey-operations.css';
 
 interface SurveyProgressPageProps {
-  sections: CourseSection[];
-  courses: Course[];
-  lecturers: Lecturer[];
+  semesterSurveys: SemesterSurvey[];
+  sectionSurveys: CourseSectionSurvey[];
+  isLoading: boolean;
+  loadError: string | null;
+}
+
+interface ProgressItem {
+  id: string;
+  code: string;
+  name: string;
+  groupCode: string;
+  lecturerName: string;
+  semester: string;
+  targetCount: number;
+  actualCount: number;
+  rate: number;
+  status: 'Hoàn thành' | 'Đang thu' | 'Chậm tiến độ';
 }
 
 export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
-  sections,
-  courses,
-  lecturers,
+  semesterSurveys,
+  sectionSurveys,
+  isLoading,
+  loadError,
 }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
-  // Mỗi lớp học phần là một dòng theo dõi. Số phiếu đã nộp lấy từ bảng
-  // "SurveyResponses", chưa có API nên tạm là 0.
-  const progressItems = sections.map((section) => {
-    const course = courses.find((item) => item.courseId === section.courseId);
-    const lecturerName =
-      lecturers.find((lecturer) => lecturer.lecturerId === section.lecturerId)?.fullName ??
-      'Chưa phân công';
-    const actualCount = 0;
-    const rate = Math.round((actualCount / (section.classSize || 1)) * 100);
+  // Mỗi lớp học phần đã được phát phiếu là một dòng theo dõi. Số phiếu đã nộp
+  // là "CourseSectionSurveys".ResponseCount do API khảo sát đếm từ bảng
+  // "SurveyResponses", không phải số tạm.
+  const progressItems: ProgressItem[] = sectionSurveys.map((section) => {
+    const survey = semesterSurveys.find(
+      (item) => item.semesterSurveyId === section.semesterSurveyId
+    );
+    const rate = Math.round((section.responseCount / (section.classSize || 1)) * 100);
 
     return {
-      id: String(section.courseSectionId),
+      id: String(section.courseSectionSurveyId),
       code: section.sectionName,
-      name: course?.courseName ?? '—',
-      type: 'Học phần' as const,
+      name: section.courseName,
       groupCode: section.sectionName,
-      lecturerName,
-      semester: `SemesterId ${section.semesterId}`,
+      lecturerName: section.lecturerName || 'Chưa phân công',
+      semester: survey ? `${survey.semesterName} - ${survey.academicYearName}` : '—',
       targetCount: section.classSize,
-      actualCount,
+      actualCount: section.responseCount,
       rate,
       status: rate >= 80 ? 'Hoàn thành' : rate >= 40 ? 'Đang thu' : 'Chậm tiến độ',
     };
@@ -96,7 +111,7 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
     });
   };
 
-  const columns: Column<(typeof progressItems)[0]>[] = [
+  const columns: Column<ProgressItem>[] = [
     {
       key: 'code',
       header: 'Mã Lớp / Nhóm N01-N02',
@@ -193,57 +208,73 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
 
   return (
     <div className="survey-operations-page operations-table-page survey-progress-page">
-      <section className="operations-metrics" aria-label="Tổng quan tiến độ">
-        <div className="operation-metric">
-          <span className="operation-metric-icon"><Target className="operation-icon" aria-hidden="true" /></span>
-          <span className="operation-metric-label">Tổng chỉ tiêu phiếu</span>
-          <strong className="operation-metric-value">{totalTarget.toLocaleString()}</strong>
-          <span className="operation-metric-note">Theo sĩ số tất cả nhóm lớp</span>
+      {loadError && (
+        <div className="operations-feedback operations-feedback--error" role="alert">
+          <CircleAlert aria-hidden="true" />
+          <span>{loadError}</span>
         </div>
-        <div className="operation-metric operation-metric--success">
-          <span className="operation-metric-icon"><ClipboardCheck className="operation-icon" aria-hidden="true" /></span>
-          <span className="operation-metric-label">Phiếu đã thu</span>
-          <strong className="operation-metric-value">{totalActual.toLocaleString()}</strong>
-          <span className="operation-metric-note">Đạt {overallRate}% tổng chỉ tiêu</span>
-        </div>
-        <div className="operation-metric operation-metric--warning">
-          <span className="operation-metric-icon"><CheckCircle2 className="operation-icon" aria-hidden="true" /></span>
-          <span className="operation-metric-label">Nhóm đạt từ 80%</span>
-          <strong className="operation-metric-value">{completedCount} / {progressItems.length}</strong>
-          <span className="operation-metric-note">Nhóm hoàn thành thu phiếu</span>
-        </div>
-        <div className="operation-metric operation-metric--danger">
-          <span className="operation-metric-icon"><TriangleAlert className="operation-icon" aria-hidden="true" /></span>
-          <span className="operation-metric-label">Nhóm dưới 40%</span>
-          <strong className="operation-metric-value">{laggingCount}</strong>
-          <span className="operation-metric-note">Cần gửi nhắc nhở</span>
-        </div>
-      </section>
+      )}
 
-      {/* Main Table */}
-      <DataTable
-        columns={columns}
-        data={filtered}
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Tìm mã lớp HP, nhóm N01/N02, tên môn hoặc giảng viên..."
-        filterOptions={[
-          { label: '-- Tất cả tiến độ --', value: '' },
-          { label: 'Hoàn thành (≥80%)', value: 'Hoàn thành' },
-          { label: 'Đang thu (40-80%)', value: 'Đang thu' },
-          { label: 'Chậm tiến độ (<40%)', value: 'Chậm tiến độ' },
-        ]}
-        currentFilter={statusFilter}
-        onFilterChange={setStatusFilter}
-        toolbarActions={(
-          <button className="btn btn-primary btn-sm" onClick={handleExportCsv}>
-            <Download className="operation-icon" aria-hidden="true" />
-            Xuất báo cáo Excel
-          </button>
-        )}
-        emptyMessage="Không tìm thấy lớp hoặc nhóm phù hợp."
-        keyExtractor={(item) => item.id}
-      />
+      {isLoading ? (
+        <div className="operations-empty" role="status">
+          <LoaderCircle className="operation-icon auth-spin" aria-hidden="true" />
+          <strong>Đang tải tiến độ thu phiếu...</strong>
+        </div>
+      ) : (
+        <>
+          <section className="operations-metrics" aria-label="Tổng quan tiến độ">
+            <div className="operation-metric">
+              <span className="operation-metric-icon"><Target className="operation-icon" aria-hidden="true" /></span>
+              <span className="operation-metric-label">Tổng chỉ tiêu phiếu</span>
+              <strong className="operation-metric-value">{totalTarget.toLocaleString()}</strong>
+              <span className="operation-metric-note">Theo sĩ số tất cả nhóm lớp</span>
+            </div>
+            <div className="operation-metric operation-metric--success">
+              <span className="operation-metric-icon"><ClipboardCheck className="operation-icon" aria-hidden="true" /></span>
+              <span className="operation-metric-label">Phiếu đã thu</span>
+              <strong className="operation-metric-value">{totalActual.toLocaleString()}</strong>
+              <span className="operation-metric-note">Đạt {overallRate}% tổng chỉ tiêu</span>
+            </div>
+            <div className="operation-metric operation-metric--warning">
+              <span className="operation-metric-icon"><CheckCircle2 className="operation-icon" aria-hidden="true" /></span>
+              <span className="operation-metric-label">Nhóm đạt từ 80%</span>
+              <strong className="operation-metric-value">{completedCount} / {progressItems.length}</strong>
+              <span className="operation-metric-note">Nhóm hoàn thành thu phiếu</span>
+            </div>
+            <div className="operation-metric operation-metric--danger">
+              <span className="operation-metric-icon"><TriangleAlert className="operation-icon" aria-hidden="true" /></span>
+              <span className="operation-metric-label">Nhóm dưới 40%</span>
+              <strong className="operation-metric-value">{laggingCount}</strong>
+              <span className="operation-metric-note">Cần gửi nhắc nhở</span>
+            </div>
+          </section>
+
+          {/* Main Table */}
+          <DataTable
+            columns={columns}
+            data={filtered}
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Tìm mã lớp HP, nhóm N01/N02, tên môn hoặc giảng viên..."
+            filterOptions={[
+              { label: '-- Tất cả tiến độ --', value: '' },
+              { label: 'Hoàn thành (≥80%)', value: 'Hoàn thành' },
+              { label: 'Đang thu (40-80%)', value: 'Đang thu' },
+              { label: 'Chậm tiến độ (<40%)', value: 'Chậm tiến độ' },
+            ]}
+            currentFilter={statusFilter}
+            onFilterChange={setStatusFilter}
+            toolbarActions={(
+              <button className="btn btn-primary btn-sm" onClick={handleExportCsv}>
+                <Download className="operation-icon" aria-hidden="true" />
+                Xuất báo cáo Excel
+              </button>
+            )}
+            emptyMessage="Chưa có lớp học phần nào được phát phiếu khảo sát."
+            keyExtractor={(item) => item.id}
+          />
+        </>
+      )}
     </div>
   );
 };

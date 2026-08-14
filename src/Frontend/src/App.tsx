@@ -39,6 +39,7 @@ import type { ImportDepartmentRow } from './utils/departmentImportExcel';
 import type { ImportMajorRow } from './utils/majorImportExcel';
 import type { ImportCourseRow } from './utils/courseImportExcel';
 import type { ImportLecturerRow } from './utils/lecturerImportExcel';
+import { surveyApi, surveyErrorMessage } from './services/surveyApi';
 import type {
   Faculty,
   Department,
@@ -46,9 +47,11 @@ import type {
   Major,
   Course,
   CourseSection,
+  CourseSectionSurvey,
   Curriculum,
   CurriculumCourse,
   Criterion,
+  SemesterSurvey,
   SurveyCampaign,
   SystemStats,
 } from './types';
@@ -120,7 +123,43 @@ function DashboardApp() {
   const [curriculumCourses] = useState<CurriculumCourse[]>([]);
   const [criteria, setCriteria] = useState<Criterion[]>([]);
   const [campaigns, setCampaigns] = useState<SurveyCampaign[]>([]);
-  const [surveyCounters, setSurveyCounters] = useState({ totalResponses: 0, qrScanCount: 0 });
+  const [surveyCounters, setSurveyCounters] = useState({ qrScanCount: 0 });
+
+  // Số phiếu đã thu nằm ở "CourseSectionSurveys". Nạp một lần tại đây để bảng
+  // điều khiển và trang tiến độ thu phiếu luôn đọc cùng một con số.
+  const [semesterSurveys, setSemesterSurveys] = useState<SemesterSurvey[]>([]);
+  const [sectionSurveys, setSectionSurveys] = useState<CourseSectionSurvey[]>([]);
+  const [surveyLoading, setSurveyLoading] = useState(true);
+  const [surveyLoadError, setSurveyLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const surveys = await surveyApi.semesterSurveys();
+        const sectionLists = await Promise.all(
+          surveys.map((survey) => surveyApi.courseSectionSurveys(survey.semesterSurveyId))
+        );
+        if (cancelled) return;
+        setSemesterSurveys(surveys);
+        setSectionSurveys(sectionLists.flat());
+        setSurveyLoadError(null);
+      } catch (error) {
+        if (cancelled) return;
+        setSurveyLoadError(
+          surveyErrorMessage(error instanceof ApiError ? error.errorCode : null)
+        );
+      } finally {
+        if (!cancelled) setSurveyLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const stats: SystemStats = useMemo(
     () => ({
@@ -129,11 +168,12 @@ function DashboardApp() {
       totalCourses: courses.length,
       totalClasses: sections.length,
       activeCampaigns: campaigns.filter((campaign) => campaign.status === 'Đang diễn ra').length,
-      totalResponses: surveyCounters.totalResponses,
+      totalResponses: sectionSurveys.reduce((total, item) => total + item.responseCount, 0),
+      totalTargetResponses: sectionSurveys.reduce((total, item) => total + item.classSize, 0),
       overallSatisfaction: 0,
       qrScanCount: surveyCounters.qrScanCount,
     }),
-    [faculties, majors, courses, sections, campaigns, surveyCounters]
+    [faculties, majors, courses, sections, campaigns, sectionSurveys, surveyCounters]
   );
 
   // QR Modal state
@@ -386,10 +426,7 @@ function DashboardApp() {
   };
 
   const handleSurveySubmitted = () => {
-    setSurveyCounters((prev) => ({
-      totalResponses: prev.totalResponses + 1,
-      qrScanCount: prev.qrScanCount + 1,
-    }));
+    setSurveyCounters((prev) => ({ qrScanCount: prev.qrScanCount + 1 }));
   };
 
   // Render Student View Mode
@@ -440,9 +477,10 @@ function DashboardApp() {
 
           {currentTab === 'progress' && (
             <SurveyProgressPage
-              sections={sections}
-              courses={courses}
-              lecturers={lecturers}
+              semesterSurveys={semesterSurveys}
+              sectionSurveys={sectionSurveys}
+              isLoading={surveyLoading}
+              loadError={surveyLoadError}
             />
           )}
 
