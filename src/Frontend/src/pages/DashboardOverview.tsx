@@ -72,6 +72,14 @@ const getProgress = (campaign: SurveyCampaign) => {
   ));
 };
 
+/** Tỷ lệ phiếu đã thu trên tổng sĩ số các lớp đã phát phiếu. */
+const formatCompletionRate = (stats: SystemStats) => {
+  if (stats.totalTargetResponses <= 0) return '0';
+  return ((stats.totalResponses / stats.totalTargetResponses) * 100).toLocaleString('vi-VN', {
+    maximumFractionDigits: 2,
+  });
+};
+
 const getStatusClassName = (status: SurveyCampaign['status']) => {
   if (status === 'Đang diễn ra') return 'is-active';
   if (status === 'Sắp diễn ra') return 'is-upcoming';
@@ -134,7 +142,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             title="Phiếu đã nộp"
             value={stats.totalResponses.toLocaleString('vi-VN')}
             icon="responses"
-            subtitle="Tỷ lệ hoàn thành 92,4%"
+            subtitle={`Tỷ lệ hoàn thành ${formatCompletionRate(stats)}%`}
           />
           <StatCard
             title="Điểm hài lòng"
