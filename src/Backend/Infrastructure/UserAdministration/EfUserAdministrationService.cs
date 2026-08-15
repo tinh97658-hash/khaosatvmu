@@ -377,6 +377,85 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
         return new AdminPage<AdminAuditLogDto>(items, page, pageSize, totalCount);
     }
 
+    public async Task<IReadOnlyList<PermissionDto>> GetPermissionsAsync(CancellationToken cancellationToken = default) =>
+        await db.Permissions
+            .AsNoTracking()
+            .OrderBy(x => x.Code)
+            .Select(x => new PermissionDto(x.Id, x.Code, x.Name, x.Description))
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<RolePermissionMatrixDto>> GetRolePermissionMatrixAsync(CancellationToken cancellationToken = default)
+    {
+        var roles = await db.Roles
+            .AsNoTracking()
+            .OrderBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+
+        var allPermissions = await db.Permissions
+            .AsNoTracking()
+            .OrderBy(x => x.Code)
+            .ToListAsync(cancellationToken);
+
+        var grantedPairs = await db.RolePermissions
+            .AsNoTracking()
+            .Where(x => x.IsGranted)
+            .Select(x => new { x.RoleId, x.PermissionId })
+            .ToListAsync(cancellationToken);
+
+        var grantedSet = grantedPairs
+            .Select(x => (x.RoleId, x.PermissionId))
+            .ToHashSet();
+
+        return roles.Select(role => new RolePermissionMatrixDto(
+            role.Id,
+            role.Code,
+            role.Name,
+            allPermissions.Select(permission => new RolePermissionStatusDto(
+                permission.Id,
+                permission.Code,
+                permission.Name,
+                grantedSet.Contains((role.Id, permission.Id))
+            )).ToList()
+        )).ToList();
+    }
+
+    public async Task UpdateRolePermissionsAsync(
+        Guid roleId,
+        IReadOnlyList<RolePermissionGrantDto> grants,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = await db.RolePermissions
+            .Where(x => x.RoleId == roleId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var grant in grants)
+        {
+            var record = existing.FirstOrDefault(x => x.PermissionId == grant.PermissionId);
+            if (record is null)
+            {
+                if (grant.IsGranted)
+                {
+                    db.RolePermissions.Add(new Domain.RolePermission
+                    {
+                        Id = Guid.NewGuid(),
+                        RoleId = roleId,
+                        PermissionId = grant.PermissionId,
+                        IsGranted = true,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+            else
+            {
+                record.IsGranted = grant.IsGranted;
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+
+
     private async Task<string?> ValidateProfileCommandAsync(
         Guid userId,
         Guid? profileId,

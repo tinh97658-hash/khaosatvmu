@@ -1,16 +1,20 @@
 using API.Auth;
 using API.Catalog;
+using API.Reports;
 using API.Surveys;
 using API.UserAdministration;
 using Application.Auth;
 using Application.Catalog;
+using Application.Reports;
 using Application.Surveys;
 using Application.UserAdministration;
 using Infrastructure.Auth;
 using Infrastructure.Catalog;
+using Infrastructure.Reports;
 using Infrastructure.Surveys;
 using Infrastructure.UserAdministration;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Infrastructure.Persistence;
 
@@ -21,11 +25,27 @@ if (string.Equals(environmentName, Environments.Development, StringComparison.Or
     DotNetEnv.Env.NoClobber().TraversePath().Load();
 }
 
+// High-Concurrency ThreadPool Warmup for 1,000+ Concurrent Requests
+ThreadPool.SetMinThreads(300, 300);
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
+builder.Services.AddMemoryCache();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// High-Throughput Rate Limiter for 1000+ Concurrent Students
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddConcurrencyLimiter("PublicSurveyConcurrency", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = 800;
+        limiterOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+        limiterOptions.QueueLimit = 500;
+    });
+});
 
 builder.Services.AddApplicationAuthentication(builder.Configuration, builder.Environment);
 builder.Services.AddAntiforgery(options =>
@@ -48,6 +68,8 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AuthPolicies.SurveyManageInOrganization, policy =>
         policy.RequireAuthenticatedUser().AddRequirements(
             new PermissionRequirement("SURVEY_MANAGE", "organizationUnitCode")));
+    options.AddPolicy(AuthPolicies.ViewReports, policy =>
+        policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement("VIEW_REPORTS")));
 });
 
 builder.Services.AddScoped<IAuthService, EfAuthService>();
@@ -55,6 +77,7 @@ builder.Services.AddScoped<IAuthSessionService, EfAuthSessionService>();
 builder.Services.AddScoped<IUserAdministrationService, EfUserAdministrationService>();
 builder.Services.AddScoped<ICatalogService, EfCatalogService>();
 builder.Services.AddScoped<ISurveyService, EfSurveyService>();
+builder.Services.AddScoped<IReportService, EfReportService>();
 builder.Services.AddScoped<ApplicationCookieEvents>();
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
@@ -72,6 +95,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -85,6 +109,7 @@ app.MapAuthEndpoints();
 app.MapUserAdministrationEndpoints();
 app.MapCatalogEndpoints();
 app.MapSurveyEndpoints();
+app.MapReportEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
 

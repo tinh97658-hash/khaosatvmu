@@ -13,6 +13,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Save,
   Search,
   ShieldCheck,
   ShieldPlus,
@@ -31,11 +32,12 @@ import type {
   AdminProfile,
   AdminRole,
   AdminUser,
+  RolePermissionMatrix,
   SaveAdminProfile,
 } from '../types';
 import '../styles/auth-admin.css';
 
-type AdminView = 'users' | 'audit';
+type AdminView = 'users' | 'audit' | 'permissions';
 type StatusConfirmation =
   | { type: 'user'; item: AdminUser }
   | { type: 'profile'; item: AdminProfile }
@@ -111,6 +113,8 @@ export function UsersAdminPage() {
   const [profileForm, setProfileForm] = useState<SaveAdminProfile>(emptyProfile);
   const [showProfileForm, setShowProfileForm] = useState(false);
   const [statusConfirmation, setStatusConfirmation] = useState<StatusConfirmation>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<RolePermissionMatrix[]>([]);
+  const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
 
   const activeFilter = statusFilter === 'all' ? null : statusFilter === 'active';
 
@@ -139,6 +143,18 @@ export function UsersAdminPage() {
     }
   }, [auditPageNumber]);
 
+  const loadPermissions = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setPermissionMatrix(await adminApi.rolePermissions());
+    } catch (requestError) {
+      setError(messageFrom(requestError));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const loadRoles = useCallback(async () => {
     try {
       setRoles(await adminApi.roles());
@@ -160,6 +176,44 @@ export function UsersAdminPage() {
   useEffect(() => {
     if (view === 'audit') void loadAudit();
   }, [loadAudit, view]);
+
+  useEffect(() => {
+    if (view === 'permissions') void loadPermissions();
+  }, [loadPermissions, view]);
+
+  const handleTogglePermission = (roleId: string, permissionId: string) => {
+    setPermissionMatrix((prev) =>
+      prev.map((role) => {
+        if (role.roleId !== roleId) return role;
+        return {
+          ...role,
+          permissions: role.permissions.map((p) =>
+            p.permissionId === permissionId ? { ...p, isGranted: !p.isGranted } : p,
+          ),
+        };
+      }),
+    );
+  };
+
+  const handleSaveRolePermissions = async (roleId: string) => {
+    const role = permissionMatrix.find((r) => r.roleId === roleId);
+    if (!role) return;
+    setSavingRoleId(roleId);
+    setError(null);
+    try {
+      const grants = role.permissions.map((p) => ({
+        permissionId: p.permissionId,
+        isGranted: p.isGranted,
+      }));
+      await adminApi.updateRolePermissions(roleId, grants);
+      toast.success('Đã cập nhật phân quyền', { description: `Vai trò: ${role.roleName}` });
+    } catch (requestError) {
+      setError(messageFrom(requestError));
+    } finally {
+      setSavingRoleId(null);
+    }
+  };
+
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil((usersPage?.totalCount ?? 0) / (usersPage?.pageSize ?? 20))),
@@ -282,8 +336,10 @@ export function UsersAdminPage() {
     if (roles.length === 0) void loadRoles();
     if (view === 'users') {
       void loadUsers();
-    } else {
+    } else if (view === 'audit') {
       void loadAudit();
+    } else {
+      void loadPermissions();
     }
   };
 
@@ -319,7 +375,20 @@ export function UsersAdminPage() {
             <FileClock aria-hidden="true" />
             Nhật ký hệ thống
           </button>
+          <button
+            id="admin-permissions-tab"
+            type="button"
+            className={view === 'permissions' ? 'active' : ''}
+            onClick={() => { setView('permissions'); setError(null); }}
+            role="tab"
+            aria-selected={view === 'permissions'}
+            aria-controls="admin-permissions-panel"
+          >
+            <ShieldCheck aria-hidden="true" />
+            Phân quyền Module
+          </button>
         </div>
+
         {view === 'users' && (
           <div className="admin-view-actions">
             <button
@@ -501,7 +570,7 @@ export function UsersAdminPage() {
             </div>
           </div>
         </section>
-      ) : (
+      ) : view === 'audit' ? (
         <section
           id="admin-audit-panel"
           className="admin-table-section"
@@ -525,10 +594,11 @@ export function UsersAdminPage() {
                 aria-label="Làm mới nhật ký"
                 title="Làm mới nhật ký"
               >
-                <RefreshCw aria-hidden="true" />
+                <RefreshCw className={loading ? 'auth-spin' : ''} aria-hidden="true" />
               </button>
             </div>
           </div>
+
           <div className="table-container admin-table-container" aria-busy={loading}>
             <table className="vmu-table admin-audit-table">
               <caption className="admin-visually-hidden">Nhật ký xác thực và thao tác quản trị</caption>
@@ -537,7 +607,7 @@ export function UsersAdminPage() {
                   <th scope="col">Thời gian</th>
                   <th scope="col">Sự kiện</th>
                   <th scope="col">Tài khoản</th>
-                  <th scope="col">Đối tượng</th>
+                  <th scope="col">Chi tiết</th>
                 </tr>
               </thead>
               <tbody>
@@ -548,20 +618,20 @@ export function UsersAdminPage() {
                       <strong>Đang tải nhật ký hệ thống</strong>
                     </td>
                   </tr>
-                ) : auditPage?.items.length ? auditPage.items.map((log) => (
-                  <tr key={log.id}>
-                    <td className="admin-date-cell">{formatDate(log.createdAt)}</td>
-                    <td><span className="admin-event-label">{eventNames[log.event] ?? log.event}</span></td>
-                    <td>{log.email ?? 'Không xác định'}</td>
-                    <td>
-                      <code>
-                        {log.profileId
-                          ? `Profile ${log.profileId.slice(0, 8)}`
-                          : `User ${log.userId?.slice(0, 8) ?? '-'}`}
-                      </code>
-                    </td>
-                  </tr>
-                )) : (
+                ) : auditPage?.items.length ? (
+                  auditPage.items.map((log) => (
+                    <tr key={log.id}>
+                      <td className="admin-date-cell">{formatDate(log.createdAt)}</td>
+                      <td>
+                        <span className="badge badge-neutral">
+                          {eventNames[log.event] ?? log.event}
+                        </span>
+                      </td>
+                      <td>{log.email ?? 'Hệ thống'}</td>
+                      <td className="admin-audit-metadata">{log.metadata ?? '-'}</td>
+                    </tr>
+                  ))
+                ) : (
                   <tr>
                     <td colSpan={4} className="admin-state-row admin-empty-row">
                       <FileClock aria-hidden="true" />
@@ -573,6 +643,7 @@ export function UsersAdminPage() {
               </tbody>
             </table>
           </div>
+
           <div className="pagination admin-pagination">
             <div>Trang <strong>{auditPageNumber}</strong> / {auditTotalPages}</div>
             <div className="admin-pagination-actions">
@@ -599,7 +670,95 @@ export function UsersAdminPage() {
             </div>
           </div>
         </section>
+      ) : (
+        <section
+          id="admin-permissions-panel"
+          className="admin-table-section"
+          role="tabpanel"
+          aria-labelledby="admin-permissions-tab"
+        >
+          <div className="admin-audit-heading">
+            <div>
+              <h3>Phân quyền Truy cập & Module Báo cáo</h3>
+              <p>Quản trị viên có thể bật/tắt quyền hạn (Permissions) cho từng vai trò (Roles) trong hệ thống.</p>
+            </div>
+            <div className="admin-audit-actions">
+              <button
+                type="button"
+                className="admin-icon-button"
+                onClick={() => void loadPermissions()}
+                disabled={loading}
+                aria-label="Tải lại phân quyền"
+                title="Tải lại phân quyền"
+              >
+                <RefreshCw className={loading ? 'auth-spin' : ''} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+
+          <div className="admin-table-shell" style={{ overflowX: 'auto' }}>
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th style={{ minWidth: '180px' }}>Vai trò (Role)</th>
+                  {permissionMatrix[0]?.permissions.map((perm) => (
+                    <th key={perm.permissionId} style={{ textAlign: 'center', minWidth: '130px' }} title={perm.permissionCode}>
+                      <div style={{ fontWeight: 600, fontSize: '12px' }}>{perm.permissionName}</div>
+                      <div style={{ fontSize: '10px', color: 'var(--ops-muted)', fontWeight: 400 }}>{perm.permissionCode}</div>
+                    </th>
+                  ))}
+                  <th style={{ width: '100px', textAlign: 'center' }}>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {permissionMatrix.map((role) => (
+                  <tr key={role.roleId}>
+                    <td>
+                      <div style={{ fontWeight: 650, fontSize: '13px', color: 'var(--ops-text)' }}>{role.roleName}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--ops-muted)' }}>{role.roleCode}</div>
+                    </td>
+                    {role.permissions.map((perm) => (
+                      <td key={perm.permissionId} style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={perm.isGranted}
+                          onChange={() => handleTogglePermission(role.roleId, perm.permissionId)}
+                          style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--ops-primary)' }}
+                          aria-label={`${role.roleName} - ${perm.permissionName}`}
+                        />
+                      </td>
+                    ))}
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: '5px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        disabled={savingRoleId === role.roleId}
+                        onClick={() => void handleSaveRolePermissions(role.roleId)}
+                      >
+                        {savingRoleId === role.roleId ? (
+                          <RefreshCw className="auth-spin" style={{ width: '14px', height: '14px' }} />
+                        ) : (
+                          <Save style={{ width: '14px', height: '14px' }} />
+                        )}
+                        Lưu
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {permissionMatrix.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={10} style={{ textAlign: 'center', padding: '32px' }}>
+                      Chưa có dữ liệu phân quyền.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
+
 
       <Modal
         isOpen={isAddUserOpen}

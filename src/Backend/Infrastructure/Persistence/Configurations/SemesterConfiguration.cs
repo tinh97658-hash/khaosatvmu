@@ -16,6 +16,9 @@ public class SemesterConfiguration : IEntityTypeConfiguration<Semester>
             .HasMaxLength(100)
             .IsRequired();
 
+        // Database Indexes for Performance Optimization
+        builder.HasIndex(x => x.AcademicYearId);
+
         builder.HasMany(x => x.SurveyCampaigns)
             .WithOne(x => x.Semester)
             .HasForeignKey(x => x.SemesterId)

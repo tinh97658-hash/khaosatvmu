@@ -58,8 +58,21 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
     const load = async () => {
       setLoading(true);
       try {
-        setSurvey(await publicSurveyApi.survey(linkToken));
+        const loadedSurvey = await publicSurveyApi.survey(linkToken);
+        setSurvey(loadedSurvey);
         setLoadError(null);
+
+        // Khôi phục bài làm từ LocalStorage nếu có
+        try {
+          const draftRaw = localStorage.getItem(`survey_draft_${linkToken}`);
+          if (draftRaw) {
+            const draft = JSON.parse(draftRaw);
+            if (draft.answers) setAnswers(draft.answers);
+            if (draft.comments) setComments(draft.comments);
+          }
+        } catch {
+          // Bỏ qua nếu localStorage bị ngắt hoặc lỗi parse
+        }
       } catch (error) {
         setLoadError(messageFrom(error));
       } finally {
@@ -68,6 +81,21 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
     };
     void load();
   }, [linkToken]);
+
+  // Tự động lưu tiến độ vào LocalStorage
+  useEffect(() => {
+    if (!survey || submitted) return;
+    try {
+      if (Object.keys(answers).length > 0 || comments.trim()) {
+        localStorage.setItem(
+          `survey_draft_${linkToken}`,
+          JSON.stringify({ answers, comments })
+        );
+      }
+    } catch {
+      // Bỏ qua lỗi truy cập localStorage
+    }
+  }, [answers, comments, linkToken, survey, submitted]);
 
   const answeredCount = useMemo(
     () => (survey ? survey.questions.filter((q) => answers[q.questionId] !== undefined).length : 0),
@@ -78,7 +106,7 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!survey) return;
+    if (!survey || submitting) return;
 
     if (answeredCount < totalQuestions) {
       setSubmitError('Vui lòng trả lời đầy đủ tất cả câu hỏi trước khi nộp.');
@@ -96,6 +124,13 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
       });
       setSubmitted(true);
       setSubmitError(null);
+
+      // Xóa bản nháp khi nộp bài thành công
+      try {
+        localStorage.removeItem(`survey_draft_${linkToken}`);
+      } catch {
+        // Bỏ qua
+      }
     } catch (error) {
       setSubmitError(messageFrom(error));
     } finally {

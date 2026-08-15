@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { agentMemoryService, MemoryResult } from '../services/agentMemoryService';
+import { agentMemoryService, type MemoryResult } from '../services/agentMemoryService';
 
 export const AgentMemoryWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -145,6 +145,22 @@ export const AgentMemoryWidget: React.FC = () => {
                 background: '#0f172a',
                 color: '#fff',
                 marginBottom: '6px',
+              }}
+            />
+            <input
+              type="text"
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder="Tags (cách nhau bởi dấu phẩy)"
+              style={{
+                width: '100%',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                border: '1px solid #475569',
+                background: '#0f172a',
+                color: '#fff',
+                marginBottom: '6px',
+                fontSize: '11px',
               }}
             />
             <button type="submit" className="btn btn-secondary btn-sm" style={{ width: '100%' }}>

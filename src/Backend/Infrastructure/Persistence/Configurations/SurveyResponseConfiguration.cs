@@ -15,6 +15,11 @@ public class SurveyResponseConfiguration : IEntityTypeConfiguration<SurveyRespon
         builder.Property(x => x.RespondentId)
             .HasMaxLength(100);
 
+        // Database Indexes for Performance Optimization
+        builder.HasIndex(x => x.SurveyFormId);
+        builder.HasIndex(x => x.RespondentId);
+        builder.HasIndex(x => x.SubmittedAt);
+
         builder.HasMany(x => x.Answers)
             .WithOne(x => x.SurveyResponse)
             .HasForeignKey(x => x.SurveyResponseId)

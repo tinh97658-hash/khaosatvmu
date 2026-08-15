@@ -23,6 +23,11 @@ public class SurveyCampaignConfiguration : IEntityTypeConfiguration<SurveyCampai
             .HasConversion<int>()
             .IsRequired();
 
+        // Database Indexes for Performance Optimization
+        builder.HasIndex(x => x.SemesterId);
+        builder.HasIndex(x => x.Status);
+        builder.HasIndex(x => new { x.StartDate, x.EndDate });
+
         builder.HasMany(x => x.SurveyForms)
             .WithOne(x => x.SurveyCampaign)
             .HasForeignKey(x => x.SurveyCampaignId)

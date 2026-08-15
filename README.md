@@ -101,24 +101,31 @@ flowchart TD
 
 ```text
 khaosatvmu/
-├── .env.example              # File mẫu biến môi trường
-├── docker-compose.yml        # Orchestration cho Postgres, Backend, Frontend, AgentMemory
-├── docs/                     # Tài liệu kiến trúc chi tiết (AGENT_MEMORY.md)
-├── rules/                    # Quy chuẩn lập trình & triết lý AI (ponytail.md)
+├── deploy/                   # Cấu hình triển khai & Docker (pgadmin, archives)
+├── docs/                     # Tập trung hóa tài liệu dự án
+│   ├── architecture/         # Quy chuẩn kiến trúc (AGENT_MEMORY, Ponytail)
+│   ├── database/             # Thiết kế DB & sơ đồ quan hệ (dtb.md)
+│   ├── plans/                # Kế hoạch triển khai & checklists
+│   └── qa/                   # Tiêu chuẩn thiết kế UI & QA (design-qa.md)
+├── rules/                    # Quy tắc hệ thống cho AI Assistant (.rulesforai)
 ├── scripts/                  # Script hỗ trợ (seed-memory.js, start-agentmemory)
-└── src/
-    ├── Backend/
-    │   ├── API/              # Presentation layer (.NET 9 Web API, Program.cs)
-    │   ├── Application/      # Interfaces, Services, DTOs
-    │   ├── Domain/           # Entities (AcademicYear, Semester, SurveyCampaign, ...)
-    │   ├── Infrastructure/   # EF Core 9 ApplicationDbContext, Seeders, Configurations
-    │   └── MyProject.sln     # Solution file
-    └── Frontend/
-        ├── public/           # Tài sản tĩnh
-        ├── src/              # React Component, Tree Views, Services, Types
-        ├── Dockerfile        # Container setup cho Frontend
-        ├── package.json      # Dependencies
-        └── vite.config.ts    # Cấu hình Vite
+├── src/
+│   ├── Backend/              # Clean Architecture Backend (.NET 9)
+│   │   ├── API/              # Presentation layer (.NET 9 Web API, Program.cs)
+│   │   ├── Application/      # Interfaces, Services, DTOs
+│   │   ├── Domain/           # Entities (AcademicYear, Semester, SurveyCampaign, ...)
+│   │   ├── Infrastructure/   # EF Core 9 ApplicationDbContext, Seeders, Configurations
+│   │   └── KhaosatVMU.sln    # Solution C# File
+│   └── Frontend/             # React + Vite + TypeScript Frontend App
+│       ├── public/           # Tài sản tĩnh
+│       ├── src/              # React Components, Tree Views, Services, Types
+│       ├── Dockerfile        # Container setup cho Frontend
+│       ├── package.json      # Dependencies
+│       └── vite.config.ts    # Cấu hình Vite
+├── .dockerignore
+├── .env.example              # File mẫu biến môi trường
+├── docker-compose.yml        # Orchestration cho Postgres & pgAdmin
+└── README.md
 ```
 
 ---
@@ -226,7 +233,7 @@ VITE_API_URL=http://localhost:5000
 
 ## 📜 Quy chuẩn lập trình & Triết lý Ponytail
 
-Dự án áp dụng quy chuẩn lập trình **Ponytail AI Coding** (`rules/ponytail.md`):
+Dự án áp dụng quy chuẩn lập trình **Ponytail AI Coding** (`docs/architecture/ponytail.md`):
 - **Thang quyết định 7 bước (Decision Ladder)**: `Need (YAGNI)` ➔ `Codebase Reuse` ➔ `Stdlib` ➔ `Native Platform` ➔ `Installed Dependency` ➔ `One-Liner` ➔ `Minimal Implementation`.
 - **Tối ưu hóa Codebase**: Giữ code gọn gàng, súc tích, tái sử dụng các abstraction có sẵn, hạn chế tối đa các dependency không cần thiết.
 

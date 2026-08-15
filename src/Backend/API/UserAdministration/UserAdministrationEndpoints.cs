@@ -130,6 +130,29 @@ public static class UserAdministrationEndpoints
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetAuditLogsAsync(userId, page, pageSize, cancellationToken)));
 
+        group.MapGet("/permissions", async (
+            IUserAdministrationService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetPermissionsAsync(cancellationToken)));
+
+        group.MapGet("/role-permissions", async (
+            IUserAdministrationService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetRolePermissionMatrixAsync(cancellationToken)));
+
+        group.MapPut("/roles/{roleId:guid}/permissions", async (
+            Guid roleId,
+            UpdateRolePermissionsRequest request,
+            IUserAdministrationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var grants = request.Grants?
+                .Select(g => new Application.UserAdministration.RolePermissionGrantDto(g.PermissionId, g.IsGranted))
+                .ToList() ?? [];
+            await service.UpdateRolePermissionsAsync(roleId, grants, cancellationToken);
+            return Results.NoContent();
+        }).AddEndpointFilter<RequireAntiforgeryFilter>();
+
         return endpoints;
     }
 
@@ -184,4 +207,8 @@ public static class UserAdministrationEndpoints
             OrganizationUnitName,
             IsDefault);
     }
+
+    public sealed record UpdateRolePermissionsRequest(IReadOnlyList<PermissionGrantRequest>? Grants);
+
+    public sealed record PermissionGrantRequest(Guid PermissionId, bool IsGranted);
 }

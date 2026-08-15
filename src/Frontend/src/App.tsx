@@ -22,6 +22,7 @@ import { CourseSurveysPage } from './pages/CourseSurveysPage';
 import { PublicSurveyPage } from './pages/PublicSurveyPage';
 import { CampaignsPage } from './pages/CampaignsPage';
 import { SurveyProgressPage } from './pages/SurveyProgressPage';
+import { ReportsOverviewPage } from './pages/ReportsOverviewPage';
 import { StudentSurveyView } from './pages/StudentSurveyView';
 import { LoginPage } from './pages/LoginPage';
 import { ProfileSelectionPage } from './pages/ProfileSelectionPage';
@@ -483,6 +484,8 @@ function DashboardApp() {
               loadError={surveyLoadError}
             />
           )}
+
+          {currentTab === 'reports' && <ReportsOverviewPage />}
 
           {currentTab === 'faculties' && (
             <FacultiesPage

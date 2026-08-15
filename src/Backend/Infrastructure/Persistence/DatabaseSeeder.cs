@@ -61,8 +61,13 @@ public static class DatabaseSeeder
     {
         var definitions = new[]
         {
-            (Code: "ADMIN_ACCESS", Name: "Admin access", Description: "Access administrative actions"),
-            (Code: "SURVEY_MANAGE", Name: "Manage surveys", Description: "Create and manage surveys")
+            (Code: "ADMIN_ACCESS",             Name: "Admin access",                  Description: "Access administrative actions"),
+            (Code: "SURVEY_MANAGE",            Name: "Manage surveys",                Description: "Create and manage surveys"),
+            (Code: "VIEW_REPORTS",             Name: "View reports",                  Description: "Access the reports and statistics section"),
+            (Code: "VIEW_REPORTS_OPERATIONAL", Name: "View operational progress",     Description: "View operational survey collection progress report"),
+            (Code: "VIEW_REPORTS_LECTURERS",   Name: "View lecturer evaluations",     Description: "View lecturer performance evaluation reports"),
+            (Code: "VIEW_REPORTS_FACULTIES",   Name: "View faculty statistics",       Description: "View faculty and department statistics reports"),
+            (Code: "VIEW_REPORTS_QUESTIONS",   Name: "View question analysis",        Description: "View survey question and criteria analysis reports"),
         };
 
         var permissions = new Dictionary<string, Permission>(StringComparer.OrdinalIgnoreCase);
@@ -96,9 +101,27 @@ public static class DatabaseSeeder
     {
         var definitions = new[]
         {
+            // ADMIN: tất cả permissions
             (RoleCode: "ADMIN", PermissionCode: "ADMIN_ACCESS"),
             (RoleCode: "ADMIN", PermissionCode: "SURVEY_MANAGE"),
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "SURVEY_MANAGE")
+            (RoleCode: "ADMIN", PermissionCode: "VIEW_REPORTS"),
+            (RoleCode: "ADMIN", PermissionCode: "VIEW_REPORTS_OPERATIONAL"),
+            (RoleCode: "ADMIN", PermissionCode: "VIEW_REPORTS_LECTURERS"),
+            (RoleCode: "ADMIN", PermissionCode: "VIEW_REPORTS_FACULTIES"),
+            (RoleCode: "ADMIN", PermissionCode: "VIEW_REPORTS_QUESTIONS"),
+
+            // SURVEY_ADMIN: quản lý khảo sát + xem toàn bộ báo cáo
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "SURVEY_MANAGE"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "VIEW_REPORTS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "VIEW_REPORTS_OPERATIONAL"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "VIEW_REPORTS_LECTURERS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "VIEW_REPORTS_FACULTIES"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "VIEW_REPORTS_QUESTIONS"),
+
+            // DEPARTMENT_MANAGER: xem báo cáo giảng viên và khoa/bộ môn
+            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "VIEW_REPORTS"),
+            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "VIEW_REPORTS_LECTURERS"),
+            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "VIEW_REPORTS_FACULTIES"),
         };
 
         foreach (var definition in definitions)

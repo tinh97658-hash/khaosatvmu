@@ -20,6 +20,10 @@ public class SurveyFormConfiguration : IEntityTypeConfiguration<SurveyForm>
             .HasMaxLength(100)
             .IsRequired();
 
+        // Database Indexes for Performance Optimization
+        builder.HasIndex(x => x.SurveyCampaignId);
+        builder.HasIndex(x => x.TargetAudience);
+
         builder.HasMany(x => x.Questions)
             .WithOne(x => x.SurveyForm)
             .HasForeignKey(x => x.SurveyFormId)

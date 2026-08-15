@@ -2,13 +2,12 @@
 # 1. Environment & Secret Configuration
 # ==========================================
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 *.env.override
 appsettings.*.Local.json
 appsettings.Local.json
+secrets.json
 
 # ==========================================
 # 2. Node.js & Frontend (Vite / React / TS)
@@ -20,6 +19,11 @@ dist-ssr/
 build/
 .vite/
 *.tsbuildinfo
+.eslintcache
+.stylelintcache
+.vite-inspect
+vite.config.*.timestamp-*
+coverage/
 
 # Logs & Debug
 logs/
@@ -29,8 +33,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-.eslintcache
-.stylelintcache
 
 # ==========================================
 # 3. .NET / C# Backend (ASP.NET Core)
@@ -42,6 +44,9 @@ lerna-debug.log*
 [Tt]est[Rr]esults/
 publish/
 out/
+*.trx
+*.coverage
+*.coveragexml
 
 # Visual Studio / Rider / User Settings
 *.rsuser
@@ -56,6 +61,7 @@ out/
 .idea/
 *.csproj.user
 *.vcxproj.user
+*.sln.iml
 
 # NuGet Packages & Cache
 *.nupkg
@@ -63,11 +69,34 @@ packages/
 **/packages/
 project.lock.json
 project.fragment.lock.json
+.nuget/
 
 # ==========================================
-# 4. IDE & Text Editors
+# 4. Database, Backup & Data Files
 # ==========================================
-# VS Code Settings (allow shared settings, ignore local state)
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.ldf
+*.mdf
+*.dump
+*.bak
+*.sql.bak
+pgdata/
+.pgdata/
+postgres-data/
+
+# ==========================================
+# 5. Docker & Orchestration
+# ==========================================
+docker-compose.override.yml
+.docker/
+
+# ==========================================
+# 6. IDE & Text Editors
+# ==========================================
+# VS Code (Giữ lại cấu hình dự án, bỏ cache cá nhân)
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -82,7 +111,7 @@ project.fragment.lock.json
 \#*\#
 
 # ==========================================
-# 5. OS & System Files
+# 7. OS & System Files
 # ==========================================
 # Windows
 Thumbs.db
@@ -100,14 +129,14 @@ $RECYCLE.BIN/
 .Spotlight-V100
 .Trashes
 
+# Linux
+*~
+.directory
+
 # ==========================================
-# 6. Temporary & Database Files
+# 8. Temporary Files
 # ==========================================
-*.sqlite
-*.sqlite3
-*.db-journal
-*.ldf
-*.mdf
 tmp/
 temp/
 *.tmp
+
