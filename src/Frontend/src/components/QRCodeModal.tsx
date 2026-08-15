@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { Copy, Download, Smartphone } from 'lucide-react';
+import { toast } from 'sonner';
 import { Modal } from './Modal';
 
 interface QRCodeModalProps {
@@ -6,7 +8,8 @@ interface QRCodeModalProps {
   onClose: () => void;
   title: string;
   subtitle: string;
-  qrUrl: string;
+  /** Ảnh QR dựng sẵn. Bỏ trống thì mã QR được sinh ngay trong trình duyệt. */
+  qrUrl?: string;
   surveyLink: string;
   onOpenSurveySimulator: () => void;
 }
@@ -20,60 +23,96 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   surveyLink,
   onOpenSurveySimulator,
 }) => {
+  // Sinh mã QR tại chỗ để không phụ thuộc dịch vụ ảnh bên ngoài.
+  const [generatedQr, setGeneratedQr] = useState('');
+
+  useEffect(() => {
+    if (!isOpen || !surveyLink) return;
+
+    let cancelled = false;
+    const generate = async () => {
+      try {
+        const { toDataURL } = await import('qrcode');
+        const dataUrl = await toDataURL(surveyLink, { width: 260, margin: 1 });
+        if (!cancelled) setGeneratedQr(dataUrl);
+      } catch {
+        if (!cancelled) setGeneratedQr('');
+      }
+    };
+
+    void generate();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, surveyLink]);
+
+  const qrImage = generatedQr || qrUrl || '';
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(surveyLink);
+      toast.success('Đã sao chép đường dẫn khảo sát');
+    } catch {
+      toast.error('Không thể sao chép tự động', {
+        description: 'Hãy chọn và sao chép đường dẫn trong ô bên cạnh.',
+      });
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`MÃ QR KHẢO SÁT & ĐÁNH GIÁ - VMU`}>
-      <div style={{ textAlign: 'center' }}>
-        <h4 style={{ color: 'var(--vmu-navy)', fontSize: '17px', fontWeight: 700, marginBottom: '6px' }}>
-          {title}
-        </h4>
-        <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '18px' }}>
-          {subtitle}
-        </p>
+    <Modal isOpen={isOpen} onClose={onClose} title="Mã QR khảo sát và đánh giá">
+      <div className="survey-operations-page qr-modal-content">
+        <h4 className="qr-modal-heading">{title}</h4>
+        <p className="qr-modal-subtitle">{subtitle}</p>
 
         <div className="qr-preview-box">
-          <img src={qrUrl} alt="Mã QR Khảo sát Sinh viên" className="qr-image" />
-          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--vmu-navy)' }}>
+          {qrImage ? (
+            <img src={qrImage} alt="Mã QR Khảo sát Sinh viên" className="qr-image" />
+          ) : (
+            <div className="qr-caption">Đang tạo mã QR...</div>
+          )}
+          <div className="qr-caption">
             Quét mã QR bằng điện thoại để làm bài đánh giá
           </div>
         </div>
 
-        <div className="form-group" style={{ textAlign: 'left' }}>
-          <label>Đường dẫn bài khảo sát (URL):</label>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input type="text" readOnly value={surveyLink} style={{ backgroundColor: '#F8FAFC' }} />
+        <div className="form-group qr-link-field">
+          <label htmlFor="qr-survey-link">Đường dẫn bài khảo sát</label>
+          <div className="qr-link-row">
+            <input id="qr-survey-link" type="text" readOnly value={surveyLink} />
             <button
+              type="button"
               className="btn btn-secondary btn-sm"
-              onClick={() => {
-                navigator.clipboard.writeText(surveyLink);
-                alert('Đã sao chép đường dẫn bài khảo sát!');
-              }}
+              onClick={() => void handleCopy()}
             >
-              Sao Chép
+              <Copy className="operation-icon" aria-hidden="true" />
+              Sao chép
             </button>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
+        <div className="qr-modal-actions">
           <button
-            className="btn btn-qr"
+            className="btn btn-secondary"
             onClick={() => {
               onClose();
               onOpenSurveySimulator();
             }}
           >
-            <span>📱</span> Mở Giao Diện Sinh Viên (Thử nghiệm)
+            <Smartphone className="operation-icon" aria-hidden="true" />
+            Mở giao diện sinh viên
           </button>
           <a
-            href={qrUrl}
+            href={qrImage}
             download="VMU_QR_Survey.png"
             target="_blank"
             rel="noreferrer"
-            className="btn btn-primary"
-            style={{ textDecoration: 'none' }}
+            className="btn btn-primary qr-download-link"
           >
-            <span>⬇️</span> Tải Ảnh QR
+            <Download className="operation-icon" aria-hidden="true" />
+            Tải ảnh QR
           </a>
         </div>
       </div>

@@ -1,5 +1,4 @@
 services:
-  # 1. Database: PostgreSQL
   db:
     image: postgres:15-alpine
     container_name: khaosatvmu_db
@@ -9,70 +8,31 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-khaosatvmu@123}
       POSTGRES_DB: ${POSTGRES_DB:-khaosatvmu}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432" # Host:Container
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - app-network
 
-  # 2. Backend: ASP.NET Core API
-  backend:
-    build:
-      context: ./src/Backend
-      dockerfile: API/Dockerfile
-    container_name: khaosatvmu_backend
-    restart: on-failure
-    ports:
-      - "${BACKEND_PORT:-5000}:8080" # Host:Container (.NET 8 mặc định 8080)
+  # pgAdmin dùng chung mạng với db nên khai báo server theo host "db" cổng 5432
+  # (cổng nội bộ container), không phải cổng đã map ra máy thật.
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: khaosatvmu_pgadmin
+    restart: unless-stopped
     environment:
-      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
-      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=${POSTGRES_DB:-khaosatvmu};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-khaosatvmu@123}
-      - AgentMemory__BaseUrl=http://host.docker.internal:3111
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@vmu.edu.vn}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-khaosatvmu@123}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      # Phải là FILE. Nếu file này bị xóa, Docker sẽ tạo một thư mục trùng tên
+      # và container không khởi động được.
+      - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
     depends_on:
       - db
-    networks:
-      - app-network
-
-  # 3. Frontend: React + Vite
-  frontend:
-    build:
-      context: ./src/Frontend
-      dockerfile: Dockerfile
-    container_name: khaosatvmu_frontend
-    restart: on-failure
-    ports:
-      - "${FRONTEND_PORT:-5173}:5173" # Host:Container (Vite mặc định 5173)
-    environment:
-      - VITE_API_URL=${VITE_API_URL:-http://localhost:5000}
-    depends_on:
-      - backend
-    networks:
-      - app-network
-
-  # 4. AgentMemory: Local AI Agent Persistent Memory & Dashboard
-  # Khởi chạy qua script: scripts/start-agentmemory.cmd
-  # Hoặc dùng Docker Compose Profile: docker compose --profile agentmemory up -d
-  agentmemory:
-    image: iiidev/iii:${AGENTMEMORY_III_VERSION:-0.11.2}
-    container_name: khaosatvmu_agentmemory
-    profiles: ["agentmemory"]
-    user: "65532:65532"
-    ports:
-      - "${AGENTMEMORY_PORT:-3111}:3111"
-      - "${AGENTMEMORY_DASHBOARD_PORT:-3113}:3113"
-    volumes:
-      - agentmemory_data:/data
-    restart: unless-stopped
-    networks:
-      - app-network
 
 volumes:
   postgres_data:
-  agentmemory_data:
-
-networks:
-  app-network:
-    driver: bridge
-
+  pgadmin_data:

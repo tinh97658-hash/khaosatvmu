@@ -1,223 +1,313 @@
 import React, { useState } from 'react';
+import { FileSpreadsheet, Pencil, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
-import { Modal } from '../components/Modal';
-import type { Major, Faculty } from '../types';
+import { ConfirmDialog, Modal } from '../components/Modal';
+import { MajorImportDialog } from '../components/MajorImportDialog';
+import { catalogErrorMessage, type CatalogImportResponse } from '../services/catalogApi';
+import type { ImportMajorRow } from '../utils/majorImportExcel';
+import type {
+  CourseSection,
+  Curriculum,
+  CurriculumCourse,
+  Faculty,
+  Major,
+} from '../types';
 
 interface MajorsPageProps {
   majors: Major[];
   faculties: Faculty[];
-  onAddMajor: (major: Major) => void;
-  onDeleteMajor: (id: string) => void;
+  curricula: Curriculum[];
+  curriculumCourses: CurriculumCourse[];
+  sections: CourseSection[];
+  /** Trả về mã lỗi của API, null nếu lưu thành công. */
+  onSaveMajor: (
+    majorId: number | null,
+    majorName: string,
+    facultyId: number,
+  ) => Promise<string | null>;
+  onDeleteMajor: (majorId: number) => Promise<string | null>;
+  onImportMajors: (rows: ImportMajorRow[]) => Promise<CatalogImportResponse>;
 }
+
+interface MajorForm {
+  majorName: string;
+  facultyId: string;
+}
+
+const emptyForm: MajorForm = { majorName: '', facultyId: '' };
 
 export const MajorsPage: React.FC<MajorsPageProps> = ({
   majors,
   faculties,
-  onAddMajor,
+  curricula,
+  curriculumCourses,
+  sections,
+  onSaveMajor,
   onDeleteMajor,
+  onImportMajors,
 }) => {
   const [search, setSearch] = useState('');
   const [facultyFilter, setFacultyFilter] = useState('');
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Major | null>(null);
+  const [toDelete, setToDelete] = useState<Major | null>(null);
+  const [validationError, setValidationError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<MajorForm>(emptyForm);
 
-  // Form state
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
-  const [facultyId, setFacultyId] = useState(faculties[0]?.id || '');
-  const [level, setLevel] = useState<'Đại học' | 'Thạc sĩ' | 'Tiến sĩ'>('Đại học');
-  const [duration, setDuration] = useState('4');
-  const [credits, setCredits] = useState('132');
+  const updateForm = (patch: Partial<MajorForm>) => setForm((prev) => ({ ...prev, ...patch }));
+  const facultyNameOf = (facultyId: number) =>
+    faculties.find((faculty) => faculty.facultyId === facultyId)?.facultyName ?? '—';
 
-  const filtered = majors.filter((m) => {
-    const matchSearch =
-      m.name.toLowerCase().includes(search.toLowerCase()) ||
-      m.code.toLowerCase().includes(search.toLowerCase());
-    const matchFaculty = !facultyFilter || m.facultyId === facultyFilter;
-    return matchSearch && matchFaculty;
-  });
+  // Số nhóm lớp của một ngành đi theo chuỗi khóa ngoại trong dtb.md:
+  // Majors -> Curricula -> CurriculumCourses -> Courses -> CourseSections.
+  const sectionCountOf = (majorId: number) => {
+    const curriculumIds = curricula
+      .filter((curriculum) => curriculum.majorId === majorId)
+      .map((curriculum) => curriculum.curriculumId);
+    if (curriculumIds.length === 0) return 0;
 
-  const handleSubmit = () => {
-    if (!code || !name) {
-      alert('Vui lòng điền mã ngành và tên ngành đào tạo!');
+    const courseIds = new Set(
+      curriculumCourses
+        .filter((row) => curriculumIds.includes(row.curriculumId))
+        .map((row) => row.courseId)
+    );
+    return sections.filter((section) => courseIds.has(section.courseId)).length;
+  };
+
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ ...emptyForm, facultyId: faculties[0] ? String(faculties[0].facultyId) : '' });
+    setValidationError('');
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (major: Major) => {
+    setEditing(major);
+    setForm({ majorName: major.majorName, facultyId: String(major.facultyId) });
+    setValidationError('');
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = form.majorName.trim();
+
+    if (!name) {
+      setValidationError('Vui lòng nhập tên ngành.');
       return;
     }
-    const selectedFac = faculties.find((f) => f.id === facultyId);
-    const newMajor: Major = {
-      id: `maj-${Date.now()}`,
-      code,
-      name,
-      facultyId,
-      facultyName: selectedFac?.name || 'Khoa Công nghệ Thông tin',
-      degreeLevel: level,
-      durationYears: parseFloat(duration) || 4,
-      totalCredits: parseInt(credits) || 132,
-      status: 'Đang đào tạo',
-    };
-    onAddMajor(newMajor);
+    // "Majors"."FacultyId" NOT NULL
+    if (!form.facultyId) {
+      setValidationError('Vui lòng chọn khoa / viện.');
+      return;
+    }
+
+    setSaving(true);
+    const errorCode = await onSaveMajor(editing?.majorId ?? null, name, Number(form.facultyId));
+    setSaving(false);
+    if (errorCode) {
+      setValidationError(catalogErrorMessage(errorCode));
+      return;
+    }
+
+    toast.success(editing ? 'Đã cập nhật ngành' : 'Đã thêm ngành', { description: name });
     setIsModalOpen(false);
-    setCode('');
-    setName('');
+    setEditing(null);
+    setForm(emptyForm);
+    setValidationError('');
   };
+
+  const handleDelete = async () => {
+    if (!toDelete) return;
+    const errorCode = await onDeleteMajor(toDelete.majorId);
+    if (errorCode) {
+      toast.error('Không thể xóa ngành', { description: catalogErrorMessage(errorCode) });
+    } else {
+      toast.success('Đã xóa ngành', { description: toDelete.majorName });
+    }
+    setToDelete(null);
+  };
+
+  const handleImport = async (rows: ImportMajorRow[]): Promise<CatalogImportResponse> => {
+    const result = await onImportMajors(rows);
+    if (result.createdCount > 0) {
+      toast.success(`Đã import ${result.createdCount} ngành học`, {
+        description: result.skippedCount > 0 ? `${result.skippedCount} dòng bị bỏ qua` : undefined,
+      });
+    } else {
+      toast.error('Không có dòng nào được thêm', {
+        description: `${result.skippedCount} dòng bị bỏ qua`,
+      });
+    }
+    return result;
+  };
+
+  const normalized = search.trim().toLowerCase();
+  const filtered = majors.filter((major) => {
+    const matchesSearch = !normalized || major.majorName.toLowerCase().includes(normalized);
+    const matchesFaculty = !facultyFilter || String(major.facultyId) === facultyFilter;
+    return matchesSearch && matchesFaculty;
+  });
 
   const columns: Column<Major>[] = [
     {
-      key: 'code',
-      header: 'Mã Ngành',
-      width: '120px',
+      key: 'majorName',
+      header: 'Tên ngành học',
+      render: (item) => <span className="catalog-cell-primary">{item.majorName}</span>,
+    },
+    {
+      key: 'facultyId',
+      header: 'Khoa viện',
+      width: '300px',
+      render: (item) => facultyNameOf(item.facultyId),
+    },
+    {
+      key: 'sectionCount',
+      header: 'Số nhóm lớp',
+      width: '130px',
       render: (item) => (
-        <span className="badge badge-info" style={{ fontFamily: 'monospace' }}>
-          {item.code}
-        </span>
-      ),
-    },
-    {
-      key: 'name',
-      header: 'Chương Trình Đào Tạo / Ngành',
-      render: (item) => <strong style={{ color: 'var(--vmu-navy)' }}>{item.name}</strong>,
-    },
-    {
-      key: 'facultyName',
-      header: 'Khoa / Viện Phụ Trách',
-    },
-    {
-      key: 'degreeLevel',
-      header: 'Trình Độ',
-      width: '100px',
-      render: (item) => <span className="badge badge-success">{item.degreeLevel}</span>,
-    },
-    {
-      key: 'structure',
-      header: 'Thời Gian & Tín Chỉ',
-      render: (item) => (
-        <span style={{ fontSize: '13px' }}>
-          ⏱️ {item.durationYears} năm &bull; 📜 <strong>{item.totalCredits}</strong> Tín chỉ
-        </span>
-      ),
-    },
-    {
-      key: 'status',
-      header: 'Trạng Thái',
-      width: '120px',
-      render: (item) => (
-        <span
-          className={`badge ${item.status === 'Đang đào tạo' ? 'badge-success' : 'badge-danger'}`}
-        >
-          {item.status}
-        </span>
+        <span className="catalog-cell-primary">{sectionCountOf(item.majorId)}</span>
       ),
     },
     {
       key: 'actions',
-      header: 'Thao Tác',
-      width: '100px',
+      header: 'Hành động',
+      width: '92px',
       render: (item) => (
-        <button
-          className="btn btn-danger btn-sm"
-          onClick={() => {
-            if (confirm(`Bạn có chắc muốn xóa Ngành "${item.name}"?`)) {
-              onDeleteMajor(item.id);
-            }
-          }}
-        >
-          Xóa
-        </button>
+        <div className="catalog-actions">
+          <button
+            type="button"
+            className="catalog-icon-button"
+            onClick={() => openEdit(item)}
+            aria-label={`Sửa ${item.majorName}`}
+            title="Sửa"
+          >
+            <Pencil aria-hidden="true" size={15} />
+          </button>
+          <button
+            type="button"
+            className="catalog-icon-button catalog-icon-button--danger"
+            onClick={() => setToDelete(item)}
+            aria-label={`Xóa ${item.majorName}`}
+            title="Xóa"
+          >
+            <Trash2 aria-hidden="true" size={15} />
+          </button>
+        </div>
       ),
     },
   ];
 
   return (
-    <div>
-      <div className="page-header">
-        <div className="page-title-group">
-          <h2>QUẢN LÝ DANH MỤC NGÀNH & CHƯƠNG TRÌNH ĐÀO TẠO</h2>
-          <p>Danh mục ngành học chính quy, chuẩn đầu ra (PLO) và khung trình độ đào tạo</p>
+    <div className="catalog-page">
+      <header className="catalog-page-header">
+        <div>
+          <h2>Danh mục ngành đào tạo</h2>
+          <p>Bảng "Majors".</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
-          + Thêm Ngành / CTĐT Mới
-        </button>
-      </div>
+      </header>
 
       <DataTable
         columns={columns}
         data={filtered}
         searchValue={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Tìm tên ngành, mã ngành..."
+        searchPlaceholder="Tìm nhanh theo tên ngành học..."
         filterOptions={[
-          { label: '-- Tất cả Khoa / Viện --', value: '' },
-          ...faculties.map((f) => ({ label: f.name, value: f.id })),
+          { label: 'Tất cả khoa / viện', value: '' },
+          ...faculties.map((faculty) => ({
+            label: faculty.facultyName,
+            value: String(faculty.facultyId),
+          })),
         ]}
         currentFilter={facultyFilter}
         onFilterChange={setFacultyFilter}
-        onAddNew={() => setIsModalOpen(true)}
-        addNewLabel="+ Thêm Ngành Mới"
-        keyExtractor={(item) => item.id}
+        onAddNew={openCreate}
+        addNewLabel="Thêm ngành học"
+        toolbarActions={(
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm catalog-add-button"
+            onClick={() => setIsImportOpen(true)}
+          >
+            <FileSpreadsheet aria-hidden="true" size={16} />
+            <span>Import Excel</span>
+          </button>
+        )}
+        emptyMessage="Chưa có ngành học nào trong danh mục."
+        keyExtractor={(item) => String(item.majorId)}
+        pageSize={20}
       />
 
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="THÊM MỚI CHƯƠNG TRÌNH ĐÀO TẠO / NGÀNH HỌC - VMU"
-        onSubmit={handleSubmit}
-        submitText="Lưu Ngành Mới"
+        title={editing ? 'Sửa ngành học' : 'Thêm ngành học'}
       >
-        <div className="form-group">
-          <label>Mã Ngành Đào Tạo (Mã Tuyển sinh):</label>
-          <input
-            type="text"
-            placeholder="Ví dụ: 7480101"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-          />
-        </div>
-        <div className="form-group">
-          <label>Tên Ngành / Chương Trình Đào Tạo:</label>
-          <input
-            type="text"
-            placeholder="Ví dụ: Công nghệ Thông tin (Chuẩn)"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-        <div className="form-group">
-          <label>Khoa / Viện Quản Lý:</label>
-          <select value={facultyId} onChange={(e) => setFacultyId(e.target.value)}>
-            {faculties.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name} ({f.code})
-              </option>
-            ))}
-          </select>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+        <form className="catalog-form" onSubmit={(event) => void handleSubmit(event)}>
+          {validationError && (
+            <div className="catalog-validation-error" role="alert">{validationError}</div>
+          )}
           <div className="form-group">
-            <label>Trình Độ:</label>
-            <select value={level} onChange={(e) => setLevel(e.target.value as any)}>
-              <option value="Đại học">Đại học</option>
-              <option value="Thạc sĩ">Thạc sĩ</option>
-              <option value="Tiến sĩ">Tiến sĩ</option>
+            <label htmlFor="major-name">Tên ngành</label>
+            <input
+              id="major-name"
+              type="text"
+              placeholder="Công nghệ Thông tin"
+              value={form.majorName}
+              onChange={(event) => updateForm({ majorName: event.target.value })}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="major-faculty">Khoa viện</label>
+            <select
+              id="major-faculty"
+              value={form.facultyId}
+              onChange={(event) => updateForm({ facultyId: event.target.value })}
+              required
+            >
+              <option value="">Chọn khoa viện</option>
+              {faculties.map((faculty) => (
+                <option key={faculty.facultyId} value={String(faculty.facultyId)}>
+                  {faculty.facultyName}
+                </option>
+              ))}
             </select>
           </div>
-          <div className="form-group">
-            <label>Thời Gian (Năm):</label>
-            <input
-              type="number"
-              step="0.5"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-            />
+          <div className="modal-footer catalog-form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={saving || faculties.length === 0}
+            >
+              {saving ? 'Đang lưu...' : editing ? 'Cập nhật' : 'Lưu'}
+            </button>
           </div>
-          <div className="form-group">
-            <label>Tổng Tín Chỉ:</label>
-            <input
-              type="number"
-              value={credits}
-              onChange={(e) => setCredits(e.target.value)}
-            />
-          </div>
-        </div>
+        </form>
       </Modal>
+
+      <MajorImportDialog
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImport={handleImport}
+      />
+
+      <ConfirmDialog
+        isOpen={toDelete !== null}
+        onClose={() => setToDelete(null)}
+        onConfirm={() => void handleDelete()}
+        title="Xóa ngành?"
+        recordName={toDelete?.majorName ?? ''}
+        confirmText="Xóa"
+      />
     </div>
   );
 };

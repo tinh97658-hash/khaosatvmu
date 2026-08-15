@@ -1,6 +1,18 @@
 import React from 'react';
+import {
+  ArrowRight,
+  BookOpen,
+  Building2,
+  CalendarDays,
+  GraduationCap,
+  ListChecks,
+  QrCode,
+  RadioTower,
+  type LucideIcon,
+} from 'lucide-react';
 import { StatCard } from '../components/StatCard';
 import type { SystemStats, SurveyCampaign } from '../types';
+import '../styles/dashboard.css';
 
 interface DashboardOverviewProps {
   stats: SystemStats;
@@ -9,6 +21,71 @@ interface DashboardOverviewProps {
   onNavigateTab: (tab: string) => void;
 }
 
+interface QuickAction {
+  tab: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  tone: 'blue' | 'teal' | 'green' | 'amber';
+}
+
+const quickActions: QuickAction[] = [
+  {
+    tab: 'faculties',
+    title: 'Khoa / Viện',
+    description: 'Cơ cấu đơn vị đào tạo',
+    icon: Building2,
+    tone: 'blue',
+  },
+  {
+    tab: 'majors',
+    title: 'Ngành đào tạo',
+    description: 'Chương trình và chuẩn đầu ra',
+    icon: GraduationCap,
+    tone: 'teal',
+  },
+  {
+    tab: 'courses',
+    title: 'Học phần',
+    description: 'Môn học và số tín chỉ',
+    icon: BookOpen,
+    tone: 'green',
+  },
+  {
+    tab: 'course-question-sets',
+    title: 'Bộ câu hỏi khảo sát',
+    description: 'Bộ câu hỏi và thang đánh giá',
+    icon: ListChecks,
+    tone: 'amber',
+  },
+];
+
+const formatDate = (value: string) => {
+  const [year, month, day] = value.split('-');
+  return year && month && day ? `${day}/${month}/${year}` : value;
+};
+
+const getProgress = (campaign: SurveyCampaign) => {
+  if (campaign.totalTargetResponses <= 0) return 0;
+  return Math.min(100, Math.round(
+    (campaign.actualResponses / campaign.totalTargetResponses) * 100,
+  ));
+};
+
+/** Tỷ lệ phiếu đã thu trên tổng sĩ số các lớp đã phát phiếu. */
+const formatCompletionRate = (stats: SystemStats) => {
+  if (stats.totalTargetResponses <= 0) return '0';
+  return ((stats.totalResponses / stats.totalTargetResponses) * 100).toLocaleString('vi-VN', {
+    maximumFractionDigits: 2,
+  });
+};
+
+const getStatusClassName = (status: SurveyCampaign['status']) => {
+  if (status === 'Đang diễn ra') return 'is-active';
+  if (status === 'Sắp diễn ra') return 'is-upcoming';
+  return 'is-complete';
+};
+
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   stats,
   campaigns,
@@ -16,196 +93,199 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onNavigateTab,
 }) => {
   return (
-    <div>
-      {/* Top Stat Cards */}
-      <div className="stats-grid">
-        <StatCard
-          title="Tổng Số Khoa / Viện"
-          value={stats.totalFaculties}
-          icon="🏛️"
-          subtitle="Đang quản lý"
-        />
-        <StatCard
-          title="Chương Trình Đào Tạo"
-          value={stats.totalMajors}
-          icon="🎓"
-          subtitle="Ngành đào tạo chính quy"
-        />
-        <StatCard
-          title="Học Phần / Môn Học"
-          value={stats.totalCourses}
-          icon="📚"
-          subtitle="Đã cập nhật CLO/PLO"
-        />
-        <StatCard
-          title="Lớp Học Phần Khảo Sát"
-          value={stats.totalClasses}
-          icon="👨‍🏫"
-          subtitle="Học kỳ II (2025-2026)"
-        />
-        <StatCard
-          title="Đợt Khảo Sát Đang Mở"
-          value={stats.activeCampaigns}
-          icon="⚡"
-          subtitle="Đang tiếp nhận phiếu"
-          trend="+1 mới"
-        />
-        <StatCard
-          title="Phiếu Đánh Giá Đã Nộp"
-          value={stats.totalResponses.toLocaleString('vi-VN')}
-          icon="📝"
-          subtitle="Tỷ lệ hoàn thành 92.4%"
-        />
-        <StatCard
-          title="Điểm Hài Lòng Trung Bình"
-          value={`${stats.overallSatisfaction} / 5.0`}
-          icon="⭐"
-          subtitle="Chỉ số chất lượng VMU"
-        />
-        <StatCard
-          title="Lượt Sinh Viên Quét QR"
-          value={stats.qrScanCount.toLocaleString('vi-VN')}
-          icon="📱"
-          subtitle="Truy cập thiết bị di động"
-        />
-      </div>
+    <div className="dashboard-overview">
+      <section className="dashboard-block" aria-labelledby="dashboard-summary-title">
+        <header className="dashboard-block-heading">
+          <div>
+            <h2 id="dashboard-summary-title">Tổng quan hệ thống</h2>
+            <p>Số liệu vận hành khảo sát trong học kỳ hiện tại</p>
+          </div>
+          <span className="dashboard-period">
+            <CalendarDays aria-hidden="true" />
+            Học kỳ II, 2025-2026
+          </span>
+        </header>
 
-      {/* Quick Navigation Cards */}
-      <div className="card" style={{ padding: '24px', marginBottom: '28px' }}>
-        <h3 style={{ fontSize: '16px', color: 'var(--vmu-navy)', marginBottom: '16px', fontWeight: 700 }}>
-          🚀 HỆ THỐNG DỮ LIỆU CẮT LỚP & DỤNG CỤ ĐÁNH GIÁ (VMU CATALOGS)
-        </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-          <button
-            onClick={() => onNavigateTab('faculties')}
-            className="btn btn-secondary"
-            style={{ justifyContent: 'flex-start', padding: '14px', textTransform: 'none', borderLeft: '4px solid #003366' }}
-          >
-            <span style={{ fontSize: '20px' }}>🏛️</span>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontWeight: 700, color: 'var(--vmu-navy)' }}>Danh Mục Khoa / Viện</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Cơ cấu đơn vị đào tạo</div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => onNavigateTab('majors')}
-            className="btn btn-secondary"
-            style={{ justifyContent: 'flex-start', padding: '14px', textTransform: 'none', borderLeft: '4px solid #1A5690' }}
-          >
-            <span style={{ fontSize: '20px' }}>🎓</span>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontWeight: 700, color: 'var(--vmu-navy)' }}>Ngành & CT Đào Tạo</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Chuẩn đầu ra PLO</div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => onNavigateTab('courses')}
-            className="btn btn-secondary"
-            style={{ justifyContent: 'flex-start', padding: '14px', textTransform: 'none', borderLeft: '4px solid #059669' }}
-          >
-            <span style={{ fontSize: '20px' }}>📚</span>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontWeight: 700, color: 'var(--vmu-navy)' }}>Danh Mục Học Phần</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Môn học & Tín chỉ</div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => onNavigateTab('criteria')}
-            className="btn btn-secondary"
-            style={{ justifyContent: 'flex-start', padding: '14px', textTransform: 'none', borderLeft: '4px solid #D97706' }}
-          >
-            <span style={{ fontSize: '20px' }}>📋</span>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontWeight: 700, color: 'var(--vmu-navy)' }}>Bộ Tiêu Chí Khảo Sát</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Mẫu câu hỏi Likert 5 mức</div>
-            </div>
-          </button>
+        <div className="dashboard-stats-grid">
+          <StatCard
+            title="Khoa / Viện"
+            value={stats.totalFaculties}
+            icon="building"
+            subtitle="Đơn vị đang quản lý"
+          />
+          <StatCard
+            title="Ngành đào tạo"
+            value={stats.totalMajors}
+            icon="graduation"
+            subtitle="Chương trình chính quy"
+          />
+          <StatCard
+            title="Học phần"
+            value={stats.totalCourses}
+            icon="course"
+            subtitle="Đã cập nhật CLO/PLO"
+          />
+          <StatCard
+            title="Lớp khảo sát"
+            value={stats.totalClasses}
+            icon="classes"
+            subtitle="Trong học kỳ hiện tại"
+          />
+          <StatCard
+            title="Đợt đang mở"
+            value={stats.activeCampaigns}
+            icon="campaign"
+            subtitle="Đang tiếp nhận phiếu"
+            trend="+1 mới"
+          />
+          <StatCard
+            title="Phiếu đã nộp"
+            value={stats.totalResponses.toLocaleString('vi-VN')}
+            icon="responses"
+            subtitle={`Tỷ lệ hoàn thành ${formatCompletionRate(stats)}%`}
+          />
+          <StatCard
+            title="Điểm hài lòng"
+            value={`${stats.overallSatisfaction} / 5,0`}
+            icon="satisfaction"
+            subtitle="Chỉ số chất lượng VMU"
+          />
+          <StatCard
+            title="Lượt quét QR"
+            value={stats.qrScanCount.toLocaleString('vi-VN')}
+            icon="qr"
+            subtitle="Truy cập từ thiết bị di động"
+          />
         </div>
-      </div>
+      </section>
 
-      {/* Active Campaigns Table Overview */}
-      <div className="card">
-        <div className="card-header">
-          <h3>📱 CÁC ĐỢT KHẢO SÁT ĐANG MỞ & MÃ QR CODE TRUY CẬP TRỰC TIẾP</h3>
-          <button className="btn btn-primary btn-sm" onClick={() => onNavigateTab('campaigns')}>
-            Quản Lý Tất Cả Đợt Khảo Sát &raquo;
-          </button>
+      <section className="dashboard-block" aria-labelledby="dashboard-catalog-title">
+        <header className="dashboard-block-heading">
+          <div>
+            <h2 id="dashboard-catalog-title">Danh mục và công cụ</h2>
+            <p>Truy cập nhanh dữ liệu nền phục vụ khảo sát</p>
+          </div>
+        </header>
+
+        <div className="dashboard-quick-grid">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <button
+                type="button"
+                key={action.tab}
+                className={`dashboard-quick-action is-${action.tone}`}
+                onClick={() => onNavigateTab(action.tab)}
+              >
+                <span className="dashboard-quick-icon" aria-hidden="true">
+                  <Icon />
+                </span>
+                <span className="dashboard-quick-copy">
+                  <strong>{action.title}</strong>
+                  <small>{action.description}</small>
+                </span>
+                <ArrowRight className="dashboard-quick-arrow" aria-hidden="true" />
+              </button>
+            );
+          })}
         </div>
-        <div className="table-container">
-          <table className="vmu-table">
+      </section>
+
+      <section className="dashboard-block dashboard-campaigns" aria-labelledby="dashboard-campaigns-title">
+        <header className="dashboard-block-heading dashboard-campaigns-heading">
+          <div>
+            <h2 id="dashboard-campaigns-title">Đợt khảo sát đang mở</h2>
+            <p>Theo dõi tiến độ thu phiếu và mở mã QR truy cập</p>
+          </div>
+          <div className="dashboard-heading-actions">
+            <span className="dashboard-result-count">{campaigns.length} đợt khảo sát</span>
+            <button
+              type="button"
+              className="dashboard-manage-button"
+              onClick={() => onNavigateTab('course-campaigns')}
+            >
+              Quản lý tất cả
+              <ArrowRight aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+
+        <div className="dashboard-table-scroll">
+          <table className="dashboard-campaign-table">
             <thead>
               <tr>
-                <th>Tên Đợt Khảo Sát</th>
-                <th>Phân Loại</th>
-                <th>Thời Gian</th>
-                <th>Tiến Độ Thu Phiếu</th>
-                <th>Trạng Thái</th>
-                <th style={{ textAlign: 'center' }}>Thao Tác Mã QR</th>
+                <th scope="col">Đợt khảo sát</th>
+                <th scope="col">Phân loại</th>
+                <th scope="col">Thời gian</th>
+                <th scope="col">Tiến độ thu phiếu</th>
+                <th scope="col">Trạng thái</th>
+                <th scope="col" className="dashboard-action-column">Mã QR</th>
               </tr>
             </thead>
             <tbody>
-              {campaigns.map((c) => (
-                <tr key={c.id}>
-                  <td style={{ fontWeight: 600, color: 'var(--vmu-navy)', maxWidth: '320px' }}>
-                    {c.title}
-                  </td>
-                  <td>
-                    <span className="badge badge-info">{c.type}</span>
-                  </td>
-                  <td style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                    {c.startDate} ~ {c.endDate}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div
-                        style={{
-                          flexGrow: 1,
-                          height: '8px',
-                          backgroundColor: '#E2E8F0',
-                          borderRadius: '4px',
-                          overflow: 'hidden',
-                          width: '100px',
-                        }}
-                      >
-                        <div
-                          style={{
-                            height: '100%',
-                            width: `${Math.min(100, Math.round((c.actualResponses / c.totalTargetResponses) * 100))}%`,
-                            backgroundColor: 'var(--vmu-blue)',
-                          }}
-                        />
-                      </div>
-                      <span style={{ fontSize: '12px', fontWeight: 600 }}>
-                        {c.actualResponses} / {c.totalTargetResponses}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <span
-                      className={`badge ${
-                        c.status === 'Đang diễn ra' ? 'badge-warning' : 'badge-success'
-                      }`}
-                    >
-                      {c.status}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <button
-                      className="btn btn-qr btn-sm"
-                      onClick={() => onOpenQR(c)}
-                    >
-                      <span>📱</span> Mã QR
-                    </button>
+              {campaigns.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="dashboard-empty-cell">
+                    <RadioTower aria-hidden="true" />
+                    <strong>Chưa có đợt khảo sát đang mở</strong>
+                    <span>Các đợt khảo sát mới sẽ xuất hiện tại đây.</span>
                   </td>
                 </tr>
-              ))}
+              ) : campaigns.map((campaign) => {
+                const progress = getProgress(campaign);
+                return (
+                  <tr key={campaign.id}>
+                    <td className="dashboard-campaign-name">
+                      <strong title={campaign.title}>{campaign.title}</strong>
+                      <span>{campaign.semester} · {campaign.academicYear}</span>
+                    </td>
+                    <td>
+                      <span className="dashboard-type-label">{campaign.type}</span>
+                    </td>
+                    <td className="dashboard-date-cell">
+                      {formatDate(campaign.startDate)}
+                      <span aria-hidden="true">-</span>
+                      {formatDate(campaign.endDate)}
+                    </td>
+                    <td>
+                      <div
+                        className="dashboard-progress"
+                        aria-label={`Đã thu ${campaign.actualResponses} trên ${campaign.totalTargetResponses} phiếu, đạt ${progress}%`}
+                      >
+                        <div className="dashboard-progress-track" aria-hidden="true">
+                          <span style={{ width: `${progress}%` }} />
+                        </div>
+                        <span className="dashboard-progress-value">
+                          {campaign.actualResponses.toLocaleString('vi-VN')}
+                          <small> / {campaign.totalTargetResponses.toLocaleString('vi-VN')}</small>
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`dashboard-status ${getStatusClassName(campaign.status)}`}>
+                        <span aria-hidden="true" />
+                        {campaign.status}
+                      </span>
+                    </td>
+                    <td className="dashboard-action-column">
+                      <button
+                        type="button"
+                        className="dashboard-qr-button"
+                        aria-label={`Mở mã QR cho ${campaign.title}`}
+                        title="Mở mã QR"
+                        onClick={() => onOpenQR(campaign)}
+                      >
+                        <QrCode aria-hidden="true" />
+                        <span>Mã QR</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   );
 };

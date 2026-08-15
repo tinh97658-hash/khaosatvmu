@@ -1,93 +1,202 @@
-import React from 'react';
+import { useEffect, useState } from 'react';
+import {
+  BookOpen,
+  Building2,
+  ChartColumn,
+  ClipboardCheck,
+  FileCheck2,
+  GraduationCap,
+  LayoutDashboard,
+  ListChecks,
+  Network,
+  PanelLeftOpen,
+  Presentation,
+  School,
+  ShieldCheck,
+  UserCog,
+  UsersRound,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 
 interface SidebarProps {
   currentTab: string;
   onSelectTab: (tab: string) => void;
   activeCampaignsCount: number;
+  canManageUsers: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({
+interface SidebarItem {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  badge?: number;
+}
+
+interface SidebarGroup {
+  section: string;
+  items: SidebarItem[];
+}
+
+export function Sidebar({
   currentTab,
   onSelectTab,
   activeCampaignsCount,
-}) => {
-  const menuItems = [
+  canManageUsers,
+}: SidebarProps) {
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isMobileOpen) return;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsMobileOpen(false);
+    };
+
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [isMobileOpen]);
+
+  const menuGroups: SidebarGroup[] = [
     {
-      section: 'BÁO CÁO & THỐNG KÊ',
+      section: 'TỔNG QUAN',
       items: [
-        { id: 'overview', label: 'Dashboard Thống Kê', icon: '📊' },
-        { id: 'progress', label: 'Tiến độ Thu phiếu Khảo sát', icon: '📈' },
+        { id: 'overview', label: 'Bảng điều khiển', icon: LayoutDashboard },
+        { id: 'progress', label: 'Tiến độ thu phiếu', icon: ChartColumn },
       ],
     },
     {
       section: 'DANH MỤC ĐÀO TẠO',
       items: [
-        { id: 'faculties', label: 'Danh mục Khoa / Viện', icon: '🏛️' },
-        { id: 'departments', label: 'Bộ môn Đào tạo', icon: '🏫' },
-        { id: 'lecturers', label: 'Danh mục Giảng viên', icon: '👨‍🏫' },
-        { id: 'majors', label: 'Ngành & CT Đào tạo', icon: '🎓' },
-        { id: 'courses', label: 'Học phần / Môn học', icon: '📚' },
-        { id: 'classes', label: 'Lớp HP & Nhóm N01/N02', icon: '👥' },
+        { id: 'faculties', label: 'Khoa / Viện', icon: Building2 },
+        { id: 'departments', label: 'Bộ môn', icon: Network },
+        { id: 'lecturers', label: 'Giảng viên', icon: Presentation },
+        { id: 'majors', label: 'Ngành đào tạo', icon: GraduationCap },
+        { id: 'courses', label: 'Học phần', icon: BookOpen },
+        { id: 'classes', label: 'Lớp học phần', icon: UsersRound },
       ],
     },
     {
-      section: '📚 KHẢO SÁT HỌC PHẦN (MÔN HỌC)',
+      section: 'KHẢO SÁT HỌC PHẦN',
       items: [
+        { id: 'course-question-sets', label: 'Bộ câu hỏi khảo sát', icon: ListChecks },
         {
           id: 'course-campaigns',
-          label: 'Đợt Khảo sát Môn học & QR',
-          icon: '📱',
+          label: 'Khảo sát học phần',
+          icon: ClipboardCheck,
           badge: activeCampaignsCount > 0 ? activeCampaignsCount : undefined,
         },
-        { id: 'course-criteria', label: 'Bộ Tiêu chí Môn học', icon: '📋' },
       ],
     },
     {
-      section: '🎓 KHẢO SÁT CHƯƠNG TRÌNH ĐÀO TẠO',
+      section: 'KHẢO SÁT CHƯƠNG TRÌNH',
       items: [
-        { id: 'program-campaigns', label: 'Đợt Khảo sát CT Đào tạo', icon: '🏛️' },
-        { id: 'program-criteria', label: 'Bộ Tiêu chí CT Đào tạo', icon: '📜' },
+        { id: 'program-campaigns', label: 'Đợt khảo sát CTĐT', icon: School },
+        { id: 'program-criteria', label: 'Tiêu chí CTĐT', icon: FileCheck2 },
       ],
     },
+    ...(canManageUsers
+      ? [{
+          section: 'QUẢN TRỊ',
+          items: [
+            { id: 'users-admin', label: 'Người dùng & phân quyền', icon: UserCog },
+          ],
+        } satisfies SidebarGroup]
+      : []),
   ];
 
+  const handleSelect = (tab: string) => {
+    onSelectTab(tab);
+    setIsMobileOpen(false);
+  };
+
   return (
-    <aside className="sidebar">
-      <div className="sidebar-header">
-        <div className="vmu-logo-icon">VMU</div>
-        <div className="sidebar-header-text">
-          <h2>ĐẠI HỌC HÀNG HẢI</h2>
-          <p>Hệ thống Đánh giá Kvalitet</p>
-        </div>
-      </div>
+    <>
+      <button
+        type="button"
+        className="sidebar-mobile-toggle"
+        aria-controls="main-sidebar"
+        aria-expanded={isMobileOpen}
+        aria-label="Mở điều hướng"
+        title="Mở điều hướng"
+        onClick={() => setIsMobileOpen(true)}
+      >
+        <PanelLeftOpen aria-hidden="true" />
+      </button>
 
-      <nav className="sidebar-menu">
-        {menuItems.map((group, idx) => (
-          <div key={idx}>
-            <div className="menu-section-title">{group.section}</div>
-            {group.items.map((item) => (
-              <button
-                key={item.id}
-                className={`menu-item ${currentTab === item.id ? 'active' : ''}`}
-                onClick={() => onSelectTab(item.id)}
-              >
-                <span className="menu-icon">{item.icon}</span>
-                <span style={{ flexGrow: 1 }}>{item.label}</span>
-                {item.badge !== undefined && (
-                  <span className="badge badge-warning" style={{ fontSize: '11px' }}>
-                    {item.badge} Đang mở
-                  </span>
-                )}
-              </button>
-            ))}
+      <button
+        type="button"
+        className={`sidebar-overlay ${isMobileOpen ? 'is-visible' : ''}`}
+        aria-label="Đóng điều hướng"
+        tabIndex={isMobileOpen ? 0 : -1}
+        onClick={() => setIsMobileOpen(false)}
+      />
+
+      <aside
+        id="main-sidebar"
+        className={`sidebar ${isMobileOpen ? 'is-mobile-open' : ''}`}
+      >
+        <div className="sidebar-header">
+          <img className="vmu-logo-icon" src="/vmu-logo.png" alt="" aria-hidden="true" />
+          <div className="sidebar-header-text">
+            <h2>KHẢO SÁT VMU</h2>
+            <p>Quản lý chất lượng đào tạo</p>
           </div>
-        ))}
-      </nav>
+          <button
+            type="button"
+            className="sidebar-close-button"
+            aria-label="Đóng điều hướng"
+            title="Đóng điều hướng"
+            onClick={() => setIsMobileOpen(false)}
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
 
-      <div className="sidebar-footer">
-        <div>Trường Đại học Hàng hải VN</div>
-        <div style={{ marginTop: '2px', opacity: 0.8 }}>Phiên bản 2.5 &bull; 2026</div>
-      </div>
-    </aside>
+        <nav className="sidebar-menu" aria-label="Điều hướng chính">
+          {menuGroups.map((group) => (
+            <section className="menu-section" key={group.section}>
+              <h3 className="menu-section-title">{group.section}</h3>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = currentTab === item.id;
+
+                return (
+                  <button
+                    type="button"
+                    key={item.id}
+                    className={`menu-item ${isActive ? 'active' : ''}`}
+                    aria-current={isActive ? 'page' : undefined}
+                    onClick={() => handleSelect(item.id)}
+                  >
+                    <Icon className="menu-icon" aria-hidden="true" />
+                    <span className="menu-label">{item.label}</span>
+                    {item.badge !== undefined && (
+                      <span className="menu-count" aria-label={`${item.badge} đợt đang mở`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </section>
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="sidebar-footer-icon" aria-hidden="true">
+            <ShieldCheck />
+          </div>
+          <div className="sidebar-footer-copy">
+            <strong>Hệ thống nội bộ</strong>
+            <span>Phiên bản 2.5 · 2026</span>
+          </div>
+          <span className="sidebar-status" title="Hệ thống đang kết nối">
+            <span aria-hidden="true" />
+            Kết nối
+          </span>
+        </div>
+      </aside>
+    </>
   );
-};
+}

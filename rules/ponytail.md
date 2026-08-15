@@ -47,3 +47,11 @@ Trước khi tạo hoặc chỉnh sửa bất kỳ dòng code nào, AI bắt bu�
 
 - **Không bỏ qua an toàn:** Không đánh đổi Validation, Type Safety, Security, Error Handling hay Accessibility.
 - **Tối giản thiết kế, nghiêm ngặt thực thi.**
+- **Không dùng raw SQL trong `Program.cs`.**
+- **Đổi schema/database phải thông qua EF migration.**
+- **Không tự ý xóa file bừa bãi.**
+- **Không viết code dài dòng, lan man, thừa thãi.**
+- **Không sửa file ngoài phạm vi task nếu không có lý do rõ ràng.**
+- **Không thêm abstraction nếu nó không giải quyết được độ phức tạp thật.**
+- **Không trộn thay đổi frontend và backend nếu task không yêu cầu.**
+- **Không tái sử dụng một API cho các chức năng riêng biệt hoặc không liên quan.**

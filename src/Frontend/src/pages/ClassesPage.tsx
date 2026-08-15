@@ -1,445 +1,978 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import {
+  CalendarDays,
+  ChevronDown,
+  ChevronRight,
+  FileSpreadsheet,
+  Layers,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react';
+import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
-import { Modal } from '../components/Modal';
-import type { CourseClass, Course, Lecturer, ClassGroup } from '../types';
+import { ConfirmDialog, Modal } from '../components/Modal';
+import { CourseSectionImportDialog } from '../components/CourseSectionImportDialog';
+import type { ImportCourseSectionRow } from '../utils/courseSectionImportExcel';
+import { ApiError } from '../services/apiClient';
+import {
+  catalogApi,
+  catalogErrorMessage,
+  type SaveAcademicYearPayload,
+} from '../services/catalogApi';
+import type { AcademicYear, Course, CourseSection, Lecturer, Semester } from '../types';
 
 interface ClassesPageProps {
-  classes: CourseClass[];
   courses: Course[];
   lecturers: Lecturer[];
-  onAddClass: (cls: CourseClass) => void;
-  onDeleteClass: (id: string) => void;
-  onAddClassGroup: (classId: string, group: ClassGroup) => void;
 }
 
-export const ClassesPage: React.FC<ClassesPageProps> = ({
-  classes,
-  courses,
-  lecturers,
-  onAddClass,
-  onDeleteClass,
-  onAddClassGroup,
-}) => {
+interface YearForm {
+  academicYearName: string;
+  startDate: string;
+  endDate: string;
+}
+
+interface SectionForm {
+  courseId: string;
+  lecturerId: string;
+  sectionName: string;
+  classSize: string;
+}
+
+const emptyYearForm: YearForm = { academicYearName: '', startDate: '', endDate: '' };
+const emptySectionForm: SectionForm = {
+  courseId: '',
+  lecturerId: '',
+  sectionName: '',
+  classSize: '0',
+};
+
+const errorCodeOf = (error: unknown): string =>
+  error instanceof ApiError ? error.errorCode : 'API_REQUEST_FAILED';
+
+export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) => {
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [expandedYearIds, setExpandedYearIds] = useState<number[]>([]);
+  const [selectedYearId, setSelectedYearId] = useState<number | null>(null);
+  const [selectedSemesterId, setSelectedSemesterId] = useState<number | null>(null);
+
+  const [sections, setSections] = useState<CourseSection[]>([]);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
 
-  // Add Class Group Modal State
-  const [addingGroupForClass, setAddingGroupForClass] = useState<CourseClass | null>(null);
-  const [groupCode, setGroupCode] = useState('N01');
-  const [selectedLecturerId, setSelectedLecturerId] = useState('');
-  const [groupStudents, setGroupStudents] = useState(30);
-  const [groupRoom, setGroupRoom] = useState('A6-302');
-  const [groupSchedule, setGroupSchedule] = useState('Thứ 2 (Tiết 1-3)');
+  const [isYearModalOpen, setIsYearModalOpen] = useState(false);
+  const [editingYear, setEditingYear] = useState<AcademicYear | null>(null);
+  const [yearToDelete, setYearToDelete] = useState<AcademicYear | null>(null);
+  const [yearForm, setYearForm] = useState<YearForm>(emptyYearForm);
+  const [yearError, setYearError] = useState('');
+  const [savingYear, setSavingYear] = useState(false);
 
-  // Form states for creating a new Class
-  const [code, setCode] = useState('');
-  const [courseId, setCourseId] = useState(courses[0]?.id || '');
-  const [lecturerName, setLecturerName] = useState('');
-  const [lecturerEmail, setLecturerEmail] = useState('');
-  const [semester, setSemester] = useState('Học kỳ II');
-  const [academicYear, setAcademicYear] = useState('2025-2026');
-  const [totalStudents, setTotalStudents] = useState('60');
-  const [room, setRoom] = useState('A6-302');
+  const [isSemesterModalOpen, setIsSemesterModalOpen] = useState(false);
+  const [editingSemester, setEditingSemester] = useState<Semester | null>(null);
+  const [semesterToDelete, setSemesterToDelete] = useState<Semester | null>(null);
+  const [semesterName, setSemesterName] = useState('');
+  const [semesterError, setSemesterError] = useState('');
+  const [savingSemester, setSavingSemester] = useState(false);
 
-  const filtered = classes.filter((c) => {
-    const matchSearch =
-      c.code.toLowerCase().includes(search.toLowerCase()) ||
-      c.courseName.toLowerCase().includes(search.toLowerCase()) ||
-      c.lecturerName.toLowerCase().includes(search.toLowerCase()) ||
-      (c.groups && c.groups.some((g) => g.lecturerName.toLowerCase().includes(search.toLowerCase())));
-    const matchStatus = !statusFilter || c.surveyStatus === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  const [isSectionModalOpen, setIsSectionModalOpen] = useState(false);
+  const [editingSection, setEditingSection] = useState<CourseSection | null>(null);
+  const [sectionToDelete, setSectionToDelete] = useState<CourseSection | null>(null);
+  const [sectionForm, setSectionForm] = useState<SectionForm>(emptySectionForm);
+  const [sectionError, setSectionError] = useState('');
+  const [savingSection, setSavingSection] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!code.trim()) {
-      alert('Vui lòng điền mã lớp học phần!');
+
+  const selectedYear = academicYears.find((year) => year.academicYearId === selectedYearId) ?? null;
+  const selectedSemester =
+    academicYears
+      .flatMap((year) => year.semesters)
+      .find((semester) => semester.semesterId === selectedSemesterId) ?? null;
+
+  const courseOf = (courseId: number) => courses.find((course) => course.courseId === courseId);
+  const lecturerOf = (lecturerId: number) =>
+    lecturers.find((lecturer) => lecturer.lecturerId === lecturerId);
+
+  // ----- Nạp dữ liệu --------------------------------------------------------
+
+  const reloadYears = async (): Promise<AcademicYear[]> => {
+    const next = await catalogApi.academicYears();
+    setAcademicYears(next);
+    return next;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const next = await catalogApi.academicYears();
+        if (cancelled) return;
+        setAcademicYears(next);
+        setLoadError(null);
+      } catch {
+        if (!cancelled) setLoadError('Không thể tải danh sách năm học');
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      if (selectedSemesterId === null) {
+        setSections([]);
+        return;
+      }
+      try {
+        const next = await catalogApi.courseSections(selectedSemesterId);
+        if (!cancelled) setSections(next);
+      } catch {
+        if (!cancelled) {
+          setSections([]);
+          toast.error('Không thể tải danh sách lớp học phần');
+        }
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSemesterId]);
+
+  const reloadSections = async () => {
+    if (selectedSemesterId === null) return;
+    setSections(await catalogApi.courseSections(selectedSemesterId));
+  };
+
+  // ----- Năm học ------------------------------------------------------------
+
+  const toggleYear = (academicYearId: number) => {
+    setExpandedYearIds((current) =>
+      current.includes(academicYearId)
+        ? current.filter((id) => id !== academicYearId)
+        : [...current, academicYearId]
+    );
+    setSelectedYearId(academicYearId);
+  };
+
+  const openCreateYear = () => {
+    setEditingYear(null);
+    setYearForm(emptyYearForm);
+    setYearError('');
+    setIsYearModalOpen(true);
+  };
+
+  const openEditYear = (year: AcademicYear) => {
+    setEditingYear(year);
+    setYearForm({
+      academicYearName: year.academicYearName,
+      startDate: year.startDate,
+      endDate: year.endDate,
+    });
+    setYearError('');
+    setIsYearModalOpen(true);
+  };
+
+  const handleYearSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = yearForm.academicYearName.trim();
+
+    if (!name || !yearForm.startDate || !yearForm.endDate) {
+      setYearError('Vui lòng nhập tên năm học và khoảng thời gian.');
       return;
     }
-    const selectedCourse = courses.find((crs) => crs.id === courseId);
-    const classId = `cls-${Date.now()}`;
 
-    // Auto-generate default N01 & N02 groups
-    const defaultN01: ClassGroup = {
-      id: `grp-${Date.now()}-1`,
-      classId,
-      groupCode: 'N01',
-      fullGroupCode: `${code}.N01`,
-      lecturerId: 'lec-1',
-      lecturerName: lecturerName || 'TS. Nguyễn Văn A',
-      lecturerEmail: lecturerEmail || 'anguyen@vimaru.edu.vn',
-      studentCount: Math.ceil((parseInt(totalStudents) || 60) / 2),
-      room: room || 'A6-302 (PM1)',
-      schedule: 'Thứ 2 (Tiết 1-3)',
-      surveyStatus: 'Đang khảo sát',
-      completedResponses: 0,
+    const payload: SaveAcademicYearPayload = {
+      academicYearName: name,
+      startDate: yearForm.startDate,
+      endDate: yearForm.endDate,
     };
 
-    const defaultN02: ClassGroup = {
-      id: `grp-${Date.now()}-2`,
-      classId,
-      groupCode: 'N02',
-      fullGroupCode: `${code}.N02`,
-      lecturerId: 'lec-2',
-      lecturerName: lecturerName || 'ThS. Trần Thị B',
-      lecturerEmail: lecturerEmail || 'btran@vimaru.edu.vn',
-      studentCount: Math.floor((parseInt(totalStudents) || 60) / 2),
-      room: room || 'A6-304 (PM2)',
-      schedule: 'Thứ 4 (Tiết 4-6)',
-      surveyStatus: 'Đang khảo sát',
-      completedResponses: 0,
-    };
-
-    const newClass: CourseClass = {
-      id: classId,
-      code,
-      courseId,
-      courseCode: selectedCourse?.code || 'IT201',
-      courseName: selectedCourse?.name || 'Lập trình Web nâng cao',
-      lecturerName: lecturerName || 'Phân công theo Nhóm N01, N02',
-      lecturerEmail: lecturerEmail || 'giangvien@vimaru.edu.vn',
-      semester,
-      academicYear,
-      totalStudents: parseInt(totalStudents) || 60,
-      room: room || 'Giảng đường',
-      surveyStatus: 'Đang khảo sát',
-      completedResponses: 0,
-      groups: [defaultN01, defaultN02],
-    };
-
-    onAddClass(newClass);
-    setIsModalOpen(false);
-    setCode('');
-    setLecturerName('');
-    setLecturerEmail('');
+    setSavingYear(true);
+    try {
+      if (editingYear) {
+        await catalogApi.updateAcademicYear(editingYear.academicYearId, payload);
+        await reloadYears();
+        toast.success('Đã cập nhật năm học', { description: name });
+      } else {
+        const created = await catalogApi.createAcademicYear(payload);
+        await reloadYears();
+        setExpandedYearIds((current) => [...current, created.academicYearId]);
+        setSelectedYearId(created.academicYearId);
+        toast.success('Đã thêm năm học', {
+          description: `${name} · tự tạo ${created.semesters.length} học kỳ`,
+        });
+      }
+      setIsYearModalOpen(false);
+      setEditingYear(null);
+      setYearForm(emptyYearForm);
+      setYearError('');
+    } catch (error) {
+      setYearError(catalogErrorMessage(errorCodeOf(error)));
+    } finally {
+      setSavingYear(false);
+    }
   };
 
-  const handleAddGroupSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!addingGroupForClass || !selectedLecturerId) return;
-
-    const lecturer = lecturers.find((l) => l.id === selectedLecturerId);
-    if (!lecturer) return;
-
-    const newGroup: ClassGroup = {
-      id: `grp-${Date.now()}`,
-      classId: addingGroupForClass.id,
-      groupCode,
-      fullGroupCode: `${addingGroupForClass.code}.${groupCode}`,
-      lecturerId: lecturer.id,
-      lecturerName: lecturer.fullName,
-      lecturerEmail: lecturer.email,
-      studentCount: Number(groupStudents) || 30,
-      room: groupRoom || 'A6-302',
-      schedule: groupSchedule || 'Thứ 2 (Tiết 1-3)',
-      surveyStatus: 'Đang khảo sát',
-      completedResponses: 0,
-    };
-
-    onAddClassGroup(addingGroupForClass.id, newGroup);
-    setAddingGroupForClass(null);
+  const handleYearDelete = async () => {
+    if (!yearToDelete) return;
+    try {
+      await catalogApi.deleteAcademicYear(yearToDelete.academicYearId);
+      const next = await reloadYears();
+      if (selectedYearId === yearToDelete.academicYearId) {
+        setSelectedYearId(null);
+        setSelectedSemesterId(null);
+      }
+      if (next.length === 0) setSelectedSemesterId(null);
+      toast.success('Đã xóa năm học', { description: yearToDelete.academicYearName });
+    } catch (error) {
+      toast.error('Không thể xóa năm học', {
+        description: catalogErrorMessage(errorCodeOf(error)),
+      });
+    }
+    setYearToDelete(null);
   };
 
-  const columns: Column<CourseClass>[] = [
+  // ----- Học kỳ -------------------------------------------------------------
+
+  const openCreateSemester = () => {
+    setEditingSemester(null);
+    setSemesterName('');
+    setSemesterError('');
+    setIsSemesterModalOpen(true);
+  };
+
+  const openEditSemester = (semester: Semester) => {
+    setEditingSemester(semester);
+    setSemesterName(semester.semesterName);
+    setSemesterError('');
+    setIsSemesterModalOpen(true);
+  };
+
+  const handleSemesterSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = semesterName.trim();
+    const academicYearId = editingSemester?.academicYearId ?? selectedYearId;
+
+    if (!name) {
+      setSemesterError('Vui lòng nhập tên học kỳ.');
+      return;
+    }
+    if (academicYearId === null) {
+      setSemesterError('Hãy chọn một năm học trước.');
+      return;
+    }
+
+    setSavingSemester(true);
+    try {
+      if (editingSemester) {
+        await catalogApi.updateSemester(editingSemester.semesterId, name, academicYearId);
+      } else {
+        await catalogApi.createSemester(name, academicYearId);
+      }
+      await reloadYears();
+      setExpandedYearIds((current) =>
+        current.includes(academicYearId) ? current : [...current, academicYearId]
+      );
+      toast.success(editingSemester ? 'Đã cập nhật học kỳ' : 'Đã thêm học kỳ', {
+        description: name,
+      });
+      setIsSemesterModalOpen(false);
+      setEditingSemester(null);
+      setSemesterName('');
+      setSemesterError('');
+    } catch (error) {
+      setSemesterError(catalogErrorMessage(errorCodeOf(error)));
+    } finally {
+      setSavingSemester(false);
+    }
+  };
+
+  const handleSemesterDelete = async () => {
+    if (!semesterToDelete) return;
+    try {
+      await catalogApi.deleteSemester(semesterToDelete.semesterId);
+      await reloadYears();
+      if (selectedSemesterId === semesterToDelete.semesterId) setSelectedSemesterId(null);
+      toast.success('Đã xóa học kỳ', { description: semesterToDelete.semesterName });
+    } catch (error) {
+      toast.error('Không thể xóa học kỳ', {
+        description: catalogErrorMessage(errorCodeOf(error)),
+      });
+    }
+    setSemesterToDelete(null);
+  };
+
+  // ----- Lớp học phần -------------------------------------------------------
+
+  const openCreateSection = () => {
+    setEditingSection(null);
+    setSectionForm(emptySectionForm);
+    setSectionError('');
+    setIsSectionModalOpen(true);
+  };
+
+  const openEditSection = (section: CourseSection) => {
+    setEditingSection(section);
+    setSectionForm({
+      courseId: String(section.courseId),
+      lecturerId: String(section.lecturerId),
+      sectionName: section.sectionName,
+      classSize: String(section.classSize),
+    });
+    setSectionError('');
+    setIsSectionModalOpen(true);
+  };
+
+  const handleSectionSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const sectionName = sectionForm.sectionName.trim();
+    const classSize = Number(sectionForm.classSize);
+
+    if (selectedSemesterId === null) {
+      setSectionError('Hãy chọn một học kỳ trước.');
+      return;
+    }
+    if (!sectionForm.courseId || !sectionName) {
+      setSectionError('Vui lòng chọn học phần và nhập tên lớp.');
+      return;
+    }
+    // "CourseSections"."LecturerId" là NOT NULL.
+    if (!sectionForm.lecturerId) {
+      setSectionError('Vui lòng chọn giảng viên.');
+      return;
+    }
+    if (!Number.isFinite(classSize) || classSize < 0) {
+      setSectionError('Sĩ số không hợp lệ.');
+      return;
+    }
+
+    const payload = {
+      courseId: Number(sectionForm.courseId),
+      semesterId: selectedSemesterId,
+      lecturerId: Number(sectionForm.lecturerId),
+      sectionName,
+      classSize,
+    };
+
+    setSavingSection(true);
+    try {
+      if (editingSection) {
+        await catalogApi.updateCourseSection(editingSection.courseSectionId, payload);
+      } else {
+        await catalogApi.createCourseSection(payload);
+      }
+      await reloadSections();
+      toast.success(editingSection ? 'Đã cập nhật lớp học phần' : 'Đã thêm lớp học phần', {
+        description: sectionName,
+      });
+      setIsSectionModalOpen(false);
+      setEditingSection(null);
+      setSectionForm(emptySectionForm);
+      setSectionError('');
+    } catch (error) {
+      setSectionError(catalogErrorMessage(errorCodeOf(error)));
+    } finally {
+      setSavingSection(false);
+    }
+  };
+
+  const handleSectionDelete = async () => {
+    if (!sectionToDelete) return;
+    try {
+      await catalogApi.deleteCourseSection(sectionToDelete.courseSectionId);
+      await reloadSections();
+      toast.success('Đã xóa lớp học phần', { description: sectionToDelete.sectionName });
+    } catch (error) {
+      toast.error('Không thể xóa lớp học phần', {
+        description: catalogErrorMessage(errorCodeOf(error)),
+      });
+    }
+    setSectionToDelete(null);
+  };
+
+  const handleImportSections = async (rows: ImportCourseSectionRow[]) => {
+    if (selectedSemesterId === null) {
+      throw new ApiError(400, 'CATALOG_SEMESTER_NOT_FOUND');
+    }
+    const result = await catalogApi.importCourseSections(selectedSemesterId, rows);
+    await reloadSections();
+    if (result.createdCount > 0) {
+      toast.success(`Đã import ${result.createdCount} lớp học phần`, {
+        description: result.skippedCount > 0 ? `${result.skippedCount} dòng bị bỏ qua` : undefined,
+      });
+    } else {
+      toast.error('Không có dòng nào được thêm', {
+        description: `${result.skippedCount} dòng bị bỏ qua`,
+      });
+    }
+    return result;
+  };
+
+  // ----- Bảng lớp học phần --------------------------------------------------
+
+  const normalized = search.trim().toLowerCase();
+  const filteredSections = sections.filter((section) => {
+    if (!normalized) return true;
+    const course = courseOf(section.courseId);
+    return (
+      section.sectionName.toLowerCase().includes(normalized) ||
+      (course?.courseName ?? '').toLowerCase().includes(normalized) ||
+      (course?.courseCode ?? '').toLowerCase().includes(normalized)
+    );
+  });
+
+  const columns: Column<CourseSection>[] = [
     {
-      key: 'code',
-      header: 'Mã Lớp HP',
-      width: '110px',
-      render: (item) => (
-        <span className="badge badge-info" style={{ fontFamily: 'monospace', fontSize: '13px' }}>
-          {item.code}
-        </span>
-      ),
-    },
-    {
-      key: 'courseName',
-      header: 'Tên Học Phần',
-      render: (item) => (
-        <div>
-          <strong style={{ color: 'var(--vmu-navy)', fontSize: '14px' }}>{item.courseName}</strong>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Mã môn: {item.courseCode} &bull; Sĩ số: {item.totalStudents} SV &bull; {item.semester} ({item.academicYear})
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'groups',
-      header: 'Phân Công Giảng Viên Theo Nhóm (N01, N02...)',
+      key: 'courseId',
+      header: 'Học phần',
+      width: '260px',
       render: (item) => {
-        const groups = item.groups || [];
+        const course = courseOf(item.courseId);
         return (
           <div>
-            {groups.length === 0 ? (
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Chưa chia nhóm N01, N02</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {groups.map((g) => (
-                  <div
-                    key={g.id}
-                    style={{
-                      backgroundColor: '#F8FAFC',
-                      padding: '6px 10px',
-                      borderLeft: '3px solid var(--vmu-blue)',
-                      fontSize: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '8px',
-                    }}
-                  >
-                    <div>
-                      <strong style={{ color: 'var(--vmu-navy)' }}>[{g.groupCode}]</strong> {g.lecturerName}
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        {g.schedule} &bull; Phòng: {g.room} ({g.studentCount} SV)
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button
-              className="btn btn-secondary btn-sm"
-              style={{ marginTop: '6px', fontSize: '11px', padding: '2px 8px' }}
-              onClick={() => {
-                setAddingGroupForClass(item);
-                setGroupCode(`N0${(item.groups?.length || 0) + 1}`);
-                if (lecturers.length > 0) setSelectedLecturerId(lecturers[0].id);
-              }}
-            >
-              + Phân công Nhóm Mới (N03, N04...)
-            </button>
+            <div className="catalog-cell-primary">{course?.courseName ?? '—'}</div>
+            <div className="catalog-cell-meta">{course?.courseCode ?? '—'}</div>
           </div>
         );
       },
     },
     {
-      key: 'responses',
-      header: 'Tiến Độ Thu Phiếu',
-      width: '130px',
-      render: (item) => (
-        <div>
-          <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--vmu-navy)' }}>
-            📝 {item.completedResponses} / {item.totalStudents} SV
+      key: 'sectionName',
+      header: 'Tên lớp',
+      width: '160px',
+      render: (item) => <span className="catalog-cell-primary">{item.sectionName}</span>,
+    },
+    {
+      key: 'classSize',
+      header: 'Sĩ số',
+      width: '90px',
+      render: (item) => item.classSize,
+    },
+    {
+      key: 'lecturerId',
+      header: 'Giảng viên',
+      width: '260px',
+      render: (item) => {
+        const lecturer = lecturerOf(item.lecturerId);
+        return (
+          <div>
+            <div className="catalog-cell-primary">{lecturer?.fullName ?? '—'}</div>
+            <div className="catalog-cell-meta">{lecturer?.email ?? '—'}</div>
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            ({Math.round((item.completedResponses / (item.totalStudents || 1)) * 100)}% sĩ số)
-          </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       key: 'actions',
-      header: 'Thao Tác',
-      width: '90px',
+      header: 'Hành động',
+      width: '92px',
       render: (item) => (
-        <button
-          className="btn btn-danger btn-sm"
-          onClick={() => {
-            if (confirm(`Xóa lớp học phần "${item.code}"?`)) {
-              onDeleteClass(item.id);
-            }
-          }}
-        >
-          🗑️ Xóa
-        </button>
+        <div className="catalog-actions">
+          <button
+            type="button"
+            className="catalog-icon-button"
+            onClick={() => openEditSection(item)}
+            aria-label={`Sửa lớp ${item.sectionName}`}
+            title="Sửa"
+          >
+            <Pencil aria-hidden="true" size={15} />
+          </button>
+          <button
+            type="button"
+            className="catalog-icon-button catalog-icon-button--danger"
+            onClick={() => setSectionToDelete(item)}
+            aria-label={`Xóa lớp ${item.sectionName}`}
+            title="Xóa"
+          >
+            <Trash2 aria-hidden="true" size={15} />
+          </button>
+        </div>
       ),
     },
   ];
 
+  const semesterCount = selectedYear?.semesters.length ?? 0;
+
   return (
-    <div>
-      <div className="page-header">
-        <div className="page-title-group">
-          <h2>QUẢN LÝ LỚP HỌC PHẦN & PHÂN CÔNG NHÓM (N01, N02...)</h2>
-          <p>Chia lớp học phần thành các nhóm N01, N02... và phân công Giảng viên giảng dạy tương ứng</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
-          + Thêm Lớp Học Phần Mới
-        </button>
+    <div className="catalog-page term-page">
+      <div className="term-layout">
+        {/* Cột trái: cây năm học -> học kỳ */}
+        <aside className="term-tree" aria-label="Năm học và học kỳ">
+          <header className="term-tree__header">
+            <span className="term-tree__title">
+              <CalendarDays aria-hidden="true" size={16} />
+              Năm học
+            </span>
+            <button
+              type="button"
+              className="term-tree__add"
+              onClick={openCreateYear}
+              aria-label="Thêm năm học"
+              title="Thêm năm học"
+            >
+              <Plus aria-hidden="true" size={16} />
+            </button>
+          </header>
+
+          {loadError && <p className="term-tree__error">{loadError}</p>}
+
+          {academicYears.length === 0 ? (
+            <p className="term-tree__empty">Chưa có năm học nào</p>
+          ) : (
+            <ul className="term-tree__list">
+              {academicYears.map((year) => {
+                const isExpanded = expandedYearIds.includes(year.academicYearId);
+                return (
+                  <li key={year.academicYearId}>
+                    <div
+                      className={`term-tree__year ${
+                        selectedYearId === year.academicYearId ? 'is-selected' : ''
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        className="term-tree__year-button"
+                        onClick={() => toggleYear(year.academicYearId)}
+                        aria-expanded={isExpanded}
+                      >
+                        {isExpanded ? (
+                          <ChevronDown aria-hidden="true" size={14} />
+                        ) : (
+                          <ChevronRight aria-hidden="true" size={14} />
+                        )}
+                        <span className="term-tree__year-name">{year.academicYearName}</span>
+                        <span className="term-tree__count">{year.semesters.length}</span>
+                      </button>
+                      <span className="term-tree__row-actions">
+                        <button
+                          type="button"
+                          className="catalog-icon-button catalog-icon-button--sm"
+                          onClick={() => openEditYear(year)}
+                          aria-label={`Sửa ${year.academicYearName}`}
+                          title="Sửa năm học"
+                        >
+                          <Pencil aria-hidden="true" size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          className="catalog-icon-button catalog-icon-button--sm catalog-icon-button--danger"
+                          onClick={() => setYearToDelete(year)}
+                          aria-label={`Xóa ${year.academicYearName}`}
+                          title="Xóa năm học"
+                        >
+                          <Trash2 aria-hidden="true" size={13} />
+                        </button>
+                      </span>
+                    </div>
+
+                    {isExpanded && (
+                      <ul className="term-tree__semesters">
+                        {year.semesters.length === 0 ? (
+                          <li className="term-tree__empty term-tree__empty--nested">
+                            Chưa có học kỳ
+                          </li>
+                        ) : (
+                          year.semesters.map((semester) => (
+                            <li key={semester.semesterId}>
+                              <div
+                                className={`term-tree__semester ${
+                                  selectedSemesterId === semester.semesterId ? 'is-selected' : ''
+                                }`}
+                              >
+                                <button
+                                  type="button"
+                                  className="term-tree__semester-button"
+                                  onClick={() => {
+                                    setSelectedYearId(year.academicYearId);
+                                    setSelectedSemesterId(semester.semesterId);
+                                  }}
+                                >
+                                  <Layers aria-hidden="true" size={13} />
+                                  {semester.semesterName}
+                                </button>
+                                <span className="term-tree__row-actions">
+                                  <button
+                                    type="button"
+                                    className="catalog-icon-button catalog-icon-button--sm"
+                                    onClick={() => openEditSemester(semester)}
+                                    aria-label={`Sửa ${semester.semesterName}`}
+                                    title="Sửa học kỳ"
+                                  >
+                                    <Pencil aria-hidden="true" size={12} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="catalog-icon-button catalog-icon-button--sm catalog-icon-button--danger"
+                                    onClick={() => setSemesterToDelete(semester)}
+                                    aria-label={`Xóa ${semester.semesterName}`}
+                                    title="Xóa học kỳ"
+                                  >
+                                    <Trash2 aria-hidden="true" size={12} />
+                                  </button>
+                                </span>
+                              </div>
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </aside>
+
+        {/* Cột phải */}
+        <section className="term-detail" aria-label="Nội dung học kỳ">
+          <header className="term-detail__header">
+            <span className="term-detail__title">
+              <Layers aria-hidden="true" size={16} />
+              {selectedSemester ? (
+                <>
+                  Lớp học phần
+                  <span className="term-detail__badge">{sections.length} lớp</span>
+                  <span className="term-detail__context">
+                    {selectedSemester.semesterName} · {selectedYear?.academicYearName}
+                  </span>
+                </>
+              ) : (
+                <>
+                  Học kỳ
+                  <span className="term-detail__badge">{semesterCount} học kỳ</span>
+                </>
+              )}
+            </span>
+
+            {/* Khi đã chọn học kỳ, nút thêm nằm trên thanh công cụ của bảng. */}
+            {!selectedSemester && (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm catalog-add-button"
+                onClick={openCreateSemester}
+                disabled={selectedYearId === null}
+              >
+                <Plus aria-hidden="true" size={16} />
+                <span>Thêm học kỳ</span>
+              </button>
+            )}
+          </header>
+
+          {selectedSemester ? (
+            <DataTable
+              columns={columns}
+              data={filteredSections}
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchPlaceholder="Tìm tên lớp hoặc học phần..."
+              onAddNew={openCreateSection}
+              addNewLabel="Thêm lớp học phần"
+              toolbarActions={(
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm catalog-add-button"
+                  onClick={() => setIsImportOpen(true)}
+                >
+                  <FileSpreadsheet aria-hidden="true" size={16} />
+                  <span>Import Excel</span>
+                </button>
+              )}
+              emptyMessage="Học kỳ này chưa có lớp học phần nào."
+              keyExtractor={(item) => String(item.courseSectionId)}
+              pageSize={20}
+            />
+          ) : selectedYear ? (
+            <div className="term-detail__semesters">
+              {selectedYear.semesters.length === 0 ? (
+                <p className="term-detail__hint">Năm học này chưa có học kỳ nào.</p>
+              ) : (
+                selectedYear.semesters.map((semester) => (
+                  <button
+                    type="button"
+                    key={semester.semesterId}
+                    className="term-detail__semester-card"
+                    onClick={() => setSelectedSemesterId(semester.semesterId)}
+                  >
+                    <Layers aria-hidden="true" size={15} />
+                    <span>{semester.semesterName}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          ) : (
+            <p className="term-detail__hint">Chọn một năm học để xem học kỳ</p>
+          )}
+        </section>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={filtered}
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Tìm mã lớp HP, tên giảng viên nhóm N01/N02, tên môn..."
-        filterOptions={[
-          { label: '-- Tất cả trạng thái --', value: '' },
-          { label: 'Đang khảo sát', value: 'Đang khảo sát' },
-          { label: 'Đã hoàn thành', value: 'Đã hoàn thành' },
-          { label: 'Chưa khảo sát', value: 'Chưa khảo sát' },
-        ]}
-        currentFilter={statusFilter}
-        onFilterChange={setStatusFilter}
-        onAddNew={() => setIsModalOpen(true)}
-        addNewLabel="+ Thêm Lớp HP"
-        keyExtractor={(item) => item.id}
-      />
-
-      {/* MODAL 1: Create New Master Class */}
+      {/* Modal năm học */}
       <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="THÊM MỚI LỚP HỌC PHẦN (TỰ ĐỘNG KHỞI TẠO NHÓM N01, N02)"
+        isOpen={isYearModalOpen}
+        onClose={() => setIsYearModalOpen(false)}
+        title={editingYear ? 'Sửa năm học' : 'Thêm năm học'}
       >
-        <form onSubmit={handleSubmit}>
+        <form className="catalog-form" onSubmit={(event) => void handleYearSubmit(event)}>
+          {yearError && <div className="catalog-validation-error" role="alert">{yearError}</div>}
           <div className="form-group">
-            <label>Mã Lớp Học Phần Tổng:</label>
+            <label htmlFor="year-name">Tên năm học</label>
             <input
+              id="year-name"
               type="text"
-              placeholder="Ví dụ: IT201.01, NAV101.02..."
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
+              placeholder="VD: 2025-2026"
+              value={yearForm.academicYearName}
+              onChange={(event) =>
+                setYearForm((prev) => ({ ...prev, academicYearName: event.target.value }))
+              }
               required
             />
           </div>
           <div className="form-group">
-            <label>Chọn Học Phần / Môn Học:</label>
-            <select value={courseId} onChange={(e) => setCourseId(e.target.value)} required>
-              {courses.map((crs) => (
-                <option key={crs.id} value={crs.id}>
-                  [{crs.code}] {crs.name} ({crs.credits} tín chỉ)
-                </option>
-              ))}
-            </select>
+            <label htmlFor="year-start">Ngày bắt đầu</label>
+            <input
+              id="year-start"
+              type="date"
+              value={yearForm.startDate}
+              onChange={(event) =>
+                setYearForm((prev) => ({ ...prev, startDate: event.target.value }))
+              }
+              required
+            />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }} className="form-group">
-            <div>
-              <label>Học Kỳ:</label>
-              <select value={semester} onChange={(e) => setSemester(e.target.value)}>
-                <option value="Học kỳ I">Học kỳ I</option>
-                <option value="Học kỳ II">Học kỳ II</option>
-                <option value="Học kỳ Hè">Học kỳ Hè</option>
-              </select>
-            </div>
-            <div>
-              <label>Năm Học:</label>
-              <input
-                type="text"
-                value={academicYear}
-                onChange={(e) => setAcademicYear(e.target.value)}
-                required
-              />
-            </div>
+          <div className="form-group">
+            <label htmlFor="year-end">Ngày kết thúc</label>
+            <input
+              id="year-end"
+              type="date"
+              value={yearForm.endDate}
+              onChange={(event) => setYearForm((prev) => ({ ...prev, endDate: event.target.value }))}
+              required
+            />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }} className="form-group">
-            <div>
-              <label>Tổng Sĩ Số Sinh Viên:</label>
-              <input
-                type="number"
-                value={totalStudents}
-                onChange={(e) => setTotalStudents(e.target.value)}
-                required
-              />
+          {!editingYear && (
+            <div className="catalog-context-band">
+              Sau khi lưu, hệ thống tự tạo ba học kỳ: Học kỳ phụ, Học kỳ 1, Học kỳ 2.
             </div>
-            <div>
-              <label>Phòng Học Chính:</label>
-              <input
-                type="text"
-                value={room}
-                onChange={(e) => setRoom(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="modal-footer" style={{ padding: '16px 0 0 0', backgroundColor: 'transparent', borderTop: 'none' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>
+          )}
+          <div className="modal-footer catalog-form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setIsYearModalOpen(false)}>
               Hủy
             </button>
-            <button type="submit" className="btn btn-primary">
-              Khởi Tạo Lớp & Tạo Nhóm N01, N02
+            <button type="submit" className="btn btn-primary" disabled={savingYear}>
+              {savingYear ? 'Đang lưu...' : 'Lưu'}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* MODAL 2: Assign Lecturer to Sub-group N01, N02, N03... */}
-      {addingGroupForClass && (
-        <Modal
-          isOpen={!!addingGroupForClass}
-          onClose={() => setAddingGroupForClass(null)}
-          title={`PHÂN CÔNG GIẢNG VIÊN CHO NHÓM LỚP (LỚP ${addingGroupForClass.code})`}
-        >
-          <form onSubmit={handleAddGroupSubmit}>
-            <div style={{ marginBottom: '14px', fontSize: '13px', color: 'var(--vmu-navy)', backgroundColor: 'var(--vmu-blue-light)', padding: '10px' }}>
-              📚 Học phần: <strong>{addingGroupForClass.courseName} ({addingGroupForClass.courseCode})</strong>
-            </div>
+      {/* Modal học kỳ */}
+      <Modal
+        isOpen={isSemesterModalOpen}
+        onClose={() => setIsSemesterModalOpen(false)}
+        title={editingSemester ? 'Sửa học kỳ' : 'Thêm học kỳ'}
+      >
+        <form className="catalog-form" onSubmit={(event) => void handleSemesterSubmit(event)}>
+          {semesterError && (
+            <div className="catalog-validation-error" role="alert">{semesterError}</div>
+          )}
+          <div className="catalog-context-band">
+            Năm học:{' '}
+            <strong>
+              {editingSemester
+                ? academicYears.find((y) => y.academicYearId === editingSemester.academicYearId)
+                    ?.academicYearName ?? '—'
+                : selectedYear?.academicYearName ?? 'Chưa chọn'}
+            </strong>
+          </div>
+          <div className="form-group">
+            <label htmlFor="semester-name">Tên học kỳ</label>
+            <input
+              id="semester-name"
+              type="text"
+              placeholder="VD: Học kỳ 1"
+              value={semesterName}
+              onChange={(event) => setSemesterName(event.target.value)}
+              required
+            />
+          </div>
+          <div className="modal-footer catalog-form-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setIsSemesterModalOpen(false)}
+            >
+              Hủy
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={savingSemester}>
+              {savingSemester ? 'Đang lưu...' : 'Lưu'}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }} className="form-group">
-              <div>
-                <label>Ký Hiệu Nhóm Lớp:</label>
-                <input
-                  type="text"
-                  placeholder="N01, N02, N03..."
-                  value={groupCode}
-                  onChange={(e) => setGroupCode(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <label>Chọn Giảng Viên Đảm Nhận:</label>
-                <select
-                  value={selectedLecturerId}
-                  onChange={(e) => setSelectedLecturerId(e.target.value)}
-                  required
-                >
-                  <option value="">-- Chọn Giảng viên từ Danh mục --</option>
-                  {lecturers.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.fullName} [{l.code}] ({l.facultyName})
-                    </option>
-                  ))}
-                </select>
-              </div>
+      {/* Modal lớp học phần */}
+      <Modal
+        isOpen={isSectionModalOpen}
+        onClose={() => setIsSectionModalOpen(false)}
+        title={editingSection ? 'Sửa lớp học phần' : 'Thêm lớp học phần'}
+      >
+        <form className="catalog-form" onSubmit={(event) => void handleSectionSubmit(event)}>
+          {sectionError && (
+            <div className="catalog-validation-error" role="alert">{sectionError}</div>
+          )}
+          <div className="catalog-context-band">
+            Học kỳ: <strong>{selectedSemester?.semesterName ?? '—'}</strong> ·{' '}
+            {selectedYear?.academicYearName ?? '—'}
+          </div>
+          {courses.length === 0 && (
+            <div className="catalog-validation-error" role="alert">
+              Chưa có học phần nào trong danh mục.
             </div>
+          )}
+          {lecturers.length === 0 && (
+            <div className="catalog-validation-error" role="alert">
+              Chưa có giảng viên nào trong danh mục.
+            </div>
+          )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }} className="form-group">
-              <div>
-                <label>Sĩ Số Nhóm (SV):</label>
-                <input
-                  type="number"
-                  value={groupStudents}
-                  onChange={(e) => setGroupStudents(Number(e.target.value))}
-                  required
-                />
-              </div>
-              <div>
-                <label>Phòng Học Thực Hành:</label>
-                <input
-                  type="text"
-                  value={groupRoom}
-                  onChange={(e) => setGroupRoom(e.target.value)}
-                  placeholder="A6-302 (PM1)"
-                />
-              </div>
-              <div>
-                <label>Lịch Học:</label>
-                <input
-                  type="text"
-                  value={groupSchedule}
-                  onChange={(e) => setGroupSchedule(e.target.value)}
-                  placeholder="Thứ 2 (Tiết 1-3)"
-                />
-              </div>
-            </div>
+          <div className="form-group">
+            <label htmlFor="section-course">Học phần</label>
+            <select
+              id="section-course"
+              value={sectionForm.courseId}
+              onChange={(event) =>
+                setSectionForm((prev) => ({ ...prev, courseId: event.target.value }))
+              }
+              required
+            >
+              <option value="">Chọn học phần</option>
+              {courses.map((course) => (
+                <option key={course.courseId} value={String(course.courseId)}>
+                  [{course.courseCode}] {course.courseName}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            <div className="modal-footer" style={{ padding: '16px 0 0 0', backgroundColor: 'transparent', borderTop: 'none' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setAddingGroupForClass(null)}>
-                Hủy
-              </button>
-              <button type="submit" className="btn btn-primary">
-                Lưu Phân Công Giảng Viên
-              </button>
+          <div className="form-group">
+            <label htmlFor="section-lecturer">Giảng viên</label>
+            <select
+              id="section-lecturer"
+              value={sectionForm.lecturerId}
+              onChange={(event) =>
+                setSectionForm((prev) => ({ ...prev, lecturerId: event.target.value }))
+              }
+              required
+            >
+              <option value="">Chọn giảng viên</option>
+              {lecturers.map((lecturer) => (
+                <option key={lecturer.lecturerId} value={String(lecturer.lecturerId)}>
+                  {lecturer.fullName}
+                  {lecturer.email ? ` · ${lecturer.email}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="catalog-form-grid catalog-form-grid--2">
+            <div className="form-group">
+              <label htmlFor="section-name">Tên lớp</label>
+              <input
+                id="section-name"
+                type="text"
+                placeholder="IT201.01"
+                value={sectionForm.sectionName}
+                onChange={(event) =>
+                  setSectionForm((prev) => ({ ...prev, sectionName: event.target.value }))
+                }
+                required
+              />
             </div>
-          </form>
-        </Modal>
-      )}
+            <div className="form-group">
+              <label htmlFor="section-size">Sĩ số</label>
+              <input
+                id="section-size"
+                type="number"
+                min="0"
+                value={sectionForm.classSize}
+                onChange={(event) =>
+                  setSectionForm((prev) => ({ ...prev, classSize: event.target.value }))
+                }
+                required
+              />
+            </div>
+          </div>
+
+          <div className="modal-footer catalog-form-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setIsSectionModalOpen(false)}
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={savingSection || courses.length === 0 || lecturers.length === 0}
+            >
+              {savingSection ? 'Đang lưu...' : 'Lưu'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <CourseSectionImportDialog
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        semesterLabel={`${selectedSemester?.semesterName ?? ''} · ${
+          selectedYear?.academicYearName ?? ''
+        }`}
+        onImport={handleImportSections}
+      />
+
+      <ConfirmDialog
+        isOpen={yearToDelete !== null}
+        onClose={() => setYearToDelete(null)}
+        onConfirm={() => void handleYearDelete()}
+        title="Xóa năm học?"
+        recordName={yearToDelete?.academicYearName ?? ''}
+        confirmText="Xóa"
+        warning={
+          yearToDelete && yearToDelete.semesters.length > 0
+            ? `Xóa cùng: ${yearToDelete.semesters.length} học kỳ và toàn bộ lớp học phần thuộc các học kỳ đó.`
+            : undefined
+        }
+      />
+
+      <ConfirmDialog
+        isOpen={semesterToDelete !== null}
+        onClose={() => setSemesterToDelete(null)}
+        onConfirm={() => void handleSemesterDelete()}
+        title="Xóa học kỳ?"
+        recordName={semesterToDelete?.semesterName ?? ''}
+        confirmText="Xóa"
+        warning="Xóa cùng: toàn bộ lớp học phần thuộc học kỳ này."
+      />
+
+      <ConfirmDialog
+        isOpen={sectionToDelete !== null}
+        onClose={() => setSectionToDelete(null)}
+        onConfirm={() => void handleSectionDelete()}
+        title="Xóa lớp học phần?"
+        recordName={sectionToDelete?.sectionName ?? ''}
+        confirmText="Xóa"
+      />
+
     </div>
   );
 };

@@ -1,129 +1,91 @@
-using System.Text.Json.Serialization;
-using Application.Common.Interfaces;
-using Infrastructure.Persistence;
-using Infrastructure.Services;
+using API.Auth;
+using API.Catalog;
+using API.Surveys;
+using API.UserAdministration;
+using Application.Auth;
+using Application.Catalog;
+using Application.Surveys;
+using Application.UserAdministration;
+using Infrastructure.Auth;
+using Infrastructure.Catalog;
+using Infrastructure.Surveys;
+using Infrastructure.UserAdministration;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Infrastructure.Persistence;
+
+var environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+    ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
+if (string.Equals(environmentName, Environments.Development, StringComparison.OrdinalIgnoreCase))
+{
+    DotNetEnv.Env.NoClobber().TraversePath().Load();
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddOpenApi();
-builder.Services.AddHttpClient<IAgentMemoryService, AgentMemoryService>();
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-builder.Services.ConfigureHttpJsonOptions(options =>
+builder.Services.AddApplicationAuthentication(builder.Configuration, builder.Environment);
+builder.Services.AddAntiforgery(options =>
 {
-    options.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    options.HeaderName = "X-CSRF-TOKEN";
+    options.Cookie.Name = ".khaosatvmu.csrf";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+        ? CookieSecurePolicy.SameAsRequest
+        : CookieSecurePolicy.Always;
 });
 
-// Entity Framework Core 9 PostgreSQL Setup
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString, b => b.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)));
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(AuthPolicies.AdminAccess, policy =>
+        policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement("ADMIN_ACCESS")));
+    options.AddPolicy(AuthPolicies.SurveyManage, policy =>
+        policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement("SURVEY_MANAGE")));
+    options.AddPolicy(AuthPolicies.SurveyManageInOrganization, policy =>
+        policy.RequireAuthenticatedUser().AddRequirements(
+            new PermissionRequirement("SURVEY_MANAGE", "organizationUnitCode")));
+});
 
-builder.Services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ApplicationDbContext>());
-builder.Services.AddScoped<ApplicationDbContextInitialiser>();
+builder.Services.AddScoped<IAuthService, EfAuthService>();
+builder.Services.AddScoped<IAuthSessionService, EfAuthSessionService>();
+builder.Services.AddScoped<IUserAdministrationService, EfUserAdministrationService>();
+builder.Services.AddScoped<ICatalogService, EfCatalogService>();
+builder.Services.AddScoped<ISurveyService, EfSurveyService>();
+builder.Services.AddScoped<ApplicationCookieEvents>();
+builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 var app = builder.Build();
 
-// Auto-Apply Migrations and Seed Domain Data
-using (var scope = app.Services.CreateScope())
+await using (var scope = app.Services.CreateAsyncScope())
 {
-    var initialiser = scope.ServiceProvider.GetRequiredService<ApplicationDbContextInitialiser>();
-    await initialiser.InitialiseAsync();
-    await initialiser.SeedAsync();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await DatabaseSeeder.SeedAsync(db, app.Environment.IsDevelopment());
 }
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 
-// EF Core Survey Data Endpoints
-app.MapGet("/api/surveys/tree", async (IApplicationDbContext db) =>
+app.MapGet("/", () => Results.Ok(new
 {
-    var tree = await db.AcademicYears
-        .Include(ay => ay.Semesters)
-            .ThenInclude(s => s.SurveyCampaigns)
-                .ThenInclude(sc => sc.SurveyForms)
-                    .ThenInclude(sf => sf.Questions)
-                        .ThenInclude(q => q.Options)
-        .AsNoTracking()
-        .ToListAsync();
+    service = "khaosatvmu-api",
+    status = "ok"
+}));
 
-    return Results.Ok(tree);
-})
-.WithName("GetSurveyTree");
+app.MapAuthEndpoints();
+app.MapUserAdministrationEndpoints();
+app.MapCatalogEndpoints();
+app.MapSurveyEndpoints();
 
-app.MapGet("/api/academic-years", async (IApplicationDbContext db) =>
-{
-    var years = await db.AcademicYears
-        .Include(ay => ay.Semesters)
-        .AsNoTracking()
-        .ToListAsync();
-
-    return Results.Ok(years);
-})
-.WithName("GetAcademicYears");
-
-app.MapGet("/api/survey-campaigns", async (IApplicationDbContext db) =>
-{
-    var campaigns = await db.SurveyCampaigns
-        .Include(sc => sc.Semester)
-        .Include(sc => sc.SurveyForms)
-        .AsNoTracking()
-        .ToListAsync();
-
-    return Results.Ok(campaigns);
-})
-.WithName("GetSurveyCampaigns");
-
-// AgentMemory API Endpoints
-app.MapGet("/api/agentmemory/health", async (IAgentMemoryService memoryService) =>
-{
-    var healthy = await memoryService.IsHealthyAsync();
-    return Results.Ok(new { status = healthy ? "online" : "offline", timestamp = DateTime.UtcNow });
-})
-.WithName("GetAgentMemoryHealth");
-
-app.MapPost("/api/agentmemory/save", async (MemorySaveRequest req, IAgentMemoryService memoryService) =>
-{
-    var success = await memoryService.SaveMemoryAsync(req);
-    return success ? Results.Ok(new { message = "Memory saved successfully" }) : Results.BadRequest(new { error = "Failed to save memory" });
-})
-.WithName("SaveAgentMemory");
-
-app.MapPost("/api/agentmemory/recall", async (MemoryRecallRequest req, IAgentMemoryService memoryService) =>
-{
-    var memories = await memoryService.RecallMemoryAsync(req);
-    return Results.Ok(memories);
-})
-.WithName("RecallAgentMemory");
-
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
