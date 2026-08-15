@@ -9,6 +9,7 @@ public static class AuthPolicies
     public const string AdminAccess = "PERMISSION_ADMIN_ACCESS";
     public const string SurveyManage = "PERMISSION_SURVEY_MANAGE";
     public const string SurveyManageInOrganization = "PERMISSION_SURVEY_MANAGE_IN_ORGANIZATION";
+    public const string ViewReports = "PERMISSION_VIEW_REPORTS";
 }
 
 public sealed record PermissionRequirement(

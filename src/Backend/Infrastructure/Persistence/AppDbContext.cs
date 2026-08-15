@@ -338,7 +338,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                     "\"SelectedValue\" BETWEEN 1 AND 5"));
             entity.HasKey(x => new { x.ResponseId, x.QuestionId });
             entity.HasIndex(x => x.QuestionId);
-            entity.HasOne<SurveyResponse>()
+            entity.HasOne(x => x.SurveyResponse)
                 .WithMany()
                 .HasForeignKey(x => x.ResponseId)
                 .OnDelete(DeleteBehavior.Cascade);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  BarChart3,
   BookOpen,
   Building2,
   ChartColumn,
@@ -63,6 +64,7 @@ export function Sidebar({
       items: [
         { id: 'overview', label: 'Bảng điều khiển', icon: LayoutDashboard },
         { id: 'progress', label: 'Tiến độ thu phiếu', icon: ChartColumn },
+        { id: 'reports', label: 'Thống kê & Báo cáo', icon: BarChart3 },
       ],
     },
     {

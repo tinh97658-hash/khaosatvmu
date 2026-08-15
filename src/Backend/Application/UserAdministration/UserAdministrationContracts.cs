@@ -28,6 +28,35 @@ public sealed record AdminUserDto(
 
 public sealed record AdminRoleDto(Guid Id, string Code, string Name, string? Description);
 
+/// <summary>Thông tin một permission trong hệ thống.</summary>
+public sealed record PermissionDto(
+    Guid Id,
+    string Code,
+    string Name,
+    string? Description);
+
+/// <summary>Trạng thái permission (được cấp hay không) của một role.</summary>
+public sealed record RolePermissionStatusDto(
+    Guid PermissionId,
+    string PermissionCode,
+    string PermissionName,
+    bool IsGranted);
+
+/// <summary>Toàn bộ permission matrix của một role.</summary>
+public sealed record RolePermissionMatrixDto(
+    Guid RoleId,
+    string RoleCode,
+    string RoleName,
+    IReadOnlyList<RolePermissionStatusDto> Permissions);
+
+/// <summary>Lệnh cập nhật permission của một role.</summary>
+public sealed record UpdateRolePermissionsCommand(
+    Guid RoleId,
+    IReadOnlyList<RolePermissionGrantDto> Grants);
+
+public sealed record RolePermissionGrantDto(Guid PermissionId, bool IsGranted);
+
+
 public sealed record AdminAuditLogDto(
     Guid Id,
     Guid? UserId,
@@ -119,7 +148,20 @@ public interface IUserAdministrationService
         int page,
         int pageSize,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Lấy toàn bộ danh sách permissions trong hệ thống.</summary>
+    Task<IReadOnlyList<PermissionDto>> GetPermissionsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Lấy trạng thái permissions (granted/denied) của tất cả roles.</summary>
+    Task<IReadOnlyList<RolePermissionMatrixDto>> GetRolePermissionMatrixAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Cập nhật danh sách permissions của một role.</summary>
+    Task UpdateRolePermissionsAsync(
+        Guid roleId,
+        IReadOnlyList<RolePermissionGrantDto> grants,
+        CancellationToken cancellationToken = default);
 }
+
 
 public static class UserAdministrationErrorCodes
 {

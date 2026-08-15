@@ -2,10 +2,11 @@ using Application.Surveys;
 using Domain;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Infrastructure.Surveys;
 
-public sealed class EfSurveyService(AppDbContext db) : ISurveyService
+public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurveyService
 {
     private const int MaximumScaleOptions = 5;
     private const int MaximumCommentLength = 1000;
@@ -680,73 +681,92 @@ public sealed class EfSurveyService(AppDbContext db) : ISurveyService
         CancellationToken cancellationToken = default)
     {
         var token = linkToken?.Trim() ?? string.Empty;
-        var sectionSurvey = await db.CourseSectionSurveys
-            .FirstOrDefaultAsync(x => x.LinkToken == token, cancellationToken);
-        if (sectionSurvey is null)
+        if (string.IsNullOrEmpty(token))
         {
             return Failed<PublicSurveyDto>(SurveyErrorCodes.LinkNotFound);
         }
 
-        var semesterSurvey = await db.SemesterSurveys
-            .FirstOrDefaultAsync(x => x.SemesterSurveyId == sectionSurvey.SemesterSurveyId, cancellationToken);
-        if (semesterSurvey is null)
+        var cacheKey = $"survey:public:{token}";
+        var cached = await cache.GetOrCreateAsync(cacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15);
+
+            var sectionSurvey = await db.CourseSectionSurveys
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.LinkToken == token, cancellationToken);
+            if (sectionSurvey is null) return null;
+
+            var semesterSurvey = await db.SemesterSurveys
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.SemesterSurveyId == sectionSurvey.SemesterSurveyId, cancellationToken);
+            if (semesterSurvey is null) return null;
+
+            var template = await db.SurveyTemplates
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.SurveyTemplateId == semesterSurvey.SurveyTemplateId, cancellationToken);
+            if (template is null) return null;
+
+            var questions = await db.SurveyQuestions
+                .AsNoTracking()
+                .Where(x => x.SurveyTemplateId == template.SurveyTemplateId)
+                .OrderBy(x => x.QuestionId)
+                .Select(x => new PublicSurveyQuestionDto(x.QuestionId, x.QuestionText))
+                .ToListAsync(cancellationToken);
+            var options = await db.AnswerScaleOptions
+                .AsNoTracking()
+                .Where(x => x.AnswerScaleId == template.AnswerScaleId)
+                .OrderBy(x => x.Value)
+                .Select(x => new AnswerScaleOptionDto(
+                    x.AnswerScaleOptionId,
+                    x.AnswerScaleId,
+                    x.Value,
+                    x.DisplayText))
+                .ToListAsync(cancellationToken);
+
+            var section = await db.CourseSections
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.CourseSectionId == sectionSurvey.CourseSectionId, cancellationToken);
+            var course = section is null
+                ? null
+                : await db.Courses.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.CourseId == section.CourseId, cancellationToken);
+            var lecturer = section is null
+                ? null
+                : await db.Lecturers.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.LecturerId == section.LecturerId, cancellationToken);
+            var semester = section is null
+                ? null
+                : await db.Semesters.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.SemesterId == section.SemesterId, cancellationToken);
+            var academicYear = semester is null
+                ? null
+                : await db.AcademicYears.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.AcademicYearId == semester.AcademicYearId, cancellationToken);
+
+            return new PublicSurveyDto(
+                sectionSurvey.LinkToken,
+                template.TemplateName,
+                course?.CourseCode ?? string.Empty,
+                course?.CourseName ?? string.Empty,
+                section?.SectionName ?? string.Empty,
+                lecturer?.FullName ?? string.Empty,
+                semester?.SemesterName ?? string.Empty,
+                academicYear?.AcademicYearName ?? string.Empty,
+                sectionSurvey.StartTime,
+                sectionSurvey.EndTime,
+                true,
+                options,
+                questions);
+        });
+
+        if (cached is null)
         {
             return Failed<PublicSurveyDto>(SurveyErrorCodes.LinkNotFound);
         }
-
-        var template = await db.SurveyTemplates
-            .FirstOrDefaultAsync(x => x.SurveyTemplateId == semesterSurvey.SurveyTemplateId, cancellationToken);
-        if (template is null)
-        {
-            return Failed<PublicSurveyDto>(SurveyErrorCodes.TemplateNotFound);
-        }
-
-        var questions = await db.SurveyQuestions
-            .Where(x => x.SurveyTemplateId == template.SurveyTemplateId)
-            .OrderBy(x => x.QuestionId)
-            .Select(x => new PublicSurveyQuestionDto(x.QuestionId, x.QuestionText))
-            .ToListAsync(cancellationToken);
-        var options = await db.AnswerScaleOptions
-            .Where(x => x.AnswerScaleId == template.AnswerScaleId)
-            .OrderBy(x => x.Value)
-            .Select(x => new AnswerScaleOptionDto(
-                x.AnswerScaleOptionId,
-                x.AnswerScaleId,
-                x.Value,
-                x.DisplayText))
-            .ToListAsync(cancellationToken);
-
-        var section = await db.CourseSections
-            .FirstOrDefaultAsync(x => x.CourseSectionId == sectionSurvey.CourseSectionId, cancellationToken);
-        var course = section is null
-            ? null
-            : await db.Courses.FirstOrDefaultAsync(x => x.CourseId == section.CourseId, cancellationToken);
-        var lecturer = section is null
-            ? null
-            : await db.Lecturers.FirstOrDefaultAsync(x => x.LecturerId == section.LecturerId, cancellationToken);
-        var semester = section is null
-            ? null
-            : await db.Semesters.FirstOrDefaultAsync(x => x.SemesterId == section.SemesterId, cancellationToken);
-        var academicYear = semester is null
-            ? null
-            : await db.AcademicYears
-                .FirstOrDefaultAsync(x => x.AcademicYearId == semester.AcademicYearId, cancellationToken);
 
         var now = DateTime.UtcNow;
-        return Succeeded(new PublicSurveyDto(
-            sectionSurvey.LinkToken,
-            template.TemplateName,
-            course?.CourseCode ?? string.Empty,
-            course?.CourseName ?? string.Empty,
-            section?.SectionName ?? string.Empty,
-            lecturer?.FullName ?? string.Empty,
-            semester?.SemesterName ?? string.Empty,
-            academicYear?.AcademicYearName ?? string.Empty,
-            sectionSurvey.StartTime,
-            sectionSurvey.EndTime,
-            now >= sectionSurvey.StartTime && now <= sectionSurvey.EndTime,
-            options,
-            questions));
+        var isOpen = now >= cached.StartTime && now <= cached.EndTime;
+        return Succeeded(cached with { IsOpen = isOpen });
     }
 
     public async Task<SurveyOperationResult<SubmitSurveyResponseDto>> SubmitSurveyResponseAsync(
@@ -755,41 +775,27 @@ public sealed class EfSurveyService(AppDbContext db) : ISurveyService
         CancellationToken cancellationToken = default)
     {
         var token = linkToken?.Trim() ?? string.Empty;
+        var publicSurveyResult = await GetPublicSurveyAsync(token, cancellationToken);
+        if (!publicSurveyResult.Succeeded || publicSurveyResult.Value is not { } publicSurvey)
+        {
+            return Failed<SubmitSurveyResponseDto>(publicSurveyResult.ErrorCode ?? SurveyErrorCodes.LinkNotFound);
+        }
+
+        if (!publicSurvey.IsOpen)
+        {
+            return Failed<SubmitSurveyResponseDto>(SurveyErrorCodes.LinkNotOpen);
+        }
+
         var sectionSurvey = await db.CourseSectionSurveys
+            .AsNoTracking()
             .FirstOrDefaultAsync(x => x.LinkToken == token, cancellationToken);
         if (sectionSurvey is null)
         {
             return Failed<SubmitSurveyResponseDto>(SurveyErrorCodes.LinkNotFound);
         }
 
-        var now = DateTime.UtcNow;
-        if (now < sectionSurvey.StartTime || now > sectionSurvey.EndTime)
-        {
-            return Failed<SubmitSurveyResponseDto>(SurveyErrorCodes.LinkNotOpen);
-        }
-
-        var semesterSurvey = await db.SemesterSurveys
-            .FirstOrDefaultAsync(x => x.SemesterSurveyId == sectionSurvey.SemesterSurveyId, cancellationToken);
-        if (semesterSurvey is null)
-        {
-            return Failed<SubmitSurveyResponseDto>(SurveyErrorCodes.LinkNotFound);
-        }
-
-        var template = await db.SurveyTemplates
-            .FirstOrDefaultAsync(x => x.SurveyTemplateId == semesterSurvey.SurveyTemplateId, cancellationToken);
-        if (template is null)
-        {
-            return Failed<SubmitSurveyResponseDto>(SurveyErrorCodes.TemplateNotFound);
-        }
-
-        var questionIds = await db.SurveyQuestions
-            .Where(x => x.SurveyTemplateId == template.SurveyTemplateId)
-            .Select(x => x.QuestionId)
-            .ToListAsync(cancellationToken);
-        var allowedValues = await db.AnswerScaleOptions
-            .Where(x => x.AnswerScaleId == template.AnswerScaleId)
-            .Select(x => x.Value)
-            .ToListAsync(cancellationToken);
+        var questionIds = publicSurvey.Questions.Select(x => x.QuestionId).ToHashSet();
+        var allowedValues = publicSurvey.AnswerOptions.Select(x => x.Value).ToHashSet();
 
         var answers = (command.Answers ?? [])
             .GroupBy(x => x.QuestionId)
@@ -813,6 +819,7 @@ public sealed class EfSurveyService(AppDbContext db) : ISurveyService
             return Failed<SubmitSurveyResponseDto>(SurveyErrorCodes.CommentsTooLong);
         }
 
+        var now = DateTime.UtcNow;
         var response = new SurveyResponse
         {
             CourseSectionSurveyId = sectionSurvey.CourseSectionSurveyId,
@@ -820,15 +827,15 @@ public sealed class EfSurveyService(AppDbContext db) : ISurveyService
             Score = Math.Round((decimal)answers.Average(answer => answer.SelectedValue), 2),
             SubmittedAt = now,
         };
-        db.SurveyResponses.Add(response);
-        await db.SaveChangesAsync(cancellationToken);
 
+        db.SurveyResponses.Add(response);
         db.SurveyResponseAnswers.AddRange(answers.Select(answer => new SurveyResponseAnswer
         {
-            ResponseId = response.ResponseId,
+            SurveyResponse = response,
             QuestionId = answer.QuestionId,
             SelectedValue = answer.SelectedValue,
         }));
+
         await db.SaveChangesAsync(cancellationToken);
 
         return Succeeded(new SubmitSurveyResponseDto(response.ResponseId, response.Score, response.SubmittedAt));

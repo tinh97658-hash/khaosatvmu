@@ -114,4 +114,6 @@ public sealed class SurveyResponseAnswer
 
     /// <summary>CHECK 1..5.</summary>
     public int SelectedValue { get; set; }
+
+    public SurveyResponse? SurveyResponse { get; set; }
 }

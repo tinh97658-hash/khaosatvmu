@@ -404,3 +404,130 @@ export interface SaveAdminProfile {
   organizationUnitName: string | null;
   isDefault: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// BÁO CÁO & THỐNG KÊ (REPORTS & STATISTICS)
+// ---------------------------------------------------------------------------
+
+export interface SectionProgressDetail {
+  courseSectionSurveyId: number;
+  courseCode: string;
+  courseName: string;
+  sectionName: string;
+  lecturerName: string;
+  classSize: number;
+  responseCount: number;
+  completionRate: number;
+  status: 'Hoàn thành' | 'Đang thu' | 'Chậm tiến độ';
+}
+
+export interface OperationalProgressReport {
+  semesterId: number;
+  semesterName: string;
+  academicYearName: string;
+  totalTargetResponses: number;
+  totalActualResponses: number;
+  overallCompletionRate: number;
+  completedSectionCount: number;
+  inProgressSectionCount: number;
+  laggingSectionCount: number;
+  sectionDetails: SectionProgressDetail[];
+}
+
+export interface OptionCount {
+  value: number;
+  displayText: string;
+  count: number;
+  percentage: number;
+}
+
+export interface QuestionRating {
+  questionId: number;
+  questionText: string;
+  averageScore: number;
+  totalAnswers: number;
+  optionDistribution: OptionCount[];
+}
+
+export interface LecturerSectionSummary {
+  courseSectionSurveyId: number;
+  courseCode: string;
+  courseName: string;
+  sectionName: string;
+  classSize: number;
+  responseCount: number;
+  averageScore: number;
+}
+
+export interface LecturerPerformanceReport {
+  lecturerId: number;
+  fullName: string;
+  departmentName: string;
+  facultyName: string;
+  averageScore: number;
+  totalResponses: number;
+  courseSectionCount: number;
+  departmentAverageScore: number;
+  facultyAverageScore: number;
+  sections: LecturerSectionSummary[];
+  questionRatings: QuestionRating[];
+}
+
+export interface DepartmentSummary {
+  departmentId: number;
+  departmentName: string;
+  lecturerCount: number;
+  sectionCount: number;
+  responseCount: number;
+  averageSatisfactionScore: number;
+}
+
+export interface FacultyDepartmentReport {
+  facultyId: number;
+  facultyName: string;
+  totalDepartments: number;
+  totalLecturers: number;
+  totalSections: number;
+  totalResponses: number;
+  averageSatisfactionScore: number;
+  departments: DepartmentSummary[];
+}
+
+export interface SurveyQuestionSummaryReport {
+  semesterSurveyId: number;
+  surveyTemplateId: number;
+  templateName: string;
+  totalResponses: number;
+  overallAverageScore: number;
+  questions: QuestionRating[];
+}
+
+// ---------------------------------------------------------------------------
+// PHÂN QUYỀN THEO MODULE (PERMISSION MANAGEMENT)
+// ---------------------------------------------------------------------------
+
+export interface PermissionDto {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+}
+
+export interface RolePermissionStatus {
+  permissionId: string;
+  permissionCode: string;
+  permissionName: string;
+  isGranted: boolean;
+}
+
+export interface RolePermissionMatrix {
+  roleId: string;
+  roleCode: string;
+  roleName: string;
+  permissions: RolePermissionStatus[];
+}
+
+export interface RolePermissionGrantDto {
+  permissionId: string;
+  isGranted: boolean;
+}

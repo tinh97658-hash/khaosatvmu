@@ -6,6 +6,9 @@ import type {
   AdminUser,
   AdminUserImportResult,
   ImportAdminUserRow,
+  PermissionDto,
+  RolePermissionGrantDto,
+  RolePermissionMatrix,
   SaveAdminProfile,
 } from '../types';
 import { apiRequest, csrfRequest } from './apiClient';
@@ -50,4 +53,8 @@ export const adminApi = {
     apiRequest<AdminPage<AdminAuditLog>>(
       `/api/admin/audit-logs?${queryString({ userId, page, pageSize })}`,
     ),
+  permissions: () => apiRequest<PermissionDto[]>('/api/admin/permissions'),
+  rolePermissions: () => apiRequest<RolePermissionMatrix[]>('/api/admin/role-permissions'),
+  updateRolePermissions: (roleId: string, grants: RolePermissionGrantDto[]) =>
+    csrfRequest<void>(`/api/admin/roles/${roleId}/permissions`, 'PUT', { grants }),
 };
