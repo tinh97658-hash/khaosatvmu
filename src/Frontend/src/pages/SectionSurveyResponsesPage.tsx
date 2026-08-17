@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { Modal } from '../components/Modal';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { ApiError } from '../services/apiClient';
 import { surveyApi, surveyErrorMessage } from '../services/surveyApi';
 import type {
@@ -51,26 +52,34 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
   const [detail, setDetail] = useState<SurveyResponseDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [survey, nextResponses] = await Promise.all([
-        surveyApi.courseSectionSurvey(courseSectionSurveyId),
-        surveyApi.surveyResponses(courseSectionSurveyId),
-      ]);
-      setSectionSurvey(survey);
-      setResponses(nextResponses);
-      setLoadError(null);
-    } catch (error) {
-      setLoadError(messageFrom(error));
-    } finally {
-      setLoading(false);
-    }
-  }, [courseSectionSurveyId]);
+  /** `silent` dành cho vòng tự làm mới: giữ nguyên bảng, chỉ thay dữ liệu. */
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const [survey, nextResponses] = await Promise.all([
+          surveyApi.courseSectionSurvey(courseSectionSurveyId),
+          surveyApi.surveyResponses(courseSectionSurveyId),
+        ]);
+        setSectionSurvey(survey);
+        setResponses(nextResponses);
+        setLoadError(null);
+      } catch (error) {
+        if (!silent) setLoadError(messageFrom(error));
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [courseSectionSurveyId]
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const refresh = useCallback(() => load(true), [load]);
+  // Mở sẵn một phiếu để đọc thì khoan nạp lại, tránh danh sách nhảy dưới tay.
+  useAutoRefresh(refresh, { enabled: detail === null });
 
   const openDetail = async (responseId: number) => {
     setDetailLoading(true);
@@ -118,12 +127,17 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
       key: 'score',
       header: 'Điểm',
       width: '80px',
+      filterValue: (item) => item.score.toFixed(2),
+      numeric: true,
       render: (item) => <span className="response-score">{item.score.toFixed(2)}</span>,
     },
     ...scaleValues.map((option) => ({
       key: `value-${option.value}`,
       header: `Mức ${option.value}`,
       width: '80px',
+      filterValue: (item: SurveyResponseSummary) =>
+        String(item.valueCounts.find((x) => x.value === option.value)?.count ?? 0),
+      numeric: true,
       render: (item: SurveyResponseSummary) => {
         const count = item.valueCounts.find((x) => x.value === option.value)?.count ?? 0;
         return (
@@ -133,7 +147,10 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
     })),
     {
       key: 'additionalComments',
+      // Lọc theo nguyên văn ý kiến thì mỗi dòng một giá trị, nên chỉ gom hai
+      // nhóm có/không để còn dùng được.
       header: 'Ý kiến khác',
+      filterValue: (item) => (item.additionalComments ? 'Có ý kiến' : 'Không có'),
       render: (item) =>
         item.additionalComments ? (
           <span className="response-comment">{item.additionalComments}</span>

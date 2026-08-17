@@ -139,18 +139,22 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
     {
       key: 'departmentName',
       header: 'Tên bộ môn',
+      filterValue: (row) => row.departmentName,
       render: (row) => <span className="catalog-cell-primary">{row.departmentName}</span>,
     },
     {
       key: 'facultyId',
       header: 'Khoa viện',
       width: '280px',
+      filterValue: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
       render: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
     },
     {
       key: 'courseCount',
       header: 'Số môn học',
       width: '120px',
+      filterValue: (row) => String(courseCountOf(row.departmentId)),
+      numeric: true,
       render: (row) => (
         <span className="catalog-cell-primary">{courseCountOf(row.departmentId)}</span>
       ),
@@ -159,6 +163,8 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
       key: 'lecturerCount',
       header: 'Số giảng viên',
       width: '130px',
+      filterValue: (row) => String(lecturerCountOf(row.departmentId)),
+      numeric: true,
       render: (row) => (
         <span className="catalog-cell-primary">{lecturerCountOf(row.departmentId)}</span>
       ),

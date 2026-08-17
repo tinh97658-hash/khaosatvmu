@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Inbox, Plus, Search } from 'lucide-react';
+import { ColumnFilterMenu, type SortDirection } from './ColumnFilterMenu';
 import '../styles/catalogs.css';
 
 export interface Column<T> {
@@ -7,6 +8,14 @@ export interface Column<T> {
   header: string;
   render?: (item: T) => ReactNode;
   width?: string;
+  /**
+   * Giá trị dùng cho menu lọc và sắp xếp của cột. Cột nào không khai báo thì
+   * không có nút lọc — dùng cho cột thao tác, hoặc cột mà mỗi dòng một giá trị
+   * riêng nên lọc không gom nhóm được gì.
+   */
+  filterValue?: (item: T) => string;
+  /** Đặt true cho cột số để sắp xếp theo trị số thay vì theo chuỗi. */
+  numeric?: boolean;
 }
 
 interface DataTableProps<T> {
@@ -43,11 +52,47 @@ export function DataTable<T>({
   keyExtractor,
   pageSize,
 }: DataTableProps<T>) {
-  const hasQuery = Boolean(searchValue.trim() || currentFilter);
   const resolvedAddLabel = addNewLabel.replace(/^\+\s*/, '');
 
   const [page, setPage] = useState(1);
-  const totalPages = pageSize ? Math.max(1, Math.ceil(data.length / pageSize)) : 1;
+  /** Không có khóa nghĩa là cột đó chưa lọc. */
+  const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
+  const [sort, setSort] = useState<{ key: string; direction: SortDirection } | null>(null);
+
+  const filterableColumns = useMemo(
+    () => columns.filter((column) => column.filterValue),
+    [columns]
+  );
+
+  /** Dòng có qua bộ lọc không, bỏ qua cột `except` để dựng danh sách cho chính cột đó. */
+  const passesFilters = (item: T, except?: string) =>
+    filterableColumns.every((column) => {
+      if (column.key === except) return true;
+      const allowed = columnFilters[column.key];
+      return !allowed || allowed.includes(column.filterValue!(item));
+    });
+
+  const rows = useMemo(() => {
+    const filtered = data.filter((item) => passesFilters(item));
+    if (!sort) return filtered;
+    const column = columns.find((item) => item.key === sort.key);
+    if (!column?.filterValue) return filtered;
+
+    return [...filtered].sort((left, right) => {
+      const leftValue = column.filterValue!(left);
+      const rightValue = column.filterValue!(right);
+      const compared = column.numeric
+        ? Number(leftValue) - Number(rightValue)
+        : leftValue.localeCompare(rightValue, 'vi');
+      return sort.direction === 'asc' ? compared : -compared;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, columns, columnFilters, sort]);
+
+  const hasQuery = Boolean(
+    searchValue.trim() || currentFilter || Object.keys(columnFilters).length > 0
+  );
+  const totalPages = pageSize ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
 
   // Lọc hoặc xóa bớt dòng có thể làm trang hiện tại vượt quá số trang còn lại.
   useEffect(() => {
@@ -55,7 +100,26 @@ export function DataTable<T>({
   }, [totalPages]);
 
   const firstIndex = pageSize ? (page - 1) * pageSize : 0;
-  const visibleRows = pageSize ? data.slice(firstIndex, firstIndex + pageSize) : data;
+  const visibleRows = pageSize ? rows.slice(firstIndex, firstIndex + pageSize) : rows;
+
+  /** Giá trị cho menu của một cột, đã trừ các dòng bị cột khác lọc mất. */
+  const valuesFor = (column: Column<T>) =>
+    [...new Set(
+      data.filter((item) => passesFilters(item, column.key)).map((item) => column.filterValue!(item))
+    )].sort((left, right) =>
+      column.numeric ? Number(left) - Number(right) : left.localeCompare(right, 'vi')
+    );
+
+  const applyColumnFilter = (key: string, selected: string[] | null) => {
+    setColumnFilters((prev) => {
+      const next = { ...prev };
+      if (selected === null) delete next[key];
+      else next[key] = selected;
+      return next;
+    });
+    // Lọc xong mà vẫn đứng ở trang cuối thì bảng trông như rỗng.
+    setPage(1);
+  };
 
   return (
     <section className="catalog-table-shell" aria-label="Danh sách danh mục">
@@ -74,7 +138,7 @@ export function DataTable<T>({
             </label>
           )}
           <span className="catalog-result-count" aria-live="polite">
-            {data.length} kết quả
+            {rows.length} kết quả
           </span>
         </div>
 
@@ -114,7 +178,21 @@ export function DataTable<T>({
               <th className="catalog-table__index" scope="col">STT</th>
               {columns.map((column) => (
                 <th key={column.key} scope="col" style={{ width: column.width }}>
-                  {column.header}
+                  {column.filterValue ? (
+                    <span className="catalog-th-filterable">
+                      <span className="catalog-th-label">{column.header}</span>
+                      <ColumnFilterMenu
+                        label={column.header}
+                        values={valuesFor(column)}
+                        selected={columnFilters[column.key] ?? null}
+                        sortDirection={sort?.key === column.key ? sort.direction : null}
+                        onApply={(selected) => applyColumnFilter(column.key, selected)}
+                        onSort={(direction) => setSort({ key: column.key, direction })}
+                      />
+                    </span>
+                  ) : (
+                    column.header
+                  )}
                 </th>
               ))}
             </tr>
@@ -148,17 +226,18 @@ export function DataTable<T>({
 
       <footer className="catalog-pagination">
         <span>
-          {pageSize && data.length > 0 ? (
+          {pageSize && rows.length > 0 ? (
             <>
               Hiển thị <strong>{firstIndex + 1}</strong>–
-              <strong>{Math.min(firstIndex + pageSize, data.length)}</strong> trên{' '}
-              <strong>{data.length}</strong> kết quả
+              <strong>{Math.min(firstIndex + pageSize, rows.length)}</strong> trên{' '}
+              <strong>{rows.length}</strong> kết quả
             </>
           ) : (
             <>
-              Hiển thị <strong>{data.length}</strong> kết quả
+              Hiển thị <strong>{rows.length}</strong> kết quả
             </>
           )}
+          {rows.length !== data.length && ` (lọc từ ${data.length})`}
         </span>
         <div className="catalog-pagination__controls" aria-label="Phân trang">
           <button

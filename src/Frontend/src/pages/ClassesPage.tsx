@@ -436,6 +436,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) 
       key: 'courseId',
       header: 'Học phần',
       width: '260px',
+      filterValue: (item) => courseOf(item.courseId)?.courseName ?? '—',
       render: (item) => {
         const course = courseOf(item.courseId);
         return (
@@ -450,18 +451,22 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) 
       key: 'sectionName',
       header: 'Tên lớp',
       width: '160px',
+      filterValue: (item) => item.sectionName,
       render: (item) => <span className="catalog-cell-primary">{item.sectionName}</span>,
     },
     {
       key: 'classSize',
       header: 'Sĩ số',
       width: '90px',
+      filterValue: (item) => String(item.classSize),
+      numeric: true,
       render: (item) => item.classSize,
     },
     {
       key: 'lecturerId',
       header: 'Giảng viên',
       width: '260px',
+      filterValue: (item) => lecturerOf(item.lecturerId)?.fullName ?? '—',
       render: (item) => {
         const lecturer = lecturerOf(item.lecturerId);
         return (

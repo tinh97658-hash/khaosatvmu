@@ -1459,6 +1459,22 @@
   vertical-align: middle;
 }
 
+/* Tiêu đề cột có menu lọc: chữ và nút xổ nằm cùng một hàng, nút đẩy sát mép phải. */
+.semester-survey-card .campaign-table th:has(.column-filter-button) {
+  white-space: nowrap;
+}
+
+.campaign-th-label {
+  margin-right: auto;
+}
+
+.semester-survey-card .campaign-table th:has(.column-filter-button) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+}
+
 .semester-survey-card .campaign-link-input {
   min-width: 260px;
 }

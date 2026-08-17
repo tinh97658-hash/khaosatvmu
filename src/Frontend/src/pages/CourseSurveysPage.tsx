@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CalendarDays,
   ChevronDown,
@@ -18,9 +18,11 @@ import {
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ColumnFilterMenu, type SortDirection } from '../components/ColumnFilterMenu';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { QRCodeModal } from '../components/QRCodeModal';
 import { SectionSurveyResponsesPage } from './SectionSurveyResponsesPage';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { ApiError } from '../services/apiClient';
 import { catalogApi } from '../services/catalogApi';
 import { surveyApi, surveyErrorMessage, surveyLinkOf } from '../services/surveyApi';
@@ -41,6 +43,47 @@ const selectedSemesterStorageKey = 'course-surveys.semester-id';
 
 /** Một học kỳ có thể có hàng trăm lớp nên bảng lớp được phân trang. */
 const sectionPageSize = 20;
+
+/**
+ * Các cột có menu lọc. Đường dẫn riêng, thời gian mở và thao tác đứng ngoài vì
+ * mỗi dòng một giá trị khác nhau nên lọc theo chúng không có tác dụng gom nhóm.
+ */
+type FilterableColumn = 'section' | 'responseCount';
+
+const filterableColumns: FilterableColumn[] = ['section', 'responseCount'];
+
+const columnLabels: Record<FilterableColumn, string> = {
+  section: 'Lớp học phần',
+  responseCount: 'Lượt trả lời',
+};
+
+/** Giá trị đại diện của một dòng ở từng cột, cũng là thứ hiện trong danh sách tích chọn. */
+function columnValueOf(section: CourseSectionSurvey, column: FilterableColumn): string {
+  return column === 'section'
+    ? `${section.courseCode} - ${section.courseName}`
+    : String(section.responseCount);
+}
+
+interface TableView {
+  /** Không có khóa nghĩa là cột đó chưa lọc. */
+  filters: Partial<Record<FilterableColumn, string[]>>;
+  sort: { column: FilterableColumn; direction: SortDirection } | null;
+}
+
+const emptyTableView: TableView = { filters: {}, sort: null };
+
+/** Dòng có qua được bộ lọc không, bỏ qua cột `except` để dựng danh sách cho chính cột đó. */
+function passesFilters(
+  section: CourseSectionSurvey,
+  view: TableView,
+  except?: FilterableColumn
+): boolean {
+  return filterableColumns.every((column) => {
+    if (column === except) return true;
+    const allowed = view.filters[column];
+    return !allowed || allowed.includes(columnValueOf(section, column));
+  });
+}
 
 function messageFrom(error: unknown): string {
   return error instanceof ApiError ? surveyErrorMessage(error.errorCode) : surveyErrorMessage(null);
@@ -78,6 +121,17 @@ export const CourseSurveysPage: React.FC = () => {
   const [sectionSurveys, setSectionSurveys] = useState<Record<number, CourseSectionSurvey[]>>({});
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [sectionPages, setSectionPages] = useState<Record<number, number>>({});
+  /** Bộ lọc và sắp xếp của bảng lớp, giữ riêng cho từng đợt khảo sát. */
+  const [tableViews, setTableViews] = useState<Record<number, TableView>>({});
+
+  const updateTableView = (semesterSurveyId: number, change: (view: TableView) => TableView) => {
+    setTableViews((prev) => ({
+      ...prev,
+      [semesterSurveyId]: change(prev[semesterSurveyId] ?? emptyTableView),
+    }));
+    // Lọc xong mà vẫn đứng ở trang 5 thì bảng trông như rỗng.
+    setSectionPages((prev) => ({ ...prev, [semesterSurveyId]: 1 }));
+  };
 
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -175,6 +229,42 @@ export const CourseSurveysPage: React.FC = () => {
     }
     void loadSemesterSurveys(semesterId, true);
   }, [semesterId, loadSemesterSurveys]);
+
+  // Vòng làm mới cần biết đợt nào đang mở nhưng không được dựng lại mỗi lần
+  // người dùng gập/mở một đợt, nên đọc qua ref thay vì qua dependency.
+  const expandedRef = useRef(expanded);
+  expandedRef.current = expanded;
+
+  /**
+   * Nạp lại số lượt trả lời mà không đụng tới cờ loading hay thông báo lỗi:
+   * bảng đang xem phải đứng yên, chỉ các con số thay đổi.
+   */
+  const refreshResponseCounts = useCallback(async () => {
+    if (!semesterId) return;
+    const surveys = await surveyApi.semesterSurveys(Number(semesterId));
+    setSemesterSurveys(surveys);
+
+    const openSurveyIds = surveys
+      .map((survey) => survey.semesterSurveyId)
+      .filter((id) => expandedRef.current[id]);
+    if (openSurveyIds.length === 0) return;
+
+    const lists = await Promise.all(
+      openSurveyIds.map(
+        async (id) => [id, await surveyApi.courseSectionSurveys(id)] as const
+      )
+    );
+    setSectionSurveys((prev) => {
+      const next = { ...prev };
+      for (const [id, sections] of lists) next[id] = sections;
+      return next;
+    });
+  }, [semesterId]);
+
+  useAutoRefresh(refreshResponseCounts, {
+    // Đang xem chi tiết phiếu của một lớp thì trang đó tự làm mới, khỏi gọi kép.
+    enabled: Boolean(semesterId) && openedSectionSurveyId === null,
+  });
 
   const toggleExpanded = async (semesterSurveyId: number) => {
     const willExpand = !expanded[semesterSurveyId];
@@ -293,7 +383,6 @@ export const CourseSurveysPage: React.FC = () => {
           <span>Chọn học kỳ cần khảo sát</span>
         </div>
         <div className="operations-field">
-          <label htmlFor="course-survey-semester">Học kỳ</label>
           <select
             id="course-survey-semester"
             value={semesterId}
@@ -363,7 +452,57 @@ export const CourseSurveysPage: React.FC = () => {
       )}
 
       {semesterId && !loading && semesterSurveys.map((survey) => {
-        const sections = sectionSurveys[survey.semesterSurveyId] ?? [];
+        const allSections = sectionSurveys[survey.semesterSurveyId] ?? [];
+        const view = tableViews[survey.semesterSurveyId] ?? emptyTableView;
+
+        const sections = allSections
+          .filter((section) => passesFilters(section, view))
+          .sort((left, right) => {
+            if (!view.sort) return 0;
+            const { column, direction } = view.sort;
+            // Cột lượt trả lời là số, so sánh chuỗi sẽ xếp "10" trước "9".
+            const compared =
+              column === 'responseCount'
+                ? left.responseCount - right.responseCount
+                : columnValueOf(left, column).localeCompare(columnValueOf(right, column), 'vi');
+            return direction === 'asc' ? compared : -compared;
+          });
+
+        /** Giá trị cho menu của một cột, đã trừ đi các dòng bị cột khác lọc mất. */
+        const valuesFor = (column: FilterableColumn) =>
+          [...new Set(
+            allSections
+              .filter((section) => passesFilters(section, view, column))
+              .map((section) => columnValueOf(section, column))
+          )].sort((left, right) =>
+            column === 'responseCount'
+              ? Number(left) - Number(right)
+              : left.localeCompare(right, 'vi')
+          );
+
+        const renderFilter = (column: FilterableColumn) => (
+          <ColumnFilterMenu
+            label={columnLabels[column]}
+            values={valuesFor(column)}
+            selected={view.filters[column] ?? null}
+            sortDirection={view.sort?.column === column ? view.sort.direction : null}
+            onApply={(selected) =>
+              updateTableView(survey.semesterSurveyId, (current) => {
+                const filters = { ...current.filters };
+                if (selected === null) delete filters[column];
+                else filters[column] = selected;
+                return { ...current, filters };
+              })
+            }
+            onSort={(direction) =>
+              updateTableView(survey.semesterSurveyId, (current) => ({
+                ...current,
+                sort: { column, direction },
+              }))
+            }
+          />
+        );
+
         const isExpanded = expanded[survey.semesterSurveyId] ?? false;
         const totalPages = Math.max(1, Math.ceil(sections.length / sectionPageSize));
         const page = Math.min(sectionPages[survey.semesterSurveyId] ?? 1, totalPages);
@@ -420,17 +559,27 @@ export const CourseSurveysPage: React.FC = () => {
                 <table className="campaign-table">
                   <thead>
                     <tr>
-                      <th>Lớp học phần</th>
+                      <th>
+                        <span className="campaign-th-label">Lớp học phần</span>
+                        {renderFilter('section')}
+                      </th>
                       <th>Đường dẫn riêng</th>
                       <th>Thời gian mở</th>
-                      <th>Lượt trả lời</th>
+                      <th>
+                        <span className="campaign-th-label">Lượt trả lời</span>
+                        {renderFilter('responseCount')}
+                      </th>
                       <th>Thao tác</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sections.length === 0 && (
                       <tr>
-                        <td colSpan={5}>Đang tải danh sách lớp...</td>
+                        <td colSpan={5}>
+                          {allSections.length === 0
+                            ? 'Đang tải danh sách lớp...'
+                            : 'Không có lớp nào khớp bộ lọc đang chọn.'}
+                        </td>
                       </tr>
                     )}
                     {visibleSections.map((section) => (
@@ -541,6 +690,7 @@ export const CourseSurveysPage: React.FC = () => {
                   Hiển thị <strong>{firstIndex + 1}</strong>–
                   <strong>{Math.min(firstIndex + sectionPageSize, sections.length)}</strong> trên{' '}
                   <strong>{sections.length}</strong> lớp học phần
+                  {sections.length !== allSections.length && ` (lọc từ ${allSections.length})`}
                 </span>
                 <div className="catalog-pagination__controls" aria-label="Phân trang lớp học phần">
                   <button

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from './auth/authContext';
 import { AuthLoading } from './components/AuthLoading';
@@ -29,6 +29,7 @@ import { ProfileSelectionPage } from './pages/ProfileSelectionPage';
 import { UsersAdminPage } from './pages/UsersAdminPage';
 
 // Services & Types
+import { useAutoRefresh } from './hooks/useAutoRefresh';
 import { ApiError } from './services/apiClient';
 import {
   catalogApi,
@@ -133,34 +134,33 @@ function DashboardApp() {
   const [surveyLoading, setSurveyLoading] = useState(true);
   const [surveyLoadError, setSurveyLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const surveys = await surveyApi.semesterSurveys();
-        const sectionLists = await Promise.all(
-          surveys.map((survey) => surveyApi.courseSectionSurveys(survey.semesterSurveyId))
-        );
-        if (cancelled) return;
-        setSemesterSurveys(surveys);
-        setSectionSurveys(sectionLists.flat());
-        setSurveyLoadError(null);
-      } catch (error) {
-        if (cancelled) return;
+  /** `silent` dành cho vòng tự làm mới: không nháy spinner, không đè lỗi. */
+  const loadSurveyData = useCallback(async (silent = false) => {
+    try {
+      const surveys = await surveyApi.semesterSurveys();
+      const sectionLists = await Promise.all(
+        surveys.map((survey) => surveyApi.courseSectionSurveys(survey.semesterSurveyId))
+      );
+      setSemesterSurveys(surveys);
+      setSectionSurveys(sectionLists.flat());
+      setSurveyLoadError(null);
+    } catch (error) {
+      if (!silent) {
         setSurveyLoadError(
           surveyErrorMessage(error instanceof ApiError ? error.errorCode : null)
         );
-      } finally {
-        if (!cancelled) setSurveyLoading(false);
       }
-    };
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
+    } finally {
+      if (!silent) setSurveyLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadSurveyData();
+  }, [loadSurveyData]);
+
+  const refreshSurveyData = useCallback(() => loadSurveyData(true), [loadSurveyData]);
+  useAutoRefresh(refreshSurveyData);
 
   const stats: SystemStats = useMemo(
     () => ({
