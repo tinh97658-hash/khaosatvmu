@@ -255,12 +255,14 @@
 .public-survey-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
   margin-top: 20px;
 }
 
 .public-survey-actions .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   min-height: 38px;
   padding: 0 18px;
@@ -277,6 +279,17 @@
 .public-survey-actions .btn:disabled {
   background: #9dc4d4;
   cursor: not-allowed;
+}
+
+.public-survey-actions .btn-ghost {
+  border: 1px solid #d7dee2;
+  background: #ffffff;
+  color: #40505a;
+}
+
+.public-survey-actions .btn-ghost:disabled {
+  background: #f7f9fa;
+  color: #a4adb4;
 }
 
 .public-survey-actions .btn svg {
@@ -373,11 +386,19 @@
 .public-survey-option {
   display: grid;
   justify-items: center;
-  gap: 6px;
+  align-content: start;
+  gap: 5px;
   flex: 1;
   min-width: 0;
-  padding: 4px 0;
+  padding: 6px 2px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   cursor: pointer;
+}
+
+.public-survey-option--selected {
+  border-color: #9fd3e6;
+  background: #f2f8fa;
 }
 
 .public-survey-option-value {
@@ -393,18 +414,67 @@
   cursor: pointer;
 }
 
-.public-survey-option-legend {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 6px;
-  color: #8c969f;
-  font-size: 11px;
-  line-height: 1.3;
+/* Nhãn của từng mức nằm ngay dưới nút chọn nên người dùng đọc được ý nghĩa
+   của cả 5 mức mà không phải suy ra từ hai đầu thang. */
+.public-survey-option-text {
+  color: #68737d;
+  font-size: 10px;
+  line-height: 1.25;
+  text-align: center;
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 
-.public-survey-option-legend span:last-child {
-  text-align: right;
+.public-survey-option--selected .public-survey-option-value,
+.public-survey-option--selected .public-survey-option-text {
+  color: #0b6a8f;
+}
+
+/* Thanh phân trang cố ý để mảnh: chỉ một dòng chữ nhỏ và vài nút số vuông,
+   không viền khung để không cạnh tranh với nội dung câu hỏi. */
+.public-survey-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.public-survey-pager-status {
+  color: #8c969f;
+  font-size: 11px;
+}
+
+.public-survey-pager-pages {
+  display: flex;
+  gap: 4px;
+}
+
+.public-survey-pager-page {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #dfe4e8;
+  border-radius: 3px;
+  background: #ffffff;
+  color: #68737d;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.public-survey-pager-page--incomplete {
+  border-color: #e6c3c3;
+  color: #b52d2d;
+}
+
+.public-survey-pager-page--current,
+.public-survey-pager-page--current.public-survey-pager-page--incomplete {
+  border-color: #0788b8;
+  background: #0788b8;
+  color: #ffffff;
 }
 
 @media (max-width: 760px) {
@@ -450,19 +520,22 @@
   }
 
   .public-survey-actions .btn {
-    width: 100%;
-    justify-content: center;
+    flex: 1;
     min-height: 44px;
   }
 }
 
 @media (max-width: 380px) {
+  .public-survey-option {
+    padding: 6px 1px;
+  }
+
   .public-survey-option input {
     width: 20px;
     height: 20px;
   }
 
-  .public-survey-option-legend {
-    font-size: 10px;
+  .public-survey-option-text {
+    font-size: 9px;
   }
 }
