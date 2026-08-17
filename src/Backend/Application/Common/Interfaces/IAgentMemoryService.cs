@@ -1,8 +1,8 @@
 namespace Application.Common.Interfaces;
 
-public record MemorySaveRequest(string Content, string[]? Tags = null, string? Category = null);
-public record MemoryRecallRequest(string Query, int Limit = 5);
-public record MemoryResult(string Id, string Content, double Score, string[]? Tags);
+public record MemorySaveRequest(string Content, string[]? Tags);
+public record MemoryRecallRequest(string Query);
+public record MemoryResult(string Id, string Content, double Score, string? Metadata);
 
 public interface IAgentMemoryService
 {

@@ -1264,13 +1264,11 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
         if (name.Length == 0) return CatalogErrorCodes.AcademicYearNameRequired;
         if (command.EndDate <= command.StartDate) return CatalogErrorCodes.AcademicYearRangeInvalid;
 
-        var names = await db.AcademicYears
+        var normalized = NormalizeKey(name);
+        var exists = await db.AcademicYears
             .Where(x => academicYearId == null || x.AcademicYearId != academicYearId)
-            .Select(x => x.AcademicYearName)
-            .ToListAsync(cancellationToken);
-        return names.Any(x => NormalizeKey(x) == NormalizeKey(name))
-            ? CatalogErrorCodes.AcademicYearNameExists
-            : null;
+            .AnyAsync(x => x.AcademicYearName.Trim().ToLower() == normalized, cancellationToken);
+        return exists ? CatalogErrorCodes.AcademicYearNameExists : null;
     }
 
     private async Task<string?> ValidateSemesterAsync(
@@ -1285,14 +1283,12 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
             return CatalogErrorCodes.AcademicYearNotFound;
         }
 
-        var names = await db.Semesters
+        var normalized = NormalizeKey(name);
+        var exists = await db.Semesters
             .Where(x => x.AcademicYearId == command.AcademicYearId)
             .Where(x => semesterId == null || x.SemesterId != semesterId)
-            .Select(x => x.SemesterName)
-            .ToListAsync(cancellationToken);
-        return names.Any(x => NormalizeKey(x) == NormalizeKey(name))
-            ? CatalogErrorCodes.SemesterNameExists
-            : null;
+            .AnyAsync(x => x.SemesterName.Trim().ToLower() == normalized, cancellationToken);
+        return exists ? CatalogErrorCodes.SemesterNameExists : null;
     }
 
     private async Task<string?> ValidateCourseSectionAsync(
@@ -1316,14 +1312,12 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
             return CatalogErrorCodes.LecturerNotFound;
         }
 
-        var names = await db.CourseSections
+        var normalized = NormalizeKey(name);
+        var exists = await db.CourseSections
             .Where(x => x.CourseId == command.CourseId && x.SemesterId == command.SemesterId)
             .Where(x => courseSectionId == null || x.CourseSectionId != courseSectionId)
-            .Select(x => x.SectionName)
-            .ToListAsync(cancellationToken);
-        return names.Any(x => NormalizeKey(x) == NormalizeKey(name))
-            ? CatalogErrorCodes.CourseSectionExists
-            : null;
+            .AnyAsync(x => x.SectionName.Trim().ToLower() == normalized, cancellationToken);
+        return exists ? CatalogErrorCodes.CourseSectionExists : null;
     }
 
     private static string? NullIfBlank(string? value)
@@ -1353,11 +1347,11 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
         // Email để trống thì lưu NULL; UNIQUE chỉ áp cho email có giá trị.
         if (email.Length > 0)
         {
-            var emails = await db.Lecturers
+            var normalizedEmail = NormalizeKey(email);
+            var exists = await db.Lecturers
                 .Where(x => lecturerId == null || x.LecturerId != lecturerId)
-                .Select(x => x.Email)
-                .ToListAsync(cancellationToken);
-            if (emails.Any(x => x != null && NormalizeKey(x) == NormalizeKey(email)))
+                .AnyAsync(x => x.Email != null && x.Email.Trim().ToLower() == normalizedEmail, cancellationToken);
+            if (exists)
             {
                 return CatalogErrorCodes.LecturerEmailExists;
             }
@@ -1426,11 +1420,11 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
         if (name.Length == 0) return CatalogErrorCodes.CourseNameRequired;
         if (command.Credits < 0) return CatalogErrorCodes.CourseCreditsInvalid;
 
-        var codes = await db.Courses
+        var normalizedCode = NormalizeKey(code);
+        var exists = await db.Courses
             .Where(x => courseId == null || x.CourseId != courseId)
-            .Select(x => x.CourseCode)
-            .ToListAsync(cancellationToken);
-        if (codes.Any(x => NormalizeKey(x) == NormalizeKey(code)))
+            .AnyAsync(x => x.CourseCode.Trim().ToLower() == normalizedCode, cancellationToken);
+        if (exists)
         {
             return CatalogErrorCodes.CourseCodeExists;
         }
@@ -1462,11 +1456,10 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
 
     private async Task<bool> FacultyNameTakenAsync(string name, int? exceptFacultyId, CancellationToken cancellationToken)
     {
-        var names = await db.Faculties
+        var normalized = NormalizeKey(name);
+        return await db.Faculties
             .Where(x => exceptFacultyId == null || x.FacultyId != exceptFacultyId)
-            .Select(x => x.FacultyName)
-            .ToListAsync(cancellationToken);
-        return names.Any(x => NormalizeKey(x) == NormalizeKey(name));
+            .AnyAsync(x => x.FacultyName.Trim().ToLower() == normalized, cancellationToken);
     }
 
     private async Task<Dictionary<string, int>> LoadFacultyIdByNameAsync(CancellationToken cancellationToken)

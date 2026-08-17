@@ -666,6 +666,7 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         sectionSurvey.StartTime = startTime;
         sectionSurvey.EndTime = endTime;
         await db.SaveChangesAsync(cancellationToken);
+        cache.Remove($"survey:public:{sectionSurvey.LinkToken}");
 
         var updated = (await GetCourseSectionSurveysAsync(sectionSurvey.SemesterSurveyId, cancellationToken))
             .FirstOrDefault(x => x.CourseSectionSurveyId == courseSectionSurveyId);

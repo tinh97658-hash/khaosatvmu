@@ -1,11 +1,10 @@
 using Application.Reports;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace Infrastructure.Reports;
 
-public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IReportService
+public sealed class EfReportService(AppDbContext db) : IReportService
 {
     public async Task<OperationalProgressReportDto?> GetOperationalProgressReportAsync(
         int semesterId,
@@ -157,9 +156,22 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
         var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
 
-        var responses = await db.SurveyResponses.AsNoTracking()
-            .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
-            .ToListAsync(cancellationToken);
+        // SQL Server / Postgres aggregation in DB instead of pulling all rows into RAM
+        var responseStats = cssIds.Count == 0
+            ? new Dictionary<int, (int Count, decimal TotalScore)>()
+            : await db.SurveyResponses.AsNoTracking()
+                .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
+                .GroupBy(x => x.CourseSectionSurveyId)
+                .Select(g => new
+                {
+                    CourseSectionSurveyId = g.Key,
+                    Count = g.Count(),
+                    TotalScore = g.Sum(x => x.Score)
+                })
+                .ToDictionaryAsync(
+                    x => x.CourseSectionSurveyId,
+                    x => (x.Count, x.TotalScore),
+                    cancellationToken);
 
         var reports = new List<LecturerPerformanceReportDto>();
 
@@ -168,18 +180,24 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             var lecSections = sections.Where(x => x.LecturerId == lec.LecturerId).ToList();
             var lecSecIds = lecSections.Select(x => x.CourseSectionId).ToList();
             var lecCss = sectionSurveys.Where(x => lecSecIds.Contains(x.CourseSectionId)).ToList();
-            var lecCssIds = lecCss.Select(x => x.CourseSectionSurveyId).ToList();
-            var lecResponses = responses.Where(x => lecCssIds.Contains(x.CourseSectionSurveyId)).ToList();
 
-            decimal avgScore = lecResponses.Count > 0 ? Math.Round(lecResponses.Average(x => (decimal)x.Score), 2) : 0;
+            int totalResponses = 0;
+            decimal totalScoreSum = 0;
 
             var sectionSummaries = new List<LecturerSectionSummaryDto>();
             foreach (var css in lecCss)
             {
                 var sec = lecSections.FirstOrDefault(x => x.CourseSectionId == css.CourseSectionId);
                 var crs = sec != null && courses.TryGetValue(sec.CourseId, out var c) ? c : null;
-                var res = lecResponses.Where(x => x.CourseSectionSurveyId == css.CourseSectionSurveyId).ToList();
-                decimal secAvg = res.Count > 0 ? Math.Round(res.Average(x => (decimal)x.Score), 2) : 0;
+                
+                var (cnt, sum) = responseStats.TryGetValue(css.CourseSectionSurveyId, out var stat)
+                    ? stat
+                    : (0, 0m);
+
+                totalResponses += cnt;
+                totalScoreSum += sum;
+
+                decimal secAvg = cnt > 0 ? Math.Round(sum / cnt, 2) : 0;
 
                 sectionSummaries.Add(new LecturerSectionSummaryDto(
                     css.CourseSectionSurveyId,
@@ -187,10 +205,12 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                     crs?.CourseName ?? string.Empty,
                     sec?.SectionName ?? string.Empty,
                     sec?.ClassSize ?? 0,
-                    res.Count,
+                    cnt,
                     secAvg
                 ));
             }
+
+            decimal avgScore = totalResponses > 0 ? Math.Round(totalScoreSum / totalResponses, 2) : 0;
 
             reports.Add(new LecturerPerformanceReportDto(
                 lec.LecturerId,
@@ -198,7 +218,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 lec.DepartmentId.HasValue && departments.TryGetValue(lec.DepartmentId.Value, out var dName) ? dName : "Chưa thuộc bộ môn",
                 lec.FacultyId.HasValue && faculties.TryGetValue(lec.FacultyId.Value, out var fName) ? fName : "Chưa thuộc khoa",
                 avgScore,
-                lecResponses.Count,
+                totalResponses,
                 lecSections.Count,
                 avgScore,
                 avgScore,
@@ -287,9 +307,22 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .ToListAsync(cancellationToken);
 
         var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
-        var responses = await db.SurveyResponses.AsNoTracking()
-            .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
-            .ToListAsync(cancellationToken);
+        
+        var responseStats = cssIds.Count == 0
+            ? new Dictionary<int, (int Count, decimal TotalScore)>()
+            : await db.SurveyResponses.AsNoTracking()
+                .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
+                .GroupBy(x => x.CourseSectionSurveyId)
+                .Select(g => new
+                {
+                    CourseSectionSurveyId = g.Key,
+                    Count = g.Count(),
+                    TotalScore = g.Sum(x => x.Score)
+                })
+                .ToDictionaryAsync(
+                    x => x.CourseSectionSurveyId,
+                    x => (x.Count, x.TotalScore),
+                    cancellationToken);
 
         var facultyReports = new List<FacultyDepartmentReportDto>();
 
@@ -302,10 +335,20 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             var facSections = sections.Where(x => facLecIds.Contains(x.LecturerId)).ToList();
             var facSecIds = facSections.Select(x => x.CourseSectionId).ToList();
             var facCss = sectionSurveys.Where(x => facSecIds.Contains(x.CourseSectionId)).ToList();
-            var facCssIds = facCss.Select(x => x.CourseSectionSurveyId).ToList();
-            var facResponses = responses.Where(x => facCssIds.Contains(x.CourseSectionSurveyId)).ToList();
 
-            decimal facAvgScore = facResponses.Count > 0 ? Math.Round(facResponses.Average(x => (decimal)x.Score), 2) : 0;
+            int facResponses = 0;
+            decimal facScoreSum = 0;
+
+            foreach (var css in facCss)
+            {
+                if (responseStats.TryGetValue(css.CourseSectionSurveyId, out var stat))
+                {
+                    facResponses += stat.Count;
+                    facScoreSum += stat.TotalScore;
+                }
+            }
+
+            decimal facAvgScore = facResponses > 0 ? Math.Round(facScoreSum / facResponses, 2) : 0;
 
             var deptSummaries = new List<DepartmentSummaryDto>();
             foreach (var dept in facDepts)
@@ -315,17 +358,26 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 var deptSections = facSections.Where(x => deptLecIds.Contains(x.LecturerId)).ToList();
                 var deptSecIds = deptSections.Select(x => x.CourseSectionId).ToList();
                 var deptCss = facCss.Where(x => deptSecIds.Contains(x.CourseSectionId)).ToList();
-                var deptCssIds = deptCss.Select(x => x.CourseSectionSurveyId).ToList();
-                var deptResponses = facResponses.Where(x => deptCssIds.Contains(x.CourseSectionSurveyId)).ToList();
 
-                decimal deptAvg = deptResponses.Count > 0 ? Math.Round(deptResponses.Average(x => (decimal)x.Score), 2) : 0;
+                int deptResponses = 0;
+                decimal deptScoreSum = 0;
+                foreach (var css in deptCss)
+                {
+                    if (responseStats.TryGetValue(css.CourseSectionSurveyId, out var stat))
+                    {
+                        deptResponses += stat.Count;
+                        deptScoreSum += stat.TotalScore;
+                    }
+                }
+
+                decimal deptAvg = deptResponses > 0 ? Math.Round(deptScoreSum / deptResponses, 2) : 0;
 
                 deptSummaries.Add(new DepartmentSummaryDto(
                     dept.DepartmentId,
                     dept.DepartmentName,
                     deptLecs.Count,
                     deptSections.Count,
-                    deptResponses.Count,
+                    deptResponses,
                     deptAvg
                 ));
             }
@@ -336,7 +388,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 facDepts.Count,
                 facLecturers.Count,
                 facSections.Count,
-                facResponses.Count,
+                facResponses,
                 facAvgScore,
                 deptSummaries
             ));
@@ -367,12 +419,10 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .ToListAsync(cancellationToken);
         var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
 
-        var responses = await db.SurveyResponses.AsNoTracking()
+        var responseIds = await db.SurveyResponses.AsNoTracking()
             .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
+            .Select(x => x.ResponseId)
             .ToListAsync(cancellationToken);
-        var responseIds = responses.Select(x => x.ResponseId).ToList();
-
-        decimal overallAvg = responses.Count > 0 ? Math.Round(responses.Average(x => (decimal)x.Score), 2) : 0;
 
         if (responseIds.Count == 0)
         {
@@ -385,6 +435,11 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 questions.Select(q => new QuestionRatingDto(q.QuestionId, q.QuestionText, 0, 0, [])).ToList()
             );
         }
+
+        var responsesCount = responseIds.Count;
+        var overallAvgScore = await db.SurveyResponses.AsNoTracking()
+            .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
+            .AverageAsync(x => x.Score, cancellationToken);
 
         var answers = await db.SurveyResponseAnswers.AsNoTracking()
             .Where(x => responseIds.Contains(x.ResponseId))
@@ -413,8 +468,8 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             semesterSurveyId,
             template.SurveyTemplateId,
             template.TemplateName,
-            responses.Count,
-            overallAvg,
+            responsesCount,
+            Math.Round(overallAvgScore, 2),
             questionRatings
         );
     }

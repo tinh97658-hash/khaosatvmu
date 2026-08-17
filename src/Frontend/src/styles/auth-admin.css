@@ -68,14 +68,16 @@
 
 .auth-brand-lockup .auth-brand-mark,
 .auth-brand-mark.compact {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
   display: block;
-  padding: 2px;
+  padding: 0;
   object-fit: contain;
-  border: 1px solid #9ccfdf;
-  background: var(--ops-surface);
+  border: none !important;
+  border-radius: 50% !important;
+  background: transparent;
+  filter: drop-shadow(0 1px 4px rgba(18, 63, 87, 0.12));
 }
 
 .auth-brand-lockup p {
@@ -348,6 +350,8 @@
   width: 42px;
   height: 42px;
   object-fit: contain;
+  border: none;
+  border-radius: 50%;
 }
 
 .profile-workspace-preview__brand span,
@@ -1437,7 +1441,7 @@
 
 .admin-audit-table code {
   color: #53616a;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 

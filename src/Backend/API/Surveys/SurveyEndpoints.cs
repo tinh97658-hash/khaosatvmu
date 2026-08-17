@@ -133,7 +133,9 @@ public static class SurveyEndpoints
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
         // Phiếu của sinh viên: mở bằng link hoặc mã QR nên không yêu cầu đăng nhập.
-        var publicGroup = endpoints.MapGroup("/api/public/surveys").AllowAnonymous();
+        var publicGroup = endpoints.MapGroup("/api/public/surveys")
+            .AllowAnonymous()
+            .RequireRateLimiting("PublicSurveyConcurrency");
 
         publicGroup.MapGet("/{linkToken}", async (
             string linkToken,

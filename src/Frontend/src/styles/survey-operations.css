@@ -816,9 +816,9 @@
 
 .operations-code {
   color: var(--operations-primary-dark);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .operations-primary-text {
@@ -1119,7 +1119,7 @@
   border: 1px solid var(--operations-border);
   background: var(--operations-muted);
   color: var(--operations-text);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 

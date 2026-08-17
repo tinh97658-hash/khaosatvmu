@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from './auth/authContext';
 import { AuthLoading } from './components/AuthLoading';
@@ -8,25 +8,25 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { QRCodeModal } from './components/QRCodeModal';
 
-// Catalog Pages
-import { DashboardOverview } from './pages/DashboardOverview';
-import { FacultiesPage } from './pages/FacultiesPage';
-import { DepartmentsPage } from './pages/DepartmentsPage';
-import { LecturersPage } from './pages/LecturersPage';
-import { MajorsPage } from './pages/MajorsPage';
-import { CoursesPage } from './pages/CoursesPage';
-import { ClassesPage } from './pages/ClassesPage';
-import { CriteriaPage } from './pages/CriteriaPage';
-import { SurveyTemplatesPage } from './pages/SurveyTemplatesPage';
-import { CourseSurveysPage } from './pages/CourseSurveysPage';
-import { PublicSurveyPage } from './pages/PublicSurveyPage';
-import { CampaignsPage } from './pages/CampaignsPage';
-import { SurveyProgressPage } from './pages/SurveyProgressPage';
-import { ReportsOverviewPage } from './pages/ReportsOverviewPage';
-import { StudentSurveyView } from './pages/StudentSurveyView';
-import { LoginPage } from './pages/LoginPage';
-import { ProfileSelectionPage } from './pages/ProfileSelectionPage';
-import { UsersAdminPage } from './pages/UsersAdminPage';
+// Lazy-loaded Pages (Code Splitting for Production Performance)
+const DashboardOverview = lazy(() => import('./pages/DashboardOverview').then(m => ({ default: m.DashboardOverview })));
+const FacultiesPage = lazy(() => import('./pages/FacultiesPage').then(m => ({ default: m.FacultiesPage })));
+const DepartmentsPage = lazy(() => import('./pages/DepartmentsPage').then(m => ({ default: m.DepartmentsPage })));
+const LecturersPage = lazy(() => import('./pages/LecturersPage').then(m => ({ default: m.LecturersPage })));
+const MajorsPage = lazy(() => import('./pages/MajorsPage').then(m => ({ default: m.MajorsPage })));
+const CoursesPage = lazy(() => import('./pages/CoursesPage').then(m => ({ default: m.CoursesPage })));
+const ClassesPage = lazy(() => import('./pages/ClassesPage').then(m => ({ default: m.ClassesPage })));
+const CriteriaPage = lazy(() => import('./pages/CriteriaPage').then(m => ({ default: m.CriteriaPage })));
+const SurveyTemplatesPage = lazy(() => import('./pages/SurveyTemplatesPage').then(m => ({ default: m.SurveyTemplatesPage })));
+const CourseSurveysPage = lazy(() => import('./pages/CourseSurveysPage').then(m => ({ default: m.CourseSurveysPage })));
+const PublicSurveyPage = lazy(() => import('./pages/PublicSurveyPage').then(m => ({ default: m.PublicSurveyPage })));
+const CampaignsPage = lazy(() => import('./pages/CampaignsPage').then(m => ({ default: m.CampaignsPage })));
+const SurveyProgressPage = lazy(() => import('./pages/SurveyProgressPage').then(m => ({ default: m.SurveyProgressPage })));
+const ReportsOverviewPage = lazy(() => import('./pages/ReportsOverviewPage').then(m => ({ default: m.ReportsOverviewPage })));
+const StudentSurveyView = lazy(() => import('./pages/StudentSurveyView').then(m => ({ default: m.StudentSurveyView })));
+const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
+const ProfileSelectionPage = lazy(() => import('./pages/ProfileSelectionPage').then(m => ({ default: m.ProfileSelectionPage })));
+const UsersAdminPage = lazy(() => import('./pages/UsersAdminPage').then(m => ({ default: m.UsersAdminPage })));
 
 // Services & Types
 import { ApiError } from './services/apiClient';
@@ -57,17 +57,50 @@ import type {
   SystemStats,
 } from './types';
 
+function getInitialTab(): string {
+  if (typeof window === 'undefined') return 'overview';
+  const hash = window.location.hash.replace(/^#\/?/, '').trim();
+  return hash || 'overview';
+}
+
+function PageFallback() {
+  return (
+    <div className="flex items-center justify-center p-12 text-slate-400">
+      <div className="flex items-center gap-3">
+        <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+        <span>Đang nạp dữ liệu...</span>
+      </div>
+    </div>
+  );
+}
+
 function DashboardApp() {
   const auth = useAuth();
-  const [currentTab, setCurrentTab] = useState<string>('overview');
+  const [currentTab, setCurrentTabState] = useState<string>(getInitialTab);
   const [isStudentView, setIsStudentView] = useState<boolean>(false);
   const canManageUsers = auth.access?.permissions.includes('ADMIN_ACCESS') ?? false;
+
+  const setCurrentTab = useCallback((tab: string) => {
+    setCurrentTabState(tab);
+    window.location.hash = tab;
+  }, []);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace(/^#\/?/, '').trim();
+      if (hash && hash !== currentTab) {
+        setCurrentTabState(hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [currentTab]);
 
   useEffect(() => {
     if (currentTab === 'users-admin' && !canManageUsers) {
       setCurrentTab('overview');
     }
-  }, [canManageUsers, currentTab]);
+  }, [canManageUsers, currentTab, setCurrentTab]);
 
   // Nạp danh mục đã lưu trong database khi vào hệ thống.
   useEffect(() => {
@@ -275,9 +308,6 @@ function DashboardApp() {
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // Lecturers. CourseSectionLecturers: ON DELETE CASCADE.
-  // ---------------------------------------------------------------------------
   const handleSaveLecturer = async (
     lecturerId: number | null,
     lecturer: SaveLecturerPayload
@@ -305,17 +335,12 @@ function DashboardApp() {
     try {
       await catalogApi.deleteLecturer(lecturerId);
       setLecturers(await catalogApi.lecturers());
-      // "CourseSections"."LecturerId" là ON DELETE RESTRICT nên nếu giảng viên
-      // còn lớp học phần thì API đã trả lỗi ở trên, danh sách lớp không đổi.
       return null;
     } catch (error) {
       return errorCodeOf(error);
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // Majors.
-  // ---------------------------------------------------------------------------
   const handleSaveMajor = async (
     majorId: number | null,
     majorName: string,
@@ -350,10 +375,6 @@ function DashboardApp() {
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // Courses. CourseSections: ON DELETE CASCADE.
-  // PrerequisiteCourseId: ON DELETE RESTRICT.
-  // ---------------------------------------------------------------------------
   const handleSaveCourse = async (
     courseId: number | null,
     course: SaveCoursePayload
@@ -381,64 +402,79 @@ function DashboardApp() {
     try {
       await catalogApi.deleteCourse(courseId);
       setCourses(await catalogApi.courses());
-      // CourseSections tham chiếu Courses với ON DELETE CASCADE.
-      setSections((prev) => prev.filter((section) => section.courseId !== courseId));
       return null;
     } catch (error) {
       return errorCodeOf(error);
     }
   };
 
-  // Handlers for Criteria
-  const handleAddCriterion = (newCriterion: Criterion) => {
-    setCriteria((prev) => [newCriterion, ...prev]);
+  const handleAddCriterion = (criterion: Omit<Criterion, 'id'>) => {
+    const newCriterion: Criterion = {
+      ...criterion,
+      id: `crit_${Date.now()}`,
+    };
+    setCriteria([...criteria, newCriterion]);
   };
+
   const handleDeleteCriterion = (id: string) => {
-    setCriteria((prev) => prev.filter((c) => c.id !== id));
+    setCriteria(criteria.filter((c) => c.id !== id));
   };
 
-  // Handlers for Campaigns
-  const handleAddCampaign = (newCampaign: SurveyCampaign) => {
-    setCampaigns((prev) => [newCampaign, ...prev]);
+  const handleAddCampaign = (campaign: Omit<SurveyCampaign, 'id'>) => {
+    const newId = `camp_${Date.now()}`;
+    const newCampaign: SurveyCampaign = {
+      ...campaign,
+      id: newId,
+      qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://khaosat.vimaru.edu.vn/survey/${newId}`,
+      surveyLink: `https://khaosat.vimaru.edu.vn/survey/${newId}`,
+    };
+    setCampaigns([newCampaign, ...campaigns]);
   };
+
+  const handleAddMultipleCampaigns = (campaignsToAdd: Omit<SurveyCampaign, 'id'>[]) => {
+    const newCampaigns: SurveyCampaign[] = campaignsToAdd.map((c, index) => {
+      const newId = `camp_${Date.now()}_${index}`;
+      return {
+        ...c,
+        id: newId,
+        qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://khaosat.vimaru.edu.vn/survey/${newId}`,
+        surveyLink: `https://khaosat.vimaru.edu.vn/survey/${newId}`,
+      };
+    });
+    setCampaigns([...newCampaigns, ...campaigns]);
+  };
+
   const handleDeleteCampaign = (id: string) => {
-    setCampaigns((prev) => prev.filter((c) => c.id !== id));
-  };
-
-  const handleAddMultipleCampaigns = (newCampaigns: SurveyCampaign[]) => {
-    setCampaigns((prev) => [...newCampaigns, ...prev]);
+    setCampaigns(campaigns.filter((c) => c.id !== id));
   };
 
   const handleUpdateCampaignDates = (id: string, startDate: string, endDate: string) => {
-    setCampaigns((prev) =>
-      prev.map((cmp) => (cmp.id === id ? { ...cmp, startDate, endDate } : cmp))
+    setCampaigns(
+      campaigns.map((c) => (c.id === id ? { ...c, startDate, endDate } : c))
     );
   };
 
-  // QR Code Open Handlers
   const handleOpenCampaignQR = (campaign: SurveyCampaign) => {
     setQrModalData({
       isOpen: true,
       title: campaign.title,
-      subtitle: `Đợt khảo sát ${campaign.type} • Thời gian mở QR: ${campaign.startDate} ~ ${campaign.endDate}`,
-      qrUrl: campaign.qrCodeUrl || `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(campaign.surveyLink || `https://khaosat.vimaru.edu.vn/survey/${campaign.id}`)}`,
-      surveyLink: campaign.surveyLink || `https://khaosat.vimaru.edu.vn/survey/${campaign.id}`,
+      subtitle: `${campaign.courseName || campaign.majorName || ''} • ${campaign.lecturerName || ''}`,
+      qrUrl: campaign.qrCodeUrl || '',
+      surveyLink: campaign.surveyLink || '',
     });
+    setSurveyCounters((prev) => ({ ...prev, qrScanCount: prev.qrScanCount + 1 }));
   };
 
-  const handleSurveySubmitted = () => {
-    setSurveyCounters((prev) => ({ qrScanCount: prev.qrScanCount + 1 }));
-  };
-
-  // Render Student View Mode
   if (isStudentView) {
     return (
-      <div className="student-survey-shell">
-        <StudentSurveyView
-          criteria={criteria}
-          onCloseStudentView={() => setIsStudentView(false)}
-          onSurveySubmitted={handleSurveySubmitted}
-        />
+      <div className="student-preview-wrapper">
+        <Suspense fallback={<PageFallback />}>
+          <StudentSurveyView
+            criteria={criteria}
+            onCloseStudentView={() => setIsStudentView(false)}
+            onSurveySubmitted={() => setIsStudentView(false)}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -467,123 +503,125 @@ function DashboardApp() {
         />
 
         <main className="content-area">
-          {currentTab === 'overview' && (
-            <DashboardOverview
-              stats={stats}
-              campaigns={campaigns}
-              onOpenQR={handleOpenCampaignQR}
-              onNavigateTab={(tab) => setCurrentTab(tab)}
-            />
-          )}
+          <Suspense fallback={<PageFallback />}>
+            {currentTab === 'overview' && (
+              <DashboardOverview
+                stats={stats}
+                campaigns={campaigns}
+                onOpenQR={handleOpenCampaignQR}
+                onNavigateTab={(tab) => setCurrentTab(tab)}
+              />
+            )}
 
-          {currentTab === 'progress' && (
-            <SurveyProgressPage
-              semesterSurveys={semesterSurveys}
-              sectionSurveys={sectionSurveys}
-              isLoading={surveyLoading}
-              loadError={surveyLoadError}
-            />
-          )}
+            {currentTab === 'progress' && (
+              <SurveyProgressPage
+                semesterSurveys={semesterSurveys}
+                sectionSurveys={sectionSurveys}
+                isLoading={surveyLoading}
+                loadError={surveyLoadError}
+              />
+            )}
 
-          {currentTab === 'reports' && <ReportsOverviewPage />}
+            {currentTab === 'reports' && <ReportsOverviewPage />}
 
-          {currentTab === 'faculties' && (
-            <FacultiesPage
-              faculties={faculties}
-              majors={majors}
-              departments={departments}
-              onSaveFaculty={handleSaveFaculty}
-              onDeleteFaculty={handleDeleteFaculty}
-              onImportFaculties={handleImportFaculties}
-            />
-          )}
+            {currentTab === 'faculties' && (
+              <FacultiesPage
+                faculties={faculties}
+                majors={majors}
+                departments={departments}
+                onSaveFaculty={handleSaveFaculty}
+                onDeleteFaculty={handleDeleteFaculty}
+                onImportFaculties={handleImportFaculties}
+              />
+            )}
 
-          {currentTab === 'departments' && (
-            <DepartmentsPage
-              departments={departments}
-              faculties={faculties}
-              courses={courses}
-              lecturers={lecturers}
-              onSaveDepartment={handleSaveDepartment}
-              onDeleteDepartment={handleDeleteDepartment}
-              onImportDepartments={handleImportDepartments}
-            />
-          )}
+            {currentTab === 'departments' && (
+              <DepartmentsPage
+                departments={departments}
+                faculties={faculties}
+                courses={courses}
+                lecturers={lecturers}
+                onSaveDepartment={handleSaveDepartment}
+                onDeleteDepartment={handleDeleteDepartment}
+                onImportDepartments={handleImportDepartments}
+              />
+            )}
 
-          {currentTab === 'lecturers' && (
-            <LecturersPage
-              lecturers={lecturers}
-              faculties={faculties}
-              departments={departments}
-              onSaveLecturer={handleSaveLecturer}
-              onDeleteLecturer={handleDeleteLecturer}
-              onImportLecturers={handleImportLecturers}
-            />
-          )}
+            {currentTab === 'lecturers' && (
+              <LecturersPage
+                lecturers={lecturers}
+                faculties={faculties}
+                departments={departments}
+                onSaveLecturer={handleSaveLecturer}
+                onDeleteLecturer={handleDeleteLecturer}
+                onImportLecturers={handleImportLecturers}
+              />
+            )}
 
-          {currentTab === 'majors' && (
-            <MajorsPage
-              majors={majors}
-              faculties={faculties}
-              curricula={curricula}
-              curriculumCourses={curriculumCourses}
-              sections={sections}
-              onSaveMajor={handleSaveMajor}
-              onDeleteMajor={handleDeleteMajor}
-              onImportMajors={handleImportMajors}
-            />
-          )}
+            {currentTab === 'majors' && (
+              <MajorsPage
+                majors={majors}
+                faculties={faculties}
+                curricula={curricula}
+                curriculumCourses={curriculumCourses}
+                sections={sections}
+                onSaveMajor={handleSaveMajor}
+                onDeleteMajor={handleDeleteMajor}
+                onImportMajors={handleImportMajors}
+              />
+            )}
 
-          {currentTab === 'courses' && (
-            <CoursesPage
-              courses={courses}
-              faculties={faculties}
-              departments={departments}
-              onSaveCourse={handleSaveCourse}
-              onDeleteCourse={handleDeleteCourse}
-              onImportCourses={handleImportCourses}
-            />
-          )}
+            {currentTab === 'courses' && (
+              <CoursesPage
+                courses={courses}
+                faculties={faculties}
+                departments={departments}
+                onSaveCourse={handleSaveCourse}
+                onDeleteCourse={handleDeleteCourse}
+                onImportCourses={handleImportCourses}
+              />
+            )}
 
-          {currentTab === 'classes' && (
-            <ClassesPage courses={courses} lecturers={lecturers} />
-          )}
+            {currentTab === 'classes' && (
+              <ClassesPage courses={courses} lecturers={lecturers} />
+            )}
 
-          {(currentTab === 'course-question-sets' || currentTab === 'criteria') && (
-            <SurveyTemplatesPage />
-          )}
+            {(currentTab === 'course-question-sets' || currentTab === 'criteria') && (
+              <SurveyTemplatesPage />
+            )}
 
-          {currentTab === 'program-criteria' && (
-            <CriteriaPage
-              criteria={criteria}
-              surveyType="Chương trình đào tạo"
-              onAddCriterion={handleAddCriterion}
-              onDeleteCriterion={handleDeleteCriterion}
-            />
-          )}
+            {currentTab === 'program-criteria' && (
+              <CriteriaPage
+                criteria={criteria}
+                surveyType="Chương trình đào tạo"
+                onAddCriterion={handleAddCriterion}
+                onDeleteCriterion={handleDeleteCriterion}
+              />
+            )}
 
-          {(currentTab === 'course-campaigns' || currentTab === 'campaigns') && (
-            <CourseSurveysPage />
-          )}
+            {(currentTab === 'course-campaigns' || currentTab === 'campaigns') && (
+              <CourseSurveysPage />
+            )}
 
-          {currentTab === 'program-campaigns' && (
-            <CampaignsPage
-              campaigns={campaigns}
-              majors={majors}
-              sections={sections}
-              courses={courses}
-              lecturers={lecturers}
-              criteria={criteria}
-              surveyType="Chương trình đào tạo"
-              onAddCampaign={handleAddCampaign}
-              onAddMultipleCampaigns={handleAddMultipleCampaigns}
-              onDeleteCampaign={handleDeleteCampaign}
-              onUpdateCampaignDates={handleUpdateCampaignDates}
-              onOpenQR={handleOpenCampaignQR}
-            />
-          )}
+            {currentTab === 'program-campaigns' && (
+              <CampaignsPage
+                campaigns={campaigns}
+                majors={majors}
+                sections={sections}
+                courses={courses}
+                lecturers={lecturers}
+                criteria={criteria}
+                surveyType="Chương trình đào tạo"
+                onAddCampaign={handleAddCampaign}
+                onAddMultipleCampaigns={handleAddMultipleCampaigns}
+                onDeleteCampaign={handleDeleteCampaign}
+                onUpdateCampaignDates={handleUpdateCampaignDates}
+                onOpenQR={handleOpenCampaignQR}
+              />
+            )}
 
-          {currentTab === 'users-admin' && canManageUsers && <UsersAdminPage />}
+            {currentTab === 'users-admin' && canManageUsers && <UsersAdminPage />}
+          </Suspense>
         </main>
       </div>
 
@@ -613,7 +651,11 @@ export function App() {
     ? decodeURIComponent(window.location.pathname.slice('/survey/'.length))
     : '';
   if (publicSurveyToken) {
-    return <PublicSurveyPage linkToken={publicSurveyToken} />;
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <PublicSurveyPage linkToken={publicSurveyToken} />
+      </Suspense>
+    );
   }
 
   if (auth.status === 'loading') {
@@ -621,11 +663,19 @@ export function App() {
   }
 
   if (isProfileSelection && auth.status !== 'authenticated') {
-    return <ProfileSelectionPage />;
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <ProfileSelectionPage />
+      </Suspense>
+    );
   }
 
   if (auth.status !== 'authenticated') {
-    return <LoginPage />;
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <LoginPage />
+      </Suspense>
+    );
   }
 
   return <DashboardApp />;

@@ -1,22 +1,26 @@
 using API.Auth;
 using API.Catalog;
+using API.Middleware;
 using API.Reports;
 using API.Surveys;
 using API.UserAdministration;
 using Application.Auth;
 using Application.Catalog;
+using Application.Common.Interfaces;
 using Application.Reports;
 using Application.Surveys;
 using Application.UserAdministration;
 using Infrastructure.Auth;
 using Infrastructure.Catalog;
+using Infrastructure.Persistence;
 using Infrastructure.Reports;
+using Infrastructure.Services;
 using Infrastructure.Surveys;
 using Infrastructure.UserAdministration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Infrastructure.Persistence;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
     ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
@@ -30,10 +34,31 @@ ThreadPool.SetMinThreads(300, 300);
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Exception Handling & Problem Details
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
 builder.Services.AddOpenApi();
 builder.Services.AddMemoryCache();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Health Checks with Database Readiness
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>("database", HealthStatus.Unhealthy);
+
+// CORS Policy for Frontend Integration
+var frontendBaseUrl = builder.Configuration["Authentication:FrontendBaseUrl"] ?? "http://localhost:5173";
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("FrontendPolicy", policy =>
+    {
+        policy.WithOrigins(frontendBaseUrl, "http://localhost:5173", "http://127.0.0.1:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
 
 // High-Throughput Rate Limiter for 1000+ Concurrent Students
 builder.Services.AddRateLimiter(options =>
@@ -72,6 +97,7 @@ builder.Services.AddAuthorization(options =>
         policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement("VIEW_REPORTS")));
 });
 
+builder.Services.AddHttpClient<IAgentMemoryService, AgentMemoryService>();
 builder.Services.AddScoped<IAuthService, EfAuthService>();
 builder.Services.AddScoped<IAuthSessionService, EfAuthSessionService>();
 builder.Services.AddScoped<IUserAdministrationService, EfUserAdministrationService>();
@@ -83,9 +109,12 @@ builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler
 
 var app = builder.Build();
 
+app.UseExceptionHandler();
+
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
     await DatabaseSeeder.SeedAsync(db, app.Environment.IsDevelopment());
 }
 
@@ -95,6 +124,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("FrontendPolicy");
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -111,6 +141,7 @@ app.MapCatalogEndpoints();
 app.MapSurveyEndpoints();
 app.MapReportEndpoints();
 
-app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
+app.MapHealthChecks("/healthz");
+app.MapHealthChecks("/api/health");
 
 app.Run();
