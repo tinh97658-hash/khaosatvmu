@@ -277,6 +277,15 @@ public interface ICatalogService
     Task<CatalogOperationResult<CatalogImportDto>> ImportCoursesAsync(
         IReadOnlyList<ImportCourseRowCommand> rows,
         CancellationToken cancellationToken = default);
+
+    Task<CatalogOperationResult<FacultyDto>> RestoreFacultyAsync(int facultyId, CancellationToken cancellationToken = default);
+    Task<CatalogOperationResult<DepartmentDto>> RestoreDepartmentAsync(int departmentId, CancellationToken cancellationToken = default);
+    Task<CatalogOperationResult<MajorDto>> RestoreMajorAsync(int majorId, CancellationToken cancellationToken = default);
+    Task<CatalogOperationResult<AcademicYearDto>> RestoreAcademicYearAsync(int academicYearId, CancellationToken cancellationToken = default);
+    Task<CatalogOperationResult<SemesterDto>> RestoreSemesterAsync(int semesterId, CancellationToken cancellationToken = default);
+    Task<CatalogOperationResult<CourseSectionDto>> RestoreCourseSectionAsync(int courseSectionId, CancellationToken cancellationToken = default);
+    Task<CatalogOperationResult<LecturerDto>> RestoreLecturerAsync(int lecturerId, CancellationToken cancellationToken = default);
+    Task<CatalogOperationResult<CourseDto>> RestoreCourseAsync(int courseId, CancellationToken cancellationToken = default);
 }
 
 public static class CatalogErrorCodes

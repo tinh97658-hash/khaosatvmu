@@ -94,6 +94,17 @@ public sealed record SaveAdminProfileCommand(
 
 public sealed record AdminOperationResult<T>(bool Succeeded, string? ErrorCode, T? Value);
 
+public sealed record ChangeAuditLogDto(
+    Guid Id,
+    string TableName,
+    string RecordId,
+    string Action,
+    Guid? ChangedBy,
+    string? ChangedByEmail,
+    string? OldValues,
+    string? NewValues,
+    DateTime ChangedAt);
+
 public interface IUserAdministrationService
 {
     Task<AdminPage<AdminUserDto>> GetUsersAsync(
@@ -159,6 +170,13 @@ public interface IUserAdministrationService
     Task UpdateRolePermissionsAsync(
         Guid roleId,
         IReadOnlyList<RolePermissionGrantDto> grants,
+        CancellationToken cancellationToken = default);
+
+    Task<AdminPage<ChangeAuditLogDto>> GetChangeAuditLogsAsync(
+        string? tableName,
+        string? recordId,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken = default);
 }
 

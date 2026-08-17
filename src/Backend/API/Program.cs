@@ -10,13 +10,13 @@ using Application.Surveys;
 using Application.UserAdministration;
 using Infrastructure.Auth;
 using Infrastructure.Catalog;
+using Infrastructure.Persistence;
 using Infrastructure.Reports;
 using Infrastructure.Surveys;
 using Infrastructure.UserAdministration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Infrastructure.Persistence;
 
 var environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
     ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
@@ -32,8 +32,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddMemoryCache();
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddPersistence(builder.Configuration);
 
 // High-Throughput Rate Limiter for 1000+ Concurrent Students
 builder.Services.AddRateLimiter(options =>

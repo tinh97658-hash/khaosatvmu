@@ -222,6 +222,10 @@ public interface ISurveyService
         string linkToken,
         SubmitSurveyResponseCommand command,
         CancellationToken cancellationToken = default);
+
+    Task<SurveyOperationResult<bool>> RestoreAnswerScaleAsync(int answerScaleId, CancellationToken cancellationToken = default);
+    Task<SurveyOperationResult<bool>> RestoreSurveyTemplateAsync(int surveyTemplateId, CancellationToken cancellationToken = default);
+    Task<SurveyOperationResult<bool>> RestoreSemesterSurveyAsync(int semesterSurveyId, CancellationToken cancellationToken = default);
 }
 
 public static class SurveyErrorCodes

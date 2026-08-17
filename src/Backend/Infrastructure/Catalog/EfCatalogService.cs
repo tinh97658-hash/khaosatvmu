@@ -75,17 +75,19 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
             return Failed<bool>(CatalogErrorCodes.FacultyNotFound);
         }
 
-        db.Faculties.Remove(faculty);
-        try
+        if (await db.Lecturers.AnyAsync(x => x.FacultyId == facultyId, cancellationToken)
+            || await db.Courses.AnyAsync(x => x.FacultyId == facultyId, cancellationToken))
         {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            // Lecturers và Courses tham chiếu Faculties với ON DELETE RESTRICT.
-            db.ChangeTracker.Clear();
             return Failed<bool>(CatalogErrorCodes.FacultyInUse);
         }
+
+        // Cascade soft-delete: khoa viện → ngành học (trước đây ON DELETE CASCADE).
+        var majors = await db.Majors.Where(x => x.FacultyId == facultyId).ToListAsync(cancellationToken);
+        foreach (var major in majors)
+            db.Majors.Remove(major);
+
+        db.Faculties.Remove(faculty);
+        await db.SaveChangesAsync(cancellationToken);
 
         return Succeeded(true);
     }
@@ -207,17 +209,14 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
             return Failed<bool>(CatalogErrorCodes.DepartmentNotFound);
         }
 
-        db.Departments.Remove(department);
-        try
+        if (await db.Lecturers.AnyAsync(x => x.DepartmentId == departmentId, cancellationToken)
+            || await db.Courses.AnyAsync(x => x.DepartmentId == departmentId, cancellationToken))
         {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            // Lecturers và Courses tham chiếu Departments với ON DELETE RESTRICT.
-            db.ChangeTracker.Clear();
             return Failed<bool>(CatalogErrorCodes.DepartmentInUse);
         }
+
+        db.Departments.Remove(department);
+        await db.SaveChangesAsync(cancellationToken);
 
         return Succeeded(true);
     }
@@ -500,7 +499,17 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
             return Failed<bool>(CatalogErrorCodes.AcademicYearNotFound);
         }
 
-        // Semesters và CourseSections cascade theo năm học.
+        // Cascade soft-delete: năm học → học kỳ → lớp học phần.
+        var semesters = await db.Semesters
+            .Where(x => x.AcademicYearId == academicYearId).ToListAsync(cancellationToken);
+        var semesterIds = semesters.Select(x => x.SemesterId).ToList();
+        var sections = await db.CourseSections
+            .Where(x => semesterIds.Contains(x.SemesterId)).ToListAsync(cancellationToken);
+        foreach (var section in sections)
+            db.CourseSections.Remove(section);
+        foreach (var semester in semesters)
+            db.Semesters.Remove(semester);
+
         db.AcademicYears.Remove(year);
         await db.SaveChangesAsync(cancellationToken);
         return Succeeded(true);
@@ -560,6 +569,12 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
         {
             return Failed<bool>(CatalogErrorCodes.SemesterNotFound);
         }
+
+        // Cascade soft-delete: học kỳ → lớp học phần.
+        var sections = await db.CourseSections
+            .Where(x => x.SemesterId == semesterId).ToListAsync(cancellationToken);
+        foreach (var section in sections)
+            db.CourseSections.Remove(section);
 
         db.Semesters.Remove(semester);
         await db.SaveChangesAsync(cancellationToken);
@@ -644,6 +659,12 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
         {
             return Failed<bool>(CatalogErrorCodes.CourseSectionNotFound);
         }
+
+        // Cascade soft-delete: lớp học phần → bài khảo sát lớp.
+        var sectionSurveys = await db.CourseSectionSurveys
+            .Where(x => x.CourseSectionId == courseSectionId).ToListAsync(cancellationToken);
+        foreach (var ss in sectionSurveys)
+            db.CourseSectionSurveys.Remove(ss);
 
         db.CourseSections.Remove(section);
         await db.SaveChangesAsync(cancellationToken);
@@ -911,16 +932,13 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
             return Failed<bool>(CatalogErrorCodes.LecturerNotFound);
         }
 
-        db.Lecturers.Remove(lecturer);
-        try
+        if (await db.CourseSections.AnyAsync(x => x.LecturerId == lecturerId, cancellationToken))
         {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            db.ChangeTracker.Clear();
             return Failed<bool>(CatalogErrorCodes.LecturerInUse);
         }
+
+        db.Lecturers.Remove(lecturer);
+        await db.SaveChangesAsync(cancellationToken);
 
         return Succeeded(true);
     }
@@ -1101,17 +1119,15 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
             return Failed<bool>(CatalogErrorCodes.CourseNotFound);
         }
 
-        db.Courses.Remove(course);
-        try
+        if (await db.CourseSections.AnyAsync(x => x.CourseId == courseId, cancellationToken)
+            || await db.Courses.AnyAsync(x => x.PrerequisiteCourseId == courseId, cancellationToken))
         {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            // Học phần khác đang dùng làm tiên quyết (ON DELETE RESTRICT).
-            db.ChangeTracker.Clear();
+            // Học phần khác đang dùng làm tiên quyết, hoặc đang có lớp học phần.
             return Failed<bool>(CatalogErrorCodes.CourseInUse);
         }
+
+        db.Courses.Remove(course);
+        await db.SaveChangesAsync(cancellationToken);
 
         return Succeeded(true);
     }
@@ -1456,6 +1472,118 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
     private static CatalogOperationResult<T> Succeeded<T>(T value) => new(true, null, value);
 
     private static CatalogOperationResult<T> Failed<T>(string errorCode) => new(false, errorCode, default);
+
+    // --------------------------------------------------------------- Restore
+
+    public async Task<CatalogOperationResult<FacultyDto>> RestoreFacultyAsync(
+        int facultyId,
+        CancellationToken cancellationToken = default)
+    {
+        var faculty = await db.Faculties.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.FacultyId == facultyId && x.IsDeleted, cancellationToken);
+        if (faculty is null) return Failed<FacultyDto>(CatalogErrorCodes.FacultyNotFound);
+        faculty.IsDeleted = false;
+        faculty.DeletedAt = null;
+        await db.SaveChangesAsync(cancellationToken);
+        return Succeeded(new FacultyDto(faculty.FacultyId, faculty.FacultyName));
+    }
+
+    public async Task<CatalogOperationResult<DepartmentDto>> RestoreDepartmentAsync(
+        int departmentId,
+        CancellationToken cancellationToken = default)
+    {
+        var department = await db.Departments.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.DepartmentId == departmentId && x.IsDeleted, cancellationToken);
+        if (department is null) return Failed<DepartmentDto>(CatalogErrorCodes.DepartmentNotFound);
+        department.IsDeleted = false;
+        department.DeletedAt = null;
+        await db.SaveChangesAsync(cancellationToken);
+        return Succeeded(new DepartmentDto(department.DepartmentId, department.DepartmentName, department.FacultyId));
+    }
+
+    public async Task<CatalogOperationResult<MajorDto>> RestoreMajorAsync(
+        int majorId,
+        CancellationToken cancellationToken = default)
+    {
+        var major = await db.Majors.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.MajorId == majorId && x.IsDeleted, cancellationToken);
+        if (major is null) return Failed<MajorDto>(CatalogErrorCodes.MajorNotFound);
+        major.IsDeleted = false;
+        major.DeletedAt = null;
+        await db.SaveChangesAsync(cancellationToken);
+        return Succeeded(new MajorDto(major.MajorId, major.MajorName, major.FacultyId));
+    }
+
+    public async Task<CatalogOperationResult<AcademicYearDto>> RestoreAcademicYearAsync(
+        int academicYearId,
+        CancellationToken cancellationToken = default)
+    {
+        var year = await db.AcademicYears.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.AcademicYearId == academicYearId && x.IsDeleted, cancellationToken);
+        if (year is null) return Failed<AcademicYearDto>(CatalogErrorCodes.AcademicYearNotFound);
+        year.IsDeleted = false;
+        year.DeletedAt = null;
+        await db.SaveChangesAsync(cancellationToken);
+        var semesters = await db.Semesters.IgnoreQueryFilters()
+            .Where(x => x.AcademicYearId == academicYearId)
+            .OrderBy(x => x.SemesterId)
+            .ToListAsync(cancellationToken);
+        return Succeeded(new AcademicYearDto(
+            year.AcademicYearId, year.AcademicYearName, year.StartDate, year.EndDate,
+            semesters.Select(ToDto).ToList()));
+    }
+
+    public async Task<CatalogOperationResult<SemesterDto>> RestoreSemesterAsync(
+        int semesterId,
+        CancellationToken cancellationToken = default)
+    {
+        var semester = await db.Semesters.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.SemesterId == semesterId && x.IsDeleted, cancellationToken);
+        if (semester is null) return Failed<SemesterDto>(CatalogErrorCodes.SemesterNotFound);
+        semester.IsDeleted = false;
+        semester.DeletedAt = null;
+        await db.SaveChangesAsync(cancellationToken);
+        return Succeeded(ToDto(semester));
+    }
+
+    public async Task<CatalogOperationResult<CourseSectionDto>> RestoreCourseSectionAsync(
+        int courseSectionId,
+        CancellationToken cancellationToken = default)
+    {
+        var section = await db.CourseSections.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.CourseSectionId == courseSectionId && x.IsDeleted, cancellationToken);
+        if (section is null) return Failed<CourseSectionDto>(CatalogErrorCodes.CourseSectionNotFound);
+        section.IsDeleted = false;
+        section.DeletedAt = null;
+        await db.SaveChangesAsync(cancellationToken);
+        return Succeeded(ToDto(section));
+    }
+
+    public async Task<CatalogOperationResult<LecturerDto>> RestoreLecturerAsync(
+        int lecturerId,
+        CancellationToken cancellationToken = default)
+    {
+        var lecturer = await db.Lecturers.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.LecturerId == lecturerId && x.IsDeleted, cancellationToken);
+        if (lecturer is null) return Failed<LecturerDto>(CatalogErrorCodes.LecturerNotFound);
+        lecturer.IsDeleted = false;
+        lecturer.DeletedAt = null;
+        await db.SaveChangesAsync(cancellationToken);
+        return Succeeded(ToDto(lecturer));
+    }
+
+    public async Task<CatalogOperationResult<CourseDto>> RestoreCourseAsync(
+        int courseId,
+        CancellationToken cancellationToken = default)
+    {
+        var course = await db.Courses.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.CourseId == courseId && x.IsDeleted, cancellationToken);
+        if (course is null) return Failed<CourseDto>(CatalogErrorCodes.CourseNotFound);
+        course.IsDeleted = false;
+        course.DeletedAt = null;
+        await db.SaveChangesAsync(cancellationToken);
+        return Succeeded(ToDto(course));
+    }
 
     private Task<bool> FacultyExistsAsync(int facultyId, CancellationToken cancellationToken) =>
         db.Faculties.AnyAsync(x => x.FacultyId == facultyId, cancellationToken);
