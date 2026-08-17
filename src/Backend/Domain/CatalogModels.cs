@@ -1,34 +1,40 @@
 namespace Domain;
 
 /// <summary>Bảng "Faculties".</summary>
-public sealed class Faculty
+public sealed class Faculty : ISoftDeletable
 {
     public int FacultyId { get; set; }
     public string FacultyName { get; set; } = string.Empty;
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>Bảng "Departments".</summary>
-public sealed class Department
+public sealed class Department : ISoftDeletable
 {
     public int DepartmentId { get; set; }
     public string DepartmentName { get; set; } = string.Empty;
 
     /// <summary>Nullable: bộ môn có thể chưa gắn khoa viện (ON DELETE SET NULL).</summary>
     public int? FacultyId { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>Bảng "Majors".</summary>
-public sealed class Major
+public sealed class Major : ISoftDeletable
 {
     public int MajorId { get; set; }
     public string MajorName { get; set; } = string.Empty;
 
     /// <summary>NOT NULL: ngành học luôn thuộc một khoa viện (ON DELETE CASCADE).</summary>
     public int FacultyId { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>Bảng "AcademicYears".</summary>
-public sealed class AcademicYear
+public sealed class AcademicYear : ISoftDeletable
 {
     public int AcademicYearId { get; set; }
 
@@ -37,20 +43,24 @@ public sealed class AcademicYear
 
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>Bảng "Semesters". UNIQUE theo (AcademicYearId, SemesterName).</summary>
-public sealed class Semester
+public sealed class Semester : ISoftDeletable
 {
     public int SemesterId { get; set; }
     public string SemesterName { get; set; } = string.Empty;
 
     /// <summary>NOT NULL, ON DELETE CASCADE.</summary>
     public int AcademicYearId { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>Bảng "CourseSections". UNIQUE theo (CourseId, SemesterId, SectionName).</summary>
-public sealed class CourseSection
+public sealed class CourseSection : ISoftDeletable
 {
     public int CourseSectionId { get; set; }
 
@@ -65,10 +75,12 @@ public sealed class CourseSection
 
     public string SectionName { get; set; } = string.Empty;
     public int ClassSize { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>Bảng "Lecturers". Giảng viên đăng nhập bằng Gmail, không qua Accounts.</summary>
-public sealed class Lecturer
+public sealed class Lecturer : ISoftDeletable
 {
     public int LecturerId { get; set; }
     public string FullName { get; set; } = string.Empty;
@@ -83,10 +95,12 @@ public sealed class Lecturer
     public string? Email { get; set; }
 
     public string? PhoneNumber { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>Bảng "Courses".</summary>
-public sealed class Course
+public sealed class Course : ISoftDeletable
 {
     public int CourseId { get; set; }
 
@@ -104,4 +118,6 @@ public sealed class Course
 
     /// <summary>Tự tham chiếu, tối đa một học phần tiên quyết (ON DELETE RESTRICT).</summary>
     public int? PrerequisiteCourseId { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }

@@ -31,13 +31,15 @@ public sealed class UserProfile
     public DateTime UpdatedAt { get; set; }
 }
 
-public sealed class Role
+public sealed class Role : ISoftDeletable
 {
     public Guid Id { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public bool IsSystem { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
 public sealed class Permission
