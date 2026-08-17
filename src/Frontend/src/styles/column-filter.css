@@ -1,0 +1,200 @@
+/* ---------------------------------------------------------------------------
+   Menu lọc trên tiêu đề cột, dựng theo mẫu AutoFilter của Excel: sắp xếp
+   A→Z / Z→A, ô tìm kiếm, danh sách tích chọn và hai nút OK / Cancel.
+   --------------------------------------------------------------------------- */
+
+.column-filter-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0;
+  border: 1px solid #c4ccd2;
+  border-radius: 2px;
+  background: #ffffff;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.column-filter-button:hover {
+  border-color: #0788b8;
+  background: #eef7fb;
+}
+
+/* Tam giác nhỏ giống nút xổ của Excel. */
+.column-filter-caret {
+  width: 0;
+  height: 0;
+  border-top: 4px solid #40505a;
+  border-right: 3.5px solid transparent;
+  border-left: 3.5px solid transparent;
+}
+
+.column-filter-button--active {
+  border-color: #0788b8;
+  background: #0788b8;
+}
+
+.column-filter-button--active .column-filter-caret {
+  border-top-color: #ffffff;
+}
+
+.column-filter-panel {
+  position: fixed;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  max-height: min(440px, calc(100vh - 96px));
+  padding: 4px 0 0;
+  border: 1px solid #b9c2c9;
+  border-radius: 3px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(15, 30, 45, 0.18);
+  color: #20262c;
+  font-size: 12px;
+}
+
+.column-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  background: transparent;
+  color: #20262c;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.column-filter-item:hover {
+  background: #eef7fb;
+}
+
+.column-filter-item svg {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  color: #40505a;
+}
+
+.column-filter-item--current {
+  font-weight: 700;
+}
+
+.column-filter-item--current svg {
+  color: #0788b8;
+}
+
+.column-filter-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: #e5eaee;
+}
+
+.column-filter-search {
+  position: relative;
+  padding: 4px 8px 6px;
+}
+
+.column-filter-search input {
+  width: 100%;
+  height: 26px;
+  padding: 0 26px 0 8px;
+  border: 1px solid #c4ccd2;
+  border-radius: 2px;
+  background: #ffffff;
+  color: #20262c;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.column-filter-search input:focus {
+  border-color: #0788b8;
+  outline: 0;
+}
+
+.column-filter-search svg {
+  position: absolute;
+  top: 50%;
+  right: 15px;
+  width: 14px;
+  height: 14px;
+  margin-top: -8px;
+  color: #8c969f;
+  pointer-events: none;
+}
+
+.column-filter-values {
+  flex: 1;
+  min-height: 90px;
+  margin: 0 8px;
+  padding: 4px 0;
+  border: 1px solid #d7dee2;
+  overflow: auto;
+}
+
+.column-filter-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 4px 9px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.column-filter-option:hover {
+  background: #eef7fb;
+}
+
+.column-filter-option input {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  margin-top: 1px;
+  accent-color: #0788b8;
+  cursor: pointer;
+}
+
+.column-filter-empty {
+  margin: 0;
+  padding: 10px 9px;
+  color: #8c969f;
+}
+
+.column-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 9px 8px;
+}
+
+.column-filter-actions button {
+  min-width: 74px;
+  height: 26px;
+  border: 1px solid #b9c2c9;
+  border-radius: 2px;
+  background: #f3f5f7;
+  color: #20262c;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.column-filter-actions button:hover:not(:disabled) {
+  border-color: #0788b8;
+  background: #eef7fb;
+}
+
+.column-filter-ok {
+  font-weight: 600;
+}
+
+.column-filter-actions button:disabled {
+  color: #a4adb4;
+  cursor: not-allowed;
+}

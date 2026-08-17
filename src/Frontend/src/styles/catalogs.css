@@ -191,6 +191,18 @@
   border-right: 0;
 }
 
+/* Tiêu đề cột có menu lọc: chữ bên trái, nút xổ đẩy sát mép phải của ô. Bọc
+   trong span thay vì đổi display của chính th, vì th đang position: sticky. */
+.catalog-th-filterable {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.catalog-th-label {
+  margin-right: auto;
+}
+
 .catalog-table tbody tr:last-child td {
   border-bottom: 0;
 }

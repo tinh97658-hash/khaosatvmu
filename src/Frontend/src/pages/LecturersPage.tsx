@@ -160,18 +160,21 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
     {
       key: 'fullName',
       header: 'Họ và tên',
+      filterValue: (row) => row.fullName,
       render: (row) => <span className="catalog-cell-primary">{row.fullName}</span>,
     },
     {
       key: 'departmentId',
       header: 'Bộ môn',
       width: '250px',
+      filterValue: (row) => (row.departmentId === null ? '—' : departmentNameOf(row.departmentId)),
       render: (row) => (row.departmentId === null ? '—' : departmentNameOf(row.departmentId)),
     },
     {
       key: 'facultyId',
       header: 'Khoa viện',
       width: '250px',
+      filterValue: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
       render: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
     },
     {

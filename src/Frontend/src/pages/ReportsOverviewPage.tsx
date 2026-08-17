@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   BarChart,
   Bar,
@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../auth/authContext';
 import { Modal } from '../components/Modal';
+import { reportRefreshIntervalMs, useAutoRefresh } from '../hooks/useAutoRefresh';
 import { catalogApi } from '../services/catalogApi';
 import { reportApi } from '../services/reportApi';
 import { surveyApi } from '../services/surveyApi';
@@ -109,53 +110,90 @@ export const ReportsOverviewPage: React.FC = () => {
     void loadYears();
   }, []);
 
-  // Fetch Operational Progress
-  useEffect(() => {
-    if (!selectedSemesterId || activeTab !== 'operational' || !canViewOp) return;
-    setOpLoading(true);
-    reportApi.operationalProgress(selectedSemesterId)
-      .then((data) => {
-        setOpReport(data);
+  // Mỗi hàm nạp nhận cờ `silent` để vòng tự làm mới dùng lại được: khi làm mới
+  // ngầm thì không bật spinner và không đè thông báo lỗi lên báo cáo đang xem.
+  const loadOperational = useCallback(
+    async (silent = false) => {
+      if (!selectedSemesterId || !canViewOp) return;
+      if (!silent) setOpLoading(true);
+      try {
+        setOpReport(await reportApi.operationalProgress(selectedSemesterId));
         setLoadError(null);
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error(err);
-        setLoadError('Không thể tải báo cáo tiến độ vận hành.');
-      })
-      .finally(() => setOpLoading(false));
-  }, [selectedSemesterId, activeTab, canViewOp]);
+        if (!silent) setLoadError('Không thể tải báo cáo tiến độ vận hành.');
+      } finally {
+        if (!silent) setOpLoading(false);
+      }
+    },
+    [selectedSemesterId, canViewOp]
+  );
 
-  // Fetch Lecturer Reports
-  useEffect(() => {
-    if (activeTab !== 'lecturers' || !canViewLec) return;
-    setLecLoading(true);
-    reportApi.lecturers({ semesterId: selectedSemesterId })
-      .then((data) => {
-        setLecturerReports(data);
+  const loadLecturers = useCallback(
+    async (silent = false) => {
+      if (!canViewLec) return;
+      if (!silent) setLecLoading(true);
+      try {
+        setLecturerReports(await reportApi.lecturers({ semesterId: selectedSemesterId }));
         setLoadError(null);
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error(err);
-        setLoadError('Không thể tải báo cáo đánh giá giảng viên.');
-      })
-      .finally(() => setLecLoading(false));
-  }, [selectedSemesterId, activeTab, canViewLec]);
+        if (!silent) setLoadError('Không thể tải báo cáo đánh giá giảng viên.');
+      } finally {
+        if (!silent) setLecLoading(false);
+      }
+    },
+    [selectedSemesterId, canViewLec]
+  );
 
-  // Fetch Faculty Reports
-  useEffect(() => {
-    if (activeTab !== 'faculties' || !canViewFac) return;
-    setFacLoading(true);
-    reportApi.faculties(selectedSemesterId)
-      .then((data) => {
-        setFacultyReports(data);
+  const loadFaculties = useCallback(
+    async (silent = false) => {
+      if (!canViewFac) return;
+      if (!silent) setFacLoading(true);
+      try {
+        setFacultyReports(await reportApi.faculties(selectedSemesterId));
         setLoadError(null);
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error(err);
-        setLoadError('Không thể tải báo cáo thống kê Khoa/Bộ môn.');
-      })
-      .finally(() => setFacLoading(false));
-  }, [selectedSemesterId, activeTab, canViewFac]);
+        if (!silent) setLoadError('Không thể tải báo cáo thống kê Khoa/Bộ môn.');
+      } finally {
+        if (!silent) setFacLoading(false);
+      }
+    },
+    [selectedSemesterId, canViewFac]
+  );
+
+  const loadQuestions = useCallback(
+    async (silent = false) => {
+      if (!selectedSurveyId || !canViewQ) return;
+      if (!silent) setQLoading(true);
+      try {
+        setQReport(await reportApi.questionAnalysis(selectedSurveyId));
+        setLoadError(null);
+      } catch (err) {
+        console.error(err);
+        if (!silent) setLoadError('Không thể tải báo cáo phân tích tiêu chí.');
+      } finally {
+        if (!silent) setQLoading(false);
+      }
+    },
+    [selectedSurveyId, canViewQ]
+  );
+
+  useEffect(() => {
+    if (activeTab !== 'operational') return;
+    void loadOperational();
+  }, [activeTab, loadOperational]);
+
+  useEffect(() => {
+    if (activeTab !== 'lecturers') return;
+    void loadLecturers();
+  }, [activeTab, loadLecturers]);
+
+  useEffect(() => {
+    if (activeTab !== 'faculties') return;
+    void loadFaculties();
+  }, [activeTab, loadFaculties]);
 
   // Fetch Semester Surveys for Question Analysis
   useEffect(() => {
@@ -170,21 +208,24 @@ export const ReportsOverviewPage: React.FC = () => {
       .catch(console.error);
   }, [activeTab, canViewQ]);
 
-  // Fetch Question Summary Report
   useEffect(() => {
-    if (activeTab !== 'questions' || !selectedSurveyId || !canViewQ) return;
-    setQLoading(true);
-    reportApi.questionAnalysis(selectedSurveyId)
-      .then((data) => {
-        setQReport(data);
-        setLoadError(null);
-      })
-      .catch((err) => {
-        console.error(err);
-        setLoadError('Không thể tải báo cáo phân tích tiêu chí.');
-      })
-      .finally(() => setQLoading(false));
-  }, [selectedSurveyId, activeTab, canViewQ]);
+    if (activeTab !== 'questions') return;
+    void loadQuestions();
+  }, [activeTab, loadQuestions]);
+
+  // Chỉ làm mới đúng tab đang xem, không nạp lại cả bốn báo cáo mỗi nhịp.
+  const refreshActiveReport = useCallback(() => {
+    if (activeTab === 'operational') return loadOperational(true);
+    if (activeTab === 'lecturers') return loadLecturers(true);
+    if (activeTab === 'faculties') return loadFaculties(true);
+    return loadQuestions(true);
+  }, [activeTab, loadOperational, loadLecturers, loadFaculties, loadQuestions]);
+
+  useAutoRefresh(refreshActiveReport, {
+    // Đang mở chi tiết một giảng viên thì giữ nguyên số liệu người dùng đang đọc.
+    enabled: canViewReports && selectedLecturer === null,
+    intervalMs: reportRefreshIntervalMs,
+  });
 
   if (!canViewReports) {
     return (
