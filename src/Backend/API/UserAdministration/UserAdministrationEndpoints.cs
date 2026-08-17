@@ -153,6 +153,15 @@ public static class UserAdministrationEndpoints
             return Results.NoContent();
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
+        group.MapGet("/change-audit-logs", async (
+            string? tableName,
+            string? recordId,
+            int page,
+            int pageSize,
+            IUserAdministrationService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetChangeAuditLogsAsync(tableName, recordId, page, pageSize, cancellationToken)));
+
         return endpoints;
     }
 

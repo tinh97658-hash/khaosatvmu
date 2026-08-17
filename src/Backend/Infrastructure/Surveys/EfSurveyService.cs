@@ -132,15 +132,7 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         }
 
         db.AnswerScales.Remove(scale);
-        try
-        {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            db.ChangeTracker.Clear();
-            return Failed<bool>(SurveyErrorCodes.AnswerScaleInUse);
-        }
+        await db.SaveChangesAsync(cancellationToken);
 
         return Succeeded(true);
     }
@@ -275,17 +267,14 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             return Failed<bool>(SurveyErrorCodes.TemplateNotFound);
         }
 
-        db.SurveyTemplates.Remove(template);
-        try
+        // "SemesterSurveys"."SurveyTemplateId" là ON DELETE RESTRICT.
+        if (await db.SemesterSurveys.AnyAsync(x => x.SurveyTemplateId == surveyTemplateId, cancellationToken))
         {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            // "SemesterSurveys"."SurveyTemplateId" là ON DELETE RESTRICT.
-            db.ChangeTracker.Clear();
             return Failed<bool>(SurveyErrorCodes.TemplateInUse);
         }
+
+        db.SurveyTemplates.Remove(template);
+        await db.SaveChangesAsync(cancellationToken);
 
         return Succeeded(true);
     }
@@ -438,15 +427,19 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         }
 
         // Xóa đợt sẽ xóa lây phiếu đã thu (ON DELETE CASCADE) nên chặn lại.
-        var sectionSurveyIds = await db.CourseSectionSurveys
+        var sectionSurveys = await db.CourseSectionSurveys
             .Where(x => x.SemesterSurveyId == semesterSurveyId)
-            .Select(x => x.CourseSectionSurveyId)
             .ToListAsync(cancellationToken);
+        var sectionSurveyIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
         if (await db.SurveyResponses
             .AnyAsync(x => sectionSurveyIds.Contains(x.CourseSectionSurveyId), cancellationToken))
         {
             return Failed<bool>(SurveyErrorCodes.SemesterSurveyHasResponses);
         }
+
+        // Cascade soft-delete: đợt khảo sát → bài khảo sát lớp học phần.
+        foreach (var sectionSurvey in sectionSurveys)
+            db.CourseSectionSurveys.Remove(sectionSurvey);
 
         db.SemesterSurveys.Remove(survey);
         await db.SaveChangesAsync(cancellationToken);
@@ -1016,4 +1009,45 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
     private static SurveyOperationResult<T> Succeeded<T>(T value) => new(true, null, value);
 
     private static SurveyOperationResult<T> Failed<T>(string errorCode) => new(false, errorCode, default);
+
+    // --------------------------------------------------------------- Restore
+
+    public async Task<SurveyOperationResult<bool>> RestoreAnswerScaleAsync(
+        int answerScaleId,
+        CancellationToken cancellationToken = default)
+    {
+        var scale = await db.AnswerScales.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.AnswerScaleId == answerScaleId && x.IsDeleted, cancellationToken);
+        if (scale is null) return Failed<bool>(SurveyErrorCodes.AnswerScaleNotFound);
+        scale.IsDeleted = false;
+        scale.DeletedAt = null;
+        await db.SaveChangesAsync(cancellationToken);
+        return Succeeded(true);
+    }
+
+    public async Task<SurveyOperationResult<bool>> RestoreSurveyTemplateAsync(
+        int surveyTemplateId,
+        CancellationToken cancellationToken = default)
+    {
+        var template = await db.SurveyTemplates.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.SurveyTemplateId == surveyTemplateId && x.IsDeleted, cancellationToken);
+        if (template is null) return Failed<bool>(SurveyErrorCodes.TemplateNotFound);
+        template.IsDeleted = false;
+        template.DeletedAt = null;
+        await db.SaveChangesAsync(cancellationToken);
+        return Succeeded(true);
+    }
+
+    public async Task<SurveyOperationResult<bool>> RestoreSemesterSurveyAsync(
+        int semesterSurveyId,
+        CancellationToken cancellationToken = default)
+    {
+        var survey = await db.SemesterSurveys.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.SemesterSurveyId == semesterSurveyId && x.IsDeleted, cancellationToken);
+        if (survey is null) return Failed<bool>(SurveyErrorCodes.SemesterSurveyNotFound);
+        survey.IsDeleted = false;
+        survey.DeletedAt = null;
+        await db.SaveChangesAsync(cancellationToken);
+        return Succeeded(true);
+    }
 }

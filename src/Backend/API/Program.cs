@@ -40,8 +40,8 @@ builder.Services.AddProblemDetails();
 
 builder.Services.AddOpenApi();
 builder.Services.AddMemoryCache();
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddPersistence(builder.Configuration);
 
 // Health Checks with Database Readiness
 builder.Services.AddHealthChecks()

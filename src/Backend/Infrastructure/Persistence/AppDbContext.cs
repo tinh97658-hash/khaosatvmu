@@ -28,9 +28,25 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<CourseSectionSurvey> CourseSectionSurveys => Set<CourseSectionSurvey>();
     public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
     public DbSet<SurveyResponseAnswer> SurveyResponseAnswers => Set<SurveyResponseAnswer>();
+    public DbSet<ChangeAuditLog> ChangeAuditLogs => Set<ChangeAuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Global soft-delete filters — excluded from queries unless .IgnoreQueryFilters() is used
+        modelBuilder.Entity<Role>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Faculty>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Department>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Major>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<AcademicYear>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Semester>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<CourseSection>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Lecturer>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Course>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<AnswerScale>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<SurveyTemplate>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<SemesterSurvey>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<CourseSectionSurvey>().HasQueryFilter(e => !e.IsDeleted);
+
         modelBuilder.Entity<User>(entity =>
         {
             entity.ToTable("Users");
@@ -346,6 +362,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany()
                 .HasForeignKey(x => x.QuestionId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ChangeAuditLog>(entity =>
+        {
+            entity.ToTable("ChangeAuditLogs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TableName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.RecordId).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Action).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ChangedByEmail).HasMaxLength(320);
+            entity.HasIndex(x => new { x.TableName, x.RecordId });
+            entity.HasIndex(x => new { x.ChangedBy, x.ChangedAt });
+            entity.HasIndex(x => x.ChangedAt);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.ChangedBy).OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

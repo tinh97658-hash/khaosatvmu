@@ -360,6 +360,48 @@ public static class CatalogEndpoints
             return ToResult(await service.ImportCoursesAsync(rows, cancellationToken));
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
+        // ------------------------------------------------------------ Restore
+
+        group.MapPatch("/faculties/{facultyId:int}/restore", async (
+            int facultyId, ICatalogService service, CancellationToken ct) =>
+            ToResult(await service.RestoreFacultyAsync(facultyId, ct)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapPatch("/departments/{departmentId:int}/restore", async (
+            int departmentId, ICatalogService service, CancellationToken ct) =>
+            ToResult(await service.RestoreDepartmentAsync(departmentId, ct)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapPatch("/majors/{majorId:int}/restore", async (
+            int majorId, ICatalogService service, CancellationToken ct) =>
+            ToResult(await service.RestoreMajorAsync(majorId, ct)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapPatch("/academic-years/{academicYearId:int}/restore", async (
+            int academicYearId, ICatalogService service, CancellationToken ct) =>
+            ToResult(await service.RestoreAcademicYearAsync(academicYearId, ct)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapPatch("/semesters/{semesterId:int}/restore", async (
+            int semesterId, ICatalogService service, CancellationToken ct) =>
+            ToResult(await service.RestoreSemesterAsync(semesterId, ct)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapPatch("/course-sections/{courseSectionId:int}/restore", async (
+            int courseSectionId, ICatalogService service, CancellationToken ct) =>
+            ToResult(await service.RestoreCourseSectionAsync(courseSectionId, ct)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapPatch("/lecturers/{lecturerId:int}/restore", async (
+            int lecturerId, ICatalogService service, CancellationToken ct) =>
+            ToResult(await service.RestoreLecturerAsync(lecturerId, ct)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapPatch("/courses/{courseId:int}/restore", async (
+            int courseId, ICatalogService service, CancellationToken ct) =>
+            ToResult(await service.RestoreCourseAsync(courseId, ct)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
         return endpoints;
     }
 

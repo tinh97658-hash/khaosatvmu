@@ -153,6 +153,23 @@ public static class SurveyEndpoints
                 request.ToCommand(),
                 cancellationToken)));
 
+        // ------------------------------------------------------------ Restore
+
+        group.MapPatch("/answer-scales/{answerScaleId:int}/restore", async (
+            int answerScaleId, ISurveyService service, CancellationToken ct) =>
+            ToResult(await service.RestoreAnswerScaleAsync(answerScaleId, ct)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapPatch("/survey-templates/{surveyTemplateId:int}/restore", async (
+            int surveyTemplateId, ISurveyService service, CancellationToken ct) =>
+            ToResult(await service.RestoreSurveyTemplateAsync(surveyTemplateId, ct)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapPatch("/semester-surveys/{semesterSurveyId:int}/restore", async (
+            int semesterSurveyId, ISurveyService service, CancellationToken ct) =>
+            ToResult(await service.RestoreSemesterSurveyAsync(semesterSurveyId, ct)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
         return endpoints;
     }
 

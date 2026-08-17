@@ -454,7 +454,31 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<AdminPage<ChangeAuditLogDto>> GetChangeAuditLogsAsync(
+        string? tableName,
+        string? recordId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        (page, pageSize) = NormalizePaging(page, pageSize);
+        var query = db.ChangeAuditLogs.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(tableName))
+            query = query.Where(x => x.TableName == tableName);
+        if (!string.IsNullOrWhiteSpace(recordId))
+            query = query.Where(x => x.RecordId == recordId);
 
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(x => x.ChangedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => new ChangeAuditLogDto(
+                x.Id, x.TableName, x.RecordId, x.Action,
+                x.ChangedBy, x.ChangedByEmail, x.OldValues, x.NewValues, x.ChangedAt))
+            .ToListAsync(cancellationToken);
+        return new AdminPage<ChangeAuditLogDto>(items, page, pageSize, total);
+    }
 
     private async Task<string?> ValidateProfileCommandAsync(
         Guid userId,
