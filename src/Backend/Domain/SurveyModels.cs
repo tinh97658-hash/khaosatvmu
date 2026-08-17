@@ -1,12 +1,14 @@
 namespace Domain;
 
 /// <summary>Bảng "AnswerScales". Thang trả lời dùng lại được cho nhiều bộ câu hỏi.</summary>
-public sealed class AnswerScale
+public sealed class AnswerScale : ISoftDeletable
 {
     public int AnswerScaleId { get; set; }
 
     /// <summary>Vd 'Mức độ hài lòng', 'Mức độ đồng ý'.</summary>
     public string AnswerScaleName { get; set; } = string.Empty;
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>Bảng "AnswerScaleOptions". UNIQUE theo (AnswerScaleId, Value).</summary>
@@ -25,7 +27,7 @@ public sealed class AnswerScaleOption
 }
 
 /// <summary>Bảng "SurveyTemplates". Bộ câu hỏi do quản trị soạn, tối đa 30 câu.</summary>
-public sealed class SurveyTemplate
+public sealed class SurveyTemplate : ISoftDeletable
 {
     public int SurveyTemplateId { get; set; }
 
@@ -35,6 +37,8 @@ public sealed class SurveyTemplate
     public int AnswerScaleId { get; set; }
 
     public DateTime CreatedAt { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>Bảng "SurveyQuestions". Một câu hỏi thuộc đúng một bộ câu hỏi.</summary>
@@ -52,7 +56,7 @@ public sealed class SurveyQuestion
 /// Bảng "SemesterSurveys". Một lần phát khảo sát cho cả học kỳ: chọn học kỳ và
 /// bộ câu hỏi, mọi lớp học phần của kỳ dùng chung bộ câu hỏi này.
 /// </summary>
-public sealed class SemesterSurvey
+public sealed class SemesterSurvey : ISoftDeletable
 {
     public int SemesterSurveyId { get; set; }
 
@@ -63,13 +67,15 @@ public sealed class SemesterSurvey
     public int SurveyTemplateId { get; set; }
 
     public DateTime CreatedAt { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>
 /// Bảng "CourseSectionSurveys". Mỗi lớp học phần có một bài khảo sát riêng với
 /// LinkToken riêng để dựng link và mã QR. UNIQUE theo (SemesterSurveyId, CourseSectionId).
 /// </summary>
-public sealed class CourseSectionSurvey
+public sealed class CourseSectionSurvey : ISoftDeletable
 {
     public int CourseSectionSurveyId { get; set; }
 
@@ -85,6 +91,8 @@ public sealed class CourseSectionSurvey
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public DateTime CreatedAt { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>Bảng "SurveyResponses". Phiếu trả lời ẩn danh của sinh viên.</summary>
