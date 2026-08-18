@@ -152,7 +152,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         var faculties = await db.Faculties.AsNoTracking().ToDictionaryAsync(x => x.FacultyId, x => x.FacultyName, cancellationToken);
         var departments = await db.Departments.AsNoTracking().ToDictionaryAsync(x => x.DepartmentId, x => x.DepartmentName, cancellationToken);
 
-        var sectionQuery = db.CourseSections.AsNoTracking().Where(x => lecturerIds.Contains(x.LecturerId));
+        // Lớp chưa xác định được giảng viên (LecturerId NULL) không vào báo cáo giảng viên.
+        var sectionQuery = db.CourseSections.AsNoTracking()
+            .Where(x => x.LecturerId != null && lecturerIds.Contains(x.LecturerId.Value));
         if (semesterId is { } semId)
         {
             sectionQuery = sectionQuery.Where(x => x.SemesterId == semId);
@@ -346,7 +348,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             var facLecturers = lecturers.Where(x => x.FacultyId == fac.FacultyId).ToList();
             var facLecIds = facLecturers.Select(x => x.LecturerId).ToList();
 
-            var facSections = sections.Where(x => facLecIds.Contains(x.LecturerId)).ToList();
+            var facSections = sections
+                .Where(x => x.LecturerId is { } lecId && facLecIds.Contains(lecId))
+                .ToList();
             var facSecIds = facSections.Select(x => x.CourseSectionId).ToList();
             var facCss = sectionSurveys.Where(x => facSecIds.Contains(x.CourseSectionId)).ToList();
 
@@ -369,7 +373,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             {
                 var deptLecs = facLecturers.Where(x => x.DepartmentId == dept.DepartmentId).ToList();
                 var deptLecIds = deptLecs.Select(x => x.LecturerId).ToList();
-                var deptSections = facSections.Where(x => deptLecIds.Contains(x.LecturerId)).ToList();
+                var deptSections = facSections
+                    .Where(x => x.LecturerId is { } deptLecId && deptLecIds.Contains(deptLecId))
+                    .ToList();
                 var deptSecIds = deptSections.Select(x => x.CourseSectionId).ToList();
                 var deptCss = facCss.Where(x => deptSecIds.Contains(x.CourseSectionId)).ToList();
 

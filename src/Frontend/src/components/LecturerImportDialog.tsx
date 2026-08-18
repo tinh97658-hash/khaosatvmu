@@ -9,6 +9,7 @@ import {
   Upload,
 } from 'lucide-react';
 import {
+  defaultPositionName,
   downloadLecturerImportTemplate,
   parseLecturerImportFile,
   LecturerImportFileError,
@@ -120,8 +121,9 @@ export function LecturerImportDialog({ isOpen, onClose, onImport }: LecturerImpo
           <FileSpreadsheet aria-hidden="true" />
           <p>
             Hàng đầu tiên cần có cột <strong>Họ và tên</strong>. Các cột Email, Số điện thoại, Tên
-            khoa viện, Tên bộ môn là tùy chọn; tên khoa viện và bộ môn được tra ngược ra id. Tối đa
-            500 dòng.
+            khoa viện, Tên bộ môn, Chức vụ là tùy chọn; tên khoa viện, bộ môn và chức vụ được tra
+            ngược ra id. Dòng nào bỏ trống cột <strong>Chức vụ</strong> sẽ mặc định là{' '}
+            <strong>{defaultPositionName}</strong>. Tối đa 500 dòng.
           </p>
         </div>
 
@@ -204,6 +206,7 @@ export function LecturerImportDialog({ isOpen, onClose, onImport }: LecturerImpo
                         <th>Email</th>
                         <th>Khoa viện</th>
                         <th>Bộ môn</th>
+                        <th>Chức vụ</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -218,6 +221,11 @@ export function LecturerImportDialog({ isOpen, onClose, onImport }: LecturerImpo
                           <td>{row.email || '—'}</td>
                           <td>{row.facultyName || '—'}</td>
                           <td>{row.departmentName || '—'}</td>
+                          <td>
+                            {row.positionName || (
+                              <span className="admin-import-default">{defaultPositionName}</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

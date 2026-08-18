@@ -27,7 +27,8 @@ interface CourseForm {
   courseCode: string;
   courseName: string;
   credits: string;
-  courseType: CourseType;
+  /** Chuỗi rỗng nghĩa là chưa xác định, gửi lên API thành null. */
+  courseType: CourseType | '';
   departmentId: string;
   facultyId: string;
   prerequisiteCourseId: string;
@@ -37,7 +38,7 @@ const emptyForm: CourseForm = {
   courseCode: '',
   courseName: '',
   credits: '3',
-  courseType: 'Required',
+  courseType: '',
   departmentId: '',
   facultyId: '',
   prerequisiteCourseId: '',
@@ -48,8 +49,8 @@ const courseTypeLabels: Record<CourseType, string> = {
   Elective: 'Tự chọn',
 };
 
-const courseTypeLabelOf = (value: CourseType | '') =>
-  value === '' ? '—' : courseTypeLabels[value];
+const courseTypeLabelOf = (value: CourseType | null) =>
+  value === null ? '—' : courseTypeLabels[value];
 
 export const CoursesPage: React.FC<CoursesPageProps> = ({
   courses,
@@ -90,7 +91,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
       courseCode: course.courseCode,
       courseName: course.courseName,
       credits: String(course.credits),
-      courseType: course.courseType === '' ? 'Required' : course.courseType,
+      courseType: course.courseType ?? '',
       departmentId: course.departmentId === null ? '' : String(course.departmentId),
       facultyId: course.facultyId === null ? '' : String(course.facultyId),
       prerequisiteCourseId:
@@ -120,7 +121,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
       courseCode,
       courseName,
       credits,
-      courseType: form.courseType,
+      courseType: form.courseType === '' ? null : form.courseType,
       departmentId: form.departmentId ? Number(form.departmentId) : null,
       facultyId: form.facultyId ? Number(form.facultyId) : null,
       prerequisiteCourseId: form.prerequisiteCourseId ? Number(form.prerequisiteCourseId) : null,
@@ -182,35 +183,42 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
       key: 'courseCode',
       header: 'Mã học phần',
       width: '130px',
+      filterValue: (item) => item.courseCode,
       render: (item) => <span className="catalog-code">{item.courseCode}</span>,
     },
     {
       key: 'courseName',
       header: 'Tên học phần',
+      filterValue: (item) => item.courseName,
       render: (item) => <span className="catalog-cell-primary">{item.courseName}</span>,
     },
     {
       key: 'credits',
       header: 'Số tín chỉ',
       width: '100px',
+      filterValue: (item) => String(item.credits),
+      numeric: true,
       render: (item) => <span className="catalog-cell-primary">{item.credits}</span>,
     },
     {
       key: 'courseType',
       header: 'Loại học phần',
       width: '130px',
+      filterValue: (item) => courseTypeLabelOf(item.courseType),
       render: (item) => courseTypeLabelOf(item.courseType),
     },
     {
       key: 'departmentId',
       header: 'Bộ môn',
       width: '230px',
+      filterValue: (item) => (item.departmentId === null ? '—' : departmentNameOf(item.departmentId)),
       render: (item) => (item.departmentId === null ? '—' : departmentNameOf(item.departmentId)),
     },
     {
       key: 'facultyId',
       header: 'Khoa viện',
       width: '230px',
+      filterValue: (item) => (item.facultyId === null ? '—' : facultyNameOf(item.facultyId)),
       render: (item) => (item.facultyId === null ? '—' : facultyNameOf(item.facultyId)),
     },
     {
@@ -340,8 +348,11 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
               <select
                 id="course-type"
                 value={form.courseType}
-                onChange={(event) => updateForm({ courseType: event.target.value as CourseType })}
+                onChange={(event) =>
+                  updateForm({ courseType: event.target.value as CourseType | '' })
+                }
               >
+                <option value="">Chưa xác định</option>
                 <option value="Required">Required — Bắt buộc</option>
                 <option value="Elective">Elective — Tự chọn</option>
               </select>

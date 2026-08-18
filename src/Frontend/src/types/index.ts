@@ -24,6 +24,13 @@ export interface Lecturer {
   facultyId: number | null;
   email: string | null;
   phoneNumber: string | null;
+  positionId: number | null;
+}
+
+/** Bảng "Positions". Chức vụ của giảng viên. */
+export interface Position {
+  positionId: number;
+  positionName: string;
 }
 
 /** Bảng "Majors" */
@@ -59,8 +66,11 @@ export interface Course {
   courseCode: string;
   courseName: string;
   credits: number;
-  /** Chuỗi rỗng khi tệp import không ghi loại học phần; cột có DEFAULT ''. */
-  courseType: CourseType | '';
+  /**
+   * Null khi chưa xác định bắt buộc hay tự chọn — học phần tạo tự động lúc
+   * import lớp học phần rơi vào trường hợp này, quản trị điền sau.
+   */
+  courseType: CourseType | null;
   departmentId: number | null;
   facultyId: number | null;
   prerequisiteCourseId: number | null;
@@ -88,10 +98,15 @@ export interface CourseSection {
   courseSectionId: number;
   courseId: number;
   semesterId: number;
-  /** NOT NULL: mỗi lớp học phần có đúng một giảng viên. */
-  lecturerId: number;
+  /**
+   * Null khi tệp import không có email để xác định giảng viên; khi đó tên đọc
+   * được nằm ở unidentifiedLecturerName. Hai trường này loại trừ nhau.
+   */
+  lecturerId: number | null;
   sectionName: string;
   classSize: number;
+  /** Tên giảng viên chưa gắn được vào bảng "Lecturers" vì thiếu email. */
+  unidentifiedLecturerName: string | null;
 }
 
 export interface Criterion {

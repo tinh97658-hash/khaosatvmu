@@ -116,11 +116,13 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
       key: 'code',
       header: 'Mã Lớp / Nhóm N01-N02',
       width: '150px',
+      filterValue: (item) => item.code,
       render: (item) => <span className="operations-code">{item.code}</span>,
     },
     {
       key: 'name',
       header: 'Tên Lớp HP / Đợt Khảo Sát',
+      filterValue: (item) => item.name,
       render: (item) => (
         <div>
           <strong className="operations-primary-text">{item.name}</strong>
@@ -135,12 +137,16 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
       key: 'targetCount',
       header: 'Chỉ Tiêu / Sĩ Số',
       width: '120px',
+      filterValue: (item) => String(item.targetCount),
+      numeric: true,
       render: (item) => <span className="operations-primary-text">{item.targetCount} sinh viên</span>,
     },
     {
       key: 'actualCount',
       header: 'Số Phiếu Đã Nộp',
       width: '130px',
+      filterValue: (item) => String(item.actualCount),
+      numeric: true,
       render: (item) => <span className="operations-primary-text">{item.actualCount} phiếu</span>,
     },
     {

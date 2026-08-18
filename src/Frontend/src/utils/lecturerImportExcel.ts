@@ -28,6 +28,16 @@ const departmentNameHeaders = new Set([
   'departmentname',
   'department name',
 ]);
+const positionNameHeaders = new Set([
+  'chuc vu',
+  'ten chuc vu',
+  'positionname',
+  'position name',
+  'position',
+]);
+
+/** Chức vụ mặc định khi cột chức vụ của một dòng bị bỏ trống. */
+export const defaultPositionName = 'Giảng viên';
 
 export interface ImportLecturerRow {
   rowNumber: number;
@@ -38,6 +48,8 @@ export interface ImportLecturerRow {
   facultyName: string;
   /** Tra ngược ra "Lecturers"."DepartmentId". */
   departmentName: string;
+  /** Tra ngược ra "Lecturers"."PositionId"; để trống thì backend dùng defaultPositionName. */
+  positionName: string;
 }
 
 export type LecturerImportFileErrorCode =
@@ -81,18 +93,19 @@ function cellText(value: CellValue | null | undefined): string {
 export const lecturerTemplateFileName = 'mau-import-giang-vien.xlsx';
 
 /**
- * Tạo và tải tệp Excel mẫu cho giảng viên. Khoa viện và bộ môn ghi theo tên,
- * khi import được tra ngược ra id.
+ * Tạo và tải tệp Excel mẫu cho giảng viên. Khoa viện, bộ môn và chức vụ ghi theo tên,
+ * khi import được tra ngược ra id. Dòng cuối để trống cột chức vụ để minh họa
+ * trường hợp mặc định thành "Giảng viên".
  */
 export async function downloadLecturerImportTemplate(): Promise<void> {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
 
-  const header = ['Họ và tên', 'Email', 'Số điện thoại', 'Tên khoa viện', 'Tên bộ môn'];
+  const header = ['Họ và tên', 'Email', 'Số điện thoại', 'Tên khoa viện', 'Tên bộ môn', 'Chức vụ'];
 
   const rows = [
-    ['Nguyễn Văn Hải', 'hainv@vimaru.edu.vn', '0912345678', 'Khoa Công nghệ Thông tin', 'Bộ môn Công nghệ Phần mềm'],
-    ['Trần Thị Bình', 'binhtt@vimaru.edu.vn', '0987654321', 'Khoa Công nghệ Thông tin', ''],
-    ['Lê Văn Cường', 'cuonglv@vimaru.edu.vn', '', 'Khoa Điện - Điện tử', ''],
+    ['Nguyễn Văn Hải', 'hainv@vimaru.edu.vn', '0912345678', 'Khoa Công nghệ Thông tin', 'Bộ môn Công nghệ Phần mềm', 'Trưởng Bộ môn'],
+    ['Trần Thị Bình', 'binhtt@vimaru.edu.vn', '0987654321', 'Khoa Công nghệ Thông tin', '', 'Giảng viên chính'],
+    ['Lê Văn Cường', 'cuonglv@vimaru.edu.vn', '', 'Khoa Điện - Điện tử', '', ''],
   ];
 
   const data: SheetData = [
@@ -102,7 +115,7 @@ export async function downloadLecturerImportTemplate(): Promise<void> {
 
   await writeXlsxFile(data, {
     sheet: 'Giang vien',
-    columns: [{ width: 26 }, { width: 30 }, { width: 18 }, { width: 30 }, { width: 30 }],
+    columns: [{ width: 26 }, { width: 30 }, { width: 18 }, { width: 30 }, { width: 30 }, { width: 22 }],
   }).toFile(lecturerTemplateFileName);
 }
 
@@ -140,6 +153,8 @@ export async function parseLecturerImportFile(file: File): Promise<ImportLecture
   const phoneIndex = indexOf(phoneHeaders);
   const facultyIndex = indexOf(facultyNameHeaders);
   const departmentIndex = indexOf(departmentNameHeaders);
+  // Cột Chức vụ là tùy chọn: bỏ trống thì backend gán defaultPositionName.
+  const positionIndex = indexOf(positionNameHeaders);
 
   const pick = (row: readonly (CellValue | null)[], index: number) =>
     index < 0 ? '' : cellText(row[index]);
@@ -153,6 +168,7 @@ export async function parseLecturerImportFile(file: File): Promise<ImportLecture
       phoneNumber: pick(row, phoneIndex),
       facultyName: pick(row, facultyIndex),
       departmentName: pick(row, departmentIndex),
+      positionName: pick(row, positionIndex),
     }))
     .filter((row) => row.fullName.length > 0 || row.email.length > 0);
 

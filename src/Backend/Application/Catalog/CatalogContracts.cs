@@ -6,6 +6,9 @@ public sealed record DepartmentDto(int DepartmentId, string DepartmentName, int?
 
 public sealed record MajorDto(int MajorId, string MajorName, int FacultyId);
 
+/// <summary>Chức vụ của giảng viên. Bảng "Positions".</summary>
+public sealed record PositionDto(int PositionId, string PositionName);
+
 public sealed record AcademicYearDto(
     int AcademicYearId,
     string AcademicYearName,
@@ -15,13 +18,18 @@ public sealed record AcademicYearDto(
 
 public sealed record SemesterDto(int SemesterId, string SemesterName, int AcademicYearId);
 
+/// <summary>
+/// LecturerId và UnidentifiedLecturerName loại trừ nhau: lớp nào chưa xác định được
+/// giảng viên thì LecturerId null và tên đọc từ tệp nằm ở UnidentifiedLecturerName.
+/// </summary>
 public sealed record CourseSectionDto(
     int CourseSectionId,
     int CourseId,
     int SemesterId,
-    int LecturerId,
+    int? LecturerId,
     string SectionName,
-    int ClassSize);
+    int ClassSize,
+    string? UnidentifiedLecturerName);
 
 public sealed record SaveAcademicYearCommand(string AcademicYearName, DateOnly StartDate, DateOnly EndDate);
 
@@ -30,23 +38,65 @@ public sealed record SaveSemesterCommand(string SemesterName, int AcademicYearId
 public sealed record SaveCourseSectionCommand(
     int CourseId,
     int SemesterId,
-    int LecturerId,
+    int? LecturerId,
     string SectionName,
-    int ClassSize);
+    int ClassSize,
+    string? UnidentifiedLecturerName);
 
 /// <summary>
-/// Một dòng lớp học phần trong tệp Excel. Học phần đi vào theo MÃ; giảng viên
-/// tra theo email, hoặc theo họ tên thu hẹp bằng bộ môn và khoa viện.
+/// Một dòng lớp học phần trong tệp Excel gốc của đơn vị đào tạo. Các cột theo thứ tự:
+/// Mã HP, Học phần, Nhóm, TCHT, Sĩ số, Bộ môn, Khoa, Giảng viên, Email, Mã BM.
+/// Học phần chưa có thì được tạo mới; giảng viên có email mà chưa có cũng vậy.
 /// </summary>
 public sealed record ImportCourseSectionRowCommand(
     int RowNumber,
+    /// <summary>Cột "Mã HP".</summary>
     string CourseCode,
+    /// <summary>Cột "Học phần". Dùng khi phải tạo học phần mới.</summary>
+    string? CourseName,
+    /// <summary>Cột "Nhóm", chính là tên lớp học phần.</summary>
     string SectionName,
+    /// <summary>Cột "TCHT", số tín chỉ. Dùng khi phải tạo học phần mới.</summary>
+    string? Credits,
+    /// <summary>Cột "Sĩ số".</summary>
     string? ClassSize,
-    string? LecturerEmail,
+    /// <summary>Cột "Bộ môn". Chỉ dùng khi cột "Mã BM" bỏ trống.</summary>
+    string? DepartmentName,
+    /// <summary>Cột "Mã BM". Được ưu tiên hơn tên bộ môn.</summary>
+    string? DepartmentCode,
+    /// <summary>Cột "Khoa".</summary>
+    string? FacultyName,
+    /// <summary>Cột "Giảng viên".</summary>
     string? LecturerFullName,
-    string? LecturerDepartmentName,
-    string? LecturerFacultyName);
+    /// <summary>Cột "Email". Bỏ trống thì lớp được tạo với giảng viên chưa xác định.</summary>
+    string? LecturerEmail);
+
+/// <summary>
+/// Một giảng viên đọc được trong tệp nhưng thiếu email nên không gắn được vào
+/// bảng "Lecturers". Frontend gom theo bộ môn rồi xuất tệp Excel cho quản trị.
+/// </summary>
+public sealed record UnidentifiedLecturerDto(
+    int RowNumber,
+    string FullName,
+    int? DepartmentId,
+    string? DepartmentName,
+    string? FacultyName,
+    string CourseCode,
+    string SectionName);
+
+/// <summary>Kết quả import lớp học phần, rộng hơn <see cref="CatalogImportDto"/>.</summary>
+public sealed record CourseSectionImportDto(
+    int TotalCount,
+    int CreatedCount,
+    int SkippedCount,
+    IReadOnlyList<CatalogImportItemDto> Items,
+    /// <summary>Số học phần được tạo tự động vì chưa có trong danh mục.</summary>
+    int CreatedCourseCount,
+    /// <summary>Số giảng viên được tạo tự động từ email trong tệp.</summary>
+    int CreatedLecturerCount,
+    /// <summary>Số lớp đã có sẵn và được cập nhật lại mã giảng viên.</summary>
+    int UpdatedSectionCount,
+    IReadOnlyList<UnidentifiedLecturerDto> UnidentifiedLecturers);
 
 public sealed record LecturerDto(
     int LecturerId,
@@ -54,21 +104,26 @@ public sealed record LecturerDto(
     int? DepartmentId,
     int? FacultyId,
     string? Email,
-    string? PhoneNumber);
+    string? PhoneNumber,
+    int? PositionId);
 
+/// <summary>CourseType null nghĩa là chưa xác định bắt buộc hay tự chọn.</summary>
 public sealed record CourseDto(
     int CourseId,
     string CourseCode,
     string CourseName,
     int Credits,
-    string CourseType,
+    string? CourseType,
     int? DepartmentId,
     int? FacultyId,
     int? PrerequisiteCourseId);
 
 public sealed record SaveFacultyCommand(string FacultyName);
 
-public sealed record SaveDepartmentCommand(string DepartmentName, int? FacultyId);
+/// <summary>DepartmentId chỉ dùng khi tạo mới; khi cập nhật thì lấy theo id trên đường dẫn.</summary>
+public sealed record SaveDepartmentCommand(int DepartmentId, string DepartmentName, int? FacultyId);
+
+public sealed record SavePositionCommand(string PositionName);
 
 public sealed record SaveMajorCommand(string MajorName, int FacultyId);
 
@@ -77,13 +132,14 @@ public sealed record SaveLecturerCommand(
     int? DepartmentId,
     int? FacultyId,
     string? Email,
-    string? PhoneNumber);
+    string? PhoneNumber,
+    int? PositionId);
 
 public sealed record SaveCourseCommand(
     string CourseCode,
     string CourseName,
     int Credits,
-    string CourseType,
+    string? CourseType,
     int? DepartmentId,
     int? FacultyId,
     int? PrerequisiteCourseId);
@@ -91,18 +147,29 @@ public sealed record SaveCourseCommand(
 /// <summary>Một dòng của tệp Excel. Khoa viện đi vào theo TÊN, không phải theo id.</summary>
 public sealed record ImportFacultyRowCommand(int RowNumber, string FacultyName);
 
-public sealed record ImportDepartmentRowCommand(int RowNumber, string DepartmentName, string? FacultyName);
+/// <summary>Mã bộ môn do người dùng tự nhập trong tệp; "Departments"."DepartmentId" không tự tăng.</summary>
+public sealed record ImportDepartmentRowCommand(int RowNumber, int DepartmentId, string DepartmentName, string? FacultyName);
 
 public sealed record ImportMajorRowCommand(int RowNumber, string MajorName, string? FacultyName);
 
-/// <summary>Một dòng giảng viên trong tệp Excel. Khoa viện và bộ môn đi vào theo TÊN.</summary>
+/// <summary>
+/// Một dòng giảng viên trong tệp Excel. Khoa viện, bộ môn và chức vụ đi vào theo TÊN.
+/// PositionName bỏ trống thì dùng <see cref="CatalogDefaults.PositionName"/>.
+/// </summary>
 public sealed record ImportLecturerRowCommand(
     int RowNumber,
     string FullName,
     string? Email,
     string? PhoneNumber,
     string? FacultyName,
-    string? DepartmentName);
+    string? DepartmentName,
+    string? PositionName);
+
+public static class CatalogDefaults
+{
+    /// <summary>Chức vụ mặc định khi tệp Excel bỏ trống cột chức vụ.</summary>
+    public const string PositionName = "Giảng viên";
+}
 
 /// <summary>
 /// Một dòng học phần trong tệp Excel. Khoa viện, bộ môn và học phần tiên quyết
@@ -166,6 +233,21 @@ public interface ICatalogService
 
     Task<CatalogOperationResult<CatalogImportDto>> ImportDepartmentsAsync(
         IReadOnlyList<ImportDepartmentRowCommand> rows,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PositionDto>> GetPositionsAsync(CancellationToken cancellationToken = default);
+
+    Task<CatalogOperationResult<PositionDto>> CreatePositionAsync(
+        SavePositionCommand command,
+        CancellationToken cancellationToken = default);
+
+    Task<CatalogOperationResult<PositionDto>> UpdatePositionAsync(
+        int positionId,
+        SavePositionCommand command,
+        CancellationToken cancellationToken = default);
+
+    Task<CatalogOperationResult<bool>> DeletePositionAsync(
+        int positionId,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<MajorDto>> GetMajorsAsync(CancellationToken cancellationToken = default);
@@ -235,7 +317,7 @@ public interface ICatalogService
         CancellationToken cancellationToken = default);
 
     /// <summary>Import lớp học phần vào một học kỳ đã chọn.</summary>
-    Task<CatalogOperationResult<CatalogImportDto>> ImportCourseSectionsAsync(
+    Task<CatalogOperationResult<CourseSectionImportDto>> ImportCourseSectionsAsync(
         int semesterId,
         IReadOnlyList<ImportCourseSectionRowCommand> rows,
         CancellationToken cancellationToken = default);
@@ -301,7 +383,20 @@ public static class CatalogErrorCodes
 
     public const string DepartmentNotFound = "CATALOG_DEPARTMENT_NOT_FOUND";
     public const string DepartmentNameRequired = "CATALOG_DEPARTMENT_NAME_REQUIRED";
+    public const string DepartmentIdRequired = "CATALOG_DEPARTMENT_ID_REQUIRED";
+    public const string DepartmentIdExists = "CATALOG_DEPARTMENT_ID_EXISTS";
+    public const string DepartmentIdDuplicateInFile = "CATALOG_DEPARTMENT_ID_DUPLICATE_IN_FILE";
     public const string DepartmentInUse = "CATALOG_DEPARTMENT_IN_USE";
+
+    /// <summary>Tệp import phải có tên học phần thì mới tạo mới được học phần chưa có.</summary>
+    public const string CourseNameRequiredForAutoCreate = "CATALOG_COURSE_NAME_REQUIRED_FOR_AUTO_CREATE";
+
+    /// <summary>Cột "Mã BM" không phải số nguyên dương.</summary>
+    public const string DepartmentCodeInvalid = "CATALOG_DEPARTMENT_CODE_INVALID";
+
+    public const string PositionNotFound = "CATALOG_POSITION_NOT_FOUND";
+    public const string PositionNameRequired = "CATALOG_POSITION_NAME_REQUIRED";
+    public const string PositionNameExists = "CATALOG_POSITION_NAME_EXISTS";
 
     public const string MajorNotFound = "CATALOG_MAJOR_NOT_FOUND";
     public const string MajorNameRequired = "CATALOG_MAJOR_NAME_REQUIRED";

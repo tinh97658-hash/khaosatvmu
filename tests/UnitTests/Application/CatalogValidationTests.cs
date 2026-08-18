@@ -16,7 +16,8 @@ public class CatalogValidationTests
     [Fact]
     public void SaveDepartmentCommand_WithFacultyId_ShouldLinkCorrectly()
     {
-        var command = new SaveDepartmentCommand("Bộ môn Hệ thống thông tin", 5);
+        var command = new SaveDepartmentCommand(102, "Bộ môn Hệ thống thông tin", 5);
+        command.DepartmentId.Should().Be(102);
         command.DepartmentName.Should().Be("Bộ môn Hệ thống thông tin");
         command.FacultyId.Should().Be(5);
     }
@@ -38,8 +39,10 @@ public class CatalogValidationTests
             1,
             1,
             "lehoangc@vimaru.edu.vn",
-            "0901234567"
+            "0901234567",
+            2
         );
+        command.PositionId.Should().Be(2);
         command.FullName.Should().Be("TS. Lê Hoàng C");
         command.Email.Should().Be("lehoangc@vimaru.edu.vn");
         command.PhoneNumber.Should().Be("0901234567");

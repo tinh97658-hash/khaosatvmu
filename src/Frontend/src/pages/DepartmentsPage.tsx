@@ -14,9 +14,14 @@ interface DepartmentsPageProps {
   faculties: Faculty[];
   courses: Course[];
   lecturers: Lecturer[];
-  /** Trả về mã lỗi của API, null nếu lưu thành công. */
+  /**
+   * Trả về mã lỗi của API, null nếu lưu thành công.
+   * editingDepartmentId là mã bộ môn đang sửa (null khi thêm mới);
+   * departmentId là mã người dùng nhập, chỉ dùng khi thêm mới.
+   */
   onSaveDepartment: (
-    departmentId: number | null,
+    editingDepartmentId: number | null,
+    departmentId: number,
     departmentName: string,
     facultyId: number | null,
   ) => Promise<string | null>;
@@ -25,11 +30,12 @@ interface DepartmentsPageProps {
 }
 
 interface DepartmentForm {
+  departmentId: string;
   departmentName: string;
   facultyId: string;
 }
 
-const emptyForm: DepartmentForm = { departmentName: '', facultyId: '' };
+const emptyForm: DepartmentForm = { departmentId: '', departmentName: '', facultyId: '' };
 
 export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
   departments,
@@ -68,6 +74,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
   const openEdit = (department: Department) => {
     setEditing(department);
     setForm({
+      departmentId: String(department.departmentId),
       departmentName: department.departmentName,
       facultyId: department.facultyId === null ? '' : String(department.facultyId),
     });
@@ -78,7 +85,13 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const name = form.departmentName.trim();
+    const id = form.departmentId.trim();
 
+    // Chỉ bắt buộc khi thêm mới; lúc sửa thì mã đã cố định và ô nhập bị khóa.
+    if (!editing && !/^\d+$/.test(id)) {
+      setValidationError('Mã bộ môn phải là số nguyên dương.');
+      return;
+    }
     if (!name) {
       setValidationError('Vui lòng nhập tên bộ môn.');
       return;
@@ -87,6 +100,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
     setSaving(true);
     const errorCode = await onSaveDepartment(
       editing?.departmentId ?? null,
+      Number(id),
       name,
       form.facultyId ? Number(form.facultyId) : null
     );
@@ -137,20 +151,32 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
 
   const columns: Column<Department>[] = [
     {
+      key: 'departmentId',
+      header: 'Mã bộ môn',
+      width: '110px',
+      filterValue: (row) => String(row.departmentId),
+      numeric: true,
+      render: (row) => <span className="catalog-cell-primary">{row.departmentId}</span>,
+    },
+    {
       key: 'departmentName',
       header: 'Tên bộ môn',
+      filterValue: (row) => row.departmentName,
       render: (row) => <span className="catalog-cell-primary">{row.departmentName}</span>,
     },
     {
       key: 'facultyId',
       header: 'Khoa viện',
       width: '280px',
+      filterValue: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
       render: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
     },
     {
       key: 'courseCount',
       header: 'Số môn học',
       width: '120px',
+      filterValue: (row) => String(courseCountOf(row.departmentId)),
+      numeric: true,
       render: (row) => (
         <span className="catalog-cell-primary">{courseCountOf(row.departmentId)}</span>
       ),
@@ -159,6 +185,8 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
       key: 'lecturerCount',
       header: 'Số giảng viên',
       width: '130px',
+      filterValue: (row) => String(lecturerCountOf(row.departmentId)),
+      numeric: true,
       render: (row) => (
         <span className="catalog-cell-primary">{lecturerCountOf(row.departmentId)}</span>
       ),
@@ -242,6 +270,20 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
           {validationError && (
             <div className="catalog-validation-error" role="alert">{validationError}</div>
           )}
+          <div className="form-group">
+            <label htmlFor="department-id">Mã bộ môn</label>
+            <input
+              id="department-id"
+              type="number"
+              min={1}
+              step={1}
+              placeholder="101"
+              value={form.departmentId}
+              onChange={(event) => updateForm({ departmentId: event.target.value })}
+              disabled={editing !== null}
+              required
+            />
+          </div>
           <div className="form-group">
             <label htmlFor="department-name">Tên bộ môn</label>
             <input

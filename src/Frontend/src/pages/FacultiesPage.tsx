@@ -113,18 +113,23 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
     {
       key: 'facultyName',
       header: 'Tên khoa viện',
+      filterValue: (item) => item.facultyName,
       render: (item) => <span className="catalog-cell-primary">{item.facultyName}</span>,
     },
     {
       key: 'majorCount',
       header: 'Số ngành học',
       width: '130px',
+      filterValue: (item) => String(majorCountOf(item.facultyId)),
+      numeric: true,
       render: (item) => <span className="catalog-cell-primary">{majorCountOf(item.facultyId)}</span>,
     },
     {
       key: 'departmentCount',
       header: 'Số bộ môn',
       width: '120px',
+      filterValue: (item) => String(departmentCountOf(item.facultyId)),
+      numeric: true,
       render: (item) => (
         <span className="catalog-cell-primary">{departmentCountOf(item.facultyId)}</span>
       ),

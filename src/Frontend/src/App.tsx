@@ -283,15 +283,16 @@ function DashboardApp() {
   };
 
   const handleSaveDepartment = async (
-    departmentId: number | null,
+    editingDepartmentId: number | null,
+    departmentId: number,
     departmentName: string,
     facultyId: number | null
   ): Promise<string | null> => {
     try {
-      if (departmentId === null) {
-        await catalogApi.createDepartment(departmentName, facultyId);
+      if (editingDepartmentId === null) {
+        await catalogApi.createDepartment(departmentId, departmentName, facultyId);
       } else {
-        await catalogApi.updateDepartment(departmentId, departmentName, facultyId);
+        await catalogApi.updateDepartment(editingDepartmentId, departmentName, facultyId);
       }
       setDepartments(await catalogApi.departments());
       return null;
@@ -404,6 +405,20 @@ function DashboardApp() {
     const result = await catalogApi.importCourses(rows);
     setCourses(await catalogApi.courses());
     return result;
+  };
+
+  /**
+   * Import lớp học phần có thể tạo thêm học phần và giảng viên, nên phải nạp lại
+   * hai danh mục này. Không nạp thì bảng Học phần vẫn cũ và cột Giảng viên của
+   * lớp mới tra không ra tên.
+   */
+  const reloadCoursesAndLecturers = async () => {
+    const [nextCourses, nextLecturers] = await Promise.all([
+      catalogApi.courses(),
+      catalogApi.lecturers(),
+    ]);
+    setCourses(nextCourses);
+    setLecturers(nextLecturers);
   };
 
   const handleDeleteCourse = async (courseId: number): Promise<string | null> => {
@@ -593,7 +608,11 @@ function DashboardApp() {
             )}
 
             {currentTab === 'classes' && (
-              <ClassesPage courses={courses} lecturers={lecturers} />
+              <ClassesPage
+                courses={courses}
+                lecturers={lecturers}
+                onCatalogChanged={reloadCoursesAndLecturers}
+              />
             )}
 
             {(currentTab === 'course-question-sets' || currentTab === 'criteria') && (

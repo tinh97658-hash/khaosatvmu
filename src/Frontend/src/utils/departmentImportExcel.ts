@@ -3,6 +3,12 @@ import type { SheetData } from 'write-excel-file/browser';
 
 const maximumFileSize = 5 * 1024 * 1024;
 const maximumRows = 500;
+const departmentIdHeaders = new Set([
+  'ma bo mon',
+  'ma',
+  'departmentid',
+  'department id',
+]);
 const departmentNameHeaders = new Set([
   'ten bo mon',
   'bo mon',
@@ -21,6 +27,8 @@ const facultyNameHeaders = new Set([
 
 export interface ImportDepartmentRow {
   rowNumber: number;
+  /** Mã bộ môn tự nhập; "Departments"."DepartmentId" không tự tăng. 0 nghĩa là bỏ trống hoặc sai định dạng. */
+  departmentId: number;
   departmentName: string;
   /** Tên khoa viện trong tệp; App tra tên này ra "Departments"."FacultyId". */
   facultyName: string;
@@ -30,6 +38,7 @@ export type DepartmentImportFileErrorCode =
   | 'FILE_TYPE'
   | 'FILE_SIZE'
   | 'FILE_EMPTY'
+  | 'ID_HEADER_MISSING'
   | 'NAME_HEADER_MISSING'
   | 'FACULTY_HEADER_MISSING'
   | 'NO_DATA_ROWS'
@@ -64,10 +73,19 @@ function cellText(value: CellValue | null | undefined): string {
   return String(value).trim();
 }
 
+/** Mã bộ môn phải là số nguyên dương; trả 0 khi ô trống hoặc không phải số. */
+function cellPositiveInteger(value: CellValue | null | undefined): number {
+  const text = cellText(value);
+  if (!/^\d+$/.test(text)) return 0;
+  const parsed = Number(text);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 0;
+}
+
 export const departmentTemplateFileName = 'mau-import-bo-mon.xlsx';
 
 /**
- * Tạo và tải tệp Excel mẫu: cột "Tên bộ môn" và cột "Tên khoa viện".
+ * Tạo và tải tệp Excel mẫu: cột "Mã bộ môn", "Tên bộ môn" và "Tên khoa viện".
+ * Mã bộ môn phải tự điền vì cột khóa chính không tự tăng.
  * Khi import, tên khoa viện được tra ngược ra FacultyId.
  */
 export async function downloadDepartmentImportTemplate(): Promise<void> {
@@ -75,18 +93,22 @@ export async function downloadDepartmentImportTemplate(): Promise<void> {
 
   const data: SheetData = [
     [
+      { value: 'Mã bộ môn', type: String, fontWeight: 'bold' },
       { value: 'Tên bộ môn', type: String, fontWeight: 'bold' },
       { value: 'Tên khoa viện', type: String, fontWeight: 'bold' },
     ],
     [
+      { value: 101, type: Number },
       { value: 'Bộ môn Công nghệ Phần mềm', type: String },
       { value: 'Khoa Công nghệ Thông tin', type: String },
     ],
     [
+      { value: 102, type: Number },
       { value: 'Bộ môn Hệ thống Thông tin', type: String },
       { value: 'Khoa Công nghệ Thông tin', type: String },
     ],
     [
+      { value: 201, type: Number },
       { value: 'Bộ môn Điện tử Viễn thông', type: String },
       { value: 'Khoa Điện - Điện tử', type: String },
     ],
@@ -94,11 +116,11 @@ export async function downloadDepartmentImportTemplate(): Promise<void> {
 
   await writeXlsxFile(data, {
     sheet: 'Bo mon',
-    columns: [{ width: 38 }, { width: 38 }],
+    columns: [{ width: 14 }, { width: 38 }, { width: 38 }],
   }).toFile(departmentTemplateFileName);
 }
 
-/** Đọc tệp .xlsx và lấy cột tên bộ môn kèm tên khoa viện. */
+/** Đọc tệp .xlsx và lấy mã bộ môn, tên bộ môn kèm tên khoa viện. */
 export async function parseDepartmentImportFile(file: File): Promise<ImportDepartmentRow[]> {
   if (!file.name.toLowerCase().endsWith('.xlsx')) {
     throw new DepartmentImportFileError('FILE_TYPE');
@@ -120,6 +142,10 @@ export async function parseDepartmentImportFile(file: File): Promise<ImportDepar
   }
 
   const headers = sheet[0].map((value) => normalizeHeader(cellText(value)));
+  const idIndex = headers.findIndex((header) => departmentIdHeaders.has(header));
+  if (idIndex < 0) {
+    throw new DepartmentImportFileError('ID_HEADER_MISSING');
+  }
   const nameIndex = headers.findIndex((header) => departmentNameHeaders.has(header));
   if (nameIndex < 0) {
     throw new DepartmentImportFileError('NAME_HEADER_MISSING');
@@ -133,10 +159,14 @@ export async function parseDepartmentImportFile(file: File): Promise<ImportDepar
     .slice(1)
     .map((row, index) => ({
       rowNumber: index + 2,
+      departmentId: cellPositiveInteger(row[idIndex]),
       departmentName: cellText(row[nameIndex]),
       facultyName: cellText(row[facultyIndex]),
     }))
-    .filter((row) => row.departmentName.length > 0 || row.facultyName.length > 0);
+    .filter(
+      (row) =>
+        row.departmentId > 0 || row.departmentName.length > 0 || row.facultyName.length > 0
+    );
 
   if (rows.length === 0) {
     throw new DepartmentImportFileError('NO_DATA_ROWS');
