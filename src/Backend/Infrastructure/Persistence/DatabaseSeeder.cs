@@ -61,13 +61,13 @@ public static class DatabaseSeeder
     {
         var definitions = new[]
         {
-            (Code: "ADMIN_ACCESS",             Name: "Admin access",                  Description: "Access administrative actions"),
-            (Code: "SURVEY_MANAGE",            Name: "Manage surveys",                Description: "Create and manage surveys"),
-            (Code: "VIEW_REPORTS",             Name: "View reports",                  Description: "Access the reports and statistics section"),
-            (Code: "VIEW_REPORTS_OPERATIONAL", Name: "View operational progress",     Description: "View operational survey collection progress report"),
-            (Code: "VIEW_REPORTS_LECTURERS",   Name: "View lecturer evaluations",     Description: "View lecturer performance evaluation reports"),
-            (Code: "VIEW_REPORTS_FACULTIES",   Name: "View faculty statistics",       Description: "View faculty and department statistics reports"),
-            (Code: "VIEW_REPORTS_QUESTIONS",   Name: "View question analysis",        Description: "View survey question and criteria analysis reports"),
+            (Code: "ADMIN_ACCESS",             Name: "Admin access",                  Description: "Access administrative actions",                        Category: "Quản trị hệ thống"),
+            (Code: "SURVEY_MANAGE",            Name: "Manage surveys",                Description: "Create and manage surveys",                            Category: "Khảo sát"),
+            (Code: "VIEW_REPORTS",             Name: "View reports",                  Description: "Access the reports and statistics section",           Category: "Báo cáo"),
+            (Code: "VIEW_REPORTS_OPERATIONAL", Name: "View operational progress",     Description: "View operational survey collection progress report",  Category: "Báo cáo"),
+            (Code: "VIEW_REPORTS_LECTURERS",   Name: "View lecturer evaluations",     Description: "View lecturer performance evaluation reports",        Category: "Báo cáo"),
+            (Code: "VIEW_REPORTS_FACULTIES",   Name: "View faculty statistics",       Description: "View faculty and department statistics reports",      Category: "Báo cáo"),
+            (Code: "VIEW_REPORTS_QUESTIONS",   Name: "View question analysis",        Description: "View survey question and criteria analysis reports",  Category: "Báo cáo"),
         };
 
         var permissions = new Dictionary<string, Permission>(StringComparer.OrdinalIgnoreCase);
@@ -81,7 +81,8 @@ public static class DatabaseSeeder
                     Id = Guid.NewGuid(),
                     Code = definition.Code,
                     Name = definition.Name,
-                    Description = definition.Description
+                    Description = definition.Description,
+                    Category = definition.Category
                 };
                 db.Permissions.Add(permission);
             }

@@ -94,11 +94,36 @@ Migration cuối: `20260817165014_AddSoftDeleteAndChangeAuditLog` (EF Core `9.0.
 
 ---
 
+## Bối cảnh kiến trúc phân quyền (đã xác nhận đúng, không thay đổi)
+
+> [!NOTE]
+> Domain hiện tại (`AuthModels.cs`) đã đúng theo mô hình dưới đây. Task này **chỉ chạm vào `Permission.Category`**, không sửa `UserProfile`/`Role`/authorization flow.
+
+```
+User (Google Auth)
+ └── UserProfile (N profile / user — mỗi profile là một "ngữ cảnh làm việc")
+        │  RoleId, ProfileName, OrganizationUnitCode...
+        ▼
+      Role  (ADMIN / LECTURER / DEPARTMENT_MANAGER / SURVEY_ADMIN)
+        ▼
+   RolePermission (RoleId, PermissionId, IsGranted)
+        ▼
+     Permission (Code, Name, Description, Category ← task này thêm)
+```
+
+- **`UserProfile` = ngữ cảnh làm việc** (một user có thể có nhiều profile, mỗi profile gắn 1 `Role`). `AuthSession.ActiveProfileId` xác định profile đang hoạt động.
+- **Authorization luôn đi qua `Active UserProfile → Role → RolePermission → Permission`** — đã được `PermissionAuthorizationHandler` (`API/Auth/PermissionAuth.cs`) implement đúng, task này **không đổi logic đó**.
+- **`Category` không phải là một tầng phân quyền.** Nó chỉ là *grouping metadata* của `Permission`, phục vụ hiển thị UI (nhóm theo module trong màn "Phân quyền kiểu Discord"). Nó không tham gia vào quyết định "được phép làm gì" — quyết định đó vẫn chỉ dựa trên `RolePermission.IsGranted`.
+- **Không tạo bảng `PermissionCategories` riêng** ở giai đoạn này: `Category` chưa có behavior/data riêng (không cần `SortOrder`, `Icon`, `IsEnabled`, CRUD riêng...). Tách bảng chỉ hợp lý khi `Category` (hoặc khái niệm `Module` sau này) có nhu cầu quản trị độc lập — hiện tại 7 permissions / 3 nhóm cố định thì thêm bảng là over-engineering.
+
+---
+
 ## Quyết định đã chốt
 
-- ✅ **Grouping**: Thêm cột `Category varchar(100) NOT NULL` vào bảng `Permissions` — EF migration tự populate ngay trong `Up()`, không phụ thuộc Seeder/restart.
+- ✅ **Grouping**: Thêm cột `Category varchar(100) NOT NULL` trực tiếp vào bảng `Permissions` (không tách bảng `PermissionCategories`) — EF migration tự populate ngay trong `Up()`, không phụ thuộc Seeder/restart.
 - ✅ **Category Order**: Sử dụng dictionary ordering cố định ở Backend (`Quản trị hệ thống` = 1, `Khảo sát` = 2, `Báo cáo` = 3, Các nhóm mới = 99). Đảm bảo thứ tự hiển thị UI cố định chuẩn xác mà không cần mở rộng schema thêm cột `SortOrder`.
 - ✅ **CRUD Role**: Không — màn này chỉ edit permissions của 4 roles hiện có.
+- ✅ **Phạm vi task**: Chỉ sửa `Permission` (thêm `Category`) + UI hiển thị theo nhóm. Không đụng đến `UserProfile`, `Role`, authorization handler, hay thêm khái niệm `Module`/scope theo `Department`/`Faculty` — đó là hướng phát triển dài hạn, ngoài phạm vi plan này.
 
 **Mapping & Sort Order cho Category:**
 
