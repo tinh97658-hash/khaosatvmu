@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react
 import { toast } from 'sonner';
 import { useAuth } from './auth/authContext';
 import { AuthLoading } from './components/AuthLoading';
-import type { ReportInitialSelection } from './pages/ReportsOverviewPage';
+import { getHashRoot } from './pages/reportRoute';
 
 // Shared Components
 import { Header } from './components/Header';
@@ -60,8 +60,7 @@ import type {
 
 function getInitialTab(): string {
   if (typeof window === 'undefined') return 'overview';
-  const hash = window.location.hash.replace(/^#\/?/, '').trim();
-  return hash || 'overview';
+  return getHashRoot();
 }
 
 function PageFallback() {
@@ -79,7 +78,6 @@ function DashboardApp() {
   const auth = useAuth();
   const [currentTab, setCurrentTabState] = useState<string>(getInitialTab);
   const [isStudentView, setIsStudentView] = useState<boolean>(false);
-  const [reportSelection, setReportSelection] = useState<ReportInitialSelection | null>(null);
   const canManageUsers = auth.access?.permissions.includes('ADMIN_ACCESS') ?? false;
 
   const setCurrentTab = useCallback((tab: string) => {
@@ -89,17 +87,17 @@ function DashboardApp() {
 
   const handleOpenSurveyReport = useCallback(
     (courseSectionSurveyId: number) => {
-      setReportSelection({ courseSectionSurveyId });
-      setCurrentTab('reports');
+      setCurrentTabState('reports');
+      window.location.hash = `/reports/surveys/${courseSectionSurveyId}`;
     },
-    [setCurrentTab],
+    [],
   );
 
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.replace(/^#\/?/, '').trim();
-      if (hash && hash !== currentTab) {
-        setCurrentTabState(hash);
+      const tab = getHashRoot();
+      if (tab !== currentTab) {
+        setCurrentTabState(tab);
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -533,10 +531,7 @@ function DashboardApp() {
             )}
 
             {currentTab === 'reports' && (
-              <ReportsOverviewPage
-                initialSelection={reportSelection}
-                onConsumeSelection={() => setReportSelection(null)}
-              />
+              <ReportsOverviewPage />
             )}
 
             {currentTab === 'faculties' && (

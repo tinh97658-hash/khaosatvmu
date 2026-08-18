@@ -22,6 +22,7 @@ import { ScoreDistributionDonut } from './ScoreDistributionDonut';
 import { WeakestQuestionsPanel } from './WeakestQuestionsPanel';
 import { LaggingDepartmentsTable } from './LaggingDepartmentsTable';
 import { formatNumber } from './theme';
+import type { ReportAnalysisView } from '../../pages/reportRoute';
 
 export interface SchoolOverviewDrillDown {
   facultyId?: number;
@@ -30,6 +31,11 @@ export interface SchoolOverviewDrillDown {
 
 interface SchoolSurveyOverviewProps {
   semesterId: number;
+  comparisonOptions: Array<{ semesterId: number; label: string }>;
+  analysisView: ReportAnalysisView;
+  comparisonSemesterId?: number;
+  onAnalysisViewChange: (view: ReportAnalysisView) => void;
+  onComparisonSemesterChange: (semesterId?: number) => void;
   onDrillDown?: (filter: SchoolOverviewDrillDown) => void;
 }
 
@@ -42,6 +48,11 @@ const deltaClass = (delta: number): string => {
 /** Bảng tổng quan toàn trường — executive dashboard đặt đầu trang Thống kê & Báo cáo. */
 export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
   semesterId,
+  comparisonOptions,
+  analysisView,
+  comparisonSemesterId,
+  onAnalysisViewChange,
+  onComparisonSemesterChange,
   onDrillDown,
 }) => {
   const [data, setData] = useState<SchoolSurveyOverviewData | null>(null);
@@ -53,14 +64,14 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const overview = await reportApi.schoolOverview(semesterId);
+      const overview = await reportApi.schoolOverview(semesterId, comparisonSemesterId);
       setData(overview);
     } catch {
       setError('Không thể tải bảng tổng quan kết quả khảo sát toàn trường.');
     } finally {
       setLoading(false);
     }
-  }, [semesterId]);
+  }, [semesterId, comparisonSemesterId]);
 
   useEffect(() => {
     void load();
@@ -92,7 +103,11 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
   }
 
   const hasData = data.totalSections > 0;
-  const comparison = data.previousSemester;
+  const comparison = data.semesterComparison;
+  const laggingDepartments = data.departments.filter(
+    (department) => department.completionRate < 40,
+  );
+  const laggingDepartmentCount = laggingDepartments.length;
 
   return (
     <section className="reports-exec" aria-label="Bảng tổng quan kết quả khảo sát toàn trường">
@@ -106,11 +121,32 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
             </p>
           </div>
         </div>
-        {comparison && (
-          <div className="reports-exec-compare" aria-label={`So sánh với ${comparison.previousSemesterName}`}>
-            <span className="reports-exec-compare-label">
-              So với {comparison.previousSemesterName} · {comparison.previousAcademicYearName}
-            </span>
+        <div
+          className="reports-exec-compare"
+          aria-label={comparison ? `So sánh với ${comparison.comparisonSemesterName}` : 'Chọn học kỳ so sánh'}
+        >
+          <label className="reports-exec-compare-label" htmlFor="reports-comparison-semester">
+            So sánh với
+          </label>
+          <select
+            id="reports-comparison-semester"
+            value={comparisonSemesterId ?? ''}
+            onChange={(event) => {
+              const value = event.target.value;
+              onComparisonSemesterChange(value ? Number(value) : undefined);
+            }}
+          >
+            <option value="">Học kỳ liền trước (mặc định)</option>
+            {comparisonOptions
+              .filter((option) => option.semesterId !== semesterId)
+              .map((option) => (
+                <option key={option.semesterId} value={option.semesterId}>
+                  {option.label}
+                </option>
+              ))}
+          </select>
+          {comparison && (
+            <div className="reports-exec-compare-deltas">
             <span className={`reports-exec-delta ${deltaClass(comparison.completionRateDelta)}`}>
               {comparison.completionRateDelta > 0.005 ? <TrendingUp aria-hidden="true" /> : comparison.completionRateDelta < -0.005 ? <TrendingDown aria-hidden="true" /> : <Minus aria-hidden="true" />}
               Tiến độ {comparison.completionRateDelta > 0 ? '+' : ''}{comparison.completionRateDelta.toFixed(1)}%
@@ -119,8 +155,9 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
               {comparison.averageScoreDelta > 0.005 ? <TrendingUp aria-hidden="true" /> : comparison.averageScoreDelta < -0.005 ? <TrendingDown aria-hidden="true" /> : <Minus aria-hidden="true" />}
               Điểm TB {comparison.averageScoreDelta > 0 ? '+' : ''}{comparison.averageScoreDelta.toFixed(2)}
             </span>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </header>
 
       {!hasData ? (
@@ -191,8 +228,40 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
             </div>
           </div>
 
+          <div className="reports-analysis-tabs" role="tablist" aria-label="Chọn nhóm phân tích">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={analysisView === 'faculties'}
+              className={analysisView === 'faculties' ? 'is-active' : ''}
+              onClick={() => onAnalysisViewChange('faculties')}
+            >
+              So sánh theo Khoa
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={analysisView === 'quality'}
+              className={analysisView === 'quality' ? 'is-active' : ''}
+              onClick={() => onAnalysisViewChange('quality')}
+            >
+              Chất lượng phản hồi
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={analysisView === 'progress'}
+              className={analysisView === 'progress' ? 'is-active' : ''}
+              onClick={() => onAnalysisViewChange('progress')}
+            >
+              Đơn vị chậm tiến độ
+              {laggingDepartmentCount > 0 && <span>{laggingDepartmentCount}</span>}
+            </button>
+          </div>
+
           {/* Hàng biểu đồ: điểm TB + tiến độ theo Khoa */}
-          <div className="reports-exec-grid">
+          {analysisView === 'faculties' && (
+          <div className="reports-exec-grid reports-analysis-panel" role="tabpanel">
             <div className="reports-exec-card">
               <header className="reports-exec-card-head">
                 <Target className="operation-icon" aria-hidden="true" />
@@ -217,9 +286,11 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
               />
             </div>
           </div>
+          )}
 
           {/* Hàng thứ 2: tiêu chí yếu nhất + phân bố điểm */}
-          <div className="reports-exec-grid">
+          {analysisView === 'quality' && (
+          <div className="reports-exec-grid reports-analysis-panel" role="tabpanel">
             <div className="reports-exec-card">
               <header className="reports-exec-card-head">
                 <AlertTriangle className="operation-icon" aria-hidden="true" />
@@ -242,20 +313,22 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
               />
             </div>
           </div>
+          )}
 
           {/* Bảng bộ môn chậm tiến độ nhất */}
-          <div className="reports-exec-card">
+          {analysisView === 'progress' && (
+          <div className="reports-exec-card reports-analysis-panel" role="tabpanel">
             <header className="reports-exec-card-head">
               <Clock4 className="operation-icon" aria-hidden="true" />
-              <h3>Bộ môn chậm tiến độ thu phiếu nhất</h3>
-              <span className="reports-exec-card-note">Click vào dòng để lọc chi tiết</span>
+              <h3>Bộ môn chậm tiến độ thu phiếu</h3>
+              <span className="reports-exec-card-note">Đầy đủ Bộ môn dưới 40% · sắp xếp tại tiêu đề cột</span>
             </header>
             <LaggingDepartmentsTable
-              departments={data.departments}
-              limit={6}
+              departments={laggingDepartments}
               onSelect={onDrillDown ? (departmentId) => onDrillDown({ departmentId }) : undefined}
             />
           </div>
+          )}
         </>
       )}
     </section>

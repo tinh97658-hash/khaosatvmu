@@ -19,7 +19,7 @@
 - [x] Sửa Docker build context của frontend.
 - [x] Proxy callback `/signin-google` tới API.
 - [x] Xử lý forwarded headers khi chạy sau reverse proxy.
-- [x] Bỏ dependency `DotNetEnv` đang kéo package High; dùng environment/User Secrets chuẩn .NET.
+- [x] Bỏ dependency `DotNetEnv` đang kéo package High; dùng environment/User Secrets và loader Development tối thiểu không có dependency.
 - [x] Loại mật khẩu mặc định khỏi Compose và appsettings.
 - [x] Không public trực tiếp API; chỉ truy cập qua frontend reverse proxy.
 - [x] Chuyển pgAdmin thành profile công cụ và chỉ bind loopback.

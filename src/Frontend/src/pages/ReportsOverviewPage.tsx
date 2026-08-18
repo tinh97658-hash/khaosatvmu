@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
   Building2,
@@ -7,7 +7,10 @@ import {
   CircleAlert,
   ClipboardList,
   GraduationCap,
+  LayoutDashboard,
+  ListFilter,
   LoaderCircle,
+  Medal,
   Search,
   ShieldAlert,
   Star,
@@ -17,13 +20,21 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../auth/authContext';
 import { useSemester } from '../context/semesterContext';
-import { DataTable, type Column } from '../components/DataTable';
+import { DataTable, type Column, type DataTableSortDirection } from '../components/DataTable';
 import { QuestionAnalysisChart } from '../components/QuestionAnalysisChart';
 import { SchoolSurveyOverview } from '../components/reports/SchoolSurveyOverview';
 import { SectionSurveyResponsesPage } from './SectionSurveyResponsesPage';
 import { catalogApi } from '../services/catalogApi';
 import { reportApi } from '../services/reportApi';
 import { surveyApi } from '../services/surveyApi';
+import {
+  buildReportHash,
+  parseReportRoute,
+  type ReportAnalysisView,
+  type ReportRouteState,
+  type ReportResultSortKey,
+  type ReportWorkspace,
+} from './reportRoute';
 import type {
   Department,
   Faculty,
@@ -34,11 +45,6 @@ import type {
 } from '../types';
 import '../styles/survey-operations.css';
 import '../styles/reports.css';
-
-/** Điểm bắt đầu khi người dùng nhảy từ màn khác vào module báo cáo. */
-export interface ReportInitialSelection {
-  courseSectionSurveyId?: number;
-}
 
 /** Một đơn vị (Khoa hoặc Bộ môn) gộp từ kết quả để xếp hạng. */
 interface RankedUnit {
@@ -57,22 +63,31 @@ const scoreColor = (score: number): string =>
 const completionColor = (rate: number): string =>
   rate >= 80 ? '#137b3b' : rate >= 40 ? '#0788b8' : '#b86216';
 
-export const ReportsOverviewPage: React.FC<{
-  initialSelection?: ReportInitialSelection | null;
-  onConsumeSelection?: () => void;
-}> = ({ initialSelection, onConsumeSelection }) => {
+export const ReportsOverviewPage: React.FC = () => {
+  const initialRoute = useMemo(() => parseReportRoute(), []);
   const { access } = useAuth();
   const {
     academicYears,
     activeSemesterId,
   } = useSemester();
   const [selectedSemesterId, setSelectedSemesterId] = useState<number | undefined>(
-    () => activeSemesterId ?? undefined
+    () => initialRoute.semesterId ?? activeSemesterId ?? undefined
   );
+  const previousActiveSemesterId = useRef(activeSemesterId);
+  const preserveInitialRouteSemester = useRef(initialRoute.semesterId !== undefined);
 
   // Khi học kỳ làm việc toàn cục (Header) thay đổi, cập nhật bộ lọc trang theo
   useEffect(() => {
-    if (activeSemesterId !== null && activeSemesterId !== undefined) {
+    if (preserveInitialRouteSemester.current) {
+      previousActiveSemesterId.current = activeSemesterId;
+      if (activeSemesterId !== null && activeSemesterId !== undefined) {
+        preserveInitialRouteSemester.current = false;
+      }
+      return;
+    }
+    const activeSemesterChanged = previousActiveSemesterId.current !== activeSemesterId;
+    previousActiveSemesterId.current = activeSemesterId;
+    if (activeSemesterChanged && activeSemesterId !== null && activeSemesterId !== undefined) {
       setSelectedSemesterId(activeSemesterId);
     }
   }, [activeSemesterId]);
@@ -88,12 +103,29 @@ export const ReportsOverviewPage: React.FC<{
   const [semesterSurveys, setSemesterSurveys] = useState<SemesterSurvey[]>([]);
 
   // Bộ lọc.
-  const [facultyId, setFacultyId] = useState<number | undefined>(undefined);
-  const [departmentId, setDepartmentId] = useState<number | undefined>(undefined);
-  const [lecturerId, setLecturerId] = useState<number | undefined>(undefined);
-  const [semesterSurveyId, setSemesterSurveyId] = useState<number | undefined>(undefined);
-  const [search, setSearch] = useState('');
+  const [facultyId, setFacultyId] = useState<number | undefined>(initialRoute.facultyId);
+  const [departmentId, setDepartmentId] = useState<number | undefined>(initialRoute.departmentId);
+  const [lecturerId, setLecturerId] = useState<number | undefined>(initialRoute.lecturerFilterId);
+  const [semesterSurveyId, setSemesterSurveyId] = useState<number | undefined>(initialRoute.semesterSurveyId);
+  const [search, setSearch] = useState(initialRoute.search ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [workspace, setWorkspace] = useState<ReportWorkspace>(
+    initialRoute.screen === 'overview' || initialRoute.screen === 'rankings'
+      ? initialRoute.screen
+      : 'details',
+  );
+  const [analysisView, setAnalysisView] = useState<ReportAnalysisView>(
+    initialRoute.analysisView ?? 'faculties',
+  );
+  const [comparisonSemesterId, setComparisonSemesterId] = useState<number | undefined>(
+    initialRoute.comparisonSemesterId,
+  );
+  const [resultSortKey, setResultSortKey] = useState<ReportResultSortKey | undefined>(
+    initialRoute.resultSortKey,
+  );
+  const [resultSortDirection, setResultSortDirection] = useState<DataTableSortDirection>(
+    initialRoute.resultSortDirection ?? 'asc',
+  );
 
   // Kết quả.
   const [results, setResults] = useState<SurveyResultDetail[]>([]);
@@ -101,23 +133,203 @@ export const ReportsOverviewPage: React.FC<{
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Drill-down: giảng viên → bài khảo sát.
-  const [lecturer, setLecturer] = useState<LecturerPerformanceReport | null>(null);
+  const [lecturer, setLecturer] = useState<LecturerPerformanceReport | null>(() => {
+    const routeLecturerId = initialRoute.lecturerId ?? initialRoute.parentLecturerId;
+    return routeLecturerId
+      ? ({ lecturerId: routeLecturerId, fullName: 'Chi tiết giảng viên' } as LecturerPerformanceReport)
+      : null;
+  });
   const [lecturerDetail, setLecturerDetail] = useState<LecturerPerformanceReport | null>(null);
   const [lecDetailLoading, setLecDetailLoading] = useState(false);
-  const [surveyId, setSurveyId] = useState<number | null>(null);
-  const [surveyTitle, setSurveyTitle] = useState<string | null>(null);
+  const [surveyId, setSurveyId] = useState<number | null>(initialRoute.surveyId ?? null);
+  const [surveyTitle, setSurveyTitle] = useState<string | null>(
+    initialRoute.surveyId ? 'Chi tiết bài khảo sát' : null,
+  );
+
+  const routeFromState = useCallback(
+    (screen: ReportRouteState['screen'], overrides: Partial<ReportRouteState> = {}): ReportRouteState => ({
+      screen,
+      semesterId: selectedSemesterId,
+      facultyId,
+      departmentId,
+      lecturerFilterId: lecturerId,
+      semesterSurveyId,
+      search: search.trim() || undefined,
+      analysisView,
+      comparisonSemesterId,
+      resultSortKey,
+      resultSortDirection,
+      ...overrides,
+    }),
+    [
+      analysisView,
+      comparisonSemesterId,
+      departmentId,
+      facultyId,
+      lecturerId,
+      search,
+      resultSortDirection,
+      resultSortKey,
+      selectedSemesterId,
+      semesterSurveyId,
+    ],
+  );
+
+  const navigateToRoute = useCallback((route: ReportRouteState) => {
+    const nextHash = buildReportHash(route);
+    if (window.location.hash !== nextHash) {
+      window.location.hash = nextHash;
+    }
+  }, []);
+
+  const navigateToWorkspace = useCallback(
+    (nextWorkspace: ReportWorkspace) => {
+      navigateToRoute(routeFromState(nextWorkspace));
+    },
+    [navigateToRoute, routeFromState],
+  );
+
+  const openSurvey = useCallback(
+    (nextSurveyId: number, title?: string, parentLecturerId?: number) => {
+      setSurveyTitle(title ?? 'Chi tiết bài khảo sát');
+      navigateToRoute(routeFromState('survey', {
+        surveyId: nextSurveyId,
+        parentLecturerId,
+      }));
+    },
+    [navigateToRoute, routeFromState],
+  );
 
   const backToOverview = useCallback(() => {
-    setLecturer(null);
-    setLecturerDetail(null);
-    setSurveyId(null);
-    setSurveyTitle(null);
-  }, []);
+    navigateToWorkspace('details');
+  }, [navigateToWorkspace]);
 
   const backToLecturer = useCallback(() => {
-    setSurveyId(null);
-    setSurveyTitle(null);
+    if (lecturer?.lecturerId) {
+      navigateToRoute(routeFromState('lecturer', { lecturerId: lecturer.lecturerId }));
+    } else {
+      navigateToWorkspace('details');
+    }
+  }, [lecturer?.lecturerId, navigateToRoute, navigateToWorkspace, routeFromState]);
+
+  const changeSemester = useCallback(
+    (nextSemesterId: number) => {
+      if (surveyId) {
+        navigateToRoute({
+          screen: 'survey',
+          semesterId: nextSemesterId,
+          surveyId,
+          parentLecturerId: lecturer?.lecturerId,
+        });
+        return;
+      }
+      if (lecturer?.lecturerId) {
+        navigateToRoute({
+          screen: 'lecturer',
+          semesterId: nextSemesterId,
+          lecturerId: lecturer.lecturerId,
+        });
+        return;
+      }
+      navigateToRoute({
+        screen: workspace,
+        semesterId: nextSemesterId,
+        analysisView: workspace === 'overview' ? analysisView : undefined,
+      });
+    },
+    [analysisView, lecturer?.lecturerId, navigateToRoute, surveyId, workspace],
+  );
+
+  const changeAnalysisView = useCallback(
+    (nextView: ReportAnalysisView) => {
+      navigateToRoute(routeFromState('overview', { analysisView: nextView }));
+    },
+    [navigateToRoute, routeFromState],
+  );
+
+  const changeComparisonSemester = useCallback(
+    (nextSemesterId?: number) => {
+      navigateToRoute(routeFromState('overview', { comparisonSemesterId: nextSemesterId }));
+    },
+    [navigateToRoute, routeFromState],
+  );
+
+  const changeResultSort = useCallback(
+    (key?: string, direction?: DataTableSortDirection) => {
+      navigateToRoute(routeFromState('details', {
+        resultSortKey: key as ReportResultSortKey | undefined,
+        resultSortDirection: direction,
+      }));
+    },
+    [navigateToRoute, routeFromState],
+  );
+
+  useEffect(() => {
+    const applyHashRoute = () => {
+      if (!window.location.hash.replace(/^#\/?/, '').startsWith('reports')) return;
+      const route = parseReportRoute();
+      if (route.semesterId) setSelectedSemesterId(route.semesterId);
+      setFacultyId(route.facultyId);
+      setDepartmentId(route.departmentId);
+      setLecturerId(route.lecturerFilterId);
+      setSemesterSurveyId(route.semesterSurveyId);
+      setSearch(route.search ?? '');
+      setAnalysisView(route.analysisView ?? 'faculties');
+      setComparisonSemesterId(route.comparisonSemesterId);
+      setResultSortKey(route.resultSortKey);
+      setResultSortDirection(route.resultSortDirection ?? 'asc');
+
+      if (route.screen === 'survey' && route.surveyId) {
+        setWorkspace('details');
+        setSurveyId(route.surveyId);
+        setSurveyTitle('Chi tiết bài khảo sát');
+        const parentId = route.parentLecturerId;
+        setLecturer(parentId
+          ? ({ lecturerId: parentId, fullName: 'Chi tiết giảng viên' } as LecturerPerformanceReport)
+          : null);
+      } else if (route.screen === 'lecturer' && route.lecturerId) {
+        setWorkspace('details');
+        setSurveyId(null);
+        setSurveyTitle(null);
+        setLecturer({
+          lecturerId: route.lecturerId,
+          fullName: 'Chi tiết giảng viên',
+        } as LecturerPerformanceReport);
+      } else if (
+        route.screen === 'overview'
+        || route.screen === 'details'
+        || route.screen === 'rankings'
+      ) {
+        setWorkspace(route.screen);
+        setSurveyId(null);
+        setSurveyTitle(null);
+        setLecturer(null);
+        setLecturerDetail(null);
+      } else {
+        setWorkspace('details');
+      }
+    };
+
+    window.addEventListener('hashchange', applyHashRoute);
+    return () => window.removeEventListener('hashchange', applyHashRoute);
   }, []);
+
+  useEffect(() => {
+    const screen: ReportRouteState['screen'] = surveyId
+      ? 'survey'
+      : lecturer
+        ? 'lecturer'
+        : workspace;
+    const canonicalRoute = routeFromState(screen, {
+      surveyId: surveyId ?? undefined,
+      lecturerId: !surveyId ? lecturer?.lecturerId : undefined,
+      parentLecturerId: surveyId ? lecturer?.lecturerId : undefined,
+    });
+    const canonicalHash = buildReportHash(canonicalRoute);
+    if (window.location.hash !== canonicalHash) {
+      window.history.replaceState(null, '', canonicalHash);
+    }
+  }, [lecturer, routeFromState, surveyId, workspace]);
 
   // Nạp danh mục để dựng bộ lọc.
   useEffect(() => {
@@ -169,15 +381,6 @@ export const ReportsOverviewPage: React.FC<{
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  // Nhảy thẳng vào chi tiết một bài khảo sát (từ màn Khảo sát học phần).
-  useEffect(() => {
-    if (!initialSelection?.courseSectionSurveyId) return;
-    backToOverview();
-    setSurveyId(initialSelection.courseSectionSurveyId);
-    setSurveyTitle('Chi tiết bài khảo sát');
-    onConsumeSelection?.();
-  }, [initialSelection, backToOverview, onConsumeSelection]);
-
   // Lấy kết quả theo bộ lọc.
   useEffect(() => {
     if (!selectedSemesterId) return;
@@ -209,23 +412,36 @@ export const ReportsOverviewPage: React.FC<{
     };
   }, [selectedSemesterId, facultyId, departmentId, lecturerId, semesterSurveyId, debouncedSearch]);
 
-  const openLecturer = useCallback(
-    async (lecturerId: number, lecturerName: string) => {
-      if (!selectedSemesterId) return;
-      setLecturer({ lecturerId, fullName: lecturerName } as LecturerPerformanceReport);
-      setLecturerDetail(null);
-      setLecDetailLoading(true);
-      try {
-        const detail = await reportApi.lecturerDetail(lecturerId, selectedSemesterId);
+  useEffect(() => {
+    if (!lecturer?.lecturerId || !selectedSemesterId) return;
+    let cancelled = false;
+    setLecturerDetail(null);
+    setLecDetailLoading(true);
+    reportApi
+      .lecturerDetail(lecturer.lecturerId, selectedSemesterId)
+      .then((detail) => {
+        if (cancelled) return;
         setLecturerDetail(detail);
+        setLecturer(detail);
         setLoadError(null);
-      } catch {
-        setLoadError('Không thể tải chi tiết đánh giá giảng viên.');
-      } finally {
-        setLecDetailLoading(false);
-      }
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError('Không thể tải chi tiết đánh giá giảng viên.');
+      })
+      .finally(() => {
+        if (!cancelled) setLecDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lecturer?.lecturerId, selectedSemesterId]);
+
+  const openLecturer = useCallback(
+    (nextLecturerId: number, lecturerName: string) => {
+      setLecturer({ lecturerId: nextLecturerId, fullName: lecturerName } as LecturerPerformanceReport);
+      navigateToRoute(routeFromState('lecturer', { lecturerId: nextLecturerId }));
     },
-    [selectedSemesterId],
+    [navigateToRoute, routeFromState],
   );
 
   const handleResetFilters = useCallback(() => {
@@ -239,14 +455,16 @@ export const ReportsOverviewPage: React.FC<{
   // Drill-down từ bảng tổng quan toàn trường → gán bộ lọc và cuộn tới bảng kết quả.
   const handleOverviewDrillDown = useCallback(
     (filter: { facultyId?: number; departmentId?: number }) => {
-      setFacultyId(filter.facultyId);
-      setDepartmentId(filter.departmentId);
-      setLecturerId(undefined);
+      navigateToRoute(routeFromState('details', {
+        facultyId: filter.facultyId,
+        departmentId: filter.departmentId,
+        lecturerFilterId: undefined,
+      }));
       window.setTimeout(() => {
-        document.getElementById('reports-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById('reports-detail-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 120);
     },
-    [],
+    [navigateToRoute, routeFromState],
   );
 
   // Danh sách lựa chọn phụ thuộc.
@@ -325,6 +543,15 @@ export const ReportsOverviewPage: React.FC<{
     }
     return 'Học kỳ';
   }, [academicYears, selectedSemesterId]);
+
+  const comparisonSemesterOptions = useMemo(
+    () => academicYears.flatMap((year) =>
+      year.semesters.map((semester) => ({
+        semesterId: semester.semesterId,
+        label: `${year.academicYearName} - ${semester.semesterName}`,
+      }))),
+    [academicYears],
+  );
 
   if (!canViewReports) {
     return (
@@ -452,18 +679,21 @@ export const ReportsOverviewPage: React.FC<{
     {
       key: 'classSize',
       header: 'Sĩ số',
+      sortValue: (item) => item.classSize,
       width: '80px',
       render: (item) => <span className="catalog-cell-number">{item.classSize}</span>,
     },
     {
       key: 'responseCount',
       header: 'Phiếu',
+      sortValue: (item) => item.responseCount,
       width: '80px',
       render: (item) => <span className="catalog-cell-number">{item.responseCount}</span>,
     },
     {
       key: 'completionRate',
       header: 'Hoàn thành',
+      sortValue: (item) => item.completionRate,
       width: '150px',
       render: (item) => (
         <span className="reports-progress-cell">
@@ -479,6 +709,7 @@ export const ReportsOverviewPage: React.FC<{
     {
       key: 'averageScore',
       header: 'Điểm TB',
+      sortValue: (item) => item.averageScore,
       width: '100px',
       render: (item) => (
         <span className="catalog-score" style={{ color: scoreColor(item.averageScore) }}>
@@ -496,8 +727,10 @@ export const ReportsOverviewPage: React.FC<{
           type="button"
           className="btn btn-secondary btn-sm"
           onClick={() => {
-            setSurveyId(item.courseSectionSurveyId);
-            setSurveyTitle(`${item.courseCode} - ${item.courseName} (${item.sectionName})`);
+            openSurvey(
+              item.courseSectionSurveyId,
+              `${item.courseCode} - ${item.courseName} (${item.sectionName})`,
+            );
           }}
         >
           <ClipboardList className="operation-icon" aria-hidden="true" />
@@ -551,7 +784,11 @@ export const ReportsOverviewPage: React.FC<{
         <button
           type="button"
           className="btn btn-secondary btn-sm"
-          onClick={() => setSurveyId(item.courseSectionSurveyId)}
+          onClick={() => openSurvey(
+            item.courseSectionSurveyId,
+            `${item.courseCode} - ${item.courseName} (${item.sectionName})`,
+            lecturer?.lecturerId,
+          )}
         >
           <ClipboardList className="operation-icon" aria-hidden="true" />
           Xem kết quả
@@ -578,9 +815,8 @@ export const ReportsOverviewPage: React.FC<{
             value={selectedSemesterId ?? ''}
             onChange={(e) => {
               const next = Number(e.target.value);
-              setSelectedSemesterId(Number.isNaN(next) ? undefined : next);
-              handleResetFilters();
-              backToOverview();
+              if (Number.isNaN(next)) return;
+              changeSemester(next);
             }}
           >
             {academicYears.flatMap((year) =>
@@ -693,16 +929,56 @@ export const ReportsOverviewPage: React.FC<{
       {/* CẤP TỔNG HỢP: tổng quan toàn trường + bộ lọc + KPI + xếp hạng + bảng kết quả */}
       {!isLecturerMode && !isSurveyMode && (
         <div className="reports-overview">
+          <nav className="reports-workspace-tabs" aria-label="Chế độ xem báo cáo" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={workspace === 'overview'}
+              className={`reports-workspace-tab${workspace === 'overview' ? ' is-active' : ''}`}
+              onClick={() => navigateToWorkspace('overview')}
+            >
+              <LayoutDashboard className="operation-icon" aria-hidden="true" />
+              <span><strong>Tổng quan</strong><small>Chỉ số và xu hướng toàn trường</small></span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={workspace === 'details'}
+              className={`reports-workspace-tab${workspace === 'details' ? ' is-active' : ''}`}
+              onClick={() => navigateToWorkspace('details')}
+            >
+              <ListFilter className="operation-icon" aria-hidden="true" />
+              <span><strong>Tra cứu chi tiết</strong><small>Lọc và mở kết quả từng lớp</small></span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={workspace === 'rankings'}
+              className={`reports-workspace-tab${workspace === 'rankings' ? ' is-active' : ''}`}
+              onClick={() => navigateToWorkspace('rankings')}
+            >
+              <Medal className="operation-icon" aria-hidden="true" />
+              <span><strong>Xếp hạng đơn vị</strong><small>So sánh Khoa và Bộ môn</small></span>
+            </button>
+          </nav>
+
           {/* Bảng tổng quan toàn trường (executive dashboard) */}
-          {selectedSemesterId !== undefined && (
+          {workspace === 'overview' && selectedSemesterId !== undefined && (
             <SchoolSurveyOverview
+              key={selectedSemesterId}
               semesterId={selectedSemesterId}
+              comparisonOptions={comparisonSemesterOptions}
+              analysisView={analysisView}
+              comparisonSemesterId={comparisonSemesterId}
+              onAnalysisViewChange={changeAnalysisView}
+              onComparisonSemesterChange={changeComparisonSemester}
               onDrillDown={handleOverviewDrillDown}
             />
           )}
 
           {/* Thanh lọc */}
-          <section className="reports-filter-bar" aria-label="Lọc kết quả khảo sát">
+          {workspace === 'details' && (
+          <section id="reports-detail-workspace" className="reports-filter-bar reports-workspace-panel" aria-label="Lọc kết quả khảo sát">
             <div className="reports-filter-grid">
               <div className="operations-field">
                 <label htmlFor="filter-faculty">Khoa / Viện</label>
@@ -798,8 +1074,10 @@ export const ReportsOverviewPage: React.FC<{
               </div>
             </div>
           </section>
+          )}
 
           {/* KPI */}
+          {workspace === 'details' && (
           <div className="reports-kpi-grid" aria-label="Tổng quan kết quả đang lọc">
             <div className="reports-kpi">
               <div className="reports-kpi-icon" style={{ background: '#e8f5fa', color: '#0788b8' }}>
@@ -842,9 +1120,11 @@ export const ReportsOverviewPage: React.FC<{
               </div>
             </div>
           </div>
+          )}
 
           {/* Xếp hạng Top Khoa / Bộ môn */}
-          <div className="reports-rank-grid">
+          {workspace === 'rankings' && (
+          <div className="reports-rank-grid reports-workspace-panel" role="tabpanel">
             {renderRankedTable(
               'Top Khoa / Viện theo điểm TB',
               <Building2 className="operation-icon" aria-hidden="true" />,
@@ -856,8 +1136,10 @@ export const ReportsOverviewPage: React.FC<{
               topDepartments,
             )}
           </div>
+          )}
 
           {/* Bảng kết quả chi tiết */}
+          {workspace === 'details' && (
           <section
             className="reports-table-section"
             id="reports-results"
@@ -873,8 +1155,12 @@ export const ReportsOverviewPage: React.FC<{
               }
               keyExtractor={(item) => String(item.courseSectionSurveyId)}
               pageSize={20}
+              sortKey={resultSortKey}
+              sortDirection={resultSortDirection}
+              onSortChange={changeResultSort}
             />
           </section>
+          )}
         </div>
       )}
     </div>

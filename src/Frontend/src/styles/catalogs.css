@@ -177,6 +177,37 @@
   white-space: nowrap;
 }
 
+.catalog-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.catalog-sort-button:hover {
+  color: #057fae;
+}
+
+.catalog-sort-button:focus-visible {
+  outline: 2px solid #0788b8;
+  outline-offset: 3px;
+}
+
+.catalog-sort-button svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
 .catalog-table td {
   height: 32px;
   padding: 4px 10px;

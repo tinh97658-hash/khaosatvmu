@@ -166,7 +166,8 @@ khaosatvmu/
 # Di chuyển vào thư mục dự án API
 cd src/Backend/API
 
-# Cấu hình local bằng .NET User Secrets, không commit credential
+# Có thể cấu hình local bằng .NET User Secrets; nếu không, API Development
+# sẽ tự tìm file .env từ thư mục hiện tại lên root mà không ghi đè biến hệ thống.
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=khaosatvmu;Username=postgres;Password=<local-password>"
 dotnet user-secrets set "Authentication:Google:ClientId" "<client-id>"
 dotnet user-secrets set "Authentication:Google:ClientSecret" "<client-secret>"
@@ -217,7 +218,7 @@ Hệ thống tích hợp **AgentMemory** để quản lý bộ nhớ dài hạn 
 
 ## ⚙️ Cấu hình môi trường
 
-File `.env` ở root chỉ phục vụ Docker Compose. Local API dùng .NET User Secrets hoặc environment variables. Production phải inject secret từ secret manager.
+File `.env` ở root phục vụ Docker Compose và được API tự nạp khi chạy Development. Environment variables và .NET User Secrets có độ ưu tiên cao hơn. Production không nạp `.env` và phải inject secret từ secret manager.
 
 ```env
 # Database Settings

@@ -573,13 +573,13 @@ export interface DepartmentOverview {
   averageScore: number;
 }
 
-/** So sánh học kỳ hiện tại với học kỳ liền trước (xu hướng). */
+/** So sánh học kỳ hiện tại với học kỳ được chọn. */
 export interface SemesterComparison {
-  previousSemesterId: number;
-  previousSemesterName: string;
-  previousAcademicYearName: string;
-  previousCompletionRate: number;
-  previousAverageScore: number;
+  comparisonSemesterId: number;
+  comparisonSemesterName: string;
+  comparisonAcademicYearName: string;
+  comparisonCompletionRate: number;
+  comparisonAverageScore: number;
   completionRateDelta: number;
   averageScoreDelta: number;
 }
@@ -602,7 +602,7 @@ export interface SchoolSurveyOverview {
   faculties: FacultyOverview[];
   departments: DepartmentOverview[];
   weakestQuestions: QuestionRating[];
-  previousSemester: SemesterComparison | null;
+  semesterComparison: SemesterComparison | null;
 }
 
 // ---------------------------------------------------------------------------

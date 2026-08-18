@@ -15,10 +15,13 @@ export const reportApi = {
       `/api/v1/reports/operational-progress?semesterId=${semesterId}`,
     ),
 
-  schoolOverview: (semesterId: number) =>
-    apiRequest<SchoolSurveyOverview>(
-      `/api/v1/reports/school-overview?semesterId=${semesterId}`,
-    ),
+  schoolOverview: (semesterId: number, comparisonSemesterId?: number) => {
+    const query = new URLSearchParams({ semesterId: String(semesterId) });
+    if (comparisonSemesterId) query.append('comparisonSemesterId', String(comparisonSemesterId));
+    return apiRequest<SchoolSurveyOverview>(
+      `/api/v1/reports/school-overview?${query.toString()}`,
+    );
+  },
 
   lecturers: (params?: { facultyId?: number; departmentId?: number; semesterId?: number }) => {
     const query = new URLSearchParams();

@@ -756,8 +756,9 @@ textarea:focus-visible {
 
 /* Main Content Area */
 .content-area {
-  flex-grow: 1;
-  width: 100%;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
   min-height: 0;
   padding: 0;
   background: var(--bg-card);

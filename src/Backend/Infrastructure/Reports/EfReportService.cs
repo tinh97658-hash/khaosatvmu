@@ -629,13 +629,20 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .Where(x => lecturerIds.Contains(x.LecturerId))
             .ToListAsync(cancellationToken);
 
-        var deptIds = lecturers.Where(x => x.DepartmentId.HasValue).Select(x => x.DepartmentId!.Value).Distinct().ToList();
+        var deptIds = lecturers.Where(x => x.DepartmentId.HasValue).Select(x => x.DepartmentId!.Value)
+            .Concat(courses.Values.Where(x => x.DepartmentId.HasValue).Select(x => x.DepartmentId!.Value))
+            .Distinct()
+            .ToList();
         var departments = deptIds.Count == 0
-            ? new Dictionary<int, string>()
+            ? new Dictionary<int, Department>()
             : await db.Departments.AsNoTracking()
                 .Where(x => deptIds.Contains(x.DepartmentId))
-                .ToDictionaryAsync(x => x.DepartmentId, x => x.DepartmentName, cancellationToken);
-        var facIds = lecturers.Where(x => x.FacultyId.HasValue).Select(x => x.FacultyId!.Value).Distinct().ToList();
+                .ToDictionaryAsync(x => x.DepartmentId, x => x, cancellationToken);
+        var facIds = lecturers.Where(x => x.FacultyId.HasValue).Select(x => x.FacultyId!.Value)
+            .Concat(courses.Values.Where(x => x.FacultyId.HasValue).Select(x => x.FacultyId!.Value))
+            .Concat(departments.Values.Where(x => x.FacultyId.HasValue).Select(x => x.FacultyId!.Value))
+            .Distinct()
+            .ToList();
         var faculties = facIds.Count == 0
             ? new Dictionary<int, string>()
             : await db.Faculties.AsNoTracking()
@@ -668,9 +675,18 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             var sec = sections.FirstOrDefault(x => x.CourseSectionId == css.CourseSectionId);
             var crs = sec != null && courses.TryGetValue(sec.CourseId, out var c) ? c : null;
             var lec = sec != null ? lecturers.FirstOrDefault(x => x.LecturerId == sec.LecturerId) : null;
+            int? reportDepartmentId = crs?.DepartmentId ?? lec?.DepartmentId;
+            int? reportFacultyId = crs?.FacultyId;
+            if (reportFacultyId is null
+                && reportDepartmentId is { } owningDepartmentId
+                && departments.TryGetValue(owningDepartmentId, out var owningDepartment))
+            {
+                reportFacultyId = owningDepartment.FacultyId;
+            }
+            reportFacultyId ??= lec?.FacultyId;
 
-            if (facultyId is { } fId && lec?.FacultyId != fId) continue;
-            if (departmentId is { } dId && lec?.DepartmentId != dId) continue;
+            if (facultyId is { } fId && reportFacultyId != fId) continue;
+            if (departmentId is { } dId && reportDepartmentId != dId) continue;
             if (lecturerId is { } lId && lec?.LecturerId != lId) continue;
 
             var courseCode = crs?.CourseCode ?? string.Empty;
@@ -702,10 +718,12 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 templateName,
                 lec?.LecturerId ?? 0,
                 lecturerName,
-                lec?.DepartmentId ?? 0,
-                lec?.DepartmentId is { } dd && departments.TryGetValue(dd, out var dn) ? dn : "Chưa thuộc bộ môn",
-                lec?.FacultyId ?? 0,
-                lec?.FacultyId is { } ff && faculties.TryGetValue(ff, out var fn) ? fn : "Chưa thuộc khoa",
+                reportDepartmentId ?? 0,
+                reportDepartmentId is { } dd && departments.TryGetValue(dd, out var department)
+                    ? department.DepartmentName
+                    : "Chưa thuộc bộ môn",
+                reportFacultyId ?? 0,
+                reportFacultyId is { } ff && faculties.TryGetValue(ff, out var fn) ? fn : "Chưa thuộc khoa",
                 courseCode,
                 courseName,
                 sectionName,
@@ -730,15 +748,19 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     /// <summary>Bảng tổng quan toàn trường theo học kỳ, có cache TTL ngắn.</summary>
     public async Task<SchoolSurveyOverviewDto?> GetSchoolSurveyOverviewAsync(
         int semesterId,
+        int? comparisonSemesterId = null,
         CancellationToken cancellationToken = default)
     {
-        string cacheKey = $"{SchoolOverviewCachePrefix}{semesterId}";
+        string cacheKey = $"{SchoolOverviewCachePrefix}{semesterId}:compare:{comparisonSemesterId?.ToString() ?? "previous"}";
         if (cache.TryGetValue(cacheKey, out SchoolSurveyOverviewDto? cached) && cached is not null)
         {
             return cached;
         }
 
-        var overview = await BuildSchoolSurveyOverviewAsync(semesterId, cancellationToken);
+        var overview = await BuildSchoolSurveyOverviewAsync(
+            semesterId,
+            comparisonSemesterId,
+            cancellationToken);
         if (overview is not null)
         {
             cache.Set(cacheKey, overview, SchoolOverviewCacheTtl);
@@ -749,6 +771,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
     private async Task<SchoolSurveyOverviewDto?> BuildSchoolSurveyOverviewAsync(
         int semesterId,
+        int? comparisonSemesterId,
         CancellationToken cancellationToken)
     {
         var semester = await db.Semesters
@@ -789,6 +812,13 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .Where(x => sectionIds.Contains(x.CourseSectionId))
             .ToListAsync(cancellationToken);
 
+        var courseIds = sections.Select(x => x.CourseId).Distinct().ToList();
+        Dictionary<int, Course> courses = courseIds.Count == 0
+            ? []
+            : await db.Courses.AsNoTracking()
+                .Where(x => courseIds.Contains(x.CourseId))
+                .ToDictionaryAsync(x => x.CourseId, x => x, cancellationToken);
+
         var lecturerIds = sections.Select(x => x.LecturerId).Distinct().ToList();
         List<Lecturer> lecturers = lecturerIds.Count == 0
             ? []
@@ -796,14 +826,21 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 .Where(x => lecturerIds.Contains(x.LecturerId))
                 .ToListAsync(cancellationToken);
 
-        var deptIds = lecturers.Where(x => x.DepartmentId.HasValue).Select(x => x.DepartmentId!.Value).Distinct().ToList();
+        var deptIds = lecturers.Where(x => x.DepartmentId.HasValue).Select(x => x.DepartmentId!.Value)
+            .Concat(courses.Values.Where(x => x.DepartmentId.HasValue).Select(x => x.DepartmentId!.Value))
+            .Distinct()
+            .ToList();
         Dictionary<int, Department> departments = deptIds.Count == 0
             ? []
             : await db.Departments.AsNoTracking()
                 .Where(x => deptIds.Contains(x.DepartmentId))
                 .ToDictionaryAsync(x => x.DepartmentId, x => x, cancellationToken);
 
-        var facultyIds = lecturers.Where(x => x.FacultyId.HasValue).Select(x => x.FacultyId!.Value).Distinct().ToList();
+        var facultyIds = lecturers.Where(x => x.FacultyId.HasValue).Select(x => x.FacultyId!.Value)
+            .Concat(courses.Values.Where(x => x.FacultyId.HasValue).Select(x => x.FacultyId!.Value))
+            .Concat(departments.Values.Where(x => x.FacultyId.HasValue).Select(x => x.FacultyId!.Value))
+            .Distinct()
+            .ToList();
         Dictionary<int, Faculty> faculties = facultyIds.Count == 0
             ? []
             : await db.Faculties.AsNoTracking()
@@ -853,6 +890,18 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         {
             var sec = sections.FirstOrDefault(x => x.CourseSectionId == ss.CourseSectionId);
             var lec = sec is null ? null : lecturers.FirstOrDefault(x => x.LecturerId == sec.LecturerId);
+            var course = sec is not null && courses.TryGetValue(sec.CourseId, out var matchedCourse)
+                ? matchedCourse
+                : null;
+            int? reportDepartmentId = course?.DepartmentId ?? lec?.DepartmentId;
+            int? reportFacultyId = course?.FacultyId;
+            if (reportFacultyId is null
+                && reportDepartmentId is { } owningDepartmentId
+                && departments.TryGetValue(owningDepartmentId, out var owningDepartment))
+            {
+                reportFacultyId = owningDepartment.FacultyId;
+            }
+            reportFacultyId ??= lec?.FacultyId;
             var (cnt, totalScore) = responseStats.TryGetValue(ss.CourseSectionSurveyId, out var stat)
                 ? stat
                 : (0, 0m);
@@ -863,7 +912,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             else if (rate >= 40) inProgressCount++;
             else laggingCount++;
 
-            if (lec?.FacultyId is { } fId)
+            if (reportFacultyId is { } fId)
             {
                 var f = facultyStats.TryGetValue(fId, out var fs) ? fs : (SectionCount: 0, Target: 0, Responses: 0, ScoreSum: 0m);
                 f.SectionCount++;
@@ -873,7 +922,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 facultyStats[fId] = f;
             }
 
-            if (lec?.DepartmentId is { } dId)
+            if (reportDepartmentId is { } dId)
             {
                 var d = deptStats.TryGetValue(dId, out var ds) ? ds : (SectionCount: 0, Target: 0, Responses: 0, ScoreSum: 0m);
                 d.SectionCount++;
@@ -946,9 +995,14 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         // Tiêu chí yếu nhất toàn trường.
         var weakestQuestions = await BuildWeakestQuestionsAsync(cssIds, cancellationToken);
 
-        // Xu hướng so với học kỳ liền trước.
-        var previousSemester = await GetPreviousSemesterComparisonAsync(
-            semesterId, totalResponses, totalTarget, overallAvg, cancellationToken);
+        // Xu hướng so với học kỳ được chọn; nếu không chọn thì dùng học kỳ liền trước.
+        var semesterComparison = await GetSemesterComparisonAsync(
+            semesterId,
+            comparisonSemesterId,
+            totalResponses,
+            totalTarget,
+            overallAvg,
+            cancellationToken);
 
         return new SchoolSurveyOverviewDto(
             semester.SemesterId,
@@ -967,7 +1021,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             facultyList.OrderByDescending(x => x.AverageScore).ToList(),
             deptList.OrderBy(x => x.CompletionRate).ThenBy(x => x.DepartmentName).ToList(),
             weakestQuestions,
-            previousSemester);
+            semesterComparison);
     }
 
     /// <summary>Gộp các câu hỏi yếu nhất toàn trường theo số lượt trả lời của kỳ.</summary>
@@ -1027,36 +1081,48 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .ToList();
     }
 
-    /// <summary>So sánh học kỳ hiện tại với học kỳ liền trước về tiến độ và điểm TB.</summary>
-    private async Task<SemesterComparisonDto?> GetPreviousSemesterComparisonAsync(
+    /// <summary>So sánh học kỳ hiện tại với kỳ được chọn; mặc định là kỳ liền trước.</summary>
+    private async Task<SemesterComparisonDto?> GetSemesterComparisonAsync(
         int semesterId,
+        int? comparisonSemesterId,
         int currentResponses,
         int currentTarget,
         decimal currentAvg,
         CancellationToken cancellationToken)
     {
-        var previous = await db.Semesters.AsNoTracking()
-            .Where(x => x.SemesterId < semesterId)
-            .OrderByDescending(x => x.SemesterId)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (previous is null) return null;
+        if (comparisonSemesterId == semesterId) return null;
 
-        var prevYear = await db.AcademicYears.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.AcademicYearId == previous.AcademicYearId, cancellationToken);
+        var comparisonSemesterQuery = db.Semesters.AsNoTracking();
+        var comparisonSemester = comparisonSemesterId.HasValue
+            ? await comparisonSemesterQuery.FirstOrDefaultAsync(
+                x => x.SemesterId == comparisonSemesterId.Value,
+                cancellationToken)
+            : await comparisonSemesterQuery
+                .Where(x => x.SemesterId < semesterId)
+                .OrderByDescending(x => x.SemesterId)
+                .FirstOrDefaultAsync(cancellationToken);
+        if (comparisonSemester is null) return null;
 
-        var (prevTarget, prevResponses, prevAvg) = await ComputeSemesterCoreStatsAsync(previous.SemesterId, cancellationToken);
-        decimal prevCompletion = prevTarget > 0 ? Math.Round((decimal)prevResponses / prevTarget * 100, 2) : 0;
+        var comparisonYear = await db.AcademicYears.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.AcademicYearId == comparisonSemester.AcademicYearId, cancellationToken);
+
+        var (comparisonTarget, comparisonResponses, comparisonAvg) = await ComputeSemesterCoreStatsAsync(
+            comparisonSemester.SemesterId,
+            cancellationToken);
+        decimal comparisonCompletion = comparisonTarget > 0
+            ? Math.Round((decimal)comparisonResponses / comparisonTarget * 100, 2)
+            : 0;
 
         decimal currentCompletion = currentTarget > 0 ? Math.Round((decimal)currentResponses / currentTarget * 100, 2) : 0;
 
         return new SemesterComparisonDto(
-            previous.SemesterId,
-            previous.SemesterName,
-            prevYear?.AcademicYearName ?? string.Empty,
-            prevCompletion,
-            prevAvg,
-            Math.Round(currentCompletion - prevCompletion, 2),
-            Math.Round(currentAvg - prevAvg, 2));
+            comparisonSemester.SemesterId,
+            comparisonSemester.SemesterName,
+            comparisonYear?.AcademicYearName ?? string.Empty,
+            comparisonCompletion,
+            comparisonAvg,
+            Math.Round(currentCompletion - comparisonCompletion, 2),
+            Math.Round(currentAvg - comparisonAvg, 2));
     }
 
     /// <summary>Chỉ số lõi (chỉ tiêu / phiếu thu / điểm TB) của một học kỳ, dùng cho so sánh.</summary>
