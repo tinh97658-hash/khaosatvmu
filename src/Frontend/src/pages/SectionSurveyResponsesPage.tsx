@@ -13,18 +13,26 @@ import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { Modal } from '../components/Modal';
+import { QuestionAnalysisChart } from '../components/QuestionAnalysisChart';
 import { ApiError } from '../services/apiClient';
+import { reportApi } from '../services/reportApi';
 import { surveyApi, surveyErrorMessage } from '../services/surveyApi';
 import type {
   CourseSectionSurvey,
+  SectionSurveyAnalysis,
   SurveyResponseDetail,
   SurveyResponseSummary,
 } from '../types';
 import '../styles/survey-operations.css';
+import '../styles/reports.css';
 
 interface SectionSurveyResponsesPageProps {
   courseSectionSurveyId: number;
   onBack: () => void;
+  /** Nhãn nút quay lại, mặc định dành cho màn quản lý khảo sát. */
+  backLabel?: string;
+  /** Bật phân tích từng câu hỏi của bài khảo sát (dùng trong Thống kê & Báo cáo). */
+  showAnalysis?: boolean;
 }
 
 function messageFrom(error: unknown): string {
@@ -41,12 +49,17 @@ const formatDateTime = (value: string) => dateTimeFormatter.format(new Date(valu
 export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProps> = ({
   courseSectionSurveyId,
   onBack,
+  backLabel = 'Quay lại danh sách lớp',
+  showAnalysis = false,
 }) => {
   const [sectionSurvey, setSectionSurvey] = useState<CourseSectionSurvey | null>(null);
   const [responses, setResponses] = useState<SurveyResponseSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+
+  const [analysis, setAnalysis] = useState<SectionSurveyAnalysis | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(showAnalysis);
 
   const [detail, setDetail] = useState<SurveyResponseDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -67,6 +80,27 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
       setLoading(false);
     }
   }, [courseSectionSurveyId]);
+
+  useEffect(() => {
+    if (!showAnalysis) return;
+    let cancelled = false;
+    setAnalysisLoading(true);
+    reportApi
+      .sectionAnalysis(courseSectionSurveyId)
+      .then((data) => {
+        if (!cancelled) setAnalysis(data);
+      })
+      .catch(() => {
+        // Phân tích là phần phụ; không làm hỏng danh sách phiếu.
+        if (!cancelled) setAnalysis(null);
+      })
+      .finally(() => {
+        if (!cancelled) setAnalysisLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [courseSectionSurveyId, showAnalysis]);
 
   useEffect(() => {
     void load();
@@ -164,7 +198,7 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
       <div className="section-responses-back">
         <button type="button" className="btn btn-secondary btn-sm" onClick={onBack}>
           <ArrowLeft className="operation-icon" aria-hidden="true" />
-          Quay lại danh sách lớp
+          {backLabel}
         </button>
       </div>
 
@@ -205,6 +239,24 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
             </span>
           </div>
         </section>
+      )}
+
+      {showAnalysis && analysisLoading && (
+        <div className="operations-empty section-analysis-loading" role="status">
+          <LoaderCircle className="operation-icon auth-spin" aria-hidden="true" />
+          <strong>Đang phân tích kết quả theo câu hỏi...</strong>
+        </div>
+      )}
+
+      {showAnalysis && !analysisLoading && analysis && (
+        <QuestionAnalysisChart
+          questions={analysis.questions}
+          templateName={analysis.templateName}
+          overallAverageScore={analysis.averageScore}
+          responseCount={analysis.responseCount}
+          title="Phân tích kết quả theo câu hỏi"
+          showDistributionTable={true}
+        />
       )}
 
       <DataTable

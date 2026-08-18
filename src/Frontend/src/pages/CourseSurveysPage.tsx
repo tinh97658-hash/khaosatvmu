@@ -20,12 +20,10 @@ import {
 import { toast } from 'sonner';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { QRCodeModal } from '../components/QRCodeModal';
-import { SectionSurveyResponsesPage } from './SectionSurveyResponsesPage';
+import { useSemester } from '../context/semesterContext';
 import { ApiError } from '../services/apiClient';
-import { catalogApi } from '../services/catalogApi';
 import { surveyApi, surveyErrorMessage, surveyLinkOf } from '../services/surveyApi';
 import type {
-  AcademicYear,
   CourseSectionSurvey,
   SemesterSurvey,
   SurveyTemplate,
@@ -36,8 +34,6 @@ interface ScheduleForm {
   startTime: string;
   endTime: string;
 }
-
-const selectedSemesterStorageKey = 'course-surveys.semester-id';
 
 /** Một học kỳ có thể có hàng trăm lớp nên bảng lớp được phân trang. */
 const sectionPageSize = 20;
@@ -64,16 +60,41 @@ function formatRange(startTime: string, endTime: string): string {
   return `${formatter.format(new Date(startTime))} → ${formatter.format(new Date(endTime))}`;
 }
 
-function defaultSchedule(): ScheduleForm {
-  const start = new Date();
-  const end = new Date(start.getTime() + 14 * 24 * 60 * 60 * 1000);
-  return { startTime: toLocalInput(start.toISOString()), endTime: toLocalInput(end.toISOString()) };
+const defaultSchedule = (): ScheduleForm => {
+  const now = new Date();
+  const nextMonth = new Date();
+  nextMonth.setMonth(now.getMonth() + 1);
+
+  const format = (date: Date) => date.toISOString().slice(0, 16);
+
+  return {
+    startTime: format(now),
+    endTime: format(nextMonth),
+  };
+};
+
+interface CourseSurveysPageProps {
+  /** Chuyển sang màn Thống kê & Báo cáo để xem kết quả chi tiết của một bài khảo sát. */
+  onOpenSurveyReport?: (courseSectionSurveyId: number) => void;
 }
 
-export const CourseSurveysPage: React.FC = () => {
-  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurveyReport }) => {
+  const {
+    academicYears,
+    activeSemesterId,
+  } = useSemester();
+  const [semesterId, setSemesterId] = useState<string>(() =>
+    activeSemesterId ? String(activeSemesterId) : ''
+  );
+
+  // Khi học kỳ làm việc toàn cục (Header) thay đổi, cập nhật trang khảo sát học phần
+  useEffect(() => {
+    if (activeSemesterId) {
+      setSemesterId(String(activeSemesterId));
+    }
+  }, [activeSemesterId]);
+
   const [templates, setTemplates] = useState<SurveyTemplate[]>([]);
-  const [semesterId, setSemesterId] = useState('');
   const [semesterSurveys, setSemesterSurveys] = useState<SemesterSurvey[]>([]);
   const [sectionSurveys, setSectionSurveys] = useState<Record<number, CourseSectionSurvey[]>>({});
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
@@ -95,34 +116,13 @@ export const CourseSurveysPage: React.FC = () => {
 
   const [deleting, setDeleting] = useState<SemesterSurvey | null>(null);
   const [qrTarget, setQrTarget] = useState<CourseSectionSurvey | null>(null);
-  /** Khác null thì đang xem trang phiếu trả lời của một lớp học phần. */
-  const [openedSectionSurveyId, setOpenedSectionSurveyId] = useState<number | null>(null);
 
-  // Tải lại trang thì chọn lại đúng học kỳ đang xem, nếu không danh sách đợt
-  // khảo sát trông như bị mất.
+  // Nạp danh sách template khảo sát
   useEffect(() => {
     const load = async () => {
       try {
-        const [years, nextTemplates, allSurveys] = await Promise.all([
-          catalogApi.academicYears(),
-          surveyApi.templates(),
-          surveyApi.semesterSurveys(),
-        ]);
-        setAcademicYears(years);
+        const nextTemplates = await surveyApi.templates();
         setTemplates(nextTemplates);
-
-        const available = years.flatMap((year) =>
-          year.semesters.map((semester) => String(semester.semesterId))
-        );
-        const stored = window.localStorage.getItem(selectedSemesterStorageKey) ?? '';
-        const newestSurveySemester =
-          allSurveys.length > 0 ? String(allSurveys[0].semesterId) : '';
-        const initial = available.includes(stored)
-          ? stored
-          : available.includes(newestSurveySemester)
-            ? newestSurveySemester
-            : '';
-        if (initial) setSemesterId(initial);
       } catch (error) {
         setLoadError(messageFrom(error));
       }
@@ -168,11 +168,6 @@ export const CourseSurveysPage: React.FC = () => {
   useEffect(() => {
     setExpanded({});
     setSectionSurveys({});
-    if (semesterId) {
-      window.localStorage.setItem(selectedSemesterStorageKey, semesterId);
-    } else {
-      window.localStorage.removeItem(selectedSemesterStorageKey);
-    }
     void loadSemesterSurveys(semesterId, true);
   }, [semesterId, loadSemesterSurveys]);
 
@@ -272,18 +267,11 @@ export const CourseSurveysPage: React.FC = () => {
     }
   };
 
-  if (openedSectionSurveyId !== null) {
-    return (
-      <SectionSurveyResponsesPage
-        courseSectionSurveyId={openedSectionSurveyId}
-        onBack={() => {
-          setOpenedSectionSurveyId(null);
-          // Số lượt trả lời có thể đã đổi khi đang xem chi tiết.
-          void loadSemesterSurveys(semesterId);
-        }}
-      />
-    );
-  }
+  const openSurveyReport = (courseSectionSurveyId: number) => {
+    if (onOpenSurveyReport) {
+      onOpenSurveyReport(courseSectionSurveyId);
+    }
+  };
 
   return (
     <div className="survey-operations-page course-surveys-page">
@@ -478,8 +466,8 @@ export const CourseSurveysPage: React.FC = () => {
                           <button
                             type="button"
                             className="section-response-link"
-                            onClick={() => setOpenedSectionSurveyId(section.courseSectionSurveyId)}
-                            title="Xem danh sách phiếu trả lời"
+                            onClick={() => openSurveyReport(section.courseSectionSurveyId)}
+                            title="Xem kết quả chi tiết trong Thống kê & Báo cáo"
                           >
                             <span className="operations-count">{section.responseCount}</span>
                           </button>
@@ -489,10 +477,10 @@ export const CourseSurveysPage: React.FC = () => {
                             <button
                               type="button"
                               className="btn btn-secondary btn-sm"
-                              onClick={() => setOpenedSectionSurveyId(section.courseSectionSurveyId)}
+                              onClick={() => openSurveyReport(section.courseSectionSurveyId)}
                             >
                               <ClipboardList className="operation-icon" aria-hidden="true" />
-                              Phiếu
+                              Kết quả
                             </button>
                             <button
                               type="button"

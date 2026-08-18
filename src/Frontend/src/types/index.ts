@@ -502,6 +502,109 @@ export interface SurveyQuestionSummaryReport {
   questions: QuestionRating[];
 }
 
+/** Phân tích theo từng câu hỏi của một bài khảo sát lớp học phần. */
+export interface SectionSurveyAnalysis {
+  courseSectionSurveyId: number;
+  courseCode: string;
+  courseName: string;
+  sectionName: string;
+  lecturerName: string;
+  classSize: number;
+  responseCount: number;
+  averageScore: number;
+  templateName: string;
+  questions: QuestionRating[];
+}
+
+/** Một dòng kết quả chi tiết của một bài khảo sát lớp học phần. */
+export interface SurveyResultDetail {
+  courseSectionSurveyId: number;
+  semesterSurveyId: number;
+  templateName: string;
+  lecturerId: number;
+  lecturerName: string;
+  departmentId: number;
+  departmentName: string;
+  facultyId: number;
+  facultyName: string;
+  courseCode: string;
+  courseName: string;
+  sectionName: string;
+  classSize: number;
+  responseCount: number;
+  completionRate: number;
+  averageScore: number;
+}
+
+// ---------------------------------------------------------------------------
+// BẢNG TỔNG QUAN TOÀN TRƯỜNG (EXECUTIVE SURVEY DASHBOARD)
+// ---------------------------------------------------------------------------
+
+/** Một nhóm điểm trong phân bố điểm toàn trường (theo điểm TB từng phiếu). */
+export interface ScoreBand {
+  band: number;
+  label: string;
+  count: number;
+  percentage: number;
+}
+
+/** Dữ liệu 1 Khoa cho biểu đồ tổng quan toàn trường. */
+export interface FacultyOverview {
+  facultyId: number;
+  facultyName: string;
+  departmentCount: number;
+  sectionCount: number;
+  targetResponses: number;
+  responseCount: number;
+  completionRate: number;
+  averageScore: number;
+}
+
+/** Dữ liệu 1 Bộ môn cho bảng "chậm tiến độ" của tổng quan toàn trường. */
+export interface DepartmentOverview {
+  departmentId: number;
+  departmentName: string;
+  facultyId: number;
+  facultyName: string;
+  sectionCount: number;
+  targetResponses: number;
+  responseCount: number;
+  completionRate: number;
+  averageScore: number;
+}
+
+/** So sánh học kỳ hiện tại với học kỳ liền trước (xu hướng). */
+export interface SemesterComparison {
+  previousSemesterId: number;
+  previousSemesterName: string;
+  previousAcademicYearName: string;
+  previousCompletionRate: number;
+  previousAverageScore: number;
+  completionRateDelta: number;
+  averageScoreDelta: number;
+}
+
+/** Bảng tổng quan toàn trường (executive summary) của một học kỳ. */
+export interface SchoolSurveyOverview {
+  semesterId: number;
+  semesterName: string;
+  academicYearName: string;
+  totalSections: number;
+  totalTargetResponses: number;
+  totalResponses: number;
+  completionRate: number;
+  completedSectionCount: number;
+  inProgressSectionCount: number;
+  laggingSectionCount: number;
+  overallAverageScore: number;
+  scoreDistribution: ScoreBand[];
+  schoolAverageScore: number;
+  faculties: FacultyOverview[];
+  departments: DepartmentOverview[];
+  weakestQuestions: QuestionRating[];
+  previousSemester: SemesterComparison | null;
+}
+
 // ---------------------------------------------------------------------------
 // PHÂN QUYỀN THEO MODULE (PERMISSION MANAGEMENT)
 // ---------------------------------------------------------------------------

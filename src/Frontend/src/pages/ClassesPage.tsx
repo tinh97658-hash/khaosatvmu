@@ -22,6 +22,7 @@ import {
   type SaveAcademicYearPayload,
 } from '../services/catalogApi';
 import type { AcademicYear, Course, CourseSection, Lecturer, Semester } from '../types';
+import { useSemester } from '../context/semesterContext';
 
 interface ClassesPageProps {
   courses: Course[];
@@ -41,23 +42,32 @@ interface SectionForm {
   classSize: string;
 }
 
-const emptyYearForm: YearForm = { academicYearName: '', startDate: '', endDate: '' };
+const emptyYearForm: YearForm = {
+  academicYearName: '',
+  startDate: '',
+  endDate: '',
+};
+
 const emptySectionForm: SectionForm = {
   courseId: '',
   lecturerId: '',
   sectionName: '',
-  classSize: '0',
+  classSize: '40',
 };
 
 const errorCodeOf = (error: unknown): string =>
   error instanceof ApiError ? error.errorCode : 'API_REQUEST_FAILED';
 
 export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) => {
-  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const {
+    academicYears,
+    activeSemesterId,
+    reloadAcademicYears,
+  } = useSemester();
+  const [loadError] = useState<string | null>(null);
+  const [selectedSemesterId, setSelectedSemesterId] = useState<number | null>(() => activeSemesterId);
   const [expandedYearIds, setExpandedYearIds] = useState<number[]>([]);
   const [selectedYearId, setSelectedYearId] = useState<number | null>(null);
-  const [selectedSemesterId, setSelectedSemesterId] = useState<number | null>(null);
 
   const [sections, setSections] = useState<CourseSection[]>([]);
   const [search, setSearch] = useState('');
@@ -84,6 +94,27 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) 
   const [sectionError, setSectionError] = useState('');
   const [savingSection, setSavingSection] = useState(false);
 
+  // Khi học kỳ làm việc toàn cục (Header) thay đổi, đồng bộ sang trang lớp học phần
+  useEffect(() => {
+    if (activeSemesterId !== null) {
+      setSelectedSemesterId(activeSemesterId);
+    }
+  }, [activeSemesterId]);
+
+  // Tự động mở nhánh và chọn năm học tương ứng với học kỳ đang xem
+  useEffect(() => {
+    if (selectedSemesterId !== null && academicYears.length > 0) {
+      const year = academicYears.find((y) =>
+        y.semesters.some((s) => s.semesterId === selectedSemesterId)
+      );
+      if (year) {
+        setSelectedYearId(year.academicYearId);
+        setExpandedYearIds((prev) =>
+          prev.includes(year.academicYearId) ? prev : [...prev, year.academicYearId]
+        );
+      }
+    }
+  }, [selectedSemesterId, academicYears]);
 
   const selectedYear = academicYears.find((year) => year.academicYearId === selectedYearId) ?? null;
   const selectedSemester =
@@ -98,30 +129,9 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) 
   // ----- Nạp dữ liệu --------------------------------------------------------
 
   const reloadYears = async (): Promise<AcademicYear[]> => {
-    const next = await catalogApi.academicYears();
-    setAcademicYears(next);
+    const next = await reloadAcademicYears();
     return next;
   };
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const next = await catalogApi.academicYears();
-        if (cancelled) return;
-        setAcademicYears(next);
-        setLoadError(null);
-      } catch {
-        if (!cancelled) setLoadError('Không thể tải danh sách năm học');
-      }
-    };
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;

@@ -23,6 +23,7 @@ import {
 import { toast } from 'sonner';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { InlineTreeWizard } from '../components/InlineTreeWizard';
+import { useSemester } from '../context/semesterContext';
 import type {
   SurveyCampaign,
   Major,
@@ -62,6 +63,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   onUpdateCampaignDates,
   onOpenQR,
 }) => {
+  const { activeSemester, activeYear } = useSemester();
   const [activeTab, setActiveTab] = useState<'Học phần' | 'Chương trình đào tạo'>(
     surveyType || 'Học phần'
   );
@@ -77,6 +79,14 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
     '2025-2026_Học kỳ I': true,
     '2026-2027_Học kỳ I': true,
   });
+
+  // Tự động mở thư mục của học kỳ đang kích hoạt
+  React.useEffect(() => {
+    if (activeYear && activeSemester) {
+      const folderKey = `${activeYear.academicYearName}_${activeSemester.semesterName}`;
+      setExpandedFolders((prev) => ({ ...prev, [folderKey]: true }));
+    }
+  }, [activeYear, activeSemester]);
 
   // Inline Tree Wizard State (specifies target semester & academic year on the tree)
   const [activeWizardTarget, setActiveWizardTarget] = useState<{
