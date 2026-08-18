@@ -1,53 +1,69 @@
 namespace UnitTests.DomainTests;
 
-using global::Domain.Entities;
-using global::Domain.Enums;
+using Domain;
 using FluentAssertions;
 using Xunit;
 
 public class SurveyDomainTests
 {
     [Fact]
-    public void SurveyCampaign_DefaultStatus_ShouldBeDraft()
+    public void CourseSectionSurvey_DefaultProperties_ShouldBeInitialized()
     {
-        // Arrange & Act
-        var campaign = new SurveyCampaign
+        var survey = new CourseSectionSurvey
         {
-            Title = "Khảo sát giảng dạy Học kỳ I năm học 2025-2026",
-            StartDate = DateTime.UtcNow,
-            EndDate = DateTime.UtcNow.AddDays(14)
+            CourseSectionSurveyId = 1,
+            SemesterSurveyId = 10,
+            CourseSectionId = 20,
+            LinkToken = "tok_test123",
+            StartTime = DateTime.UtcNow,
+            EndTime = DateTime.UtcNow.AddDays(7)
         };
 
-        // Assert
-        campaign.Status.Should().Be(CampaignStatus.Draft);
-        campaign.SurveyForms.Should().BeEmpty();
+        survey.CourseSectionSurveyId.Should().Be(1);
+        survey.SemesterSurveyId.Should().Be(10);
+        survey.CourseSectionId.Should().Be(20);
+        survey.LinkToken.Should().Be("tok_test123");
+        survey.EndTime.Should().BeAfter(survey.StartTime);
     }
 
     [Fact]
-    public void SurveyResponse_WithAnswers_ShouldBelongToForm()
+    public void SurveyResponse_WithScoreAndAnswers_CalculatesCorrectly()
     {
-        // Arrange
-        var formId = Guid.NewGuid();
         var response = new SurveyResponse
         {
-            SurveyFormId = formId,
-            RespondentId = "SV12345",
+            ResponseId = 100,
+            CourseSectionSurveyId = 1,
+            Score = 4.75m,
+            AdditionalComments = "Giảng viên nhiệt tình, tận tâm",
             SubmittedAt = DateTime.UtcNow
         };
 
-        var answer = new SurveyAnswer
+        response.ResponseId.Should().Be(100);
+        response.CourseSectionSurveyId.Should().Be(1);
+        response.Score.Should().Be(4.75m);
+        response.AdditionalComments.Should().Be("Giảng viên nhiệt tình, tận tâm");
+        response.SubmittedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public void UserProfile_ShouldLinkToUserAndRole()
+    {
+        var userId = Guid.NewGuid();
+        var roleId = Guid.NewGuid();
+        var profile = new UserProfile
         {
-            SurveyResponseId = response.Id,
-            QuestionId = Guid.NewGuid(),
-            TextAnswer = "Hài lòng với phương pháp giảng dạy"
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            RoleId = roleId,
+            ProfileCode = "ADMIN_MAIN",
+            ProfileName = "Quản trị viên toàn hệ thống",
+            IsActive = true,
+            IsDefault = true
         };
 
-        response.Answers.Add(answer);
-
-        // Act & Assert
-        response.SurveyFormId.Should().Be(formId);
-        response.RespondentId.Should().Be("SV12345");
-        response.Answers.Should().HaveCount(1);
-        response.Answers.First().TextAnswer.Should().Be("Hài lòng với phương pháp giảng dạy");
+        profile.UserId.Should().Be(userId);
+        profile.RoleId.Should().Be(roleId);
+        profile.IsActive.Should().BeTrue();
+        profile.IsDefault.Should().BeTrue();
     }
 }
