@@ -48,6 +48,8 @@ public sealed class Permission
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    /// <summary>Nhóm module hiển thị trong màn phân quyền, ví dụ: "Quản trị hệ thống", "Khảo sát", "Báo cáo".</summary>
+    public string Category { get; set; } = string.Empty;
 }
 
 public sealed class RolePermission
