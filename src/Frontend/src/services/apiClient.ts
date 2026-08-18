@@ -29,7 +29,12 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     throw new ApiError(response.status, body.errorCode ?? 'API_REQUEST_FAILED');
   }
 
-  return response.json() as Promise<T>;
+  // 204/empty bodies (e.g. NoContent) have nothing to parse
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 let cachedCsrfToken: string | null = null;
