@@ -168,7 +168,6 @@ export function RolePermissionEditor({ roles }: RolePermissionEditorProps) {
                 aria-selected={role.id === selectedRoleId}
               >
                 <div className="perm-role-item__name">{role.name}</div>
-                <div className="perm-role-item__code">{role.code}</div>
               </button>
             </li>
           ))}
@@ -245,10 +244,7 @@ export function RolePermissionEditor({ roles }: RolePermissionEditorProps) {
                 const inputId = `perm-toggle-${perm.permissionId}`;
                 return (
                   <li key={perm.permissionId} className="perm-row">
-                    <div>
-                      <div className="perm-row__name">{perm.permissionName}</div>
-                      <div className="perm-row__code">{perm.permissionCode}</div>
-                    </div>
+                    <div className="perm-row__name">{perm.permissionName}</div>
                     <span className="perm-toggle">
                       <input
                         id={inputId}

@@ -1083,9 +1083,10 @@
   display: flex;
   flex: 1 0 auto;
   flex-direction: column;
-  margin: 12px 0 0;
+  margin: 0;
   overflow: hidden;
   border: 1px solid var(--ops-border-strong);
+  border-top: 0;
   background: var(--ops-surface);
 }
 
@@ -1957,11 +1958,6 @@
   color: var(--ops-primary-dark);
 }
 
-.perm-role-item__code {
-  font-size: 11px;
-  color: var(--ops-muted);
-}
-
 .perm-content {
   flex: 1;
   min-width: 0;
@@ -2072,11 +2068,6 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--ops-text);
-}
-
-.perm-row__code {
-  font-size: 11px;
-  color: var(--ops-muted);
 }
 
 .perm-toggle {
