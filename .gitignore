@@ -86,6 +86,10 @@ project.fragment.lock.json
 pgdata/
 .pgdata/
 postgres-data/
+# Database export/dump files should not live in the repo
+khaosatvmu_dump.sql
+*_dump.sql
+pgadmin-servers.json
 
 # ==========================================
 # 5. Docker & Orchestration
