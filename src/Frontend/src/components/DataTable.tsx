@@ -1,13 +1,16 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, Inbox, Plus, Search } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Inbox, Plus, Search } from 'lucide-react';
 import '../styles/catalogs.css';
 
 export interface Column<T> {
   key: string;
   header: string;
   render?: (item: T) => ReactNode;
+  sortValue?: (item: T) => string | number | null | undefined;
   width?: string;
 }
+
+export type DataTableSortDirection = 'asc' | 'desc';
 
 interface DataTableProps<T> {
   columns: Column<T>[];
@@ -25,6 +28,9 @@ interface DataTableProps<T> {
   keyExtractor: (item: T) => string;
   /** Số dòng mỗi trang. Bỏ trống thì hiển thị toàn bộ, không phân trang. */
   pageSize?: number;
+  sortKey?: string;
+  sortDirection?: DataTableSortDirection;
+  onSortChange?: (key?: string, direction?: DataTableSortDirection) => void;
 }
 
 export function DataTable<T>({
@@ -42,20 +48,61 @@ export function DataTable<T>({
   emptyMessage = 'Chưa có dữ liệu trong danh mục này.',
   keyExtractor,
   pageSize,
+  sortKey,
+  sortDirection = 'asc',
+  onSortChange,
 }: DataTableProps<T>) {
   const hasQuery = Boolean(searchValue.trim() || currentFilter);
   const resolvedAddLabel = addNewLabel.replace(/^\+\s*/, '');
 
   const [page, setPage] = useState(1);
-  const totalPages = pageSize ? Math.max(1, Math.ceil(data.length / pageSize)) : 1;
+  const sortedData = useMemo(() => {
+    if (!sortKey) return data;
+    const column = columns.find((item) => item.key === sortKey && item.sortValue);
+    if (!column?.sortValue) return data;
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    return [...data].sort((leftItem, rightItem) => {
+      const left = column.sortValue?.(leftItem);
+      const right = column.sortValue?.(rightItem);
+      if (left === right) return 0;
+      if (left === null || left === undefined) return 1;
+      if (right === null || right === undefined) return -1;
+      const result = typeof left === 'number' && typeof right === 'number'
+        ? left - right
+        : String(left).localeCompare(String(right), 'vi', { numeric: true, sensitivity: 'base' });
+      return result * direction;
+    });
+  }, [columns, data, sortDirection, sortKey]);
+
+  const totalPages = pageSize ? Math.max(1, Math.ceil(sortedData.length / pageSize)) : 1;
 
   // Lọc hoặc xóa bớt dòng có thể làm trang hiện tại vượt quá số trang còn lại.
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
   }, [totalPages]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [sortDirection, sortKey]);
+
   const firstIndex = pageSize ? (page - 1) * pageSize : 0;
-  const visibleRows = pageSize ? data.slice(firstIndex, firstIndex + pageSize) : data;
+  const visibleRows = pageSize ? sortedData.slice(firstIndex, firstIndex + pageSize) : sortedData;
+
+  const changeSort = (column: Column<T>) => {
+    if (!column.sortValue || !onSortChange) return;
+    if (sortKey !== column.key) {
+      onSortChange(column.key, 'asc');
+    } else if (sortDirection === 'asc') {
+      onSortChange(column.key, 'desc');
+    } else {
+      onSortChange(undefined, undefined);
+    }
+  };
+
+  const nextSortAction = (column: Column<T>): string => {
+    if (sortKey !== column.key) return 'tăng dần';
+    return sortDirection === 'asc' ? 'giảm dần' : 'bỏ sắp xếp';
+  };
 
   return (
     <section className="catalog-table-shell" aria-label="Danh sách danh mục">
@@ -114,7 +161,21 @@ export function DataTable<T>({
               <th className="catalog-table__index" scope="col">STT</th>
               {columns.map((column) => (
                 <th key={column.key} scope="col" style={{ width: column.width }}>
-                  {column.header}
+                  {column.sortValue && onSortChange ? (
+                    <button
+                      type="button"
+                      className="catalog-sort-button"
+                      onClick={() => changeSort(column)}
+                      aria-label={`Sắp xếp ${column.header}: ${nextSortAction(column)}`}
+                    >
+                      {column.header}
+                      {sortKey !== column.key
+                        ? <ArrowUpDown aria-hidden="true" />
+                        : sortDirection === 'asc'
+                          ? <ArrowUp aria-hidden="true" />
+                          : <ArrowDown aria-hidden="true" />}
+                    </button>
+                  ) : column.header}
                 </th>
               ))}
             </tr>

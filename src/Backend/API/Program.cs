@@ -1,5 +1,6 @@
 using API.Auth;
 using API.Catalog;
+using API.Configuration;
 using API.Middleware;
 using API.Reports;
 using API.Surveys;
@@ -23,6 +24,8 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Threading.RateLimiting;
+
+DevelopmentEnvironment.LoadNearestEnvFile();
 
 // High-Concurrency ThreadPool Warmup for 1,000+ Concurrent Requests
 ThreadPool.SetMinThreads(300, 300);

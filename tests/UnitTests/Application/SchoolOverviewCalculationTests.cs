@@ -104,8 +104,8 @@ public class SchoolOverviewCalculationTests
         overview.SchoolAverageScore.Should().Be(overview.OverallAverageScore);
         overview.Faculties.Should().ContainSingle();
         overview.Departments.Should().ContainSingle();
-        overview.PreviousSemester!.CompletionRateDelta.Should().Be(6.43m);
-        overview.PreviousSemester!.AverageScoreDelta.Should().Be(0.35m);
+        overview.SemesterComparison!.CompletionRateDelta.Should().Be(6.43m);
+        overview.SemesterComparison!.AverageScoreDelta.Should().Be(0.35m);
     }
 
     // ---- Câu hỏi yếu nhất toàn trường --------------------------------------

@@ -221,7 +221,7 @@ export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
       <div className="section-analysis-chart-container">
         <div
           className="section-analysis-chart-scroll"
-          style={needsScroll ? { overflowX: 'auto', paddingBottom: '8px' } : undefined}
+          style={needsScroll ? { paddingBottom: '8px' } : undefined}
         >
           <div
             style={{
@@ -380,8 +380,6 @@ export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
                   <tr
                     key={question.questionId}
                     className={`analysis-table-row ${isHovered ? 'is-highlighted' : ''}`}
-                    onMouseEnter={() => setHoveredCode(question.code)}
-                    onMouseLeave={() => setHoveredCode(null)}
                   >
                     <td className="analysis-code-cell">
                       <span

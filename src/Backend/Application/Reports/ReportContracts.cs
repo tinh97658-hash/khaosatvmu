@@ -155,13 +155,13 @@ public sealed record DepartmentOverviewDto(
     decimal CompletionRate,
     decimal AverageScore);
 
-/// <summary>So sánh học kỳ hiện tại với học kỳ liền trước (xu hướng).</summary>
+/// <summary>So sánh học kỳ hiện tại với một học kỳ được chọn.</summary>
 public sealed record SemesterComparisonDto(
-    int PreviousSemesterId,
-    string PreviousSemesterName,
-    string PreviousAcademicYearName,
-    decimal PreviousCompletionRate,
-    decimal PreviousAverageScore,
+    int ComparisonSemesterId,
+    string ComparisonSemesterName,
+    string ComparisonAcademicYearName,
+    decimal ComparisonCompletionRate,
+    decimal ComparisonAverageScore,
     decimal CompletionRateDelta,
     decimal AverageScoreDelta);
 
@@ -194,8 +194,8 @@ public sealed record SchoolSurveyOverviewDto(
     // Tiêu chí yếu nhất toàn trường (gộp mọi phiếu trong kỳ)
     IReadOnlyList<QuestionRatingDto> WeakestQuestions,
 
-    // Xu hướng so với học kỳ liền trước (null nếu chưa có kỳ trước)
-    SemesterComparisonDto? PreviousSemester);
+    // Xu hướng so với học kỳ được chọn (mặc định là kỳ liền trước)
+    SemesterComparisonDto? SemesterComparison);
 
 /// <summary>Dịch vụ truy vấn và tổng hợp các báo cáo thống kê.</summary>
 public interface IReportService
@@ -243,8 +243,9 @@ public interface IReportService
         string? search,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Lấy bảng tổng quan toàn trường của một học kỳ (executive summary + so sánh kỳ trước).</summary>
+    /// <summary>Lấy bảng tổng quan toàn trường và so sánh với kỳ được chọn (mặc định là kỳ trước).</summary>
     Task<SchoolSurveyOverviewDto?> GetSchoolSurveyOverviewAsync(
         int semesterId,
+        int? comparisonSemesterId = null,
         CancellationToken cancellationToken = default);
 }

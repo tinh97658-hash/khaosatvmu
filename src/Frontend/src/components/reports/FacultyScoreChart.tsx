@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -13,6 +13,11 @@ import {
 import { Building2 } from 'lucide-react';
 import type { FacultyOverview } from '../../types';
 import { scoreColor } from './theme';
+import { FacultyNameAxisTick } from './FacultyNameAxisTick';
+import { wrapFacultyName } from './facultyChartLabels';
+import { ChartPagination } from './ChartPagination';
+
+const PAGE_SIZE = 10;
 
 interface FacultyScoreChartProps {
   faculties: FacultyOverview[];
@@ -48,9 +53,27 @@ export const FacultyScoreChart: React.FC<FacultyScoreChartProps> = ({
   schoolAverage,
   onSelect,
 }) => {
-  const data = [...faculties]
-    .sort((a, b) => a.averageScore - b.averageScore)
-    .map((f) => ({ ...f, name: f.facultyName }));
+  const [page, setPage] = useState(1);
+  const data = useMemo(
+    () => [...faculties]
+      .sort((a, b) => a.averageScore - b.averageScore)
+      .map((f) => ({ ...f, name: f.facultyName })),
+    [faculties],
+  );
+  const pageCount = Math.max(1, Math.ceil(data.length / PAGE_SIZE));
+  const pageData = data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, pageCount));
+  }, [pageCount]);
+
+  const chartHeight = Math.max(
+    250,
+    pageData.reduce(
+      (height, item) => height + 40 + (wrapFacultyName(item.name).length - 1) * 14,
+      90,
+    ),
+  );
 
   if (data.length === 0) {
     return (
@@ -60,11 +83,11 @@ export const FacultyScoreChart: React.FC<FacultyScoreChartProps> = ({
 
   return (
     <div className="reports-chart" aria-label="Điểm trung bình theo Khoa">
-      <ResponsiveContainer width="100%" height={Math.max(220, data.length * 36 + 60)}>
+      <ResponsiveContainer width="100%" height={chartHeight}>
         <BarChart
-          data={data}
+          data={pageData}
           layout="vertical"
-          margin={{ top: 8, right: 40, left: 12, bottom: 8 }}
+          margin={{ top: 32, right: 48, left: 8, bottom: 8 }}
         >
           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#eef2f6" />
           <XAxis
@@ -78,10 +101,10 @@ export const FacultyScoreChart: React.FC<FacultyScoreChartProps> = ({
           <YAxis
             type="category"
             dataKey="name"
-            width={150}
+            width={190}
             tickLine={false}
             axisLine={false}
-            tick={{ fontSize: 12, fill: '#20262c' }}
+            tick={<FacultyNameAxisTick />}
           />
           <Tooltip content={<ScoreTooltip />} cursor={{ fill: 'rgba(7,136,184,0.06)' }} />
           {schoolAverage > 0 && (
@@ -107,7 +130,7 @@ export const FacultyScoreChart: React.FC<FacultyScoreChartProps> = ({
             }}
             cursor={onSelect ? 'pointer' : 'default'}
           >
-            {data.map((entry) => (
+            {pageData.map((entry) => (
               <Cell
                 key={entry.facultyId}
                 fill={scoreColor(entry.averageScore)}
@@ -120,6 +143,14 @@ export const FacultyScoreChart: React.FC<FacultyScoreChartProps> = ({
         <Building2 className="operation-icon" aria-hidden="true" />
         <span>Click vào cột để lọc chi tiết theo Khoa.</span>
       </div>
+      <ChartPagination
+        page={page}
+        pageCount={pageCount}
+        pageSize={PAGE_SIZE}
+        totalItems={data.length}
+        itemLabel="Khoa/Viện"
+        onPageChange={setPage}
+      />
     </div>
   );
 };
