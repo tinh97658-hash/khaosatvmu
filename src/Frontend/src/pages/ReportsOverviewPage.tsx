@@ -1,25 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import {
-  BarChart,
-  Bar,
-  Cell,
-  PieChart,
-  Pie,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-  Legend,
-} from 'recharts';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   Building2,
   CheckCircle2,
+  ChevronRight,
   CircleAlert,
-  FileText,
+  ClipboardList,
   GraduationCap,
   LoaderCircle,
+  Search,
   ShieldAlert,
   Star,
   Target,
@@ -27,173 +16,322 @@ import {
   Users,
 } from 'lucide-react';
 import { useAuth } from '../auth/authContext';
-import { Modal } from '../components/Modal';
+import { useSemester } from '../context/semesterContext';
+import { DataTable, type Column } from '../components/DataTable';
+import { QuestionAnalysisChart } from '../components/QuestionAnalysisChart';
+import { SchoolSurveyOverview } from '../components/reports/SchoolSurveyOverview';
+import { SectionSurveyResponsesPage } from './SectionSurveyResponsesPage';
 import { catalogApi } from '../services/catalogApi';
 import { reportApi } from '../services/reportApi';
 import { surveyApi } from '../services/surveyApi';
 import type {
-  AcademicYear,
-  FacultyDepartmentReport,
+  Department,
+  Faculty,
+  Lecturer,
   LecturerPerformanceReport,
-  OperationalProgressReport,
   SemesterSurvey,
-  SurveyQuestionSummaryReport,
+  SurveyResultDetail,
 } from '../types';
 import '../styles/survey-operations.css';
+import '../styles/reports.css';
 
-const COLOR_PALETTE = ['#0788b8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#3b82f6'];
+/** Điểm bắt đầu khi người dùng nhảy từ màn khác vào module báo cáo. */
+export interface ReportInitialSelection {
+  courseSectionSurveyId?: number;
+}
 
-export const ReportsOverviewPage: React.FC = () => {
+/** Một đơn vị (Khoa hoặc Bộ môn) gộp từ kết quả để xếp hạng. */
+interface RankedUnit {
+  id: number;
+  name: string;
+  classSize: number;
+  responseCount: number;
+  completionRate: number;
+  averageScore: number;
+  sectionCount: number;
+}
+
+const scoreColor = (score: number): string =>
+  score >= 4.5 ? '#137b3b' : score >= 4.0 ? '#0788b8' : '#b86216';
+
+const completionColor = (rate: number): string =>
+  rate >= 80 ? '#137b3b' : rate >= 40 ? '#0788b8' : '#b86216';
+
+export const ReportsOverviewPage: React.FC<{
+  initialSelection?: ReportInitialSelection | null;
+  onConsumeSelection?: () => void;
+}> = ({ initialSelection, onConsumeSelection }) => {
   const { access } = useAuth();
+  const {
+    academicYears,
+    activeSemesterId,
+  } = useSemester();
+  const [selectedSemesterId, setSelectedSemesterId] = useState<number | undefined>(
+    () => activeSemesterId ?? undefined
+  );
 
-  // Permission helpers
+  // Khi học kỳ làm việc toàn cục (Header) thay đổi, cập nhật bộ lọc trang theo
+  useEffect(() => {
+    if (activeSemesterId !== null && activeSemesterId !== undefined) {
+      setSelectedSemesterId(activeSemesterId);
+    }
+  }, [activeSemesterId]);
+
   const hasPermission = (code: string) =>
     !access || access.permissions.includes('ADMIN_ACCESS') || access.permissions.includes(code);
-
   const canViewReports = hasPermission('VIEW_REPORTS');
-  const canViewOp = hasPermission('VIEW_REPORTS_OPERATIONAL');
-  const canViewLec = hasPermission('VIEW_REPORTS_LECTURERS');
-  const canViewFac = hasPermission('VIEW_REPORTS_FACULTIES');
-  const canViewQ = hasPermission('VIEW_REPORTS_QUESTIONS');
 
-  // Active tab state
-  const [activeTab, setActiveTab] = useState<'operational' | 'lecturers' | 'faculties' | 'questions'>('operational');
-
-  // Set default tab based on permission
-  useEffect(() => {
-    if (!canViewOp && canViewLec) setActiveTab('lecturers');
-    else if (!canViewOp && !canViewLec && canViewFac) setActiveTab('faculties');
-    else if (!canViewOp && !canViewLec && !canViewFac && canViewQ) setActiveTab('questions');
-  }, [canViewOp, canViewLec, canViewFac, canViewQ]);
-
-  // Filters state
-  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
-  const [selectedSemesterId, setSelectedSemesterId] = useState<number | undefined>(undefined);
-
-  // Operational state
-  const [opReport, setOpReport] = useState<OperationalProgressReport | null>(null);
-  const [opLoading, setOpLoading] = useState(false);
-  const [opSearch, setOpSearch] = useState('');
-
-  // Lecturer report state
-  const [lecturerReports, setLecturerReports] = useState<LecturerPerformanceReport[]>([]);
-  const [lecLoading, setLecLoading] = useState(false);
-  const [selectedLecturer, setSelectedLecturer] = useState<LecturerPerformanceReport | null>(null);
-  const [lecSearch, setLecSearch] = useState('');
-
-  // Faculty report state
-  const [facultyReports, setFacultyReports] = useState<FacultyDepartmentReport[]>([]);
-  const [facLoading, setFacLoading] = useState(false);
-
-  // Question Analysis state
+  // Danh sách lựa chọn bộ lọc.
+  const [faculties, setFaculties] = useState<Faculty[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [lecturers, setLecturers] = useState<Lecturer[]>([]);
   const [semesterSurveys, setSemesterSurveys] = useState<SemesterSurvey[]>([]);
-  const [selectedSurveyId, setSelectedSurveyId] = useState<number | undefined>(undefined);
-  const [qReport, setQReport] = useState<SurveyQuestionSummaryReport | null>(null);
-  const [qLoading, setQLoading] = useState(false);
 
+  // Bộ lọc.
+  const [facultyId, setFacultyId] = useState<number | undefined>(undefined);
+  const [departmentId, setDepartmentId] = useState<number | undefined>(undefined);
+  const [lecturerId, setLecturerId] = useState<number | undefined>(undefined);
+  const [semesterSurveyId, setSemesterSurveyId] = useState<number | undefined>(undefined);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Kết quả.
+  const [results, setResults] = useState<SurveyResultDetail[]>([]);
+  const [resultsLoading, setResultsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Load initial academic years
-  useEffect(() => {
-    async function loadYears() {
-      try {
-        const years = await catalogApi.academicYears();
-        setAcademicYears(years);
-        if (years.length > 0 && years[0].semesters.length > 0) {
-          setSelectedSemesterId(years[0].semesters[0].semesterId);
-        }
-      } catch (err) {
-        console.error('Failed to load academic years', err);
-      }
-    }
-    void loadYears();
+  // Drill-down: giảng viên → bài khảo sát.
+  const [lecturer, setLecturer] = useState<LecturerPerformanceReport | null>(null);
+  const [lecturerDetail, setLecturerDetail] = useState<LecturerPerformanceReport | null>(null);
+  const [lecDetailLoading, setLecDetailLoading] = useState(false);
+  const [surveyId, setSurveyId] = useState<number | null>(null);
+  const [surveyTitle, setSurveyTitle] = useState<string | null>(null);
+
+  const backToOverview = useCallback(() => {
+    setLecturer(null);
+    setLecturerDetail(null);
+    setSurveyId(null);
+    setSurveyTitle(null);
   }, []);
 
-  // Fetch Operational Progress
-  useEffect(() => {
-    if (!selectedSemesterId || activeTab !== 'operational' || !canViewOp) return;
-    setOpLoading(true);
-    reportApi.operationalProgress(selectedSemesterId)
-      .then((data) => {
-        setOpReport(data);
-        setLoadError(null);
-      })
-      .catch((err) => {
-        console.error(err);
-        setLoadError('Không thể tải báo cáo tiến độ vận hành.');
-      })
-      .finally(() => setOpLoading(false));
-  }, [selectedSemesterId, activeTab, canViewOp]);
+  const backToLecturer = useCallback(() => {
+    setSurveyId(null);
+    setSurveyTitle(null);
+  }, []);
 
-  // Fetch Lecturer Reports
+  // Nạp danh mục để dựng bộ lọc.
   useEffect(() => {
-    if (activeTab !== 'lecturers' || !canViewLec) return;
-    setLecLoading(true);
-    reportApi.lecturers({ semesterId: selectedSemesterId })
-      .then((data) => {
-        setLecturerReports(data);
-        setLoadError(null);
-      })
-      .catch((err) => {
-        console.error(err);
-        setLoadError('Không thể tải báo cáo đánh giá giảng viên.');
-      })
-      .finally(() => setLecLoading(false));
-  }, [selectedSemesterId, activeTab, canViewLec]);
+    let cancelled = false;
+    async function load() {
+      try {
+        const [nextFaculties, nextDepartments, nextLecturers] = await Promise.all([
+          catalogApi.faculties(),
+          catalogApi.departments(),
+          catalogApi.lecturers(),
+        ]);
+        if (cancelled) return;
+        setFaculties(nextFaculties);
+        setDepartments(nextDepartments);
+        setLecturers(nextLecturers);
+      } catch {
+        if (!cancelled) setLoadError('Không tải được danh mục để lọc báo cáo.');
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  // Fetch Faculty Reports
+  // Nạp danh sách đợt khảo sát theo học kỳ (bộ lọc "đợt khảo sát").
   useEffect(() => {
-    if (activeTab !== 'faculties' || !canViewFac) return;
-    setFacLoading(true);
-    reportApi.faculties(selectedSemesterId)
-      .then((data) => {
-        setFacultyReports(data);
-        setLoadError(null);
-      })
-      .catch((err) => {
-        console.error(err);
-        setLoadError('Không thể tải báo cáo thống kê Khoa/Bộ môn.');
-      })
-      .finally(() => setFacLoading(false));
-  }, [selectedSemesterId, activeTab, canViewFac]);
-
-  // Fetch Semester Surveys for Question Analysis
-  useEffect(() => {
-    if (activeTab !== 'questions' || !canViewQ) return;
-    surveyApi.semesterSurveys()
+    if (!selectedSemesterId) {
+      setSemesterSurveys([]);
+      return;
+    }
+    let cancelled = false;
+    surveyApi
+      .semesterSurveys(selectedSemesterId)
       .then((surveys) => {
-        setSemesterSurveys(surveys);
-        if (surveys.length > 0) {
-          setSelectedSurveyId(surveys[0].semesterSurveyId);
+        if (!cancelled) setSemesterSurveys(surveys);
+      })
+      .catch(() => {
+        if (!cancelled) setSemesterSurveys([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSemesterId]);
+
+  // Debounce ô tìm kiếm.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 350);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  // Nhảy thẳng vào chi tiết một bài khảo sát (từ màn Khảo sát học phần).
+  useEffect(() => {
+    if (!initialSelection?.courseSectionSurveyId) return;
+    backToOverview();
+    setSurveyId(initialSelection.courseSectionSurveyId);
+    setSurveyTitle('Chi tiết bài khảo sát');
+    onConsumeSelection?.();
+  }, [initialSelection, backToOverview, onConsumeSelection]);
+
+  // Lấy kết quả theo bộ lọc.
+  useEffect(() => {
+    if (!selectedSemesterId) return;
+    let cancelled = false;
+    setResultsLoading(true);
+    reportApi
+      .results({
+        semesterId: selectedSemesterId,
+        facultyId,
+        departmentId,
+        lecturerId,
+        semesterSurveyId,
+        search: debouncedSearch || undefined,
+      })
+      .then((data) => {
+        if (!cancelled) {
+          setResults(data);
+          setLoadError(null);
         }
       })
-      .catch(console.error);
-  }, [activeTab, canViewQ]);
+      .catch(() => {
+        if (!cancelled) setLoadError('Không thể tải kết quả khảo sát.');
+      })
+      .finally(() => {
+        if (!cancelled) setResultsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSemesterId, facultyId, departmentId, lecturerId, semesterSurveyId, debouncedSearch]);
 
-  // Fetch Question Summary Report
-  useEffect(() => {
-    if (activeTab !== 'questions' || !selectedSurveyId || !canViewQ) return;
-    setQLoading(true);
-    reportApi.questionAnalysis(selectedSurveyId)
-      .then((data) => {
-        setQReport(data);
+  const openLecturer = useCallback(
+    async (lecturerId: number, lecturerName: string) => {
+      if (!selectedSemesterId) return;
+      setLecturer({ lecturerId, fullName: lecturerName } as LecturerPerformanceReport);
+      setLecturerDetail(null);
+      setLecDetailLoading(true);
+      try {
+        const detail = await reportApi.lecturerDetail(lecturerId, selectedSemesterId);
+        setLecturerDetail(detail);
         setLoadError(null);
-      })
-      .catch((err) => {
-        console.error(err);
-        setLoadError('Không thể tải báo cáo phân tích tiêu chí.');
-      })
-      .finally(() => setQLoading(false));
-  }, [selectedSurveyId, activeTab, canViewQ]);
+      } catch {
+        setLoadError('Không thể tải chi tiết đánh giá giảng viên.');
+      } finally {
+        setLecDetailLoading(false);
+      }
+    },
+    [selectedSemesterId],
+  );
+
+  const handleResetFilters = useCallback(() => {
+    setFacultyId(undefined);
+    setDepartmentId(undefined);
+    setLecturerId(undefined);
+    setSemesterSurveyId(undefined);
+    setSearch('');
+  }, []);
+
+  // Drill-down từ bảng tổng quan toàn trường → gán bộ lọc và cuộn tới bảng kết quả.
+  const handleOverviewDrillDown = useCallback(
+    (filter: { facultyId?: number; departmentId?: number }) => {
+      setFacultyId(filter.facultyId);
+      setDepartmentId(filter.departmentId);
+      setLecturerId(undefined);
+      window.setTimeout(() => {
+        document.getElementById('reports-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120);
+    },
+    [],
+  );
+
+  // Danh sách lựa chọn phụ thuộc.
+  const departmentOptions = useMemo(
+    () =>
+      departments.filter(
+        (dept) => !facultyId || dept.facultyId === facultyId,
+      ),
+    [departments, facultyId],
+  );
+
+  const lecturerOptions = useMemo(
+    () =>
+      lecturers.filter(
+        (lec) =>
+          (!facultyId || lec.facultyId === facultyId) &&
+          (!departmentId || lec.departmentId === departmentId),
+      ),
+    [lecturers, facultyId, departmentId],
+  );
+
+  // KPI gộp từ kết quả đang lọc.
+  const kpi = useMemo(() => {
+    const totalTarget = results.reduce((sum, item) => sum + item.classSize, 0);
+    const totalCollected = results.reduce((sum, item) => sum + item.responseCount, 0);
+    const completionRate = totalTarget > 0 ? (totalCollected / totalTarget) * 100 : 0;
+    return { totalTarget, totalCollected, completionRate, classCount: results.length };
+  }, [results]);
+
+  // Xếp hạng Khoa / Bộ môn từ kết quả.
+  const buildRanking = useCallback(
+    (key: 'faculty' | 'department'): RankedUnit[] => {
+      const groups = new Map<string, RankedUnit>();
+      for (const item of results) {
+        const id = key === 'faculty' ? item.facultyId : item.departmentId;
+        const name = key === 'faculty' ? item.facultyName : item.departmentName;
+        if (id === 0 || !name || name === 'Chưa thuộc khoa' || name === 'Chưa thuộc bộ môn') continue;
+        const group = groups.get(`${id}`);
+        if (!group) {
+          groups.set(`${id}`, {
+            id,
+            name,
+            classSize: item.classSize,
+            responseCount: item.responseCount,
+            completionRate: 0,
+            averageScore: 0,
+            sectionCount: 1,
+          });
+        } else {
+          group.classSize += item.classSize;
+          group.responseCount += item.responseCount;
+          group.sectionCount += 1;
+        }
+      }
+      const ranked: RankedUnit[] = [];
+      for (const group of groups.values()) {
+        const items = results.filter((item) => (key === 'faculty' ? item.facultyId : item.departmentId) === group.id);
+        const scoreSum = items.reduce((sum, item) => sum + item.averageScore * item.responseCount, 0);
+        const scoreCount = items.reduce((sum, item) => sum + item.responseCount, 0);
+        group.averageScore = scoreCount > 0 ? scoreSum / scoreCount : 0;
+        group.completionRate = group.classSize > 0 ? (group.responseCount / group.classSize) * 100 : 0;
+        ranked.push(group);
+      }
+      return ranked.sort((a, b) => b.averageScore - a.averageScore).slice(0, 10);
+    },
+    [results],
+  );
+
+  const topFaculties = useMemo(() => buildRanking('faculty'), [buildRanking]);
+  const topDepartments = useMemo(() => buildRanking('department'), [buildRanking]);
+
+  const semesterLabel = useMemo(() => {
+    for (const year of academicYears) {
+      const found = year.semesters.find((s) => s.semesterId === selectedSemesterId);
+      if (found) return `${year.academicYearName} · ${found.semesterName}`;
+    }
+    return 'Học kỳ';
+  }, [academicYears, selectedSemesterId]);
 
   if (!canViewReports) {
     return (
       <div className="survey-operations-page" style={{ padding: '40px 20px', textAlign: 'center' }}>
         <div style={{ maxWidth: '500px', margin: '0 auto', background: '#fff', padding: '32px', border: '1px solid #dfe4e8', borderRadius: '4px' }}>
-          <ShieldAlert style={{ width: '48px', height: '48px', color: '#ef4444', margin: '0 auto 16px' }} />
-          <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px', color: '#20262c' }}>
-            Không có quyền truy cập
-          </h2>
+          <ShieldAlert style={{ width: '48px', height: '48px', color: '#b52d2d', margin: '0 auto 16px' }} />
+          <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px', color: '#20262c' }}>Không có quyền truy cập</h2>
           <p style={{ color: '#68737d', fontSize: '14px', lineHeight: '1.5' }}>
             Tài khoản của bạn chưa được cấp quyền <code>VIEW_REPORTS</code> để xem báo cáo thống kê. Vui lòng liên hệ Quản trị viên hệ thống để được phân quyền.
           </p>
@@ -202,48 +340,253 @@ export const ReportsOverviewPage: React.FC = () => {
     );
   }
 
-  // Filtered operational section details
-  const filteredSectionDetails = opReport?.sectionDetails.filter(
-    (s) =>
-      s.courseName.toLowerCase().includes(opSearch.toLowerCase()) ||
-      s.courseCode.toLowerCase().includes(opSearch.toLowerCase()) ||
-      s.lecturerName.toLowerCase().includes(opSearch.toLowerCase()),
-  ) ?? [];
+  const isSurveyMode = surveyId !== null;
+  const isLecturerMode = !isSurveyMode && lecturer !== null;
 
-  // Filtered lecturer list
-  const filteredLecturers = lecturerReports.filter(
-    (l) =>
-      l.fullName.toLowerCase().includes(lecSearch.toLowerCase()) ||
-      l.departmentName.toLowerCase().includes(lecSearch.toLowerCase()) ||
-      l.facultyName.toLowerCase().includes(lecSearch.toLowerCase()),
+  const renderQuestionAnalysis = (questions: LecturerPerformanceReport['questionRatings']) => {
+    return (
+      <QuestionAnalysisChart
+        questions={questions}
+        overallAverageScore={lecturerDetail?.averageScore}
+        responseCount={lecturerDetail?.totalResponses}
+        title="Phân tích kết quả theo câu hỏi"
+        showDistributionTable={true}
+        emptyMessage="Chưa có phiếu trả lời cho giảng viên này trong học kỳ đã chọn."
+      />
+    );
+  };
+
+  const renderRankedTable = (title: string, icon: React.ReactNode, data: RankedUnit[]) => (
+    <section className="reports-rank" aria-label={title}>
+      <header className="reports-rank-header">
+        <span className="reports-rank-title">
+          {icon}
+          <h3>{title}</h3>
+        </span>
+        <span className="reports-rank-note">Theo điểm trung bình</span>
+      </header>
+      {data.length === 0 ? (
+        <div className="reports-rank-empty">Chưa có dữ liệu xếp hạng.</div>
+      ) : (
+        <table className="campaign-table reports-rank-table">
+          <thead>
+            <tr>
+              <th className="reports-rank-col">Hạng</th>
+              <th>Đơn vị</th>
+              <th className="reports-rank-num-col">Phiếu</th>
+              <th className="reports-rank-completion-col">Hoàn thành</th>
+              <th className="reports-rank-num-col">Điểm TB</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((item, index) => (
+              <tr key={`${title}-${item.id}`}>
+                <td className="reports-rank-medal">
+                  <span className={index < 3 ? `reports-rank-place is-top${index + 1}` : ''}>{index + 1}</span>
+                </td>
+                <td className="reports-rank-name">
+                  <span className="catalog-cell-primary">{item.name}</span>
+                  <span className="catalog-secondary-value">{item.sectionCount} lớp khảo sát</span>
+                </td>
+                <td className="report-number-cell">{item.responseCount}</td>
+                <td className="reports-rank-completion">
+                  <div className="reports-progress">
+                    <span style={{ width: `${Math.min(100, item.completionRate)}%`, background: completionColor(item.completionRate) }} />
+                  </div>
+                  <span style={{ color: completionColor(item.completionRate) }}>{item.completionRate.toFixed(0)}%</span>
+                </td>
+                <td className="reports-rank-score" style={{ color: scoreColor(item.averageScore) }}>
+                  <Star style={{ width: '13px', height: '13px', fill: 'currentColor' }} aria-hidden="true" />
+                  {item.averageScore.toFixed(2)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 
-  return (
-    <div className="survey-operations-page">
-      {/* Header Bar */}
-      <div style={{ background: '#ffffff', borderBottom: '1px solid #dfe4e8', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0788b8', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            <BarChart3 style={{ width: '16px', height: '16px' }} />
-            Hệ thống Báo cáo & Thống kê
-          </div>
-          <h1 style={{ fontSize: '22px', fontWeight: '700', color: '#20262c', margin: '4px 0 0' }}>
-            Tổng quan Chỉ số Kiểm định & Khảo sát
-          </h1>
-        </div>
+  const resultColumns: Column<SurveyResultDetail>[] = [
+    {
+      key: 'course',
+      header: 'Học phần',
+      render: (item) => (
+        <>
+          <span className="catalog-cell-primary">
+            {item.courseCode} - {item.courseName}
+          </span>
+          <span className="catalog-secondary-value">Lớp {item.sectionName}</span>
+        </>
+      ),
+    },
+    {
+      key: 'facultyName',
+      header: 'Khoa',
+      render: (item) => <span className="catalog-cell-primary">{item.facultyName}</span>,
+    },
+    {
+      key: 'departmentName',
+      header: 'Bộ môn',
+      render: (item) => <span className="catalog-cell-primary">{item.departmentName}</span>,
+    },
+    {
+      key: 'lecturerName',
+      header: 'Giảng viên',
+      render: (item) => (
+        <button
+          type="button"
+          className="report-lecturer-link"
+          onClick={() => void openLecturer(item.lecturerId, item.lecturerName)}
+          title={`Xem chi tiết ${item.lecturerName}`}
+        >
+          {item.lecturerName}
+        </button>
+      ),
+    },
+    {
+      key: 'templateName',
+      header: 'Đợt khảo sát',
+      render: (item) => <span className="catalog-cell-primary">{item.templateName}</span>,
+    },
+    {
+      key: 'classSize',
+      header: 'Sĩ số',
+      width: '80px',
+      render: (item) => <span className="catalog-cell-number">{item.classSize}</span>,
+    },
+    {
+      key: 'responseCount',
+      header: 'Phiếu',
+      width: '80px',
+      render: (item) => <span className="catalog-cell-number">{item.responseCount}</span>,
+    },
+    {
+      key: 'completionRate',
+      header: 'Hoàn thành',
+      width: '150px',
+      render: (item) => (
+        <span className="reports-progress-cell">
+          <span className="reports-progress">
+            <span style={{ width: `${Math.min(100, item.completionRate)}%`, background: completionColor(item.completionRate) }} />
+          </span>
+          <span style={{ color: completionColor(item.completionRate), fontWeight: 700, fontSize: 12 }}>
+            {item.completionRate.toFixed(0)}%
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: 'averageScore',
+      header: 'Điểm TB',
+      width: '100px',
+      render: (item) => (
+        <span className="catalog-score" style={{ color: scoreColor(item.averageScore) }}>
+          <Star style={{ width: '13px', height: '13px', fill: 'currentColor' }} aria-hidden="true" />
+          {item.averageScore > 0 ? item.averageScore.toFixed(2) : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Thao tác',
+      width: '130px',
+      render: (item) => (
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => {
+            setSurveyId(item.courseSectionSurveyId);
+            setSurveyTitle(`${item.courseCode} - ${item.courseName} (${item.sectionName})`);
+          }}
+        >
+          <ClipboardList className="operation-icon" aria-hidden="true" />
+          Xem kết quả
+        </button>
+      ),
+    },
+  ];
 
-        {/* Semester Selector */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <label style={{ fontSize: '12px', fontWeight: '600', color: '#68737d' }}>Học kỳ:</label>
+  const sectionColumns: Column<LecturerPerformanceReport['sections'][number]>[] = [
+    {
+      key: 'course',
+      header: 'Học phần',
+      render: (item) => (
+        <>
+          <span className="catalog-cell-primary">
+            {item.courseCode} - {item.courseName}
+          </span>
+          <span className="catalog-secondary-value">Lớp {item.sectionName}</span>
+        </>
+      ),
+    },
+    {
+      key: 'classSize',
+      header: 'Sĩ số',
+      width: '80px',
+      render: (item) => <span className="catalog-cell-number">{item.classSize}</span>,
+    },
+    {
+      key: 'responseCount',
+      header: 'Phiếu',
+      width: '80px',
+      render: (item) => <span className="catalog-cell-number">{item.responseCount}</span>,
+    },
+    {
+      key: 'averageScore',
+      header: 'Điểm TB (thang 5)',
+      width: '130px',
+      render: (item) => (
+        <span className="catalog-score" style={{ color: scoreColor(item.averageScore) }}>
+          <Star style={{ width: '13px', height: '13px', fill: 'currentColor' }} aria-hidden="true" />
+          {item.averageScore > 0 ? item.averageScore.toFixed(2) : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Thao tác',
+      width: '140px',
+      render: (item) => (
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => setSurveyId(item.courseSectionSurveyId)}
+        >
+          <ClipboardList className="operation-icon" aria-hidden="true" />
+          Xem kết quả
+        </button>
+      ),
+    },
+  ];
+
+  return (
+    <div className="survey-operations-page reports-module">
+      {/* Thanh tiêu đề + chọn học kỳ */}
+      <div className="reports-header">
+        <div>
+          <div className="reports-eyebrow">
+            <BarChart3 className="operation-icon" aria-hidden="true" />
+            Hệ thống Thống kê & Báo cáo
+          </div>
+          <h1 className="reports-title">Thống kê kết quả khảo sát học phần</h1>
+        </div>
+        <div className="operations-field reports-semester-field">
+          <label htmlFor="reports-semester">Học kỳ</label>
           <select
+            id="reports-semester"
             value={selectedSemesterId ?? ''}
-            onChange={(e) => setSelectedSemesterId(Number(e.target.value))}
-            style={{ padding: '6px 12px', fontSize: '13px', border: '1px solid #dfe4e8', borderRadius: '4px', background: '#fff', color: '#20262c', fontWeight: '600' }}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              setSelectedSemesterId(Number.isNaN(next) ? undefined : next);
+              handleResetFilters();
+              backToOverview();
+            }}
           >
-            {academicYears.flatMap((y) =>
-              y.semesters.map((s) => (
-                <option key={s.semesterId} value={s.semesterId}>
-                  {y.academicYearName} - {s.semesterName}
+            {academicYears.flatMap((year) =>
+              year.semesters.map((semester) => (
+                <option key={semester.semesterId} value={semester.semesterId}>
+                  {year.academicYearName} - {semester.semesterName}
                 </option>
               )),
             )}
@@ -251,470 +594,288 @@ export const ReportsOverviewPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Modern Pill Navigation Bar */}
-      <div style={{ background: '#ffffff', borderBottom: '1px solid #dfe4e8', padding: '0 20px' }}>
-        <div className="operations-tabs" style={{ gap: '8px', border: 0 }}>
-          {canViewOp && (
-            <button
-              type="button"
-              className={`operations-tab ${activeTab === 'operational' ? 'is-active' : ''}`}
-              onClick={() => setActiveTab('operational')}
-            >
-              <Target style={{ width: '16px', height: '16px' }} />
-              Tiến độ vận hành
+      {/* Breadcrumb */}
+      <nav className="reports-breadcrumb" aria-label="Đường dẫn thống kê">
+        <button type="button" className="reports-crumb reports-crumb--link" onClick={backToOverview}>
+          Kết quả khảo sát
+        </button>
+        {lecturer && (
+          <>
+            <ChevronRight className="operation-icon reports-crumb-sep" aria-hidden="true" />
+            <button type="button" className="reports-crumb reports-crumb--link" onClick={backToLecturer}>
+              {lecturer.fullName}
             </button>
-          )}
-          {canViewLec && (
-            <button
-              type="button"
-              className={`operations-tab ${activeTab === 'lecturers' ? 'is-active' : ''}`}
-              onClick={() => setActiveTab('lecturers')}
-            >
-              <GraduationCap style={{ width: '16px', height: '16px' }} />
-              Đánh giá Giảng viên
-            </button>
-          )}
-          {canViewFac && (
-            <button
-              type="button"
-              className={`operations-tab ${activeTab === 'faculties' ? 'is-active' : ''}`}
-              onClick={() => setActiveTab('faculties')}
-            >
-              <Building2 style={{ width: '16px', height: '16px' }} />
-              Thống kê Khoa / Bộ môn
-            </button>
-          )}
-          {canViewQ && (
-            <button
-              type="button"
-              className={`operations-tab ${activeTab === 'questions' ? 'is-active' : ''}`}
-              onClick={() => setActiveTab('questions')}
-            >
-              <FileText style={{ width: '16px', height: '16px' }} />
-              Phân tích Tiêu chí
-            </button>
-          )}
-        </div>
-      </div>
+          </>
+        )}
+        {surveyTitle && (
+          <>
+            <ChevronRight className="operation-icon reports-crumb-sep" aria-hidden="true" />
+            <span className="reports-crumb reports-crumb--current">{surveyTitle}</span>
+          </>
+        )}
+        {!lecturer && !surveyTitle && (
+          <span className="reports-crumb reports-crumb--current">Tổng hợp & lọc kết quả</span>
+        )}
+        <span className="reports-breadcrumb-semester">{semesterLabel}</span>
+      </nav>
 
-      {/* Error alert */}
       {loadError && (
-        <div style={{ margin: '16px 20px', padding: '12px 16px', background: '#fff5f5', border: '1px solid #eccaca', borderLeft: '4px solid #ef4444', borderRadius: '4px', color: '#9f2727', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <CircleAlert style={{ width: '18px', height: '18px' }} />
-          {loadError}
+        <div className="operations-feedback operations-feedback--error" role="alert">
+          <CircleAlert aria-hidden="true" />
+          <span>{loadError}</span>
         </div>
       )}
 
-      {/* Main Content Area */}
-      <div style={{ padding: '20px' }}>
+      {/* CẤP CHI TIẾT BÀI KHẢO SÁT */}
+      {isSurveyMode && surveyId !== null && (
+        <SectionSurveyResponsesPage
+          courseSectionSurveyId={surveyId}
+          onBack={backToLecturer}
+          backLabel={lecturer ? `Quay lại đánh giá ${lecturer.fullName}` : 'Quay lại kết quả khảo sát'}
+          showAnalysis
+        />
+      )}
 
-        {/* TAB 1: TIẾN ĐỘ VẬN HÀNH */}
-        {activeTab === 'operational' && canViewOp && (
-          <div style={{ display: 'grid', gap: '20px' }}>
-            {/* KPI Overview Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-              <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: '#e8f5fa', color: '#0788b8', display: 'grid', placeItems: 'center' }}>
-                  <Users style={{ width: '24px', height: '24px' }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '12px', color: '#68737d', fontWeight: '600' }}>Chỉ tiêu Phiếu</div>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#20262c', margin: '2px 0' }}>
-                    {opReport?.totalTargetResponses.toLocaleString('vi-VN') ?? 0}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#68737d' }}>Sinh viên trong danh sách</div>
-                </div>
-              </div>
-
-              <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: '#ecfdf5', color: '#10b981', display: 'grid', placeItems: 'center' }}>
-                  <CheckCircle2 style={{ width: '24px', height: '24px' }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '12px', color: '#68737d', fontWeight: '600' }}>Đã thu nộp</div>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#10b981', margin: '2px 0' }}>
-                    {opReport?.totalActualResponses.toLocaleString('vi-VN') ?? 0}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#68737d' }}>Phiếu hoàn thành hợp lệ</div>
-                </div>
-              </div>
-
-              <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: '#fef3c7', color: '#d97706', display: 'grid', placeItems: 'center' }}>
-                  <TrendingUp style={{ width: '24px', height: '24px' }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '12px', color: '#68737d', fontWeight: '600' }}>Tỷ lệ Hoàn thành</div>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#d97706', margin: '2px 0' }}>
-                    {opReport?.overallCompletionRate.toFixed(1) ?? 0}%
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#68737d' }}>Tiến độ khảo sát học kỳ</div>
-                </div>
-              </div>
-
-              <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: '#f3e8ff', color: '#8b5cf6', display: 'grid', placeItems: 'center' }}>
-                  <Target style={{ width: '24px', height: '24px' }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '12px', color: '#68737d', fontWeight: '600' }}>Số Lớp khảo sát</div>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#8b5cf6', margin: '2px 0' }}>
-                    {(opReport?.completedSectionCount ?? 0) + (opReport?.inProgressSectionCount ?? 0) + (opReport?.laggingSectionCount ?? 0)}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#68737d' }}>Lớp học phần đã khởi tạo đợt</div>
-                </div>
-              </div>
+      {/* CẤP CHI TIẾT GIẢNG VIÊN */}
+      {isLecturerMode && lecturer && (
+        <div className="reports-drill-grid">
+          {lecDetailLoading ? (
+            <div className="operations-empty" role="status">
+              <LoaderCircle className="operation-icon auth-spin" aria-hidden="true" />
+              <strong>Đang tải chi tiết đánh giá giảng viên...</strong>
             </div>
+          ) : lecturerDetail ? (
+            <>
+              <section className="reports-summary-band" aria-label="Tóm tắt đánh giá giảng viên">
+                <div className="reports-summary-main">
+                  <div className="reports-summary-title">
+                    <GraduationCap className="operation-icon" aria-hidden="true" />
+                    <h2>{lecturerDetail.fullName}</h2>
+                  </div>
+                  <p>
+                    {lecturerDetail.departmentName} · {lecturerDetail.facultyName}
+                  </p>
+                </div>
+                <div className="reports-summary-metrics">
+                  <div>
+                    <span>Điểm trung bình</span>
+                    <strong style={{ color: scoreColor(lecturerDetail.averageScore) }}>
+                      {lecturerDetail.averageScore.toFixed(2)}
+                      <small>/ 5.0</small>
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Số phiếu đã thu</span>
+                    <strong>{lecturerDetail.totalResponses}</strong>
+                  </div>
+                  <div>
+                    <span>Số lớp học phần</span>
+                    <strong>{lecturerDetail.courseSectionCount}</strong>
+                  </div>
+                </div>
+              </section>
 
-            {/* Visual Charts & Table Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: '20px' }}>
-              {/* Detailed Progress Table */}
-              <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                  <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#20262c' }}>Chi tiết Tiến độ Lớp Học Phần</h3>
+              {renderQuestionAnalysis(lecturerDetail.questionRatings)}
+
+              <DataTable
+                columns={sectionColumns}
+                data={lecturerDetail.sections ?? []}
+                searchPlaceholder="Tìm học phần hoặc lớp..."
+                emptyMessage="Giảng viên này chưa có lớp học phần nào trong học kỳ."
+                keyExtractor={(item) => String(item.courseSectionSurveyId)}
+                pageSize={10}
+              />
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {/* CẤP TỔNG HỢP: tổng quan toàn trường + bộ lọc + KPI + xếp hạng + bảng kết quả */}
+      {!isLecturerMode && !isSurveyMode && (
+        <div className="reports-overview">
+          {/* Bảng tổng quan toàn trường (executive dashboard) */}
+          {selectedSemesterId !== undefined && (
+            <SchoolSurveyOverview
+              semesterId={selectedSemesterId}
+              onDrillDown={handleOverviewDrillDown}
+            />
+          )}
+
+          {/* Thanh lọc */}
+          <section className="reports-filter-bar" aria-label="Lọc kết quả khảo sát">
+            <div className="reports-filter-grid">
+              <div className="operations-field">
+                <label htmlFor="filter-faculty">Khoa / Viện</label>
+                <select
+                  id="filter-faculty"
+                  value={facultyId ?? ''}
+                  onChange={(e) => {
+                    const next = e.target.value ? Number(e.target.value) : undefined;
+                    setFacultyId(next);
+                    setDepartmentId(undefined);
+                    setLecturerId(undefined);
+                  }}
+                >
+                  <option value="">Tất cả Khoa / Viện</option>
+                  {faculties.map((fac) => (
+                    <option key={fac.facultyId} value={fac.facultyId}>
+                      {fac.facultyName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="operations-field">
+                <label htmlFor="filter-department">Bộ môn</label>
+                <select
+                  id="filter-department"
+                  value={departmentId ?? ''}
+                  onChange={(e) => {
+                    const next = e.target.value ? Number(e.target.value) : undefined;
+                    setDepartmentId(next);
+                    setLecturerId(undefined);
+                  }}
+                >
+                  <option value="">Tất cả Bộ môn</option>
+                  {departmentOptions.map((dept) => (
+                    <option key={dept.departmentId} value={dept.departmentId}>
+                      {dept.departmentName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="operations-field">
+                <label htmlFor="filter-lecturer">Giảng viên</label>
+                <select
+                  id="filter-lecturer"
+                  value={lecturerId ?? ''}
+                  onChange={(e) => setLecturerId(e.target.value ? Number(e.target.value) : undefined)}
+                >
+                  <option value="">Tất cả Giảng viên</option>
+                  {lecturerOptions.map((lec) => (
+                    <option key={lec.lecturerId} value={lec.lecturerId}>
+                      {lec.fullName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="operations-field">
+                <label htmlFor="filter-campaign">Đợt khảo sát</label>
+                <select
+                  id="filter-campaign"
+                  value={semesterSurveyId ?? ''}
+                  onChange={(e) => setSemesterSurveyId(e.target.value ? Number(e.target.value) : undefined)}
+                >
+                  <option value="">Tất cả đợt khảo sát</option>
+                  {semesterSurveys.map((survey) => (
+                    <option key={survey.semesterSurveyId} value={survey.semesterSurveyId}>
+                      {survey.templateName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="operations-field reports-search-field">
+                <label htmlFor="filter-search">Tìm học phần, lớp, giảng viên</label>
+                <div className="reports-search-box">
+                  <Search className="operation-icon" aria-hidden="true" />
                   <input
-                    type="text"
-                    placeholder="Tìm tên lớp, học phần, giảng viên..."
-                    value={opSearch}
-                    onChange={(e) => setOpSearch(e.target.value)}
-                    style={{ padding: '6px 12px', fontSize: '12px', border: '1px solid #dfe4e8', borderRadius: '4px', width: '240px' }}
+                    id="filter-search"
+                    type="search"
+                    placeholder="Mã HP, tên HP, lớp, giảng viên..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
                   />
                 </div>
-
-                {opLoading ? (
-                  <div style={{ padding: '40px', textAlign: 'center', color: '#0788b8' }}>
-                    <LoaderCircle className="auth-spin" style={{ width: '28px', height: '28px', margin: '0 auto 8px' }} />
-                    <span>Đang tải tiến độ...</span>
-                  </div>
-                ) : (
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                      <thead>
-                        <tr style={{ background: '#f7f9fa', borderBottom: '2px solid #dfe4e8' }}>
-                          <th style={{ textAlign: 'left', padding: '10px', color: '#68737d', fontWeight: '700' }}>Mã HP</th>
-                          <th style={{ textAlign: 'left', padding: '10px', color: '#68737d', fontWeight: '700' }}>Tên học phần & Lớp</th>
-                          <th style={{ textAlign: 'left', padding: '10px', color: '#68737d', fontWeight: '700' }}>Giảng viên</th>
-                          <th style={{ textAlign: 'right', padding: '10px', color: '#68737d', fontWeight: '700' }}>Đã nộp</th>
-                          <th style={{ textAlign: 'left', padding: '10px', color: '#68737d', fontWeight: '700', width: '140px' }}>Tiến độ</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredSectionDetails.map((sec) => (
-                          <tr key={sec.courseSectionSurveyId} style={{ borderBottom: '1px solid #dfe4e8' }}>
-                            <td style={{ padding: '10px', fontWeight: '600', color: '#0788b8' }}>{sec.courseCode}</td>
-                            <td style={{ padding: '10px', fontWeight: '600', color: '#20262c' }}>
-                              {sec.courseName} ({sec.sectionName})
-                            </td>
-                            <td style={{ padding: '10px', color: '#68737d' }}>{sec.lecturerName}</td>
-                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#10b981' }}>
-                              {sec.responseCount} / {sec.classSize}
-                            </td>
-                            <td style={{ padding: '10px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <div style={{ flex: 1, height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
-                                  <div
-                                    style={{
-                                      width: `${Math.min(100, sec.completionRate)}%`,
-                                      height: '100%',
-                                      background: sec.completionRate >= 80 ? '#10b981' : sec.completionRate >= 50 ? '#0788b8' : '#f59e0b',
-                                      borderRadius: '4px',
-                                    }}
-                                  />
-                                </div>
-                                <span style={{ fontSize: '11px', fontWeight: '700', color: '#20262c', width: '36px', textAlign: 'right' }}>
-                                  {sec.completionRate.toFixed(0)}%
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
               </div>
 
-              {/* Donut Chart Component */}
-              <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '20px', display: 'flex', flexDirection: 'column' }}>
-                <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#20262c', marginBottom: '16px' }}>Tỷ lệ Đã nộp / Còn lại</h3>
-                <div style={{ flex: 1, minHeight: '260px', display: 'grid', placeItems: 'center' }}>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Đã hoàn thành', value: opReport?.totalActualResponses ?? 0 },
-                          { name: 'Còn lại', value: Math.max(0, (opReport?.totalTargetResponses ?? 0) - (opReport?.totalActualResponses ?? 0)) },
-                        ]}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={90}
-                        paddingAngle={4}
-                        dataKey="value"
-                      >
-                        <Cell key="cell-completed" fill="#10b981" />
-                        <Cell key="cell-remaining" fill="#e5e7eb" />
-                      </Pie>
-                      <Tooltip formatter={(value: any) => [Number(value ?? 0).toLocaleString('vi-VN'), 'Số phiếu']} />
-                      <Legend verticalAlign="bottom" height={36} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
+              <div className="reports-filter-actions">
+                <button type="button" className="btn btn-secondary" onClick={handleResetFilters}>
+                  Xóa bộ lọc
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* KPI */}
+          <div className="reports-kpi-grid" aria-label="Tổng quan kết quả đang lọc">
+            <div className="reports-kpi">
+              <div className="reports-kpi-icon" style={{ background: '#e8f5fa', color: '#0788b8' }}>
+                <Users className="operation-icon" aria-hidden="true" />
+              </div>
+              <div>
+                <span>Chỉ tiêu phiếu</span>
+                <strong>{kpi.totalTarget.toLocaleString('vi-VN')}</strong>
+                <small>Sinh viên trong danh sách</small>
+              </div>
+            </div>
+            <div className="reports-kpi">
+              <div className="reports-kpi-icon" style={{ background: '#e7f4ec', color: '#137b3b' }}>
+                <CheckCircle2 className="operation-icon" aria-hidden="true" />
+              </div>
+              <div>
+                <span>Đã thu nộp</span>
+                <strong>{kpi.totalCollected.toLocaleString('vi-VN')}</strong>
+                <small>Phiếu hoàn thành hợp lệ</small>
+              </div>
+            </div>
+            <div className="reports-kpi">
+              <div className="reports-kpi-icon" style={{ background: '#fdf1e3', color: '#b86216' }}>
+                <TrendingUp className="operation-icon" aria-hidden="true" />
+              </div>
+              <div>
+                <span>Tỷ lệ hoàn thành</span>
+                <strong>{kpi.completionRate.toFixed(1)}%</strong>
+                <small>Phiếu thu / chỉ tiêu</small>
+              </div>
+            </div>
+            <div className="reports-kpi">
+              <div className="reports-kpi-icon" style={{ background: '#eef1f4', color: '#20262c' }}>
+                <Target className="operation-icon" aria-hidden="true" />
+              </div>
+              <div>
+                <span>Số lớp khảo sát</span>
+                <strong>{kpi.classCount}</strong>
+                <small>Lớp học phần trong bộ lọc</small>
               </div>
             </div>
           </div>
-        )}
 
-        {/* TAB 2: ĐÁNH GIÁ GIẢNG VIÊN */}
-        {activeTab === 'lecturers' && canViewLec && (
-          <div style={{ display: 'grid', gap: '20px' }}>
-            {/* Top Bar Search & Filters */}
-            <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
-              <input
-                type="text"
-                placeholder="Tìm giảng viên, Bộ môn hoặc Khoa..."
-                value={lecSearch}
-                onChange={(e) => setLecSearch(e.target.value)}
-                style={{ padding: '8px 14px', fontSize: '13px', border: '1px solid #dfe4e8', borderRadius: '4px', width: '320px' }}
-              />
-              <div style={{ fontSize: '13px', color: '#68737d' }}>
-                Tổng cộng: <strong style={{ color: '#20262c' }}>{filteredLecturers.length}</strong> giảng viên được đánh giá
-              </div>
-            </div>
-
-            {/* Visual Recharts Bar Chart: Top 10 Lecturers */}
-            <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '20px' }}>
-              <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#20262c', marginBottom: '16px' }}>
-                Top 10 Giảng viên có Điểm Đánh giá Cao nhất
-              </h3>
-              <div style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={[...filteredLecturers].sort((a, b) => b.averageScore - a.averageScore).slice(0, 10)}
-                    margin={{ top: 10, right: 30, left: 20, bottom: 40 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="fullName" angle={-15} textAnchor="end" interval={0} tick={{ fontSize: 11 }} />
-                    <YAxis domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} />
-                    <Tooltip formatter={(val: any) => [`${Number(val ?? 0).toFixed(2)} / 5.0`, 'Điểm TB']} />
-                    <Bar dataKey="averageScore" fill="#0788b8" radius={[4, 4, 0, 0]}>
-                      {[...filteredLecturers].sort((a, b) => b.averageScore - a.averageScore).slice(0, 10).map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.averageScore >= 4.5 ? '#10b981' : '#0788b8'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Lecturer Table */}
-            <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '20px' }}>
-              <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#20262c', marginBottom: '16px' }}>
-                Danh sách Chi tiết Đánh giá Giảng viên
-              </h3>
-              {lecLoading ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: '#0788b8' }}>
-                  <LoaderCircle className="auth-spin" style={{ width: '28px', height: '28px', margin: '0 auto 8px' }} />
-                  <span>Đang tải kết quả giảng viên...</span>
-                </div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead>
-                      <tr style={{ background: '#f7f9fa', borderBottom: '2px solid #dfe4e8' }}>
-                        <th style={{ textAlign: 'left', padding: '10px', color: '#68737d', fontWeight: '700' }}>Họ và tên Giảng viên</th>
-                        <th style={{ textAlign: 'left', padding: '10px', color: '#68737d', fontWeight: '700' }}>Bộ môn / Khoa</th>
-                        <th style={{ textAlign: 'right', padding: '10px', color: '#68737d', fontWeight: '700' }}>Số phiếu</th>
-                        <th style={{ textAlign: 'right', padding: '10px', color: '#68737d', fontWeight: '700' }}>Số lớp</th>
-                        <th style={{ textAlign: 'right', padding: '10px', color: '#68737d', fontWeight: '700' }}>Điểm TB (Thang 5)</th>
-                        <th style={{ textAlign: 'center', padding: '10px', color: '#68737d', fontWeight: '700' }}>Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredLecturers.map((lec) => (
-                        <tr key={lec.lecturerId} style={{ borderBottom: '1px solid #dfe4e8' }}>
-                          <td style={{ padding: '10px', fontWeight: '700', color: '#20262c' }}>{lec.fullName}</td>
-                          <td style={{ padding: '10px', color: '#68737d' }}>{lec.departmentName} - {lec.facultyName}</td>
-                          <td style={{ padding: '10px', textAlign: 'right', fontWeight: '600' }}>{lec.totalResponses}</td>
-                          <td style={{ padding: '10px', textAlign: 'right', fontWeight: '600' }}>{lec.courseSectionCount}</td>
-                          <td style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: lec.averageScore >= 4.5 ? '#10b981' : lec.averageScore >= 4.0 ? '#0788b8' : '#f59e0b' }}>
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <Star style={{ width: '14px', height: '14px', fill: 'currentColor' }} />
-                              {lec.averageScore.toFixed(2)}
-                            </div>
-                          </td>
-                          <td style={{ padding: '10px', textAlign: 'center' }}>
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              style={{ padding: '4px 10px', fontSize: '11px' }}
-                              onClick={() => setSelectedLecturer(lec)}
-                            >
-                              Xem phiếu
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: THỐNG KÊ KHOA BỘ MÔN */}
-        {activeTab === 'faculties' && canViewFac && (
-          <div style={{ display: 'grid', gap: '20px' }}>
-            {/* Visual Recharts Bar Chart: Faculty Performance */}
-            <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '20px' }}>
-              <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#20262c', marginBottom: '16px' }}>
-                So sánh Điểm Đánh giá Hài lòng Trung bình theo Khoa
-              </h3>
-              <div style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={facultyReports} margin={{ top: 10, right: 30, left: 20, bottom: 40 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="facultyName" angle={-10} textAnchor="end" interval={0} tick={{ fontSize: 11 }} />
-                    <YAxis domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} />
-                    <Tooltip formatter={(val: any) => [`${Number(val ?? 0).toFixed(2)} / 5.0`, 'Điểm trung bình']} />
-                    <Bar dataKey="averageSatisfactionScore" fill="#10b981" radius={[4, 4, 0, 0]}>
-                      {facultyReports.map((_, index) => (
-                        <Cell key={`cell-fac-${index}`} fill={COLOR_PALETTE[index % COLOR_PALETTE.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Faculty Cards Grid */}
-            {facLoading ? (
-              <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '40px', textAlign: 'center', color: '#0788b8' }}>
-                <LoaderCircle className="auth-spin" style={{ width: '28px', height: '28px', margin: '0 auto 8px' }} />
-                <span>Đang tải kết quả Khoa/Bộ môn...</span>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
-                {facultyReports.map((fac) => (
-                  <div key={fac.facultyId} style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                      <h4 style={{ fontSize: '16px', fontWeight: '700', color: '#20262c', margin: 0 }}>{fac.facultyName}</h4>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '16px' }}>
-                      <div style={{ background: '#f7f9fa', padding: '10px', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '11px', color: '#68737d' }}>Số Bộ môn</div>
-                        <div style={{ fontSize: '18px', fontWeight: '700', color: '#20262c' }}>{fac.totalDepartments}</div>
-                      </div>
-                      <div style={{ background: '#f7f9fa', padding: '10px', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '11px', color: '#68737d' }}>Số Giảng viên</div>
-                        <div style={{ fontSize: '18px', fontWeight: '700', color: '#20262c' }}>{fac.totalLecturers}</div>
-                      </div>
-                      <div style={{ background: '#f7f9fa', padding: '10px', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '11px', color: '#68737d' }}>Tổng số phiếu</div>
-                        <div style={{ fontSize: '18px', fontWeight: '700', color: '#0788b8' }}>{fac.totalResponses}</div>
-                      </div>
-                      <div style={{ background: '#f7f9fa', padding: '10px', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '11px', color: '#68737d' }}>Điểm Hài lòng TB</div>
-                        <div style={{ fontSize: '18px', fontWeight: '700', color: '#10b981' }}>{fac.averageSatisfactionScore.toFixed(2)}</div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {/* Xếp hạng Top Khoa / Bộ môn */}
+          <div className="reports-rank-grid">
+            {renderRankedTable(
+              'Top Khoa / Viện theo điểm TB',
+              <Building2 className="operation-icon" aria-hidden="true" />,
+              topFaculties,
+            )}
+            {renderRankedTable(
+              'Top Bộ môn theo điểm TB',
+              <Target className="operation-icon" aria-hidden="true" />,
+              topDepartments,
             )}
           </div>
-        )}
 
-        {/* TAB 4: PHÂN TÍCH TIÊU CHÍ */}
-        {activeTab === 'questions' && canViewQ && (
-          <div style={{ display: 'grid', gap: '20px' }}>
-            {/* Survey Select */}
-            <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <label style={{ fontSize: '13px', fontWeight: '700', color: '#20262c' }}>Chọn đợt khảo sát:</label>
-              <select
-                value={selectedSurveyId ?? ''}
-                onChange={(e) => setSelectedSurveyId(Number(e.target.value))}
-                style={{ padding: '8px 14px', fontSize: '13px', border: '1px solid #dfe4e8', borderRadius: '4px', background: '#fff', width: '360px', fontWeight: '600' }}
-              >
-                {semesterSurveys.map((s) => (
-                  <option key={s.semesterSurveyId} value={s.semesterSurveyId}>
-                    {s.templateName} - {s.semesterName} ({s.academicYearName})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Question Summary Bar Chart */}
-            {qLoading ? (
-              <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '40px', textAlign: 'center', color: '#0788b8' }}>
-                <LoaderCircle className="auth-spin" style={{ width: '28px', height: '28px', margin: '0 auto 8px' }} />
-                <span>Đang phân tích dữ liệu tiêu chí...</span>
-              </div>
-            ) : qReport && (
-              <div style={{ background: '#fff', border: '1px solid #dfe4e8', borderRadius: '6px', padding: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                  <div>
-                    <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#20262c' }}>{qReport.templateName}</h3>
-                    <div style={{ fontSize: '12px', color: '#68737d', marginTop: '2px' }}>
-                      Tổng số phiếu phản hồi: <strong>{qReport.totalResponses}</strong> | Điểm trung bình chung: <strong style={{ color: '#10b981' }}>{qReport.overallAverageScore.toFixed(2)} / 5.0</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ height: '360px', marginTop: '20px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      layout="vertical"
-                      data={qReport.questions}
-                      margin={{ top: 10, right: 30, left: 140, bottom: 10 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                      <XAxis type="number" domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} />
-                      <YAxis type="category" dataKey="questionText" width={130} tick={{ fontSize: 11 }} />
-                      <Tooltip formatter={(val: any) => [`${Number(val ?? 0).toFixed(2)} / 5.0`, 'Điểm trung bình']} />
-                      <Bar dataKey="averageScore" fill="#0788b8" radius={[0, 4, 4, 0]}>
-                        {qReport.questions.map((entry, index) => (
-                          <Cell key={`cell-q-${index}`} fill={entry.averageScore >= 4.5 ? '#10b981' : entry.averageScore >= 4.0 ? '#0788b8' : '#f59e0b'} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Lecturer Detail Modal */}
-      {selectedLecturer && (
-        <Modal
-          isOpen={!!selectedLecturer}
-          onClose={() => setSelectedLecturer(null)}
-          title={`Chi tiết Đánh giá: ${selectedLecturer.fullName}`}
-        >
-          <div style={{ padding: '8px' }}>
-            <div style={{ background: '#f7f9fa', padding: '14px', borderRadius: '4px', marginBottom: '16px' }}>
-              <div style={{ fontSize: '13px', fontWeight: '700', color: '#20262c' }}>{selectedLecturer.fullName}</div>
-              <div style={{ fontSize: '12px', color: '#68737d', marginTop: '2px' }}>Bộ môn: {selectedLecturer.departmentName} - {selectedLecturer.facultyName}</div>
-              <div style={{ display: 'flex', gap: '16px', marginTop: '10px' }}>
-                <div>Số lượt đánh giá: <strong>{selectedLecturer.totalResponses}</strong></div>
-                <div>Số lớp: <strong>{selectedLecturer.courseSectionCount}</strong></div>
-                <div>Điểm TB: <strong style={{ color: '#10b981' }}>{selectedLecturer.averageScore.toFixed(2)}</strong></div>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setSelectedLecturer(null)}
-              style={{ width: '100%' }}
-            >
-              Đóng
-            </button>
-          </div>
-        </Modal>
+          {/* Bảng kết quả chi tiết */}
+          <section
+            className="reports-table-section"
+            id="reports-results"
+            aria-label="Bảng kết quả chi tiết"
+          >
+            <DataTable
+              columns={resultColumns}
+              data={results}
+              emptyMessage={
+                resultsLoading
+                  ? 'Đang tải kết quả...'
+                  : 'Không có lớp học phần nào khớp với bộ lọc hiện tại.'
+              }
+              keyExtractor={(item) => String(item.courseSectionSurveyId)}
+              pageSize={20}
+            />
+          </section>
+        </div>
       )}
     </div>
   );

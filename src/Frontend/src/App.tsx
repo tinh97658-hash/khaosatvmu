@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react
 import { toast } from 'sonner';
 import { useAuth } from './auth/authContext';
 import { AuthLoading } from './components/AuthLoading';
+import type { ReportInitialSelection } from './pages/ReportsOverviewPage';
 
 // Shared Components
 import { Header } from './components/Header';
@@ -78,12 +79,21 @@ function DashboardApp() {
   const auth = useAuth();
   const [currentTab, setCurrentTabState] = useState<string>(getInitialTab);
   const [isStudentView, setIsStudentView] = useState<boolean>(false);
+  const [reportSelection, setReportSelection] = useState<ReportInitialSelection | null>(null);
   const canManageUsers = auth.access?.permissions.includes('ADMIN_ACCESS') ?? false;
 
   const setCurrentTab = useCallback((tab: string) => {
     setCurrentTabState(tab);
     window.location.hash = tab;
   }, []);
+
+  const handleOpenSurveyReport = useCallback(
+    (courseSectionSurveyId: number) => {
+      setReportSelection({ courseSectionSurveyId });
+      setCurrentTab('reports');
+    },
+    [setCurrentTab],
+  );
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -522,7 +532,12 @@ function DashboardApp() {
               />
             )}
 
-            {currentTab === 'reports' && <ReportsOverviewPage />}
+            {currentTab === 'reports' && (
+              <ReportsOverviewPage
+                initialSelection={reportSelection}
+                onConsumeSelection={() => setReportSelection(null)}
+              />
+            )}
 
             {currentTab === 'faculties' && (
               <FacultiesPage
@@ -600,7 +615,7 @@ function DashboardApp() {
             )}
 
             {(currentTab === 'course-campaigns' || currentTab === 'campaigns') && (
-              <CourseSurveysPage />
+              <CourseSurveysPage onOpenSurveyReport={handleOpenSurveyReport} />
             )}
 
             {currentTab === 'program-campaigns' && (

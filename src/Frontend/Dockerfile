@@ -2,10 +2,10 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
 
-COPY package*.json ./
+COPY src/Frontend/package*.json ./
 RUN npm ci
 
-COPY . .
+COPY src/Frontend/ ./
 RUN npm run build
 
 # Stage 2: Serve static files with Nginx
@@ -17,7 +17,7 @@ RUN rm -rf ./*
 
 # Copy bản build SPA và file cấu hình Nginx
 COPY --from=builder /app/dist .
-COPY ../deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

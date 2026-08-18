@@ -58,6 +58,45 @@ public static class ReportEndpoints
             return report is null ? Results.NotFound() : Results.Ok(report);
         });
 
+        group.MapGet("/section-analysis", async (
+            int courseSectionSurveyId,
+            IReportService reportService,
+            CancellationToken cancellationToken) =>
+        {
+            var report = await reportService.GetSectionSurveyAnalysisAsync(courseSectionSurveyId, cancellationToken);
+            return report is null ? Results.NotFound() : Results.Ok(report);
+        });
+
+        group.MapGet("/school-overview", async (
+            int semesterId,
+            IReportService reportService,
+            CancellationToken cancellationToken) =>
+        {
+            var report = await reportService.GetSchoolSurveyOverviewAsync(semesterId, cancellationToken);
+            return report is null ? Results.NotFound() : Results.Ok(report);
+        });
+
+        group.MapGet("/results", async (
+            int? semesterId,
+            int? facultyId,
+            int? departmentId,
+            int? lecturerId,
+            int? semesterSurveyId,
+            string? search,
+            IReportService reportService,
+            CancellationToken cancellationToken) =>
+        {
+            var results = await reportService.GetSurveyResultsAsync(
+                semesterId,
+                facultyId,
+                departmentId,
+                lecturerId,
+                semesterSurveyId,
+                search,
+                cancellationToken);
+            return Results.Ok(results);
+        });
+
         return app;
     }
 }

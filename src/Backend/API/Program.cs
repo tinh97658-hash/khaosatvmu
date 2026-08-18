@@ -18,16 +18,11 @@ using Infrastructure.Services;
 using Infrastructure.Surveys;
 using Infrastructure.UserAdministration;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-
-var environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
-    ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
-if (string.Equals(environmentName, Environments.Development, StringComparison.OrdinalIgnoreCase))
-{
-    DotNetEnv.Env.NoClobber().TraversePath().Load();
-}
+using System.Threading.RateLimiting;
 
 // High-Concurrency ThreadPool Warmup for 1,000+ Concurrent Requests
 ThreadPool.SetMinThreads(300, 300);
@@ -70,6 +65,23 @@ builder.Services.AddRateLimiter(options =>
         limiterOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
         limiterOptions.QueueLimit = 500;
     });
+    options.AddPolicy("PublicSurveySubmission", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+});
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 builder.Services.AddApplicationAuthentication(builder.Configuration, builder.Environment);
@@ -110,6 +122,7 @@ builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseForwardedHeaders();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {

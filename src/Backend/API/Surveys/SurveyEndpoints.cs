@@ -9,7 +9,7 @@ public static class SurveyEndpoints
     {
         var group = endpoints
             .MapGroup("/api/surveys")
-            .RequireAuthorization();
+            .RequireAuthorization(AuthPolicies.SurveyManage);
 
         // --------------------------------------------------------- Answer scales
 
@@ -134,14 +134,14 @@ public static class SurveyEndpoints
 
         // Phiếu của sinh viên: mở bằng link hoặc mã QR nên không yêu cầu đăng nhập.
         var publicGroup = endpoints.MapGroup("/api/public/surveys")
-            .AllowAnonymous()
-            .RequireRateLimiting("PublicSurveyConcurrency");
+            .AllowAnonymous();
 
         publicGroup.MapGet("/{linkToken}", async (
             string linkToken,
             ISurveyService service,
             CancellationToken cancellationToken) =>
-            ToResult(await service.GetPublicSurveyAsync(linkToken, cancellationToken)));
+            ToResult(await service.GetPublicSurveyAsync(linkToken, cancellationToken)))
+            .RequireRateLimiting("PublicSurveyConcurrency");
 
         publicGroup.MapPost("/{linkToken}/responses", async (
             string linkToken,
@@ -151,7 +151,8 @@ public static class SurveyEndpoints
             ToResult(await service.SubmitSurveyResponseAsync(
                 linkToken,
                 request.ToCommand(),
-                cancellationToken)));
+                cancellationToken)))
+            .RequireRateLimiting("PublicSurveySubmission");
 
         // ------------------------------------------------------------ Restore
 

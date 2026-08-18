@@ -34,6 +34,21 @@ public static class AuthSetup
         var googleConfigured = !string.IsNullOrWhiteSpace(clientId)
             && !string.IsNullOrWhiteSpace(clientSecret);
 
+        if (!environment.IsDevelopment() && !googleConfigured)
+        {
+            throw new InvalidOperationException(
+                "Authentication:Google:ClientId and ClientSecret are required in production.");
+        }
+
+        if (!Uri.TryCreate(frontendBaseUrl, UriKind.Absolute, out var frontendUri)
+            || (!environment.IsDevelopment()
+                && frontendUri.Scheme != Uri.UriSchemeHttps
+                && !frontendUri.IsLoopback))
+        {
+            throw new InvalidOperationException(
+                "Authentication:FrontendBaseUrl must be an absolute HTTPS URL in production.");
+        }
+
         services.AddSingleton(new GoogleAuthConfiguration(googleConfigured, frontendBaseUrl));
 
         var authentication = services.AddAuthentication(options =>
