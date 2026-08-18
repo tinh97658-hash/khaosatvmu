@@ -152,9 +152,10 @@ khaosatvmu/
    ```
 
 3. **Truy cập ứng dụng**:
-   - **Frontend UI**: [http://localhost:5173](http://localhost:5173)
-   - **Backend Swagger API**: [http://localhost:5000/swagger](http://localhost:5000/swagger)
-   - **PostgreSQL Database**: Port `5432` (`user: postgres`, `pass: khaosatvmu@123`, `db: khaosatvmu`)
+   - **Frontend UI**: [http://localhost:8080](http://localhost:8080)
+   - **API health**: [http://localhost:8080/healthz](http://localhost:8080/healthz)
+   - PostgreSQL chỉ bind vào loopback tại port `5432`; mật khẩu lấy từ `.env`.
+   - pgAdmin chỉ chạy khi dùng `docker compose --profile tools up -d`.
 
 ---
 
@@ -165,10 +166,15 @@ khaosatvmu/
 # Di chuyển vào thư mục dự án API
 cd src/Backend/API
 
+# Cấu hình local bằng .NET User Secrets, không commit credential
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=khaosatvmu;Username=postgres;Password=<local-password>"
+dotnet user-secrets set "Authentication:Google:ClientId" "<client-id>"
+dotnet user-secrets set "Authentication:Google:ClientSecret" "<client-secret>"
+
 # Chạy ứng dụng
 dotnet run
 ```
-*API sẽ lắng nghe tại `http://localhost:5000` (hoặc `http://localhost:8080` tùy cấu hình launchSettings).*
+*API Development lắng nghe tại `http://localhost:5115` theo `launchSettings.json`.*
 
 #### **B. Chạy Frontend (React + Vite)**
 ```bash
@@ -209,24 +215,22 @@ Hệ thống tích hợp **AgentMemory** để quản lý bộ nhớ dài hạn 
 
 ---
 
-## ⚙️ Biến môi trường (.env)
+## ⚙️ Cấu hình môi trường
 
-Cấu hình mẫu trong file `.env`:
+File `.env` ở root chỉ phục vụ Docker Compose. Local API dùng .NET User Secrets hoặc environment variables. Production phải inject secret từ secret manager.
 
 ```env
 # Database Settings
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=khaosatvmu@123
+POSTGRES_PASSWORD=change-me
 POSTGRES_DB=khaosatvmu
 POSTGRES_PORT=5432
 
-# Backend Settings
-BACKEND_PORT=5000
-ASPNETCORE_ENVIRONMENT=Development
-
-# Frontend Settings
-FRONTEND_PORT=5173
-VITE_API_URL=http://localhost:5000
+FRONTEND_BASE_URL=http://localhost:8080
+ALLOWED_HOSTS=localhost
+GOOGLE_CLIENT_ID=replace-me
+GOOGLE_CLIENT_SECRET=replace-me
+FRONTEND_PORT=8080
 ```
 
 ---

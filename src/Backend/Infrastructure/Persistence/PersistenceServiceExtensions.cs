@@ -10,10 +10,16 @@ public static class PersistenceServiceExtensions
     public static IServiceCollection AddPersistence(
         this IServiceCollection services, IConfiguration configuration)
     {
+        var connectionString = configuration.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required.");
+        }
+
         services.AddScoped<ICurrentUserAccessor, Auth.HttpContextCurrentUserAccessor>();
         services.AddScoped<AuditInterceptor>();
         services.AddDbContext<AppDbContext>((sp, options) =>
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"))
+            options.UseNpgsql(connectionString)
                    .AddInterceptors(sp.GetRequiredService<AuditInterceptor>()));
         return services;
     }

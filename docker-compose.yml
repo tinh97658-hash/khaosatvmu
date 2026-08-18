@@ -5,7 +5,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-khaosatvmu@123}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-khaosatvmu}
     command:
       - "postgres"
@@ -28,7 +28,7 @@ services:
       - "-c"
       - "wal_buffers=16MB"
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -45,10 +45,13 @@ services:
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-khaosatvmu};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-khaosatvmu@123};Minimum Pool Size=50;Maximum Pool Size=300;Connection Lifetime=300;Command Timeout=15;"
-      Authentication__FrontendBaseUrl: "http://localhost:${FRONTEND_PORT:-8080}"
-    ports:
-      - "${API_PORT:-5000}:8080"
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-khaosatvmu};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD};Minimum Pool Size=10;Maximum Pool Size=100;Connection Lifetime=300;Command Timeout=15;"
+      Authentication__FrontendBaseUrl: ${FRONTEND_BASE_URL:?FRONTEND_BASE_URL is required}
+      Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID is required}
+      Authentication__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:?GOOGLE_CLIENT_SECRET is required}
+      AllowedHosts: ${ALLOWED_HOSTS:?ALLOWED_HOSTS is required}
+    expose:
+      - "8080"
     depends_on:
       db:
         condition: service_healthy
@@ -65,16 +68,17 @@ services:
       - api
 
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: dpage/pgadmin4:9.6
+    profiles: ["tools"]
     container_name: khaosatvmu_pgadmin
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@vmu.edu.vn}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-khaosatvmu@123}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?PGADMIN_PASSWORD is required when using the tools profile}
       PGADMIN_CONFIG_SERVER_MODE: "False"
-      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "True"
     ports:
-      - "${PGADMIN_PORT:-5050}:80"
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
       - ./deploy/pgadmin/pgadmin-servers.json:/pgadmin4/servers.json:ro

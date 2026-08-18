@@ -9,7 +9,7 @@ public static class CatalogEndpoints
     {
         var group = endpoints
             .MapGroup("/api/catalog")
-            .RequireAuthorization();
+            .RequireAuthorization(AuthPolicies.SurveyManage);
 
         // ------------------------------------------------------------ Faculties
 
