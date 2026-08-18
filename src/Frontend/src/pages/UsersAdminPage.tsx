@@ -13,7 +13,6 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  Save,
   Search,
   ShieldCheck,
   ShieldPlus,
@@ -23,6 +22,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Modal } from '../components/Modal';
+import { RolePermissionEditor } from '../components/RolePermissionEditor';
 import { UserImportDialog } from '../components/UserImportDialog';
 import { adminApi } from '../services/adminApi';
 import { ApiError } from '../services/apiClient';
@@ -32,7 +32,6 @@ import type {
   AdminProfile,
   AdminRole,
   AdminUser,
-  RolePermissionMatrix,
   SaveAdminProfile,
 } from '../types';
 import '../styles/auth-admin.css';
@@ -113,8 +112,6 @@ export function UsersAdminPage() {
   const [profileForm, setProfileForm] = useState<SaveAdminProfile>(emptyProfile);
   const [showProfileForm, setShowProfileForm] = useState(false);
   const [statusConfirmation, setStatusConfirmation] = useState<StatusConfirmation>(null);
-  const [permissionMatrix, setPermissionMatrix] = useState<RolePermissionMatrix[]>([]);
-  const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
 
   const activeFilter = statusFilter === 'all' ? null : statusFilter === 'active';
 
@@ -143,18 +140,6 @@ export function UsersAdminPage() {
     }
   }, [auditPageNumber]);
 
-  const loadPermissions = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setPermissionMatrix(await adminApi.rolePermissions());
-    } catch (requestError) {
-      setError(messageFrom(requestError));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   const loadRoles = useCallback(async () => {
     try {
       setRoles(await adminApi.roles());
@@ -176,44 +161,6 @@ export function UsersAdminPage() {
   useEffect(() => {
     if (view === 'audit') void loadAudit();
   }, [loadAudit, view]);
-
-  useEffect(() => {
-    if (view === 'permissions') void loadPermissions();
-  }, [loadPermissions, view]);
-
-  const handleTogglePermission = (roleId: string, permissionId: string) => {
-    setPermissionMatrix((prev) =>
-      prev.map((role) => {
-        if (role.roleId !== roleId) return role;
-        return {
-          ...role,
-          permissions: role.permissions.map((p) =>
-            p.permissionId === permissionId ? { ...p, isGranted: !p.isGranted } : p,
-          ),
-        };
-      }),
-    );
-  };
-
-  const handleSaveRolePermissions = async (roleId: string) => {
-    const role = permissionMatrix.find((r) => r.roleId === roleId);
-    if (!role) return;
-    setSavingRoleId(roleId);
-    setError(null);
-    try {
-      const grants = role.permissions.map((p) => ({
-        permissionId: p.permissionId,
-        isGranted: p.isGranted,
-      }));
-      await adminApi.updateRolePermissions(roleId, grants);
-      toast.success('Đã cập nhật phân quyền', { description: `Vai trò: ${role.roleName}` });
-    } catch (requestError) {
-      setError(messageFrom(requestError));
-    } finally {
-      setSavingRoleId(null);
-    }
-  };
-
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil((usersPage?.totalCount ?? 0) / (usersPage?.pageSize ?? 20))),
@@ -338,8 +285,6 @@ export function UsersAdminPage() {
       void loadUsers();
     } else if (view === 'audit') {
       void loadAudit();
-    } else {
-      void loadPermissions();
     }
   };
 
@@ -682,80 +627,13 @@ export function UsersAdminPage() {
               <h3>Phân quyền Truy cập & Module Báo cáo</h3>
               <p>Quản trị viên có thể bật/tắt quyền hạn (Permissions) cho từng vai trò (Roles) trong hệ thống.</p>
             </div>
-            <div className="admin-audit-actions">
-              <button
-                type="button"
-                className="admin-icon-button"
-                onClick={() => void loadPermissions()}
-                disabled={loading}
-                aria-label="Tải lại phân quyền"
-                title="Tải lại phân quyền"
-              >
-                <RefreshCw className={loading ? 'auth-spin' : ''} aria-hidden="true" />
-              </button>
-            </div>
           </div>
 
-          <div className="admin-table-shell" style={{ overflowX: 'auto' }}>
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th style={{ minWidth: '180px' }}>Vai trò (Role)</th>
-                  {permissionMatrix[0]?.permissions.map((perm) => (
-                    <th key={perm.permissionId} style={{ textAlign: 'center', minWidth: '130px' }} title={perm.permissionCode}>
-                      <div style={{ fontWeight: 600, fontSize: '12px' }}>{perm.permissionName}</div>
-                      <div style={{ fontSize: '10px', color: 'var(--ops-muted)', fontWeight: 400 }}>{perm.permissionCode}</div>
-                    </th>
-                  ))}
-                  <th style={{ width: '100px', textAlign: 'center' }}>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {permissionMatrix.map((role) => (
-                  <tr key={role.roleId}>
-                    <td>
-                      <div style={{ fontWeight: 650, fontSize: '13px', color: 'var(--ops-text)' }}>{role.roleName}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--ops-muted)' }}>{role.roleCode}</div>
-                    </td>
-                    {role.permissions.map((perm) => (
-                      <td key={perm.permissionId} style={{ textAlign: 'center' }}>
-                        <input
-                          type="checkbox"
-                          checked={perm.isGranted}
-                          onChange={() => handleTogglePermission(role.roleId, perm.permissionId)}
-                          style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--ops-primary)' }}
-                          aria-label={`${role.roleName} - ${perm.permissionName}`}
-                        />
-                      </td>
-                    ))}
-                    <td style={{ textAlign: 'center' }}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{ padding: '5px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                        disabled={savingRoleId === role.roleId}
-                        onClick={() => void handleSaveRolePermissions(role.roleId)}
-                      >
-                        {savingRoleId === role.roleId ? (
-                          <RefreshCw className="auth-spin" style={{ width: '14px', height: '14px' }} />
-                        ) : (
-                          <Save style={{ width: '14px', height: '14px' }} />
-                        )}
-                        Lưu
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {permissionMatrix.length === 0 && !loading && (
-                  <tr>
-                    <td colSpan={10} style={{ textAlign: 'center', padding: '32px' }}>
-                      Chưa có dữ liệu phân quyền.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          {roles.length === 0 ? (
+            <p className="perm-empty">Chưa có vai trò nào trong hệ thống.</p>
+          ) : (
+            <RolePermissionEditor roles={roles} />
+          )}
         </section>
       )}
 

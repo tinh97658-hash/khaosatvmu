@@ -614,12 +614,14 @@ export interface PermissionDto {
   code: string;
   name: string;
   description: string | null;
+  category: string;
 }
 
 export interface RolePermissionStatus {
   permissionId: string;
   permissionCode: string;
   permissionName: string;
+  category: string;
   isGranted: boolean;
 }
 

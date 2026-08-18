@@ -1883,6 +1883,301 @@
   background: var(--ops-danger);
 }
 
+/* ---------------------------------------------------------------------- */
+/* Role Permission Editor (Phân quyền kiểu Discord)                       */
+/* ---------------------------------------------------------------------- */
+
+.perm-editor {
+  display: flex;
+  height: calc(100vh - 220px);
+  min-height: 500px;
+  border: 1px solid var(--ops-border);
+  background: var(--ops-surface);
+}
+
+.perm-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--ops-border);
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.perm-sidebar-select-label {
+  display: none;
+}
+
+.perm-role-select {
+  display: none;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--ops-border-strong);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--ops-text);
+  background: var(--ops-surface);
+}
+
+.perm-role-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.perm-role-item {
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  transition: background 150ms;
+}
+
+.perm-role-item:hover {
+  background: var(--ops-muted-surface);
+}
+
+.perm-role-item--active {
+  background: var(--ops-primary-soft);
+}
+
+.perm-role-item__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ops-text);
+}
+
+.perm-role-item--active .perm-role-item__name {
+  color: var(--ops-primary-dark);
+}
+
+.perm-role-item__code {
+  font-size: 11px;
+  color: var(--ops-muted);
+}
+
+.perm-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.perm-content__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.perm-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--ops-border-strong);
+  border-radius: 4px;
+  flex: 1;
+  max-width: 320px;
+  color: var(--ops-muted);
+}
+
+.perm-search input {
+  border: none;
+  outline: none;
+  flex: 1;
+  font-size: 13px;
+  color: var(--ops-text);
+  background: transparent;
+}
+
+.perm-inline-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--ops-danger);
+  border-radius: 4px;
+  color: var(--ops-danger);
+  font-size: 13px;
+}
+
+.perm-inline-error span {
+  flex: 1;
+}
+
+.perm-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--ops-muted);
+  font-size: 13px;
+}
+
+.perm-skeleton-row {
+  height: 48px;
+  background: var(--ops-muted-surface, #F7F9FA);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  animation: perm-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes perm-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.perm-group {
+  margin-bottom: 20px;
+}
+
+.perm-group__title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ops-muted);
+}
+
+.perm-group__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--ops-border);
+  border-radius: 4px;
+}
+
+.perm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ops-border);
+}
+
+.perm-row:last-child {
+  border-bottom: 0;
+}
+
+.perm-row__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ops-text);
+}
+
+.perm-row__code {
+  font-size: 11px;
+  color: var(--ops-muted);
+}
+
+.perm-toggle {
+  position: relative;
+  display: inline-flex;
+}
+
+.perm-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  clip: rect(0, 0, 0, 0);
+}
+
+.perm-toggle label {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.perm-toggle-track {
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--ops-border-strong);
+  position: relative;
+  transition: background 150ms;
+}
+
+.perm-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--ops-surface);
+  transition: transform 150ms;
+}
+
+.perm-toggle input:checked + label .perm-toggle-track {
+  background: var(--ops-primary);
+}
+
+.perm-toggle input:checked + label .perm-toggle-track::after {
+  transform: translateX(16px);
+}
+
+.perm-toggle input:focus-visible + label .perm-toggle-track {
+  outline: 2px solid var(--ops-primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .perm-editor {
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+  }
+
+  .perm-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--ops-border);
+    padding: 8px 12px;
+  }
+
+  .perm-sidebar-select-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ops-muted);
+    margin-bottom: 4px;
+  }
+
+  .perm-role-select {
+    display: block;
+  }
+
+  .perm-role-list {
+    display: none;
+  }
+
+  .perm-content {
+    padding: 12px;
+  }
+
+  .perm-content__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .perm-search {
+    max-width: none;
+  }
+}
+
+
 .admin-users-page .btn-danger:hover:not(:disabled) {
   border-color: #922323;
   background: #922323;
