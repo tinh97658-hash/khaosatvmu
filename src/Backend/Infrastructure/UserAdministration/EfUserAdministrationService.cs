@@ -377,21 +377,11 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
         return new AdminPage<AdminAuditLogDto>(items, page, pageSize, totalCount);
     }
 
-    private static readonly Dictionary<string, int> CategoryOrderMap = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Quản trị hệ thống"] = 1,
-        ["Khảo sát"] = 2,
-        ["Báo cáo"] = 3
-    };
-
-    private static int GetCategoryOrder(string category) =>
-        CategoryOrderMap.TryGetValue(category, out var order) ? order : 99;
-
     public async Task<IReadOnlyList<PermissionDto>> GetPermissionsAsync(CancellationToken cancellationToken = default) =>
         await db.Permissions
             .AsNoTracking()
             .OrderBy(x => x.Code)
-            .Select(x => new PermissionDto(x.Id, x.Code, x.Name, x.Description, x.Category))
+            .Select(x => new PermissionDto(x.Id, x.Code, x.Name, x.Description))
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<RolePermissionMatrixDto>> GetRolePermissionMatrixAsync(CancellationToken cancellationToken = default)
@@ -401,12 +391,10 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
             .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken);
 
-        var allPermissions = (await db.Permissions
+        var allPermissions = await db.Permissions
             .AsNoTracking()
-            .ToListAsync(cancellationToken))
-            .OrderBy(x => GetCategoryOrder(x.Category))
-            .ThenBy(x => x.Name)
-            .ToList();
+            .OrderBy(x => x.Code)
+            .ToListAsync(cancellationToken);
 
         var grantedPairs = await db.RolePermissions
             .AsNoTracking()
@@ -426,45 +414,9 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
                 permission.Id,
                 permission.Code,
                 permission.Name,
-                permission.Category,
                 grantedSet.Contains((role.Id, permission.Id))
             )).ToList()
         )).ToList();
-    }
-
-    public async Task<RolePermissionMatrixDto?> GetRolePermissionsAsync(
-        Guid roleId,
-        CancellationToken cancellationToken = default)
-    {
-        var role = await db.Roles
-            .AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Id == roleId, cancellationToken);
-
-        if (role is null) return null;
-
-        var allPermissions = (await db.Permissions
-            .AsNoTracking()
-            .ToListAsync(cancellationToken))
-            .OrderBy(x => GetCategoryOrder(x.Category))
-            .ThenBy(x => x.Name)
-            .ToList();
-
-        var grantedIds = await db.RolePermissions
-            .AsNoTracking()
-            .Where(x => x.RoleId == roleId && x.IsGranted)
-            .Select(x => x.PermissionId)
-            .ToHashSetAsync(cancellationToken);
-
-        return new RolePermissionMatrixDto(
-            role.Id,
-            role.Code,
-            role.Name,
-            allPermissions
-                .Select(p => new RolePermissionStatusDto(
-                    p.Id, p.Code, p.Name, p.Category,
-                    grantedIds.Contains(p.Id)))
-                .ToList()
-        );
     }
 
     public async Task UpdateRolePermissionsAsync(
