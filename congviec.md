@@ -430,10 +430,27 @@ cái là xong cho cả đợt.
 Anh chốt câu C-b là làm hẳn một trang mới chứ không nhét nút vào trang đang có,
 và câu C-c là chỉ admin hệ thống được dùng.
 
-Về quyền thì tiện, hệ thống đã có sẵn quyền `ADMIN_ACCESS` thuộc nhóm "Quản trị
-hệ thống", và cũng đã có sẵn hằng số `AuthPolicies.AdminAccess` trong
-[PermissionAuth.cs](src/Backend/API/Auth/PermissionAuth.cs). Dùng lại luôn,
-không phải thêm quyền mới.
+Về quyền thì **dùng `REPORTS_ACCESS`**, tức hằng số `AuthPolicies.ReportsAccess`
+trong [PermissionAuth.cs](src/Backend/API/Auth/PermissionAuth.cs). Không phải
+thêm quyền mới, và cả vai `ADMIN` lẫn `SURVEY_ADMIN` đều đã được cấp sẵn quyền
+này trong [DatabaseSeeder.cs](src/Backend/Infrastructure/Persistence/DatabaseSeeder.cs).
+
+> **Đính chính so với bản trước của file này.** Lúc đầu tôi ghi là dùng
+> `ADMIN_ACCESS` / `AuthPolicies.AdminAccess`. Nhưng nhánh `hieu2` đã **xoá hẳn**
+> quyền đó bằng migration `20260820080000_RemoveLegacyContentPermissions`, xoá
+> luôn cả `SURVEY_MANAGE`, `VIEW_REPORTS` và bốn quyền báo cáo cũ. Migration này
+> có `Down()` để trống nên không quay lui được. Toàn bộ hệ thống giờ chạy theo mô
+> hình tám quyền theo module, nên phải chọn lại trong danh sách mới:
+>
+> `PROGRESS_ACCESS`, `REPORTS_ACCESS`, `CATALOG_ACCESS`,
+> `COURSE_QUESTION_SETS_ACCESS`, `COURSE_CAMPAIGNS_ACCESS`,
+> `PROGRAM_CAMPAIGNS_ACCESS`, `PROGRAM_CRITERIA_ACCESS`, `USER_ADMIN_ACCESS`.
+>
+> Ngoài ra hieu đã tách `SurveyEndpoints.cs` thành ba nhóm quyền
+> `questionSetGroup`, `campaignGroup`, `operationalReadGroup`. Khi thêm endpoint
+> phát vé bắt đầu ở mục A1-b thì endpoint đó là công khai nên nằm ở
+> `publicGroup`, còn endpoint tính điểm theo mẻ thì gắn vào chính sách
+> `ReportsAccess`.
 
 Trang gồm phần chọn học kỳ và đợt khảo sát, một nút bấm để tính lại toàn bộ, và
 bên dưới là bảng dữ liệu mô tả ngay sau đây.
@@ -590,7 +607,7 @@ lại còn biết đang vướng ở đâu.
 |---|---|---|
 | C-a | Dùng cột `Score` cũ hay cột mới | Dùng luôn cột `Score`, chỉ cần loại câu bẫy và câu tự nhập |
 | C-b | Nút tính điểm đặt ở đâu | Làm hẳn một trang thống kê riêng cho admin |
-| C-c | Ai được bấm | Admin hệ thống, dùng quyền `ADMIN_ACCESS` đã có sẵn |
+| C-c | Ai được bấm | Admin hệ thống. Dùng quyền `REPORTS_ACCESS` — `ADMIN_ACCESS` đã bị nhánh `hieu2` xoá, xem đính chính ở mục C4 |
 | C-d | Báo cáo đọc cột mới hay tự tính | Tôi quyết: giữ nguyên tự tính, cột mới chỉ phục vụ trang thống kê và danh sách lớp |
 | C-e | Báo cáo có lọc phiếu hợp lệ không | Tôi quyết: số về chất lượng thì lọc, số về tiến độ thu phiếu thì đếm hết |
 
@@ -667,3 +684,4 @@ _(chờ anh mô tả thêm)_
 | 2026-08-20 | Chốt câu A-i: màn mở đầu không hiện thời gian tối thiểu, cũng không hiện ước lượng, chỉ một dòng nhắc đọc kỹ trước khi làm đặt trên cùng. |
 | 2026-08-20 | Nhận bản mô phỏng Excel của bảng thống kê, ghi thành thiết kế cho trang admin ở mục C4. Bỏ cột "% bất mãn" và cột "Đủ điều kiện công bố". Cột "Số ý kiến mở" chỉ đếm ô "Ý kiến khác" cuối phiếu. |
 | 2026-08-20 | Chốt nốt nhóm A và nhóm C. Bốn giây mỗi câu viết cứng trong mã, tính trên tổng số câu nên bỏ luôn cột `MinimumDurationSeconds`. Vé không lưu DB, bấm bắt đầu lại thoải mái. Lưu hết lý do lọc nên đổi cột thành `RejectionReasons varchar(200)`. Không báo cho sinh viên biết phiếu bị lọc. Làm trang thống kê riêng cho admin dùng quyền `ADMIN_ACCESS`. Nhóm B hoãn lại. Hai câu C-d và C-e tôi tự quyết, đã ghi rõ lý do trong mục 4. |
+| 2026-08-20 | Merge `origin/hieu2` vào `hoang2`. Chỉ xung đột ở `congviec.md` kiểu add/add, lấy bản mới của tôi. Code sau merge trùng khớp từng byte với `hieu2`. Sửa lại câu C-c: `ADMIN_ACCESS` đã bị hieu xoá nên chuyển sang `REPORTS_ACCESS`. |
