@@ -1,10 +1,10 @@
 import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
 import { maximumQuestionsPerTemplate } from '../types';
+import type { AnswerScale } from '../types';
 
 const maximumFileSize = 5 * 1024 * 1024;
 
-// Chỉ đọc cột nội dung câu hỏi vì bảng "SurveyQuestions" chỉ có "QuestionText".
 const questionTextHeaders = new Set([
   'noi dung cau hoi',
   'cau hoi',
@@ -14,9 +14,23 @@ const questionTextHeaders = new Set([
   'question',
 ]);
 
+// Cột mã thang trả lời nằm ngay cạnh cột nội dung câu hỏi.
+const answerScaleCodeHeaders = new Set([
+  'ma thang tra loi',
+  'ma thang',
+  'thang tra loi',
+  'ma thang tra loi cua he thong',
+  'answerscaleid',
+  'answer scale id',
+  'scale',
+]);
+
 export interface ImportSurveyQuestionRow {
   rowNumber: number;
   questionText: string;
+  /** Mã thang trả lời người dùng điền, đã đối chiếu với danh mục của hệ thống. */
+  answerScaleId: number;
+  answerScaleName: string;
 }
 
 export type SurveyTemplateImportFileErrorCode =
@@ -24,6 +38,7 @@ export type SurveyTemplateImportFileErrorCode =
   | 'FILE_SIZE'
   | 'FILE_EMPTY'
   | 'QUESTION_HEADER_MISSING'
+  | 'SCALE_HEADER_MISSING'
   | 'NO_DATA_ROWS'
   | 'TOO_MANY_ROWS'
   | 'READ_FAILED';
@@ -35,6 +50,18 @@ export class SurveyTemplateImportFileError extends Error {
     super(code);
     this.code = code;
   }
+}
+
+/** Dòng có mã thang trả lời sai, hiển thị để người dùng sửa lại tệp. */
+export interface InvalidScaleCodeRow {
+  rowNumber: number;
+  questionText: string;
+  rawCode: string;
+}
+
+export interface SurveyTemplateImportResult {
+  rows: ImportSurveyQuestionRow[];
+  invalidScaleRows: InvalidScaleCodeRow[];
 }
 
 // Dấu thanh tiếng Việt sau khi normalize('NFD') nằm trong dải U+0300..U+036F.
@@ -58,31 +85,81 @@ function cellText(value: CellValue | null | undefined): string {
 
 export const surveyTemplateTemplateFileName = 'mau-import-bo-cau-hoi.xlsx';
 
-/** Tạo và tải tệp Excel mẫu cho một bộ câu hỏi khảo sát. */
-export async function downloadSurveyTemplateImportTemplate(): Promise<void> {
+/**
+ * Tạo và tải tệp Excel mẫu cho một bộ câu hỏi khảo sát.
+ *
+ * Bố cục: cột A/B là hai cột dùng để import, chừa trống cột C và D, cột E/F là
+ * bảng tra thang trả lời. Bảng tra lấy thẳng từ danh mục thang của hệ thống nên
+ * người soạn luôn thấy đúng mã đang có, không phải mã cố định trong mã nguồn.
+ */
+export async function downloadSurveyTemplateImportTemplate(
+  answerScales: AnswerScale[]
+): Promise<void> {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
 
-  const rows = [
-    ['Giảng viên trình bày nội dung bài giảng rõ ràng, dễ hiểu.'],
-    ['Học liệu và tài liệu tham khảo của học phần đầy đủ, cập nhật.'],
-    ['Cách kiểm tra, đánh giá của học phần phản ánh đúng năng lực người học.'],
+  const sampleQuestions = [
+    'Giảng viên trình bày nội dung bài giảng rõ ràng, dễ hiểu.',
+    'Học liệu và tài liệu tham khảo của học phần đầy đủ, cập nhật.',
+    'Cách kiểm tra, đánh giá của học phần phản ánh đúng năng lực người học.',
   ];
 
-  const data: SheetData = [
-    [{ value: 'Nội dung câu hỏi', type: String, fontWeight: 'bold' as const }],
-    ...rows.map((row) => row.map((value) => ({ value, type: String }))),
+  // Câu mẫu gợi ý mã thang đầu tiên đang có để người dùng thấy cách điền.
+  const defaultScaleId = answerScales[0]?.answerScaleId ?? 1;
+  const sampleRows = sampleQuestions.map((questionText) => ({
+    questionText,
+    answerScaleId: defaultScaleId,
+  }));
+
+  const bold = { fontWeight: 'bold' as const };
+  const header: SheetData[number] = [
+    { value: 'Nội dung câu hỏi', type: String, ...bold },
+    { value: 'Mã thang trả lời', type: String, ...bold },
+    null,
+    null,
+    { value: 'Thang trả lời của hệ thống', type: String, ...bold },
+    { value: 'Mã', type: String, ...bold },
   ];
 
-  await writeXlsxFile(data, {
+  // Số câu mẫu và số thang thường lệch nhau nên bảng bên phải trải dài độc lập.
+  const bodyRowCount = Math.max(sampleRows.length, answerScales.length);
+  const body: SheetData = [];
+
+  for (let index = 0; index < bodyRowCount; index += 1) {
+    const question = sampleRows[index];
+    const scale = answerScales[index];
+
+    body.push([
+      question ? { value: question.questionText, type: String } : null,
+      question ? { value: question.answerScaleId, type: Number } : null,
+      null,
+      null,
+      scale ? { value: scale.answerScaleName, type: String } : null,
+      scale ? { value: scale.answerScaleId, type: Number } : null,
+    ]);
+  }
+
+  await writeXlsxFile([header, ...body], {
     sheet: 'Bo cau hoi',
-    columns: [{ width: 70 }],
+    columns: [
+      { width: 70 },
+      { width: 18 },
+      { width: 4 },
+      { width: 4 },
+      { width: 30 },
+      { width: 8 },
+    ],
   }).toFile(surveyTemplateTemplateFileName);
 }
 
-/** Đọc tệp .xlsx chứa danh sách câu hỏi của một bộ câu hỏi khảo sát. */
+/**
+ * Đọc tệp .xlsx chứa danh sách câu hỏi kèm mã thang trả lời của từng câu.
+ * Mã thang được đối chiếu với danh mục hệ thống truyền vào; dòng sai mã được
+ * tách riêng để hiển thị cho người dùng thay vì làm hỏng cả lần import.
+ */
 export async function parseSurveyTemplateImportFile(
-  file: File
-): Promise<ImportSurveyQuestionRow[]> {
+  file: File,
+  answerScales: AnswerScale[]
+): Promise<SurveyTemplateImportResult> {
   if (!file.name.toLowerCase().endsWith('.xlsx')) {
     throw new SurveyTemplateImportFileError('FILE_TYPE');
   }
@@ -108,20 +185,55 @@ export async function parseSurveyTemplateImportFile(
     throw new SurveyTemplateImportFileError('QUESTION_HEADER_MISSING');
   }
 
-  const rows = sheet
+  // Tránh bắt trúng cột "Thang trả lời của hệ thống" của bảng tra bên phải.
+  const scaleIndex = headers.findIndex(
+    (header, index) => index !== questionIndex && answerScaleCodeHeaders.has(header)
+  );
+  if (scaleIndex < 0) {
+    throw new SurveyTemplateImportFileError('SCALE_HEADER_MISSING');
+  }
+
+  const scaleById = new Map(answerScales.map((scale) => [scale.answerScaleId, scale]));
+
+  const dataRows = sheet
     .slice(1)
     .map((row, index) => ({
       rowNumber: index + 2,
       questionText: cellText(row[questionIndex]),
+      rawCode: cellText(row[scaleIndex]),
     }))
     .filter((row) => row.questionText.length > 0);
 
-  if (rows.length === 0) {
+  if (dataRows.length === 0) {
     throw new SurveyTemplateImportFileError('NO_DATA_ROWS');
   }
-  if (rows.length > maximumQuestionsPerTemplate) {
+  if (dataRows.length > maximumQuestionsPerTemplate) {
     throw new SurveyTemplateImportFileError('TOO_MANY_ROWS');
   }
 
-  return rows;
+  const rows: ImportSurveyQuestionRow[] = [];
+  const invalidScaleRows: InvalidScaleCodeRow[] = [];
+
+  for (const row of dataRows) {
+    const code = Number(row.rawCode);
+    const scale = Number.isInteger(code) ? scaleById.get(code) : undefined;
+
+    if (!scale) {
+      invalidScaleRows.push({
+        rowNumber: row.rowNumber,
+        questionText: row.questionText,
+        rawCode: row.rawCode,
+      });
+      continue;
+    }
+
+    rows.push({
+      rowNumber: row.rowNumber,
+      questionText: row.questionText,
+      answerScaleId: scale.answerScaleId,
+      answerScaleName: scale.answerScaleName,
+    });
+  }
+
+  return { rows, invalidScaleRows };
 }

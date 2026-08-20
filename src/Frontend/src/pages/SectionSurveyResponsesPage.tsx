@@ -291,38 +291,46 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
               </span>
             </div>
 
+            {/* Mỗi câu có thang riêng nên liệt kê từng câu kèm đáp án thay vì
+                dựng một bảng ma trận dùng chung các cột. */}
             <div className="admin-import-table-scroll response-detail-table">
               <table>
                 <thead>
                   <tr>
                     <th>Câu hỏi</th>
-                    {detail.answerOptions.map((option) => (
-                      <th key={option.answerScaleOptionId}>
-                        {option.displayText}
-                        <small>({option.value})</small>
-                      </th>
-                    ))}
+                    <th>Thang trả lời</th>
+                    <th>Trả lời</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {detail.answers.map((answer, index) => (
-                    <tr key={answer.questionId}>
-                      <td className="response-detail-question">
-                        {index + 1}. {answer.questionText}
-                      </td>
-                      {detail.answerOptions.map((option) => (
-                        <td key={option.answerScaleOptionId}>
-                          <input
-                            type="radio"
-                            checked={answer.selectedValue === option.value}
-                            disabled
-                            readOnly
-                            aria-label={`${answer.questionText}: ${option.displayText}`}
-                          />
+                  {detail.answers.map((answer, index) => {
+                    const scale = detail.answerScales.find(
+                      (item) => item.answerScaleId === answer.answerScaleId
+                    );
+
+                    return (
+                      <tr key={answer.questionId}>
+                        <td className="response-detail-question">
+                          {index + 1}. {answer.questionText}
                         </td>
-                      ))}
-                    </tr>
-                  ))}
+                        <td>{scale?.answerScaleName ?? '—'}</td>
+                        <td>
+                          {answer.scaleKind === 'Text' ? (
+                            <span className="response-comment">
+                              {answer.answerValue || 'Không trả lời.'}
+                            </span>
+                          ) : (
+                            <span>
+                              {answer.selectedText || '—'}
+                              {answer.selectedValue !== null && (
+                                <small> ({answer.selectedValue})</small>
+                              )}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -12,10 +12,53 @@ import {
 } from 'lucide-react';
 import { ApiError } from '../services/apiClient';
 import { publicSurveyApi, surveyErrorMessage } from '../services/surveyApi';
-import type { PublicSurvey } from '../types';
+import { maximumTextAnswerLength } from '../types';
+import type { AnswerScale, PublicSurvey } from '../types';
 import '../styles/public-survey.css';
 
 const maximumCommentLength = 1000;
+
+type PublicSurveyQuestion = PublicSurvey['questions'][number];
+
+/**
+ * Các câu liền nhau dùng chung một thang chọn mức được gộp thành một bảng ma
+ * trận như trước; câu tự nhập chữ đứng riêng thành một ô nhập.
+ */
+type QuestionBlock =
+  | { kind: 'options'; key: string; scale: AnswerScale; items: { question: PublicSurveyQuestion; order: number }[] }
+  | { kind: 'text'; key: string; scale: AnswerScale; question: PublicSurveyQuestion; order: number };
+
+function buildQuestionBlocks(survey: PublicSurvey): QuestionBlock[] {
+  const scaleById = new Map(survey.answerScales.map((scale) => [scale.answerScaleId, scale]));
+  const blocks: QuestionBlock[] = [];
+
+  survey.questions.forEach((question, index) => {
+    const scale = scaleById.get(question.answerScaleId);
+    if (!scale) return;
+
+    const order = index + 1;
+
+    if (scale.scaleKind === 'Text') {
+      blocks.push({ kind: 'text', key: `text-${question.questionId}`, scale, question, order });
+      return;
+    }
+
+    const previous = blocks.at(-1);
+    if (previous?.kind === 'options' && previous.scale.answerScaleId === scale.answerScaleId) {
+      previous.items.push({ question, order });
+      return;
+    }
+
+    blocks.push({
+      kind: 'options',
+      key: `options-${scale.answerScaleId}-${question.questionId}`,
+      scale,
+      items: [{ question, order }],
+    });
+  });
+
+  return blocks;
+}
 
 interface PublicSurveyPageProps {
   linkToken: string;
@@ -41,7 +84,9 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [answers, setAnswers] = useState<Record<number, number>>({});
+  // Giá trị thô theo "SurveyResponseAnswers"."AnswerValue": số mức đã chọn dạng
+  // chuỗi với câu chọn mức, nội dung đã gõ với câu tự nhập.
+  const [answers, setAnswers] = useState<Record<number, string>>({});
   const [comments, setComments] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -97,8 +142,13 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
     }
   }, [answers, comments, linkToken, survey, submitted]);
 
+  const blocks = useMemo(() => (survey ? buildQuestionBlocks(survey) : []), [survey]);
+
   const answeredCount = useMemo(
-    () => (survey ? survey.questions.filter((q) => answers[q.questionId] !== undefined).length : 0),
+    () =>
+      survey
+        ? survey.questions.filter((q) => (answers[q.questionId] ?? '').trim().length > 0).length
+        : 0,
     [survey, answers]
   );
   const totalQuestions = survey?.questions.length ?? 0;
@@ -118,7 +168,7 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
       await publicSurveyApi.submit(linkToken, {
         answers: survey.questions.map((question) => ({
           questionId: question.questionId,
-          selectedValue: answers[question.questionId],
+          answerValue: (answers[question.questionId] ?? '').trim(),
         })),
         additionalComments: comments.trim() ? comments.trim() : null,
       });
@@ -207,9 +257,9 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
           <div>
             <strong>Hướng dẫn</strong>
             <p>
-              Vui lòng chọn một mức từ {survey.answerOptions[0]?.value ?? 1} đến{' '}
-              {survey.answerOptions[survey.answerOptions.length - 1]?.value ?? 5} cho mỗi câu hỏi.
-              Phiếu mở trong khoảng {formatRange(survey.startTime, survey.endTime)}.
+              Phiếu có nhiều dạng câu hỏi: câu chọn mức, câu Có/Không và câu tự nhập. Vui lòng
+              trả lời đủ tất cả câu hỏi. Phiếu mở trong khoảng{' '}
+              {formatRange(survey.startTime, survey.endTime)}.
             </p>
           </div>
         </div>
@@ -232,95 +282,135 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
         </div>
 
         <form onSubmit={(event) => void handleSubmit(event)}>
-          {isNarrow ? (
-            <ol className="public-survey-cards">
-              {survey.questions.map((question, index) => (
-                <li className="public-survey-question-card" key={question.questionId}>
-                  <p className="public-survey-question-text">
-                    {index + 1}. {question.questionText}
-                  </p>
-                  <div
-                    className="public-survey-option-row"
-                    role="radiogroup"
-                    aria-label={question.questionText}
-                  >
-                    {survey.answerOptions.map((option) => (
-                      <label className="public-survey-option" key={option.answerScaleOptionId}>
-                        <span className="public-survey-option-value">{option.value}</span>
-                        <input
-                          type="radio"
-                          name={`question-${question.questionId}`}
-                          value={option.value}
-                          checked={answers[question.questionId] === option.value}
-                          disabled={!survey.isOpen || submitting}
-                          onChange={() => {
-                            setAnswers((prev) => ({
-                              ...prev,
-                              [question.questionId]: option.value,
-                            }));
-                            setSubmitError(null);
-                          }}
-                        />
-                        <span className="public-survey-sr-only">{option.displayText}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="public-survey-option-legend">
-                    <span>{survey.answerOptions[0]?.displayText}</span>
-                    <span>{survey.answerOptions[survey.answerOptions.length - 1]?.displayText}</span>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          ) : (
-          <div className="public-survey-table-scroll">
-            <table className="public-survey-table">
-              <thead>
-                <tr>
-                  <th scope="col">Tiêu chí đánh giá</th>
-                  {survey.answerOptions.map((option) => (
-                    <th key={option.answerScaleOptionId} scope="col">
-                      {option.displayText}
-                      <small>({option.value})</small>
-                    </th>
+          {blocks.map((block) => {
+            if (block.kind === 'text') {
+              const { question, order, scale } = block;
+              const value = answers[question.questionId] ?? '';
+
+              return (
+                <div className="public-survey-text-question" key={block.key}>
+                  <label htmlFor={`question-${question.questionId}`}>
+                    {order}. {question.questionText}
+                  </label>
+                  <textarea
+                    id={`question-${question.questionId}`}
+                    rows={3}
+                    maxLength={maximumTextAnswerLength}
+                    placeholder={`Nhập câu trả lời (${scale.answerScaleName})`}
+                    value={value}
+                    disabled={!survey.isOpen || submitting}
+                    onChange={(event) => {
+                      setAnswers((prev) => ({
+                        ...prev,
+                        [question.questionId]: event.target.value,
+                      }));
+                      setSubmitError(null);
+                    }}
+                  />
+                  <span className="public-survey-counter">
+                    {value.length}/{maximumTextAnswerLength}
+                  </span>
+                </div>
+              );
+            }
+
+            const { scale, items } = block;
+
+            // Màn hẹp bấm ô radio trong bảng rất khó nên đổi sang từng thẻ.
+            if (isNarrow) {
+              return (
+                <ol className="public-survey-cards" key={block.key}>
+                  {items.map(({ question, order }) => (
+                    <li className="public-survey-question-card" key={question.questionId}>
+                      <p className="public-survey-question-text">
+                        {order}. {question.questionText}
+                      </p>
+                      <div
+                        className="public-survey-option-row"
+                        role="radiogroup"
+                        aria-label={question.questionText}
+                      >
+                        {scale.options.map((option) => (
+                          <label className="public-survey-option" key={option.answerScaleOptionId}>
+                            <span className="public-survey-option-value">{option.value}</span>
+                            <input
+                              type="radio"
+                              name={`question-${question.questionId}`}
+                              value={option.value}
+                              checked={answers[question.questionId] === String(option.value)}
+                              disabled={!survey.isOpen || submitting}
+                              onChange={() => {
+                                setAnswers((prev) => ({
+                                  ...prev,
+                                  [question.questionId]: String(option.value),
+                                }));
+                                setSubmitError(null);
+                              }}
+                            />
+                            <span className="public-survey-sr-only">{option.displayText}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <div className="public-survey-option-legend">
+                        <span>{scale.options[0]?.displayText}</span>
+                        <span>{scale.options[scale.options.length - 1]?.displayText}</span>
+                      </div>
+                    </li>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {survey.questions.map((question, index) => (
-                  <tr key={question.questionId}>
-                    <th scope="row">
-                      {index + 1}. {question.questionText}
-                    </th>
-                    {survey.answerOptions.map((option) => (
-                      <td key={option.answerScaleOptionId}>
-                        <label className="public-survey-radio">
-                          <input
-                            type="radio"
-                            name={`question-${question.questionId}`}
-                            value={option.value}
-                            checked={answers[question.questionId] === option.value}
-                            disabled={!survey.isOpen || submitting}
-                            onChange={() => {
-                              setAnswers((prev) => ({
-                                ...prev,
-                                [question.questionId]: option.value,
-                              }));
-                              setSubmitError(null);
-                            }}
-                          />
-                          <span className="public-survey-sr-only">
-                            {question.questionText}: {option.displayText}
-                          </span>
-                        </label>
-                      </td>
+                </ol>
+              );
+            }
+
+            return (
+              <div className="public-survey-table-scroll" key={block.key}>
+                <table className="public-survey-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{scale.answerScaleName}</th>
+                      {scale.options.map((option) => (
+                        <th key={option.answerScaleOptionId} scope="col">
+                          {option.displayText}
+                          <small>({option.value})</small>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map(({ question, order }) => (
+                      <tr key={question.questionId}>
+                        <th scope="row">
+                          {order}. {question.questionText}
+                        </th>
+                        {scale.options.map((option) => (
+                          <td key={option.answerScaleOptionId}>
+                            <label className="public-survey-radio">
+                              <input
+                                type="radio"
+                                name={`question-${question.questionId}`}
+                                value={option.value}
+                                checked={answers[question.questionId] === String(option.value)}
+                                disabled={!survey.isOpen || submitting}
+                                onChange={() => {
+                                  setAnswers((prev) => ({
+                                    ...prev,
+                                    [question.questionId]: String(option.value),
+                                  }));
+                                  setSubmitError(null);
+                                }}
+                              />
+                              <span className="public-survey-sr-only">
+                                {question.questionText}: {option.displayText}
+                              </span>
+                            </label>
+                          </td>
+                        ))}
+                      </tr>
                     ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          )}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
 
           <div className="public-survey-comments">
             <label htmlFor="public-survey-comments">Ý kiến khác của bạn (nếu có)</label>

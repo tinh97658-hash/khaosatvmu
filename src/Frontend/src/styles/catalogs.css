@@ -1210,8 +1210,16 @@
   text-align: center;
 }
 
-.survey-question-row textarea {
+/* Nội dung câu hỏi và thang trả lời của riêng câu đó xếp chồng trong một dòng. */
+.survey-question-row-fields {
+  display: grid;
   flex: 1;
+  min-width: 0;
+  gap: 6px;
+}
+
+.survey-question-row textarea {
+  width: 100%;
   min-width: 0;
   min-height: 52px;
   padding: 6px 8px;
@@ -1224,7 +1232,19 @@
   resize: vertical;
 }
 
-.survey-question-row textarea:focus {
+.survey-question-row-fields select {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #d7dee2;
+  border-radius: 3px;
+  background: #ffffff;
+  color: #20262c;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.survey-question-row textarea:focus,
+.survey-question-row-fields select:focus {
   border-color: #0788b8;
   box-shadow: 0 0 0 2px rgba(7, 136, 184, 0.14);
   outline: 0;
@@ -1248,6 +1268,18 @@
 .survey-question-preview li {
   color: #20262c;
   font-size: 12px;
+}
+
+/* Tên thang trả lời của từng câu trong màn xem trước bộ câu hỏi. */
+.survey-question-preview-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #eef4f7;
+  color: #40505a;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .answer-scale-manager {
@@ -1315,12 +1347,36 @@
   gap: 8px;
 }
 
+/* Giá trị của mức cho chọn tay: thang 'Có/Không' dùng 1 và 5, không phải 1 và 2. */
 .answer-scale-option-value {
-  min-width: 22px;
-  color: #68737d;
-  font-size: 11px;
+  min-width: 58px;
+  padding: 5px 6px;
+  border: 1px solid #d7dee2;
+  border-radius: 3px;
+  background: #ffffff;
+  color: #20262c;
+  font-family: inherit;
+  font-size: 12px;
   font-weight: 650;
   text-align: center;
+}
+
+.answer-scale-option-value:focus {
+  border-color: #0788b8;
+  box-shadow: 0 0 0 2px rgba(7, 136, 184, 0.14);
+  outline: 0;
+}
+
+.answer-scale-hint {
+  margin: 0;
+  color: #68737d;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.answer-scale-code {
+  color: #68737d;
+  font-weight: 650;
 }
 
 .answer-scale-option-row input {

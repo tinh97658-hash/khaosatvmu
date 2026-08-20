@@ -55,6 +55,10 @@ export const WeakestQuestionsPanel: React.FC<WeakestQuestionsPanelProps> = ({
                     <small> · {ratingLabel(question.averageScore)}</small>
                   </span>
                 </div>
+                {/* Bộ trộn nhiều thang nên phải nói rõ điểm này đo bằng thang nào. */}
+                {question.answerScaleName && (
+                  <span className="reports-weakest-scale">{question.answerScaleName}</span>
+                )}
                 <div className="reports-weakest-dist" aria-label={`Phân bố ${total} lượt trả lời`}>
                   {[1, 2, 3, 4, 5].map((value) => {
                     const option = question.optionDistribution?.find((o) => o.value === value);

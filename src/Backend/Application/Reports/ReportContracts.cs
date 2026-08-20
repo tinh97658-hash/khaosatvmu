@@ -32,13 +32,21 @@ public sealed record OptionCountDto(
     int Count,
     decimal Percentage);
 
-/// <summary>Thống kê điểm một câu hỏi cụ thể theo mẫu khảo sát.</summary>
+/// <summary>
+/// Thống kê một câu hỏi cụ thể theo mẫu khảo sát.
+/// Câu thuộc thang 'Options' có <paramref name="AverageScore"/> và
+/// <paramref name="OptionDistribution"/>; câu thuộc thang 'Text' để cả hai rỗng
+/// và đọc nội dung ở <paramref name="TextAnswers"/>.
+/// </summary>
 public sealed record QuestionRatingDto(
     int QuestionId,
     string QuestionText,
     decimal AverageScore,
     int TotalAnswers,
-    IReadOnlyList<OptionCountDto> OptionDistribution);
+    IReadOnlyList<OptionCountDto> OptionDistribution,
+    string ScaleKind = "Options",
+    string AnswerScaleName = "",
+    IReadOnlyList<string>? TextAnswers = null);
 
 /// <summary>Tóm tắt kết quả của một lớp học phần mà giảng viên đảm nhận.</summary>
 public sealed record LecturerSectionSummaryDto(

@@ -725,6 +725,50 @@
   margin-bottom: 12px;
 }
 
+/* Câu hỏi tự nhập: liệt kê nội dung thay cho bảng phân bố mức. */
+.analysis-text-answers {
+  display: grid;
+  gap: 14px;
+}
+
+.analysis-text-question-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--reports-text-strong, #0f172a);
+}
+
+.analysis-text-question-title small {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--reports-text-muted);
+}
+
+.analysis-text-question ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.analysis-text-question li {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--reports-text-strong, #0f172a);
+}
+
+.analysis-text-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--reports-text-muted);
+}
+
 .distribution-table-title {
   margin: 0 0 2px 0;
   font-size: 14px;
@@ -1861,6 +1905,18 @@
   margin-top: 4px;
   font-size: 11px;
   color: var(--reports-text-muted);
+}
+
+/* Tên thang trả lời của câu, cần thiết khi một bộ trộn nhiều thang. */
+.reports-weakest-scale {
+  display: inline-block;
+  margin: 4px 0 2px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(2, 132, 199, 0.1);
+  color: #0369a1;
+  font-size: 10px;
+  font-weight: 600;
 }
 
 /* ---------- Bảng bộ môn chậm tiến độ ---------- */

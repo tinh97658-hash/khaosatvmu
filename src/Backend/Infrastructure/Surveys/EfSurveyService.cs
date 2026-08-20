@@ -40,7 +40,11 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             return Failed<AnswerScaleDto>(validation.ErrorCode);
         }
 
-        var scale = new AnswerScale { AnswerScaleName = validation.Name };
+        var scale = new AnswerScale
+        {
+            AnswerScaleName = validation.Name,
+            ScaleKind = validation.ScaleKind,
+        };
         db.AnswerScales.Add(scale);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -76,7 +80,16 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             return Failed<AnswerScaleDto>(validation.ErrorCode);
         }
 
+        // Đổi loại thang khi đã có câu hỏi dùng nó sẽ làm các phiếu đã thu không đọc
+        // lại được (số đang lưu bỗng bị hiểu thành chữ và ngược lại).
+        if (scale.ScaleKind != validation.ScaleKind
+            && await db.SurveyQuestions.AnyAsync(x => x.AnswerScaleId == answerScaleId, cancellationToken))
+        {
+            return Failed<AnswerScaleDto>(SurveyErrorCodes.AnswerScaleKindLocked);
+        }
+
         scale.AnswerScaleName = validation.Name;
+        scale.ScaleKind = validation.ScaleKind;
 
         // Ghi đè các mức: giữ lại dòng cùng Value để không phá "SurveyResponseAnswers".
         var existing = await db.AnswerScaleOptions
@@ -125,8 +138,8 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             return Failed<bool>(SurveyErrorCodes.AnswerScaleNotFound);
         }
 
-        // "SurveyTemplates"."AnswerScaleId" là ON DELETE RESTRICT.
-        if (await db.SurveyTemplates.AnyAsync(x => x.AnswerScaleId == answerScaleId, cancellationToken))
+        // "SurveyQuestions"."AnswerScaleId" là ON DELETE RESTRICT.
+        if (await db.SurveyQuestions.AnyAsync(x => x.AnswerScaleId == answerScaleId, cancellationToken))
         {
             return Failed<bool>(SurveyErrorCodes.AnswerScaleInUse);
         }
@@ -169,17 +182,17 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         var template = new SurveyTemplate
         {
             TemplateName = validation.Name,
-            AnswerScaleId = command.AnswerScaleId,
             CreatedAt = DateTime.UtcNow,
         };
         db.SurveyTemplates.Add(template);
         await db.SaveChangesAsync(cancellationToken);
 
         var questions = validation.Questions
-            .Select(text => new SurveyQuestion
+            .Select(question => new SurveyQuestion
             {
                 SurveyTemplateId = template.SurveyTemplateId,
-                QuestionText = text,
+                QuestionText = question.QuestionText,
+                AnswerScaleId = question.AnswerScaleId,
             })
             .ToList();
         db.SurveyQuestions.AddRange(questions);
@@ -207,7 +220,6 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         }
 
         template.TemplateName = validation.Name;
-        template.AnswerScaleId = command.AnswerScaleId;
 
         // Ghi đè danh sách câu hỏi nhưng dùng lại dòng cũ theo thứ tự để giữ
         // "QuestionId" cho những câu đã có câu trả lời (ON DELETE RESTRICT).
@@ -216,18 +228,40 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             .OrderBy(x => x.QuestionId)
             .ToListAsync(cancellationToken);
 
+        // Đổi thang của một câu đã có phiếu trả lời sẽ làm "AnswerValue" đã lưu bị
+        // hiểu sai (số thành chữ hoặc ngược lại), nên chặn từ đầu.
+        var existingIds = existing.Select(x => x.QuestionId).ToList();
+        var answeredIds = existingIds.Count == 0
+            ? []
+            : await db.SurveyResponseAnswers
+                .Where(x => existingIds.Contains(x.QuestionId))
+                .Select(x => x.QuestionId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
         for (var index = 0; index < validation.Questions.Count; index++)
         {
+            var question = validation.Questions[index];
             if (index < existing.Count)
             {
-                existing[index].QuestionText = validation.Questions[index];
+                var current = existing[index];
+                if (current.AnswerScaleId != question.AnswerScaleId
+                    && answeredIds.Contains(current.QuestionId))
+                {
+                    db.ChangeTracker.Clear();
+                    return Failed<SurveyTemplateDto>(SurveyErrorCodes.TemplateInUse);
+                }
+
+                current.QuestionText = question.QuestionText;
+                current.AnswerScaleId = question.AnswerScaleId;
             }
             else
             {
                 db.SurveyQuestions.Add(new SurveyQuestion
                 {
                     SurveyTemplateId = surveyTemplateId,
-                    QuestionText = validation.Questions[index],
+                    QuestionText = question.QuestionText,
+                    AnswerScaleId = question.AnswerScaleId,
                 });
             }
         }
@@ -534,7 +568,10 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             .OrderByDescending(x => x.ResponseId)
             .ToListAsync(cancellationToken);
 
-        var options = await AnswerOptionsOfSectionSurveyAsync(sectionSurvey, cancellationToken);
+        var scales = await ScalesOfSectionSurveyAsync(sectionSurvey, cancellationToken);
+        var mergedValues = MergedOptionValues(scales);
+        var scaleOfQuestion = await ScaleByQuestionAsync(sectionSurvey, scales, cancellationToken);
+
         var responseIds = responses.Select(x => x.ResponseId).ToList();
         var answers = responseIds.Count == 0
             ? []
@@ -546,6 +583,14 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             .Select(response =>
             {
                 var responseAnswers = answers.Where(x => x.ResponseId == response.ResponseId).ToList();
+                var selectedValues = responseAnswers
+                    .Select(answer => SelectedValueOf(
+                        scaleOfQuestion.GetValueOrDefault(answer.QuestionId),
+                        answer.AnswerValue))
+                    .Where(value => value.HasValue)
+                    .Select(value => value!.Value)
+                    .ToList();
+
                 return new SurveyResponseSummaryDto(
                     response.ResponseId,
                     response.CourseSectionSurveyId,
@@ -554,11 +599,11 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
                     response.AdditionalComments,
                     responseAnswers.Count,
                     // Giữ đủ các mức của thang, mức không ai chọn hiển thị 0.
-                    options
+                    mergedValues
                         .Select(option => new SurveyResponseValueCountDto(
                             option.Value,
                             option.DisplayText,
-                            responseAnswers.Count(answer => answer.SelectedValue == option.Value)))
+                            selectedValues.Count(value => value == option.Value)))
                         .ToList());
             })
             .ToList();
@@ -591,7 +636,8 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             : await db.SurveyTemplates
                 .FirstOrDefaultAsync(x => x.SurveyTemplateId == semesterSurvey.SurveyTemplateId, cancellationToken);
 
-        var options = await AnswerOptionsOfSectionSurveyAsync(sectionSurvey, cancellationToken);
+        var scales = await ScalesOfSectionSurveyAsync(sectionSurvey, cancellationToken);
+        var scaleById = scales.ToDictionary(x => x.AnswerScaleId);
         var questions = template is null
             ? []
             : await db.SurveyQuestions
@@ -622,16 +668,22 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             course?.CourseName ?? string.Empty,
             section?.SectionName ?? string.Empty,
             lecturer?.FullName ?? string.Empty,
-            options,
+            scales,
             questions
                 .Select(question =>
                 {
                     var answer = answers.FirstOrDefault(x => x.QuestionId == question.QuestionId);
+                    var scale = scaleById.GetValueOrDefault(question.AnswerScaleId);
+                    var selectedValue = SelectedValueOf(scale, answer?.AnswerValue);
+
                     return new SurveyResponseAnswerDto(
                         question.QuestionId,
                         question.QuestionText,
-                        answer?.SelectedValue ?? 0,
-                        options.FirstOrDefault(option => option.Value == answer?.SelectedValue)?.DisplayText
+                        question.AnswerScaleId,
+                        scale?.ScaleKind ?? AnswerScaleKinds.Options,
+                        answer?.AnswerValue ?? string.Empty,
+                        selectedValue,
+                        scale?.Options.FirstOrDefault(option => option.Value == selectedValue)?.DisplayText
                             ?? string.Empty);
                 })
                 .ToList()));
@@ -704,18 +756,11 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
                 .AsNoTracking()
                 .Where(x => x.SurveyTemplateId == template.SurveyTemplateId)
                 .OrderBy(x => x.QuestionId)
-                .Select(x => new PublicSurveyQuestionDto(x.QuestionId, x.QuestionText))
+                .Select(x => new PublicSurveyQuestionDto(x.QuestionId, x.QuestionText, x.AnswerScaleId))
                 .ToListAsync(cancellationToken);
-            var options = await db.AnswerScaleOptions
-                .AsNoTracking()
-                .Where(x => x.AnswerScaleId == template.AnswerScaleId)
-                .OrderBy(x => x.Value)
-                .Select(x => new AnswerScaleOptionDto(
-                    x.AnswerScaleOptionId,
-                    x.AnswerScaleId,
-                    x.Value,
-                    x.DisplayText))
-                .ToListAsync(cancellationToken);
+
+            // Trả về mọi thang mà bộ đang dùng; mỗi câu tự trỏ tới thang của nó.
+            var scales = await ScalesOfTemplateAsync(template.SurveyTemplateId, cancellationToken);
 
             var section = await db.CourseSections
                 .AsNoTracking()
@@ -749,7 +794,7 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
                 sectionSurvey.StartTime,
                 sectionSurvey.EndTime,
                 true,
-                options,
+                scales,
                 questions);
         });
 
@@ -788,23 +833,52 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             return Failed<SubmitSurveyResponseDto>(SurveyErrorCodes.LinkNotFound);
         }
 
+        // Mỗi câu có thang riêng nên tra được thang nào cho câu nào trước khi kiểm.
+        var scaleById = publicSurvey.AnswerScales.ToDictionary(x => x.AnswerScaleId);
+        var scaleOfQuestion = publicSurvey.Questions
+            .Where(x => scaleById.ContainsKey(x.AnswerScaleId))
+            .ToDictionary(x => x.QuestionId, x => scaleById[x.AnswerScaleId]);
         var questionIds = publicSurvey.Questions.Select(x => x.QuestionId).ToHashSet();
-        var allowedValues = publicSurvey.AnswerOptions.Select(x => x.Value).ToHashSet();
 
         var answers = (command.Answers ?? [])
             .GroupBy(x => x.QuestionId)
             .Select(group => group.Last())
+            .Select(x => new SubmitSurveyAnswerCommand(x.QuestionId, x.AnswerValue?.Trim() ?? string.Empty))
             .ToList();
 
         if (questionIds.Count == 0
             || answers.Count != questionIds.Count
-            || answers.Any(answer => !questionIds.Contains(answer.QuestionId)))
+            || answers.Any(answer => !questionIds.Contains(answer.QuestionId))
+            || answers.Any(answer => answer.AnswerValue.Length == 0))
         {
             return Failed<SubmitSurveyResponseDto>(SurveyErrorCodes.AnswersIncomplete);
         }
-        if (answers.Any(answer => !allowedValues.Contains(answer.SelectedValue)))
+
+        // Câu thang 'Options' phải gửi lên một mức có thật; câu thang 'Text' nhận
+        // nguyên nội dung, chỉ giới hạn độ dài.
+        var scoredValues = new List<int>();
+        foreach (var answer in answers)
         {
-            return Failed<SubmitSurveyResponseDto>(SurveyErrorCodes.AnswerValueInvalid);
+            if (!scaleOfQuestion.TryGetValue(answer.QuestionId, out var scale))
+            {
+                return Failed<SubmitSurveyResponseDto>(SurveyErrorCodes.AnswerValueInvalid);
+            }
+
+            if (scale.ScaleKind == AnswerScaleKinds.Text)
+            {
+                if (answer.AnswerValue.Length > SurveyRules.MaximumTextAnswerLength)
+                {
+                    return Failed<SubmitSurveyResponseDto>(SurveyErrorCodes.AnswerTextTooLong);
+                }
+                continue;
+            }
+
+            if (!int.TryParse(answer.AnswerValue, out var selectedValue)
+                || scale.Options.All(option => option.Value != selectedValue))
+            {
+                return Failed<SubmitSurveyResponseDto>(SurveyErrorCodes.AnswerValueInvalid);
+            }
+            scoredValues.Add(selectedValue);
         }
 
         var comments = command.AdditionalComments?.Trim();
@@ -818,7 +892,7 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         {
             CourseSectionSurveyId = sectionSurvey.CourseSectionSurveyId,
             AdditionalComments = string.IsNullOrEmpty(comments) ? null : comments,
-            Score = Math.Round((decimal)answers.Average(answer => answer.SelectedValue), 2),
+            Score = ComputeScore(scoredValues),
             SubmittedAt = now,
         };
 
@@ -827,7 +901,7 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         {
             SurveyResponse = response,
             QuestionId = answer.QuestionId,
-            SelectedValue = answer.SelectedValue,
+            AnswerValue = answer.AnswerValue,
         }));
 
         await db.SaveChangesAsync(cancellationToken);
@@ -837,29 +911,73 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
 
     // ------------------------------------------------------------------ Helpers
 
-    /// <summary>Các mức trả lời của thang mà bộ câu hỏi của bài khảo sát đang dùng.</summary>
-    private async Task<IReadOnlyList<AnswerScaleOptionDto>> AnswerOptionsOfSectionSurveyAsync(
+    /// <summary>Các thang mà bộ câu hỏi của bài khảo sát đang dùng.</summary>
+    private async Task<IReadOnlyList<AnswerScaleDto>> ScalesOfSectionSurveyAsync(
         CourseSectionSurvey sectionSurvey,
         CancellationToken cancellationToken)
     {
-        var answerScaleId = await db.SemesterSurveys
+        var surveyTemplateId = await db.SemesterSurveys
             .Where(x => x.SemesterSurveyId == sectionSurvey.SemesterSurveyId)
-            .Join(
-                db.SurveyTemplates,
-                semesterSurvey => semesterSurvey.SurveyTemplateId,
-                template => template.SurveyTemplateId,
-                (_, template) => template.AnswerScaleId)
+            .Select(x => x.SurveyTemplateId)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return await db.AnswerScaleOptions
-            .Where(x => x.AnswerScaleId == answerScaleId)
-            .OrderBy(x => x.Value)
-            .Select(x => new AnswerScaleOptionDto(
-                x.AnswerScaleOptionId,
-                x.AnswerScaleId,
-                x.Value,
-                x.DisplayText))
+        return surveyTemplateId == 0
+            ? []
+            : await ScalesOfTemplateAsync(surveyTemplateId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Gộp các mức của mọi thang 'Options' theo giá trị số. Cùng một mức mà các
+    /// thang đặt nhãn khác nhau thì hiển thị chung là "Mức n".
+    /// </summary>
+    private static IReadOnlyList<(int Value, string DisplayText)> MergedOptionValues(
+        IReadOnlyList<AnswerScaleDto> scales)
+    {
+        return scales
+            .Where(scale => scale.ScaleKind == AnswerScaleKinds.Options)
+            .SelectMany(scale => scale.Options)
+            .GroupBy(option => option.Value)
+            .OrderBy(group => group.Key)
+            .Select(group =>
+            {
+                var labels = group.Select(x => x.DisplayText).Distinct().ToList();
+                return (group.Key, labels.Count == 1 ? labels[0] : $"Mức {group.Key}");
+            })
+            .ToList();
+    }
+
+    /// <summary>Đọc "AnswerValue" ra số mức; null nếu câu không thuộc thang 'Options'.</summary>
+    private static int? SelectedValueOf(AnswerScaleDto? scale, string? answerValue)
+    {
+        if (scale is null || scale.ScaleKind != AnswerScaleKinds.Options) return null;
+        return int.TryParse(answerValue, out var value) ? value : null;
+    }
+
+    /// <summary>Bảng tra thang trả lời theo từng câu hỏi của bài khảo sát một lớp.</summary>
+    private async Task<Dictionary<int, AnswerScaleDto>> ScaleByQuestionAsync(
+        CourseSectionSurvey sectionSurvey,
+        IReadOnlyList<AnswerScaleDto> scales,
+        CancellationToken cancellationToken)
+    {
+        if (scales.Count == 0) return [];
+
+        var surveyTemplateId = await db.SemesterSurveys
+            .AsNoTracking()
+            .Where(x => x.SemesterSurveyId == sectionSurvey.SemesterSurveyId)
+            .Select(x => x.SurveyTemplateId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (surveyTemplateId == 0) return [];
+
+        var scaleById = scales.ToDictionary(x => x.AnswerScaleId);
+        var pairs = await db.SurveyQuestions
+            .AsNoTracking()
+            .Where(x => x.SurveyTemplateId == surveyTemplateId)
+            .Select(x => new { x.QuestionId, x.AnswerScaleId })
             .ToListAsync(cancellationToken);
+
+        return pairs
+            .Where(x => scaleById.ContainsKey(x.AnswerScaleId))
+            .ToDictionary(x => x.QuestionId, x => scaleById[x.AnswerScaleId]);
     }
 
     private async Task<Dictionary<int, int>> ResponseCountsAsync(
@@ -891,6 +1009,7 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
     private sealed record AnswerScaleValidation(
         string? ErrorCode,
         string Name,
+        string ScaleKind,
         IReadOnlyList<SaveAnswerScaleOptionCommand> Options);
 
     private async Task<AnswerScaleValidation> ValidateAnswerScaleAsync(
@@ -899,9 +1018,15 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         CancellationToken cancellationToken)
     {
         var name = command.AnswerScaleName?.Trim() ?? string.Empty;
+        var kind = command.ScaleKind?.Trim() ?? string.Empty;
+
         if (name.Length == 0)
         {
-            return new AnswerScaleValidation(SurveyErrorCodes.AnswerScaleNameRequired, name, []);
+            return new AnswerScaleValidation(SurveyErrorCodes.AnswerScaleNameRequired, name, kind, []);
+        }
+        if (!AnswerScaleKinds.IsValid(kind))
+        {
+            return new AnswerScaleValidation(SurveyErrorCodes.AnswerScaleKindInvalid, name, kind, []);
         }
 
         var names = await db.AnswerScales
@@ -910,7 +1035,7 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             .ToListAsync(cancellationToken);
         if (names.Any(x => NormalizeKey(x) == NormalizeKey(name)))
         {
-            return new AnswerScaleValidation(SurveyErrorCodes.AnswerScaleNameExists, name, []);
+            return new AnswerScaleValidation(SurveyErrorCodes.AnswerScaleNameExists, name, kind, []);
         }
 
         var options = (command.Options ?? [])
@@ -919,24 +1044,37 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
                 option.DisplayText?.Trim() ?? string.Empty))
             .ToList();
 
+        // Thang tự nhập chữ không có mức nào để chọn.
+        if (kind == AnswerScaleKinds.Text)
+        {
+            return options.Count > 0
+                ? new AnswerScaleValidation(SurveyErrorCodes.AnswerScaleTextHasOptions, name, kind, [])
+                : new AnswerScaleValidation(null, name, kind, []);
+        }
+
         if (options.Count < 2 || options.Count > MaximumScaleOptions)
         {
-            return new AnswerScaleValidation(SurveyErrorCodes.AnswerScaleOptionsInvalid, name, []);
+            return new AnswerScaleValidation(SurveyErrorCodes.AnswerScaleOptionsInvalid, name, kind, []);
         }
+        // Value không cần liên tiếp: thang 'Có/Không' dùng 1 và 5 để cùng dải điểm
+        // với thang mức độ hài lòng.
         if (options.Any(x => x.Value is < 1 or > MaximumScaleOptions)
             || options.Select(x => x.Value).Distinct().Count() != options.Count)
         {
-            return new AnswerScaleValidation(SurveyErrorCodes.AnswerScaleOptionsInvalid, name, []);
+            return new AnswerScaleValidation(SurveyErrorCodes.AnswerScaleOptionsInvalid, name, kind, []);
         }
         if (options.Any(x => x.DisplayText.Length == 0))
         {
-            return new AnswerScaleValidation(SurveyErrorCodes.AnswerScaleOptionTextRequired, name, []);
+            return new AnswerScaleValidation(SurveyErrorCodes.AnswerScaleOptionTextRequired, name, kind, []);
         }
 
-        return new AnswerScaleValidation(null, name, options.OrderBy(x => x.Value).ToList());
+        return new AnswerScaleValidation(null, name, kind, options.OrderBy(x => x.Value).ToList());
     }
 
-    private sealed record TemplateValidation(string? ErrorCode, string Name, IReadOnlyList<string> Questions);
+    private sealed record TemplateValidation(
+        string? ErrorCode,
+        string Name,
+        IReadOnlyList<SaveSurveyQuestionCommand> Questions);
 
     private async Task<TemplateValidation> ValidateTemplateAsync(
         SaveSurveyTemplateCommand command,
@@ -958,14 +1096,11 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             return new TemplateValidation(SurveyErrorCodes.TemplateNameExists, name, []);
         }
 
-        if (!await db.AnswerScales.AnyAsync(x => x.AnswerScaleId == command.AnswerScaleId, cancellationToken))
-        {
-            return new TemplateValidation(SurveyErrorCodes.AnswerScaleNotFound, name, []);
-        }
-
         var questions = (command.Questions ?? [])
-            .Select(text => text?.Trim() ?? string.Empty)
-            .Where(text => text.Length > 0)
+            .Select(question => new SaveSurveyQuestionCommand(
+                question.QuestionText?.Trim() ?? string.Empty,
+                question.AnswerScaleId))
+            .Where(question => question.QuestionText.Length > 0)
             .ToList();
 
         if (questions.Count == 0)
@@ -977,6 +1112,17 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             return new TemplateValidation(SurveyErrorCodes.TemplateTooManyQuestions, name, []);
         }
 
+        // Mỗi câu mang thang riêng nên phải kiểm tất cả mã thang được dùng.
+        var scaleIds = questions.Select(x => x.AnswerScaleId).Distinct().ToList();
+        var knownScaleIds = await db.AnswerScales
+            .Where(x => scaleIds.Contains(x.AnswerScaleId))
+            .Select(x => x.AnswerScaleId)
+            .ToListAsync(cancellationToken);
+        if (knownScaleIds.Count != scaleIds.Count)
+        {
+            return new TemplateValidation(SurveyErrorCodes.QuestionScaleNotFound, name, []);
+        }
+
         return new TemplateValidation(null, name, questions);
     }
 
@@ -984,6 +1130,7 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         new(
             scale.AnswerScaleId,
             scale.AnswerScaleName,
+            scale.ScaleKind,
             options
                 .OrderBy(x => x.Value)
                 .Select(x => new AnswerScaleOptionDto(
@@ -997,12 +1144,55 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         new(
             template.SurveyTemplateId,
             template.TemplateName,
-            template.AnswerScaleId,
             template.CreatedAt,
             questions
                 .OrderBy(x => x.QuestionId)
-                .Select(x => new SurveyQuestionDto(x.QuestionId, x.SurveyTemplateId, x.QuestionText))
+                .Select(x => new SurveyQuestionDto(
+                    x.QuestionId,
+                    x.SurveyTemplateId,
+                    x.QuestionText,
+                    x.AnswerScaleId))
                 .ToList());
+
+    /// <summary>Các thang (kèm mức) mà một bộ câu hỏi đang dùng.</summary>
+    private async Task<IReadOnlyList<AnswerScaleDto>> ScalesOfTemplateAsync(
+        int surveyTemplateId,
+        CancellationToken cancellationToken)
+    {
+        var scaleIds = await db.SurveyQuestions
+            .AsNoTracking()
+            .Where(x => x.SurveyTemplateId == surveyTemplateId)
+            .Select(x => x.AnswerScaleId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        if (scaleIds.Count == 0) return [];
+
+        var scales = await db.AnswerScales
+            .AsNoTracking()
+            .Where(x => scaleIds.Contains(x.AnswerScaleId))
+            .ToListAsync(cancellationToken);
+        var options = await db.AnswerScaleOptions
+            .AsNoTracking()
+            .Where(x => scaleIds.Contains(x.AnswerScaleId))
+            .OrderBy(x => x.Value)
+            .ToListAsync(cancellationToken);
+
+        return scales
+            .OrderBy(x => x.AnswerScaleId)
+            .Select(scale => ToDto(
+                scale,
+                options.Where(option => option.AnswerScaleId == scale.AnswerScaleId).ToList()))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Điểm của một phiếu: trung bình các câu thuộc thang 'Options'. Câu thang
+    /// 'Text' không có giá trị số nên không tham gia.
+    /// </summary>
+    private static decimal ComputeScore(IReadOnlyList<int> scoredValues) =>
+        scoredValues.Count == 0
+            ? 0m
+            : Math.Round((decimal)scoredValues.Average(), 2);
 
     private static string NormalizeKey(string value) => value.Trim().ToLowerInvariant();
 
