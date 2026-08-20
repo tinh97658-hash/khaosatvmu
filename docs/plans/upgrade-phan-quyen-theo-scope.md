@@ -507,3 +507,200 @@ Không nên migration cứng khiến hệ thống lỗi đăng nhập nếu dữ
 8. Áp action policy cho danh mục đào tạo.
 9. Backfill dữ liệu thật và khóa validation bắt buộc scope theo role.
 10. Viết test authorization/scope và smoke test UI theo từng actor.
+
+## 15. Quy trình chức năng phân quyền được chốt
+
+Mục này mô tả quy trình nghiệp vụ cuối cùng của chức năng phân quyền. Nếu một nội dung phía trên mâu thuẫn với mục này về việc có bắt buộc chọn scope ngay khi tạo hồ sơ hay không, **mục 15 được ưu tiên áp dụng**.
+
+### 15.1. Ba khái niệm phải được tách rõ
+
+| Khái niệm | Trả lời câu hỏi | Ví dụ |
+| --- | --- | --- |
+| `Role` (vai trò) | Người dùng làm việc với tư cách gì? | Trưởng bộ môn |
+| `Permission` (quyền module) | Vai trò đó được vào module nào? | Báo cáo, tiến độ, danh mục |
+| `Scope` (phạm vi dữ liệu) | Trong các module được phép vào, hồ sơ được thấy dữ liệu của ai/đơn vị nào? | Bộ môn Công nghệ thông tin |
+
+Quyền truy cập cuối cùng không được quyết định chỉ bằng một trong ba thành phần:
+
+```text
+Quyền truy cập cuối cùng
+  = Permission của Role
+  + Scope của hồ sơ đang hoạt động
+  + ActionPolicy của Role
+```
+
+- Chọn `Role = DEPARTMENT_MANAGER` không có nghĩa là đã chọn một bộ môn cụ thể.
+- `ScopeType = DEPARTMENT` chỉ có nghĩa hệ thống đang yêu cầu chọn dữ liệu từ danh mục `Departments`.
+- `ScopeId = 12` mới có nghĩa hồ sơ thực sự được cấp phạm vi Bộ môn có `DepartmentId = 12`.
+- Màn **Phân quyền Module** cấu hình permission cho `Role`, vì vậy thay đổi tại đây ảnh hưởng đến mọi hồ sơ mang role đó; đây không phải nơi gán scope cho từng người.
+
+### 15.2. Dữ liệu phải có trước khi gán phạm vi
+
+Các scope không được nhập bằng text tự do. Danh sách lựa chọn phải lấy từ danh mục thật:
+
+| ScopeType | Nguồn lựa chọn |
+| --- | --- |
+| `DEPARTMENT` | `Departments` |
+| `LECTURER` | `Lecturers` |
+| `FACULTY` | `Faculties` |
+| `MAJOR` | `Majors` |
+| `COURSE_SECTION` | `CourseSections` |
+| `SYSTEM` | Không cần chọn bản ghi; hệ thống tự gán toàn trường |
+
+Vì vậy quy trình provisioning dữ liệu là:
+
+```text
+Tạo tài khoản ADMIN phạm vi SYSTEM
+  -> ADMIN nhập/import danh mục Khoa, Bộ môn, Giảng viên, Học phần, Lớp học phần
+  -> ADMIN tạo tài khoản người dùng
+  -> ADMIN tạo hồ sơ và gán scope từ các danh mục đã có
+```
+
+Nếu danh mục tương ứng chưa có dữ liệu, UI phải hiển thị trạng thái rỗng rõ ràng, ví dụ: **“Chưa có bộ môn. Hãy tạo/import danh mục Bộ môn trước.”** Không được chỉ hiển thị một dropdown rỗng khiến người dùng tưởng hệ thống bị lỗi.
+
+### 15.3. Quy trình tạo hồ sơ
+
+1. Admin mở một tài khoản và chọn **Tạo hồ sơ**.
+2. Admin nhập tên hồ sơ và mã hồ sơ. Mã hồ sơ phải duy nhất trong hệ thống.
+3. Admin chọn vai trò.
+4. Hệ thống tự xác định loại scope hợp lệ cho vai trò:
+
+   | Role | ScopeType bắt buộc khi hồ sơ khả dụng | Cách chọn |
+   | --- | --- | --- |
+   | `ADMIN` | `SYSTEM` | Tự gán, không hiển thị dropdown dữ liệu |
+   | `SURVEY_ADMIN` | `SYSTEM` | Tự gán, không hiển thị dropdown dữ liệu |
+   | `DEPARTMENT_MANAGER` | `DEPARTMENT` | Chọn một bản ghi từ `Departments` |
+   | `LECTURER` | `LECTURER` | Chọn một bản ghi từ `Lecturers` |
+
+5. Với scope cần một bản ghi cụ thể, UI tải danh sách tương ứng và Admin chọn **Phạm vi được cấp**.
+6. Admin lưu hồ sơ.
+
+Kết quả khi lưu:
+
+```text
+ADMIN/SURVEY_ADMIN
+  -> ScopeType = SYSTEM
+  -> ScopeId = null
+  -> hồ sơ khả dụng ngay
+
+DEPARTMENT_MANAGER/LECTURER đã chọn phạm vi cụ thể
+  -> lưu ScopeType + ScopeId
+  -> hồ sơ khả dụng
+
+DEPARTMENT_MANAGER/LECTURER chọn "Cấu hình sau"
+  -> ScopeType = null
+  -> ScopeId = null
+  -> IsDefault = false
+  -> hồ sơ ở trạng thái "Chưa cấu hình phạm vi"
+```
+
+`Scope = null` được phép ở tầng lưu trữ để Admin có thể tạo/import tài khoản và hồ sơ trước khi danh mục sẵn sàng. Tuy nhiên, `Scope = null` tuyệt đối không có nghĩa là toàn trường và không phải một hồ sơ có thể sử dụng.
+
+UI nên thể hiện đây là một lựa chọn có chủ ý bằng nhãn **“Lưu dưới dạng chưa cấu hình”**, thay vì để “Cấu hình sau” trông giống một phạm vi hợp lệ.
+
+### 15.4. Ví dụ tạo hồ sơ Trưởng bộ môn
+
+```text
+Tên hồ sơ: Trưởng Bộ Môn
+Mã hồ sơ: TBM-CNTT
+Vai trò: DEPARTMENT_MANAGER
+```
+
+Sau khi chọn vai trò:
+
+```text
+Loại phạm vi: Bộ môn                 (hệ thống tự chọn và khóa)
+Phạm vi được cấp: Công nghệ thông tin (Admin phải chọn từ Departments)
+```
+
+Dữ liệu được lưu:
+
+```text
+RoleCode = DEPARTMENT_MANAGER
+ScopeType = DEPARTMENT
+ScopeId = <DepartmentId của Bộ môn Công nghệ thông tin>
+ScopeCode = DEPARTMENT:<DepartmentId>   // chỉ dùng hiển thị/audit
+ScopeName = Công nghệ thông tin         // chỉ dùng hiển thị/audit
+```
+
+Hồ sơ này được vào module nào còn phụ thuộc vào permission đã cấp cho role `DEPARTMENT_MANAGER`. Khi vào một module được phép, backend chỉ trả dữ liệu có quan hệ với đúng `DepartmentId` nói trên.
+
+Nếu Admin chưa chọn “Công nghệ thông tin” mà lưu cấu hình sau, hồ sơ vẫn tồn tại nhưng không xuất hiện trong danh sách hồ sơ khả dụng khi đăng nhập.
+
+### 15.5. Quy trình cấu hình quyền module
+
+Đây là quy trình độc lập với việc tạo hồ sơ:
+
+1. Admin mở **Phân quyền Module**.
+2. Admin chọn một role, ví dụ `DEPARTMENT_MANAGER`.
+3. Admin bật/tắt các permission module cho role.
+4. Hệ thống lưu vào `RolePermissions`.
+5. Tất cả hồ sơ đang mang role đó nhận cùng tập permission module.
+
+Không gán permission module trực tiếp cho từng profile trong phase hiện tại. Nếu sau này cần ngoại lệ theo từng người, phải thiết kế một cơ chế riêng; không được dùng scope để giả lập ngoại lệ permission.
+
+### 15.6. Quy trình đăng nhập và chọn hồ sơ làm việc
+
+```text
+User đăng nhập
+  -> Backend lấy các profile IsActive = true
+  -> Loại bỏ profile Scope = null
+  -> Không còn profile khả dụng: trả AUTH_PROFILE_SCOPE_REQUIRED
+  -> Có một profile khả dụng: chọn/kích hoạt profile đó
+  -> Có nhiều profile khả dụng: yêu cầu người dùng chọn một profile
+  -> Tạo session gắn với đúng ActiveProfileId
+```
+
+- Profile chưa cấu hình scope không được đưa vào danh sách lựa chọn phiên làm việc.
+- Nếu gọi trực tiếp một profile chưa cấu hình, backend trả `AUTH_PROFILE_SCOPE_REQUIRED`.
+- Một session chỉ có đúng một `ActiveProfileId`; không cộng dồn role, permission hoặc scope từ các profile khác của cùng user.
+- Khi người dùng đổi profile, hệ thống tạo lại access context theo profile mới.
+
+### 15.7. Thứ tự kiểm tra trên mỗi request nghiệp vụ
+
+Backend phải kiểm tra theo thứ tự:
+
+```text
+1. Session còn hợp lệ?
+2. User và ActiveProfile còn hoạt động?
+3. ActiveProfile đã có scope hợp lệ?
+4. Role có permission vào module?
+5. ActionPolicy có cho phép hành động đang yêu cầu?
+6. Bản ghi được đọc/sửa/xóa có nằm trong scope?
+7. Chỉ khi tất cả đều đạt mới thực thi nghiệp vụ.
+```
+
+Frontend có thể ẩn menu, khóa bộ lọc hoặc ẩn nút để UX rõ ràng hơn, nhưng backend vẫn phải thực hiện đầy đủ các kiểm tra trên. Không được tin `scopeId`, `departmentId` hoặc bộ lọc do frontend gửi lên nếu chưa đối chiếu với active profile.
+
+### 15.8. Quy trình thay đổi hoặc xóa phạm vi
+
+- Khi Admin đổi role hoặc scope của một profile, các session đang dùng profile đó phải bị revoke để quyền cũ không tiếp tục tồn tại.
+- Nếu bỏ scope khỏi profile, profile trở về trạng thái **Chưa cấu hình phạm vi**, không được làm profile mặc định và không được dùng để đăng nhập nghiệp vụ.
+- Không được xóa một Faculty/Department/Major/Lecturer/CourseSection đang được profile tham chiếu làm scope.
+- API xóa phải trả lỗi `CATALOG_SCOPE_IN_USE`; Admin phải chuyển scope của các profile liên quan trước rồi mới xóa danh mục.
+- Không tự động biến scope đang hoạt động thành `null` khi xóa danh mục.
+
+### 15.9. Trạng thái cần hiển thị trên màn quản trị
+
+Mỗi hồ sơ cần hiển thị một trong các trạng thái rõ ràng:
+
+| Trạng thái | Điều kiện | Có thể dùng đăng nhập? |
+| --- | --- | --- |
+| Khả dụng | `IsActive = true` và scope hợp lệ | Có |
+| Chưa cấu hình phạm vi | `IsActive = true`, `ScopeType = null`, `ScopeId = null` | Không |
+| Vô hiệu | `IsActive = false` | Không |
+
+Form tạo/sửa hồ sơ phải có các trạng thái loading, rỗng và lỗi riêng cho danh sách scope. Lỗi tải danh sách scope phải hiển thị ngay cạnh trường **Phạm vi được cấp** và có nút thử lại; không dùng một thông báo chung như “Không thể hoàn tất thao tác quản trị” khiến người dùng không biết lỗi nằm ở tải phạm vi hay lưu hồ sơ.
+
+### 15.10. Checklist kiểm thử quy trình
+
+- Chọn `DEPARTMENT_MANAGER` tự đặt và khóa `ScopeType = DEPARTMENT`.
+- Dropdown phạm vi tải đúng dữ liệu từ `Departments` và hỗ trợ tìm kiếm.
+- Chọn một bộ môn rồi lưu tạo ra profile có đúng `ScopeId`.
+- Chọn “Lưu dưới dạng chưa cấu hình” tạo profile scope-null, không mặc định và không đăng nhập được.
+- `ADMIN` và `SURVEY_ADMIN` luôn được gán `SYSTEM`; không được coi `null` là `SYSTEM`.
+- Thay permission của role làm thay đổi quyền module của tất cả profile mang role đó nhưng không thay đổi scope.
+- Hai profile của cùng user không cộng dồn quyền hoặc scope.
+- Đổi role/scope revoke session cũ.
+- Truy cập URL/API ngoài scope bị backend chặn dù frontend bị sửa thủ công.
+- Không xóa được bản ghi danh mục đang được dùng làm scope.
