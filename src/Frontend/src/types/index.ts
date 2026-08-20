@@ -396,11 +396,16 @@ export interface AdminRole {
 
 export interface AdminAuditLog {
   id: string;
+  source: 'AUTH' | 'CHANGE';
   userId: string | null;
   profileId: string | null;
   email: string | null;
   event: string;
+  entityName: string | null;
+  recordId: string | null;
   metadata: string | null;
+  oldValues: string | null;
+  newValues: string | null;
   createdAt: string;
 }
 

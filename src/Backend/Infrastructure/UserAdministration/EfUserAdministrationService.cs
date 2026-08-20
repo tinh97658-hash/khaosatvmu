@@ -354,26 +354,69 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
         CancellationToken cancellationToken = default)
     {
         (page, pageSize) = NormalizePaging(page, pageSize);
-        var query = db.AuthAuditLogs.AsNoTracking();
+        var authQuery = db.AuthAuditLogs.AsNoTracking();
+        var changeQuery = db.ChangeAuditLogs.AsNoTracking();
         if (userId is not null)
         {
-            query = query.Where(x => x.UserId == userId);
+            authQuery = authQuery.Where(x => x.UserId == userId);
+            changeQuery = changeQuery.Where(x => x.ChangedBy == userId);
         }
 
-        var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
+        var authCount = await authQuery.CountAsync(cancellationToken);
+        var changeCount = await changeQuery.CountAsync(cancellationToken);
+        var totalCount = authCount + changeCount;
+        var offset = (long)(page - 1) * pageSize;
+        if (offset >= totalCount)
+        {
+            return new AdminPage<AdminAuditLogDto>([], page, pageSize, totalCount);
+        }
+
+        // Lấy đủ phần đầu của mỗi nguồn để hợp nhất chính xác tới trang cần trả.
+        // Một bản ghi nằm ngoài giới hạn này ở từng nguồn không thể lọt vào trang hiện tại.
+        var fetchCount = (int)Math.Min(totalCount, offset + pageSize);
+        var authItems = await authQuery
             .OrderByDescending(x => x.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .ThenByDescending(x => x.Id)
+            .Take(fetchCount)
             .Select(x => new AdminAuditLogDto(
                 x.Id,
+                "AUTH",
                 x.UserId,
                 x.ProfileId,
                 x.Email,
                 x.Event,
+                null,
+                null,
                 x.Metadata,
+                null,
+                null,
                 x.CreatedAt))
             .ToListAsync(cancellationToken);
+        var changeItems = await changeQuery
+            .OrderByDescending(x => x.ChangedAt)
+            .ThenByDescending(x => x.Id)
+            .Take(fetchCount)
+            .Select(x => new AdminAuditLogDto(
+                x.Id,
+                "CHANGE",
+                x.ChangedBy,
+                null,
+                x.ChangedByEmail,
+                x.Action,
+                x.TableName,
+                x.RecordId,
+                null,
+                x.OldValues,
+                x.NewValues,
+                x.ChangedAt))
+            .ToListAsync(cancellationToken);
+        var items = authItems
+            .Concat(changeItems)
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .Skip((int)offset)
+            .Take(pageSize)
+            .ToList();
         return new AdminPage<AdminAuditLogDto>(items, page, pageSize, totalCount);
     }
 

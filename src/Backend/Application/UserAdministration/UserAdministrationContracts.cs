@@ -61,11 +61,16 @@ public sealed record RolePermissionGrantDto(Guid PermissionId, bool IsGranted);
 
 public sealed record AdminAuditLogDto(
     Guid Id,
+    string Source,
     Guid? UserId,
     Guid? ProfileId,
     string? Email,
     string Event,
+    string? EntityName,
+    string? RecordId,
     string? Metadata,
+    string? OldValues,
+    string? NewValues,
     DateTime CreatedAt);
 
 public sealed record AdminPage<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount);
