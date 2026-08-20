@@ -76,6 +76,15 @@ public sealed class SurveyQuestion
     /// câu hỏi trộn được nhiều loại thang khác nhau.
     /// </summary>
     public int AnswerScaleId { get; set; }
+
+    /// <summary>
+    /// Câu bẫy kiểm tra độ tập trung. NULL là câu hỏi bình thường; có giá trị thì
+    /// người trả lời phải chọn đúng mức đó, sai một câu là phiếu bị lọc.
+    /// Chỉ đặt được trên câu thuộc thang <see cref="AnswerScaleKinds.Options"/> và
+    /// giá trị phải là một mức có thật của chính thang đó.
+    /// Câu bẫy không được tính vào <see cref="SurveyResponse.Score"/>.
+    /// </summary>
+    public int? AttentionCheckValue { get; set; }
 }
 
 /// <summary>
@@ -117,6 +126,30 @@ public sealed class CourseSectionSurvey : ISoftDeletable
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// Điểm trung bình của lớp, chỉ gộp phiếu qua bộ lọc nhiễu. NULL nghĩa là
+    /// chưa bấm tính lần nào. Đây là ảnh chụp của lần bấm nút gần nhất chứ không
+    /// tự cập nhật khi có phiếu mới về, nên chỗ nào hiện số này phải hiện kèm
+    /// <see cref="ScoreCalculatedAt"/>.
+    /// </summary>
+    public decimal? AverageScore { get; set; }
+
+    /// <summary>Tổng lượt nộp, tính cả phiếu bị lọc. Số liệu tiến độ thu phiếu.</summary>
+    public int TotalResponseCount { get; set; }
+
+    /// <summary>Số phiếu qua lọc, chính là mẫu số của <see cref="AverageScore"/>.</summary>
+    public int ValidResponseCount { get; set; }
+
+    /// <summary>
+    /// Số phiếu bị lọc nhiễu. Suy ra được bằng tổng trừ hợp lệ, nhưng lưu sẵn để
+    /// màn danh sách lớp hiển thị thẳng, và lệch nhau thì biết dữ liệu có vấn đề.
+    /// </summary>
+    public int InvalidResponseCount { get; set; }
+
+    /// <summary>Lần bấm tính điểm gần nhất. NULL là chưa tính lần nào.</summary>
+    public DateTime? ScoreCalculatedAt { get; set; }
+
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAt { get; set; }
 }
@@ -133,9 +166,23 @@ public sealed class SurveyResponse
 
     /// <summary>
     /// numeric(4,2): điểm trung bình, backend tính khi nhận phiếu. Chỉ gộp các câu
-    /// thuộc thang <see cref="AnswerScaleKinds.Options"/>; câu thang Text không tính.
+    /// thuộc thang <see cref="AnswerScaleKinds.Options"/> và không phải câu bẫy;
+    /// câu thang Text và câu bẫy không tính.
     /// </summary>
     public decimal Score { get; set; }
+
+    /// <summary>
+    /// Phiếu có qua bộ lọc nhiễu không. Phiếu bị lọc vẫn tính là một lượt nộp
+    /// nhưng không tham gia vào điểm trung bình của lớp.
+    /// Kết quả là ảnh chụp tại thời điểm nộp, không tính lại về sau.
+    /// </summary>
+    public bool IsValid { get; set; } = true;
+
+    /// <summary>
+    /// Các lý do bị lọc, ngăn cách bằng dấu phẩy, vd 'TOO_FAST,SINGLE_ANSWER'.
+    /// NULL khi phiếu hợp lệ.
+    /// </summary>
+    public string? RejectionReasons { get; set; }
 
     public DateTime SubmittedAt { get; set; }
 }

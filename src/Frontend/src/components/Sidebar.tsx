@@ -6,6 +6,7 @@ import {
   ChartColumn,
   ClipboardCheck,
   FileCheck2,
+  Gauge,
   GraduationCap,
   LayoutDashboard,
   ListChecks,
@@ -13,6 +14,8 @@ import {
   PanelLeftOpen,
   Presentation,
   School,
+  Sigma,
+  Table2,
   UserCog,
   UsersRound,
   X,
@@ -64,8 +67,11 @@ export function Sidebar({
       section: 'TỔNG QUAN',
       items: [
         { id: 'overview', label: 'Bảng điều khiển', icon: LayoutDashboard },
+        { id: 'survey-dashboard', label: 'Tổng quan khảo sát', icon: Gauge },
         { id: 'progress', label: 'Tiến độ thu phiếu', icon: ChartColumn },
         { id: 'reports', label: 'Thống kê & Báo cáo', icon: BarChart3 },
+        { id: 'survey-statistics', label: 'Bảng dữ liệu khảo sát', icon: Table2 },
+        { id: 'survey-analysis', label: 'Phân tích chuyên sâu', icon: Sigma },
       ],
     },
     {

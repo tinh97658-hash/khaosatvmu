@@ -16,7 +16,11 @@ import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { SurveyTemplateImportDialog } from '../components/SurveyTemplateImportDialog';
 import { ApiError } from '../services/apiClient';
-import { surveyApi, surveyErrorMessage } from '../services/surveyApi';
+import {
+  surveyApi,
+  surveyErrorMessage,
+  type SaveSurveyTemplatePayload,
+} from '../services/surveyApi';
 import { maximumAnswerScaleOptions, maximumQuestionsPerTemplate } from '../types';
 import type { AnswerScale, AnswerScaleKind, SurveyTemplate } from '../types';
 import '../styles/survey-operations.css';
@@ -25,6 +29,8 @@ import '../styles/survey-operations.css';
 interface QuestionForm {
   questionText: string;
   answerScaleId: string;
+  /** Mức bắt buộc của câu bẫy độ tập trung. Chuỗi rỗng nghĩa là câu bình thường. */
+  attentionCheckValue: string;
 }
 
 interface TemplateForm {
@@ -46,7 +52,11 @@ interface ScaleForm {
   options: ScaleOptionForm[];
 }
 
-const emptyQuestion: QuestionForm = { questionText: '', answerScaleId: '' };
+const emptyQuestion: QuestionForm = {
+  questionText: '',
+  answerScaleId: '',
+  attentionCheckValue: '',
+};
 
 const emptyTemplateForm: TemplateForm = {
   surveyTemplateId: null,
@@ -133,7 +143,7 @@ export const SurveyTemplatesPage: React.FC = () => {
     setValidationError(null);
     setForm({
       ...emptyTemplateForm,
-      questions: [{ questionText: '', answerScaleId: defaultScaleId }],
+      questions: [{ questionText: '', answerScaleId: defaultScaleId, attentionCheckValue: '' }],
     });
     setIsEditorOpen(true);
   };
@@ -146,6 +156,8 @@ export const SurveyTemplatesPage: React.FC = () => {
       questions: template.questions.map((question) => ({
         questionText: question.questionText,
         answerScaleId: String(question.answerScaleId),
+        attentionCheckValue:
+          question.attentionCheckValue === null ? '' : String(question.attentionCheckValue),
       })),
     });
     setIsEditorOpen(true);
@@ -173,6 +185,7 @@ export const SurveyTemplatesPage: React.FC = () => {
         {
           questionText: '',
           answerScaleId: prev.questions.at(-1)?.answerScaleId ?? defaultScaleId,
+          attentionCheckValue: '',
         },
       ],
     }));
@@ -216,6 +229,10 @@ export const SurveyTemplatesPage: React.FC = () => {
       questions: filled.map((question) => ({
         questionText: question.questionText,
         answerScaleId: Number(question.answerScaleId),
+        // Để trống là câu bình thường; backend còn kiểm mức có thật của thang.
+        attentionCheckValue: question.attentionCheckValue
+          ? Number(question.attentionCheckValue)
+          : null,
       })),
     };
 
@@ -240,10 +257,7 @@ export const SurveyTemplatesPage: React.FC = () => {
     }
   };
 
-  const handleImport = async (draft: {
-    templateName: string;
-    questions: { questionText: string; answerScaleId: number }[];
-  }): Promise<string | null> => {
+  const handleImport = async (draft: SaveSurveyTemplatePayload): Promise<string | null> => {
     try {
       await surveyApi.createTemplate(draft);
       setTemplates(await surveyApi.templates());
@@ -587,6 +601,40 @@ export const SurveyTemplatesPage: React.FC = () => {
                         </option>
                       ))}
                     </select>
+                    {(() => {
+                      // Câu bẫy chỉ đặt được trên thang có mức chọn sẵn: thang tự
+                      // nhập chữ không có mức nào để bắt người ta chọn.
+                      const scale = answerScales.find(
+                        (item) => String(item.answerScaleId) === question.answerScaleId
+                      );
+                      const canTrap = scale?.scaleKind === 'Options';
+
+                      return (
+                        <label className="survey-question-trap">
+                          <span>Câu bẫy — mức bắt buộc</span>
+                          <select
+                            aria-label={`Mức bắt buộc của câu bẫy cho câu hỏi ${index + 1}`}
+                            value={canTrap ? question.attentionCheckValue : ''}
+                            disabled={!canTrap}
+                            title={
+                              canTrap
+                                ? undefined
+                                : 'Chỉ đặt được câu bẫy trên thang có mức chọn sẵn'
+                            }
+                            onChange={(event) =>
+                              updateQuestion(index, { attentionCheckValue: event.target.value })
+                            }
+                          >
+                            <option value="">Không phải câu bẫy</option>
+                            {(scale?.options ?? []).map((option) => (
+                              <option key={option.answerScaleOptionId} value={String(option.value)}>
+                                Mức {option.value} — {option.displayText}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      );
+                    })()}
                   </div>
                   <button
                     type="button"

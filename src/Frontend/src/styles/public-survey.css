@@ -98,6 +98,52 @@
   font-size: 12px;
 }
 
+/* ------------------------------------------------- Màn mở đầu trước khi làm bài */
+
+.public-survey-intro .public-survey-note {
+  margin-top: 0;
+}
+
+.public-survey-intro .public-survey-header {
+  margin-top: 18px;
+}
+
+.public-survey-intro .public-survey-context {
+  justify-content: flex-start;
+}
+
+/* Cam kết ẩn danh: đặt ngay trước nút Bắt đầu để sinh viên đọc rồi mới vào bài. */
+.public-survey-pledge {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 12px;
+  border: 1px solid #cfe6d8;
+  border-left: 3px solid #14865a;
+  background: #f2faf6;
+}
+
+.public-survey-pledge svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: #14865a;
+}
+
+.public-survey-pledge strong {
+  display: block;
+  margin-bottom: 2px;
+  color: #0f6b47;
+  font-size: 12px;
+}
+
+.public-survey-pledge p {
+  margin: 0;
+  color: #40505a;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .public-survey-progress {
   display: flex;
   align-items: center;

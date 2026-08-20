@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260820164032_AddSurveyResponseFilteringColumns")]
+    partial class AddSurveyResponseFilteringColumns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -351,9 +354,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("CourseSectionSurveyId"));
 
-                    b.Property<decimal?>("AverageScore")
-                        .HasColumnType("numeric(4,2)");
-
                     b.Property<int>("CourseSectionId")
                         .HasColumnType("integer");
 
@@ -366,11 +366,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("EndTime")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("InvalidResponseCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -378,24 +373,11 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<DateTime?>("ScoreCalculatedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int>("SemesterSurveyId")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("StartTime")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("TotalResponseCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.Property<int>("ValidResponseCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
 
                     b.HasKey("CourseSectionSurveyId");
 

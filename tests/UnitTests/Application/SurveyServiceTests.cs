@@ -7,8 +7,11 @@ using Xunit;
 
 public class SurveyServiceTests
 {
-    private static SaveSurveyQuestionCommand Question(string text, int answerScaleId = 1) =>
-        new(text, answerScaleId);
+    private static SaveSurveyQuestionCommand Question(
+        string text,
+        int answerScaleId = 1,
+        int? attentionCheckValue = null) =>
+        new(text, answerScaleId, attentionCheckValue);
 
     [Fact]
     public void SurveyRules_MaximumQuestionsPerTemplate_ShouldBeThirty()
@@ -61,7 +64,7 @@ public class SurveyServiceTests
             new(3, "5"),
             new(4, "Học phần rất bổ ích"),
         };
-        var command = new SubmitSurveyResponseCommand(answers, "Bài giảng rất hay");
+        var command = new SubmitSurveyResponseCommand(answers, "Bài giảng rất hay", 120);
 
         var scored = command.Answers
             .Select(a => int.TryParse(a.AnswerValue, out var value) ? value : (int?)null)

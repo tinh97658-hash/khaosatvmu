@@ -23,6 +23,46 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     /// <summary>Trần số câu trả lời tự nhập trả kèm mỗi câu hỏi, tránh payload quá lớn.</summary>
     private const int MaxTextAnswersPerQuestion = 200;
 
+    /// <summary>
+    /// Số phiếu của một lớp, tách làm hai nhóm theo quyết định C-e:
+    /// <see cref="TotalCount"/> đếm hết mọi phiếu, dùng cho số liệu tiến độ thu
+    /// phiếu (tỷ lệ hoàn thành so với sĩ số) — nộp ẩu thì vẫn là đã tham gia.
+    /// <see cref="ValidCount"/> và <see cref="ValidTotalScore"/> chỉ gộp phiếu qua
+    /// bộ lọc nhiễu, dùng cho mọi số liệu về chất lượng.
+    /// </summary>
+    private sealed record ResponseTally(int TotalCount, int ValidCount, decimal ValidTotalScore)
+    {
+        public static readonly ResponseTally Empty = new(0, 0, 0m);
+
+        public decimal AverageScore =>
+            ValidCount > 0 ? Math.Round(ValidTotalScore / ValidCount, 2) : 0m;
+    }
+
+    /// <summary>
+    /// Gộp số phiếu theo lớp trong một lượt truy vấn: cả tổng lẫn phần hợp lệ.
+    /// </summary>
+    private async Task<Dictionary<int, ResponseTally>> ResponseTalliesAsync(
+        IReadOnlyCollection<int> courseSectionSurveyIds,
+        CancellationToken cancellationToken)
+    {
+        if (courseSectionSurveyIds.Count == 0) return [];
+
+        return await db.SurveyResponses.AsNoTracking()
+            .Where(x => courseSectionSurveyIds.Contains(x.CourseSectionSurveyId))
+            .GroupBy(x => x.CourseSectionSurveyId)
+            .Select(g => new
+            {
+                CourseSectionSurveyId = g.Key,
+                TotalCount = g.Count(),
+                ValidCount = g.Count(x => x.IsValid),
+                ValidTotalScore = g.Sum(x => x.IsValid ? x.Score : 0m)
+            })
+            .ToDictionaryAsync(
+                x => x.CourseSectionSurveyId,
+                x => new ResponseTally(x.TotalCount, x.ValidCount, x.ValidTotalScore),
+                cancellationToken);
+    }
+
     public async Task<OperationalProgressReportDto?> GetOperationalProgressReportAsync(
         int semesterId,
         CancellationToken cancellationToken = default)
@@ -49,6 +89,8 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
         var sectionSurveyIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
 
+        // CỐ Ý đếm cả phiếu bị lọc nhiễu: đây là báo cáo tiến độ thu phiếu, một em
+        // nộp phiếu ẩu thì vẫn là đã tham gia, không thể coi như chưa làm.
         var responseCounts = await db.SurveyResponses
             .AsNoTracking()
             .Where(x => sectionSurveyIds.Contains(x.CourseSectionSurveyId))
@@ -175,22 +217,8 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
         var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
 
-        // SQL Server / Postgres aggregation in DB instead of pulling all rows into RAM
-        var responseStats = cssIds.Count == 0
-            ? new Dictionary<int, (int Count, decimal TotalScore)>()
-            : await db.SurveyResponses.AsNoTracking()
-                .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
-                .GroupBy(x => x.CourseSectionSurveyId)
-                .Select(g => new
-                {
-                    CourseSectionSurveyId = g.Key,
-                    Count = g.Count(),
-                    TotalScore = g.Sum(x => x.Score)
-                })
-                .ToDictionaryAsync(
-                    x => x.CourseSectionSurveyId,
-                    x => (x.Count, x.TotalScore),
-                    cancellationToken);
+        // Gộp ngay trong SQL thay vì kéo hết phiếu về bộ nhớ ứng dụng.
+        var responseStats = await ResponseTalliesAsync(cssIds, cancellationToken);
 
         var reports = new List<LecturerPerformanceReportDto>();
 
@@ -200,23 +228,22 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             var lecSecIds = lecSections.Select(x => x.CourseSectionId).ToList();
             var lecCss = sectionSurveys.Where(x => lecSecIds.Contains(x.CourseSectionId)).ToList();
 
+            // Số lượt nộp đếm hết (tiến độ); điểm chỉ gộp phiếu hợp lệ (chất lượng).
             int totalResponses = 0;
-            decimal totalScoreSum = 0;
+            int validResponses = 0;
+            decimal validScoreSum = 0;
 
             var sectionSummaries = new List<LecturerSectionSummaryDto>();
             foreach (var css in lecCss)
             {
                 var sec = lecSections.FirstOrDefault(x => x.CourseSectionId == css.CourseSectionId);
                 var crs = sec != null && courses.TryGetValue(sec.CourseId, out var c) ? c : null;
-                
-                var (cnt, sum) = responseStats.TryGetValue(css.CourseSectionSurveyId, out var stat)
-                    ? stat
-                    : (0, 0m);
 
-                totalResponses += cnt;
-                totalScoreSum += sum;
+                var tally = responseStats.GetValueOrDefault(css.CourseSectionSurveyId, ResponseTally.Empty);
 
-                decimal secAvg = cnt > 0 ? Math.Round(sum / cnt, 2) : 0;
+                totalResponses += tally.TotalCount;
+                validResponses += tally.ValidCount;
+                validScoreSum += tally.ValidTotalScore;
 
                 sectionSummaries.Add(new LecturerSectionSummaryDto(
                     css.CourseSectionSurveyId,
@@ -224,12 +251,12 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                     crs?.CourseName ?? string.Empty,
                     sec?.SectionName ?? string.Empty,
                     sec?.ClassSize ?? 0,
-                    cnt,
-                    secAvg
+                    tally.TotalCount,
+                    tally.AverageScore
                 ));
             }
 
-            decimal avgScore = totalResponses > 0 ? Math.Round(totalScoreSum / totalResponses, 2) : 0;
+            decimal avgScore = validResponses > 0 ? Math.Round(validScoreSum / validResponses, 2) : 0;
 
             reports.Add(new LecturerPerformanceReportDto(
                 lec.LecturerId,
@@ -268,8 +295,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .ToListAsync(cancellationToken);
         var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
 
+        // Điểm từng câu của giảng viên là số liệu chất lượng: chỉ gộp phiếu hợp lệ.
         var responseIds = await db.SurveyResponses.AsNoTracking()
-            .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
+            .Where(x => cssIds.Contains(x.CourseSectionSurveyId) && x.IsValid)
             .Select(x => x.ResponseId)
             .ToListAsync(cancellationToken);
 
@@ -280,8 +308,10 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .ToListAsync(cancellationToken);
 
         var questionIds = answers.Select(x => x.QuestionId).Distinct().ToList();
+        // Câu bẫy ép chọn một mức cố định nên điểm của nó vô nghĩa: bỏ hẳn khỏi
+        // phân tích theo câu hỏi, không chỉ khỏi phép trung bình.
         var questions = await db.SurveyQuestions.AsNoTracking()
-            .Where(x => questionIds.Contains(x.QuestionId))
+            .Where(x => questionIds.Contains(x.QuestionId) && x.AttentionCheckValue == null)
             .ToListAsync(cancellationToken);
         var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
 
@@ -314,21 +344,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
         var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
         
-        var responseStats = cssIds.Count == 0
-            ? new Dictionary<int, (int Count, decimal TotalScore)>()
-            : await db.SurveyResponses.AsNoTracking()
-                .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
-                .GroupBy(x => x.CourseSectionSurveyId)
-                .Select(g => new
-                {
-                    CourseSectionSurveyId = g.Key,
-                    Count = g.Count(),
-                    TotalScore = g.Sum(x => x.Score)
-                })
-                .ToDictionaryAsync(
-                    x => x.CourseSectionSurveyId,
-                    x => (x.Count, x.TotalScore),
-                    cancellationToken);
+        var responseStats = await ResponseTalliesAsync(cssIds, cancellationToken);
 
         var facultyReports = new List<FacultyDepartmentReportDto>();
 
@@ -344,19 +360,22 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             var facSecIds = facSections.Select(x => x.CourseSectionId).ToList();
             var facCss = sectionSurveys.Where(x => facSecIds.Contains(x.CourseSectionId)).ToList();
 
+            // Số lượt nộp đếm hết; điểm chỉ gộp phiếu hợp lệ.
             int facResponses = 0;
-            decimal facScoreSum = 0;
+            int facValidResponses = 0;
+            decimal facValidScoreSum = 0;
 
             foreach (var css in facCss)
             {
-                if (responseStats.TryGetValue(css.CourseSectionSurveyId, out var stat))
-                {
-                    facResponses += stat.Count;
-                    facScoreSum += stat.TotalScore;
-                }
+                var tally = responseStats.GetValueOrDefault(css.CourseSectionSurveyId, ResponseTally.Empty);
+                facResponses += tally.TotalCount;
+                facValidResponses += tally.ValidCount;
+                facValidScoreSum += tally.ValidTotalScore;
             }
 
-            decimal facAvgScore = facResponses > 0 ? Math.Round(facScoreSum / facResponses, 2) : 0;
+            decimal facAvgScore = facValidResponses > 0
+                ? Math.Round(facValidScoreSum / facValidResponses, 2)
+                : 0;
 
             var deptSummaries = new List<DepartmentSummaryDto>();
             foreach (var dept in facDepts)
@@ -370,17 +389,19 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 var deptCss = facCss.Where(x => deptSecIds.Contains(x.CourseSectionId)).ToList();
 
                 int deptResponses = 0;
-                decimal deptScoreSum = 0;
+                int deptValidResponses = 0;
+                decimal deptValidScoreSum = 0;
                 foreach (var css in deptCss)
                 {
-                    if (responseStats.TryGetValue(css.CourseSectionSurveyId, out var stat))
-                    {
-                        deptResponses += stat.Count;
-                        deptScoreSum += stat.TotalScore;
-                    }
+                    var tally = responseStats.GetValueOrDefault(css.CourseSectionSurveyId, ResponseTally.Empty);
+                    deptResponses += tally.TotalCount;
+                    deptValidResponses += tally.ValidCount;
+                    deptValidScoreSum += tally.ValidTotalScore;
                 }
 
-                decimal deptAvg = deptResponses > 0 ? Math.Round(deptScoreSum / deptResponses, 2) : 0;
+                decimal deptAvg = deptValidResponses > 0
+                    ? Math.Round(deptValidScoreSum / deptValidResponses, 2)
+                    : 0;
 
                 deptSummaries.Add(new DepartmentSummaryDto(
                     dept.DepartmentId,
@@ -419,8 +440,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .FirstOrDefaultAsync(x => x.SurveyTemplateId == semesterSurvey.SurveyTemplateId, cancellationToken);
         if (template is null) return null;
 
+        // Bỏ câu bẫy: điểm của nó vô nghĩa vì mọi người đều bị ép chọn một mức.
         var questions = await db.SurveyQuestions.AsNoTracking()
-            .Where(x => x.SurveyTemplateId == template.SurveyTemplateId)
+            .Where(x => x.SurveyTemplateId == template.SurveyTemplateId && x.AttentionCheckValue == null)
             .OrderBy(x => x.QuestionId)
             .ToListAsync(cancellationToken);
 
@@ -429,8 +451,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .ToListAsync(cancellationToken);
         var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
 
+        // Báo cáo chất lượng nên chỉ gộp phiếu qua bộ lọc nhiễu.
         var responseIds = await db.SurveyResponses.AsNoTracking()
-            .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
+            .Where(x => cssIds.Contains(x.CourseSectionSurveyId) && x.IsValid)
             .Select(x => x.ResponseId)
             .ToListAsync(cancellationToken);
 
@@ -448,7 +471,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
         var responsesCount = responseIds.Count;
         var overallAvgScore = await db.SurveyResponses.AsNoTracking()
-            .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
+            .Where(x => cssIds.Contains(x.CourseSectionSurveyId) && x.IsValid)
             .AverageAsync(x => x.Score, cancellationToken);
 
         var answers = await db.SurveyResponseAnswers.AsNoTracking()
@@ -491,8 +514,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
         var questions = template is null
             ? []
+            // Bỏ câu bẫy khỏi phân tích theo câu hỏi.
             : await db.SurveyQuestions.AsNoTracking()
-                .Where(x => x.SurveyTemplateId == template.SurveyTemplateId)
+                .Where(x => x.SurveyTemplateId == template.SurveyTemplateId && x.AttentionCheckValue == null)
                 .OrderBy(x => x.QuestionId)
                 .ToListAsync(cancellationToken);
 
@@ -507,8 +531,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             : await db.Lecturers.AsNoTracking()
                 .FirstOrDefaultAsync(x => x.LecturerId == section.LecturerId, cancellationToken);
 
+        // Phân tích theo câu hỏi là số liệu chất lượng nên chỉ gộp phiếu hợp lệ.
         var responseIds = await db.SurveyResponses.AsNoTracking()
-            .Where(x => x.CourseSectionSurveyId == courseSectionSurveyId)
+            .Where(x => x.CourseSectionSurveyId == courseSectionSurveyId && x.IsValid)
             .Select(x => x.ResponseId)
             .ToListAsync(cancellationToken);
 
@@ -536,7 +561,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         var responseCount = responseIds.Count;
         decimal averageScore = responseCount > 0
             ? Math.Round(await db.SurveyResponses.AsNoTracking()
-                .Where(x => x.CourseSectionSurveyId == courseSectionSurveyId)
+                .Where(x => x.CourseSectionSurveyId == courseSectionSurveyId && x.IsValid)
                 .AverageAsync(x => x.Score, cancellationToken), 2)
             : 0;
 
@@ -626,18 +651,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 .ToDictionaryAsync(x => x.FacultyId, x => x.FacultyName, cancellationToken);
 
         var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
-        var responseStats = cssIds.Count == 0
-            ? new Dictionary<int, (int Count, decimal TotalScore)>()
-            : await db.SurveyResponses.AsNoTracking()
-                .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
-                .GroupBy(x => x.CourseSectionSurveyId)
-                .Select(g => new
-                {
-                    CourseSectionSurveyId = g.Key,
-                    Count = g.Count(),
-                    TotalScore = g.Sum(x => x.Score)
-                })
-                .ToDictionaryAsync(x => x.CourseSectionSurveyId, x => (x.Count, x.TotalScore), cancellationToken);
+        var responseStats = await ResponseTalliesAsync(cssIds, cancellationToken);
 
         var term = search?.Trim().ToLowerInvariant();
         var results = new List<SurveyResultDetailDto>();
@@ -680,13 +694,13 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 continue;
             }
 
-            var (cnt, totalScore) = responseStats.TryGetValue(css.CourseSectionSurveyId, out var stat)
-                ? stat
-                : (0, 0m);
+            var tally = responseStats.GetValueOrDefault(css.CourseSectionSurveyId, ResponseTally.Empty);
+            var cnt = tally.TotalCount;
 
             int classSize = sec?.ClassSize ?? 0;
+            // Tỷ lệ hoàn thành đếm hết lượt nộp; điểm chỉ gộp phiếu hợp lệ.
             decimal completionRate = classSize > 0 ? Math.Round((decimal)cnt / classSize * 100, 1) : 0;
-            decimal averageScore = cnt > 0 ? Math.Round(totalScore / cnt, 2) : 0;
+            decimal averageScore = tally.AverageScore;
 
             results.Add(new SurveyResultDetailDto(
                 css.CourseSectionSurveyId,
@@ -824,27 +838,14 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 .ToDictionaryAsync(x => x.FacultyId, x => x, cancellationToken);
 
         // Gộp phiếu theo lớp (1 query duy nhất).
-        var responseStats = cssIds.Count == 0
-            ? new Dictionary<int, (int Count, decimal TotalScore)>()
-            : await db.SurveyResponses.AsNoTracking()
-                .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
-                .GroupBy(x => x.CourseSectionSurveyId)
-                .Select(g => new
-                {
-                    CourseSectionSurveyId = g.Key,
-                    Count = g.Count(),
-                    TotalScore = g.Sum(x => x.Score)
-                })
-                .ToDictionaryAsync(
-                    x => x.CourseSectionSurveyId,
-                    x => (x.Count, x.TotalScore),
-                    cancellationToken);
+        var responseStats = await ResponseTalliesAsync(cssIds, cancellationToken);
 
         // Phân bố điểm theo nhóm (band 2..5) gộp ngay trong SQL.
+        // Là số liệu chất lượng nên chỉ gộp phiếu hợp lệ.
         var bandCounts = cssIds.Count == 0
             ? new List<BandCount>()
             : (await db.SurveyResponses.AsNoTracking()
-                .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
+                .Where(x => cssIds.Contains(x.CourseSectionSurveyId) && x.IsValid)
                 .Select(x => new
                 {
                     Band = x.Score >= 4.5m ? 5 : x.Score >= 4.0m ? 4 : x.Score >= 3.0m ? 3 : 2
@@ -856,8 +857,8 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 .ToList();
 
         // Duyệt từng lớp để gộp theo Khoa / Bộ môn và phân loại trạng thái thu phiếu.
-        var facultyStats = new Dictionary<int, (int SectionCount, int Target, int Responses, decimal ScoreSum)>();
-        var deptStats = new Dictionary<int, (int SectionCount, int Target, int Responses, decimal ScoreSum)>();
+        var facultyStats = new Dictionary<int, (int SectionCount, int Target, int Responses, int ValidResponses, decimal ScoreSum)>();
+        var deptStats = new Dictionary<int, (int SectionCount, int Target, int Responses, int ValidResponses, decimal ScoreSum)>();
         int completedCount = 0;
         int inProgressCount = 0;
         int laggingCount = 0;
@@ -878,10 +879,10 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 reportFacultyId = owningDepartment.FacultyId;
             }
             reportFacultyId ??= lec?.FacultyId;
-            var (cnt, totalScore) = responseStats.TryGetValue(ss.CourseSectionSurveyId, out var stat)
-                ? stat
-                : (0, 0m);
+            var tally = responseStats.GetValueOrDefault(ss.CourseSectionSurveyId, ResponseTally.Empty);
+            var cnt = tally.TotalCount;
             int classSize = sec?.ClassSize ?? 0;
+            // Tỷ lệ hoàn thành là số liệu tiến độ nên đếm cả phiếu bị lọc.
             decimal rate = classSize > 0 ? Math.Round((decimal)cnt / classSize * 100, 2) : 0;
 
             if (rate >= 80) completedCount++;
@@ -890,21 +891,23 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
             if (reportFacultyId is { } fId)
             {
-                var f = facultyStats.TryGetValue(fId, out var fs) ? fs : (SectionCount: 0, Target: 0, Responses: 0, ScoreSum: 0m);
+                var f = facultyStats.TryGetValue(fId, out var fs) ? fs : (SectionCount: 0, Target: 0, Responses: 0, ValidResponses: 0, ScoreSum: 0m);
                 f.SectionCount++;
                 f.Target += classSize;
                 f.Responses += cnt;
-                f.ScoreSum += totalScore;
+                f.ValidResponses += tally.ValidCount;
+                f.ScoreSum += tally.ValidTotalScore;
                 facultyStats[fId] = f;
             }
 
             if (reportDepartmentId is { } dId)
             {
-                var d = deptStats.TryGetValue(dId, out var ds) ? ds : (SectionCount: 0, Target: 0, Responses: 0, ScoreSum: 0m);
+                var d = deptStats.TryGetValue(dId, out var ds) ? ds : (SectionCount: 0, Target: 0, Responses: 0, ValidResponses: 0, ScoreSum: 0m);
                 d.SectionCount++;
                 d.Target += classSize;
                 d.Responses += cnt;
-                d.ScoreSum += totalScore;
+                d.ValidResponses += tally.ValidCount;
+                d.ScoreSum += tally.ValidTotalScore;
                 deptStats[dId] = d;
             }
         }
@@ -916,7 +919,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             var fac = faculties.TryGetValue(fId, out var f) ? f : null;
             int deptCount = departments.Values.Count(d => d.FacultyId == fId);
             int responses = stats.Responses;
-            decimal avg = responses > 0 ? Math.Round(stats.ScoreSum / responses, 2) : 0;
+            decimal avg = stats.ValidResponses > 0
+                ? Math.Round(stats.ScoreSum / stats.ValidResponses, 2)
+                : 0;
             decimal completion = stats.Target > 0 ? Math.Round((decimal)responses / stats.Target * 100, 2) : 0;
             facultyList.Add(new FacultyOverviewDto(
                 fId,
@@ -938,7 +943,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 ? ff.FacultyName
                 : "Chưa thuộc khoa";
             int responses = stats.Responses;
-            decimal avg = responses > 0 ? Math.Round(stats.ScoreSum / responses, 2) : 0;
+            decimal avg = stats.ValidResponses > 0
+                ? Math.Round(stats.ScoreSum / stats.ValidResponses, 2)
+                : 0;
             decimal completion = stats.Target > 0 ? Math.Round((decimal)responses / stats.Target * 100, 2) : 0;
             deptList.Add(new DepartmentOverviewDto(
                 dId,
@@ -955,9 +962,12 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         // Tổng hợp toàn trường.
         int totalTarget = facultyStats.Values.Sum(x => x.Target);
         int totalResponses = facultyStats.Values.Sum(x => x.Responses);
+        int totalValidResponses = facultyStats.Values.Sum(x => x.ValidResponses);
         decimal totalScoreSum = facultyStats.Values.Sum(x => x.ScoreSum);
         decimal overallCompletion = totalTarget > 0 ? Math.Round((decimal)totalResponses / totalTarget * 100, 2) : 0;
-        decimal overallAvg = totalResponses > 0 ? Math.Round(totalScoreSum / totalResponses, 2) : 0;
+        decimal overallAvg = totalValidResponses > 0
+            ? Math.Round(totalScoreSum / totalValidResponses, 2)
+            : 0;
 
         var scoreDistribution = new List<ScoreBandDto>();
         int bandTotal = bandCounts.Sum(x => x.Count);
@@ -1010,10 +1020,11 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         // Số lượt trả lời theo (Câu hỏi, Giá trị) gộp trong SQL qua join Responses →
         // Answers. "AnswerValue" là chuỗi nên gộp nguyên văn rồi mới ép sang số ở
         // dưới, chỉ với câu thuộc thang 'Options'.
+        // Chỉ gộp phiếu hợp lệ vì đây là số liệu chất lượng.
         var valueCounts = await (from r in db.SurveyResponses.AsNoTracking()
                                  join a in db.SurveyResponseAnswers.AsNoTracking()
                                      on r.ResponseId equals a.ResponseId
-                                 where cssIds.Contains(r.CourseSectionSurveyId)
+                                 where cssIds.Contains(r.CourseSectionSurveyId) && r.IsValid
                                  group a by new { a.QuestionId, a.AnswerValue } into g
                                  select new { g.Key.QuestionId, g.Key.AnswerValue, Count = g.Count() })
             .ToListAsync(cancellationToken);
@@ -1021,8 +1032,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         if (valueCounts.Count == 0) return [];
 
         var questionIds = valueCounts.Select(x => x.QuestionId).Distinct().ToList();
+        // Bỏ câu bẫy khỏi bảng xếp hạng câu hỏi yếu nhất.
         var questions = await db.SurveyQuestions.AsNoTracking()
-            .Where(x => questionIds.Contains(x.QuestionId))
+            .Where(x => questionIds.Contains(x.QuestionId) && x.AttentionCheckValue == null)
             .ToListAsync(cancellationToken);
         var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
         var textById = questions.ToDictionary(x => x.QuestionId, x => x.QuestionText);
@@ -1143,14 +1155,22 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                             select (int?)sec.ClassSize)
             .SumAsync(cancellationToken) ?? 0;
 
+        // Số lượt nộp đếm hết (tiến độ), điểm chỉ gộp phiếu hợp lệ (chất lượng).
         var agg = await db.SurveyResponses.AsNoTracking()
             .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
             .GroupBy(x => 1)
-            .Select(g => new { Count = g.Count(), Avg = g.Average(x => x.Score) })
+            .Select(g => new
+            {
+                Count = g.Count(),
+                ValidCount = g.Count(x => x.IsValid),
+                ValidTotalScore = g.Sum(x => x.IsValid ? x.Score : 0m)
+            })
             .FirstOrDefaultAsync(cancellationToken);
 
         int responses = agg?.Count ?? 0;
-        decimal avg = agg is null ? 0m : Math.Round(agg.Avg, 2);
+        decimal avg = agg is null || agg.ValidCount == 0
+            ? 0m
+            : Math.Round(agg.ValidTotalScore / agg.ValidCount, 2);
         return (target, responses, avg);
     }
 

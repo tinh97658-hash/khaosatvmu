@@ -25,6 +25,9 @@ const PublicSurveyPage = lazy(() => import('./pages/PublicSurveyPage').then(m =>
 const CampaignsPage = lazy(() => import('./pages/CampaignsPage').then(m => ({ default: m.CampaignsPage })));
 const SurveyProgressPage = lazy(() => import('./pages/SurveyProgressPage').then(m => ({ default: m.SurveyProgressPage })));
 const ReportsOverviewPage = lazy(() => import('./pages/ReportsOverviewPage').then(m => ({ default: m.ReportsOverviewPage })));
+const SurveyStatisticsPage = lazy(() => import('./pages/SurveyStatisticsPage').then(m => ({ default: m.SurveyStatisticsPage })));
+const SurveyAnalysisPage = lazy(() => import('./pages/SurveyAnalysisPage').then(m => ({ default: m.SurveyAnalysisPage })));
+const SurveyDashboardPage = lazy(() => import('./pages/SurveyDashboardPage').then(m => ({ default: m.SurveyDashboardPage })));
 const StudentSurveyView = lazy(() => import('./pages/StudentSurveyView').then(m => ({ default: m.StudentSurveyView })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const ProfileSelectionPage = lazy(() => import('./pages/ProfileSelectionPage').then(m => ({ default: m.ProfileSelectionPage })));
@@ -555,12 +558,13 @@ function DashboardApp() {
             {canAccessModule(permissions, currentTab) && <>
             {currentTab === 'overview' && (
               <DashboardOverview
-                stats={stats}
-                campaigns={campaigns}
                 permissions={permissions}
-                onOpenQR={handleOpenCampaignQR}
                 onNavigateTab={(tab) => setCurrentTab(tab)}
               />
+            )}
+
+            {currentTab === 'survey-dashboard' && (
+              <SurveyDashboardPage />
             )}
 
             {currentTab === 'progress' && (
@@ -574,6 +578,14 @@ function DashboardApp() {
 
             {currentTab === 'reports' && (
               <ReportsOverviewPage />
+            )}
+
+            {currentTab === 'survey-statistics' && (
+              <SurveyStatisticsPage />
+            )}
+
+            {currentTab === 'survey-analysis' && (
+              <SurveyAnalysisPage />
             )}
 
             {currentTab === 'faculties' && (

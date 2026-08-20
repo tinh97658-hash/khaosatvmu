@@ -19,6 +19,13 @@ interface ConfirmDialogProps {
   confirmText?: string;
   /** Cảnh báo thêm, ví dụ các bản ghi bị xóa lây theo ON DELETE CASCADE. */
   warning?: React.ReactNode;
+  /**
+   * Câu mô tả việc sắp làm. Bỏ trống thì dùng câu xoá mặc định. Truyền vào khi
+   * hộp thoại dùng cho việc khác, ví dụ xác nhận nộp bài.
+   */
+  message?: React.ReactNode;
+  /** 'danger' cho việc xoá, 'primary' cho các việc không phá dữ liệu. */
+  confirmVariant?: 'danger' | 'primary';
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -142,13 +149,19 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   recordName,
   confirmText = 'Xóa',
   warning,
+  message,
+  confirmVariant = 'danger',
 }) => (
   <Modal isOpen={isOpen} onClose={onClose} title={title}>
     <div className="catalog-confirm">
       <AlertTriangle aria-hidden="true" size={20} />
       <div>
         <p>
-          Bạn sắp xóa <strong>{recordName}</strong>. Thao tác này không thể hoàn tác.
+          {message ?? (
+            <>
+              Bạn sắp xóa <strong>{recordName}</strong>. Thao tác này không thể hoàn tác.
+            </>
+          )}
         </p>
         {warning && <p className="catalog-confirm__warning">{warning}</p>}
       </div>
@@ -157,7 +170,11 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       <button type="button" className="btn btn-secondary" onClick={onClose}>
         Hủy
       </button>
-      <button type="button" className="btn catalog-danger-button" onClick={onConfirm}>
+      <button
+        type="button"
+        className={confirmVariant === 'danger' ? 'btn catalog-danger-button' : 'btn btn-primary'}
+        onClick={onConfirm}
+      >
         {confirmText}
       </button>
     </div>

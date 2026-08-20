@@ -7,6 +7,7 @@ import {
   LoaderCircle,
   MessageSquare,
   Star,
+  TriangleAlert,
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -17,6 +18,7 @@ import { QuestionAnalysisChart } from '../components/QuestionAnalysisChart';
 import { ApiError } from '../services/apiClient';
 import { reportApi } from '../services/reportApi';
 import { surveyApi, surveyErrorMessage } from '../services/surveyApi';
+import { rejectionReasonTexts } from '../types';
 import type {
   CourseSectionSurvey,
   SectionSurveyAnalysis,
@@ -57,6 +59,8 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  /** '' xem hết, 'valid' chỉ phiếu hợp lệ, 'invalid' chỉ phiếu bị lọc nhiễu. */
+  const [validityFilter, setValidityFilter] = useState('');
 
   const [analysis, setAnalysis] = useState<SectionSurveyAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(showAnalysis);
@@ -120,18 +124,28 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
   // Các mức của thang trả lời lấy từ chính phiếu đầu tiên, đủ cả mức không ai chọn.
   const scaleValues = responses[0]?.valueCounts ?? [];
 
+  // Điểm trung bình là số liệu chất lượng nên chỉ gộp phiếu qua bộ lọc nhiễu,
+  // khớp với cách backend tính trong báo cáo.
+  const validResponses = responses.filter((response) => response.isValid);
   const averageScore =
-    responses.length === 0
+    validResponses.length === 0
       ? 0
-      : responses.reduce((total, response) => total + response.score, 0) / responses.length;
+      : validResponses.reduce((total, response) => total + response.score, 0) /
+        validResponses.length;
+
+  const invalidCount = responses.filter((response) => !response.isValid).length;
 
   const normalized = search.trim().toLowerCase();
-  const filtered = responses.filter(
-    (response) =>
+  const filtered = responses.filter((response) => {
+    const matchesSearch =
       !normalized ||
       String(response.responseId).includes(normalized) ||
-      (response.additionalComments ?? '').toLowerCase().includes(normalized)
-  );
+      (response.additionalComments ?? '').toLowerCase().includes(normalized);
+    const matchesValidity =
+      validityFilter === ''
+      || (validityFilter === 'invalid' ? !response.isValid : response.isValid);
+    return matchesSearch && matchesValidity;
+  });
 
   const columns: Column<SurveyResponseSummary>[] = [
     {
@@ -153,6 +167,39 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
       header: 'Điểm',
       width: '80px',
       render: (item) => <span className="response-score">{item.score.toFixed(2)}</span>,
+    },
+    {
+      key: 'isValid',
+      header: 'Trạng thái',
+      width: '110px',
+      filterValue: (item) => (item.isValid ? 'Hợp lệ' : 'Bị lọc'),
+      render: (item) =>
+        item.isValid ? (
+          <span className="response-validity">Hợp lệ</span>
+        ) : (
+          <span className="response-validity is-rejected">
+            <TriangleAlert aria-hidden="true" size={13} />
+            Bị lọc
+          </span>
+        ),
+    },
+    {
+      key: 'rejectionReasons',
+      header: 'Lý do bị lọc',
+      width: '230px',
+      // Dịch mã sang tiếng Việt, không phơi TOO_FAST ra màn hình.
+      filterValue: (item) => rejectionReasonTexts(item.rejectionReasons).join(', ') || '—',
+      render: (item) => {
+        const reasons = rejectionReasonTexts(item.rejectionReasons);
+        if (reasons.length === 0) return <span className="response-comment is-empty">—</span>;
+        return (
+          <ul className="response-reason-list">
+            {reasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        );
+      },
     },
     ...scaleValues.map((option) => ({
       key: `value-${option.value}`,
@@ -233,6 +280,10 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
               <MessageSquare className="operation-icon" aria-hidden="true" />
               {responses.filter((response) => response.additionalComments).length} phiếu có ý kiến
             </span>
+            <span className={invalidCount > 0 ? 'section-responses-stat--warning' : undefined}>
+              <TriangleAlert className="operation-icon" aria-hidden="true" />
+              {invalidCount} phiếu bị lọc nhiễu
+            </span>
             <span>
               <CalendarDays className="operation-icon" aria-hidden="true" />
               {formatDateTime(sectionSurvey.startTime)} → {formatDateTime(sectionSurvey.endTime)}
@@ -265,6 +316,13 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm theo mã phiếu hoặc ý kiến..."
+        filterOptions={[
+          { label: 'Tất cả phiếu', value: '' },
+          { label: `Bị lọc nhiễu (${invalidCount})`, value: 'invalid' },
+          { label: `Hợp lệ (${responses.length - invalidCount})`, value: 'valid' },
+        ]}
+        currentFilter={validityFilter}
+        onFilterChange={setValidityFilter}
         emptyMessage={loading ? 'Đang tải phiếu trả lời...' : 'Lớp này chưa có phiếu trả lời nào.'}
         keyExtractor={(item) => String(item.responseId)}
         pageSize={20}

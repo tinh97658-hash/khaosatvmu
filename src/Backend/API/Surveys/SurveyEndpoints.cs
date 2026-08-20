@@ -1,6 +1,7 @@
 using API.Auth;
 using Application.Surveys;
 using Domain;
+using Microsoft.AspNetCore.Mvc;
 
 namespace API.Surveys;
 
@@ -17,6 +18,10 @@ public static class SurveyEndpoints
         var operationalReadGroup = endpoints
             .MapGroup("/api/surveys")
             .RequireAuthorization(AuthPolicies.SurveyOperationalRead);
+        // Trang thống kê và nút tính điểm theo mẻ dành cho quản trị hệ thống.
+        var statisticsGroup = endpoints
+            .MapGroup("/api/surveys")
+            .RequireAuthorization(AuthPolicies.ReportsAccess);
 
         // --------------------------------------------------------- Answer scales
 
@@ -139,6 +144,59 @@ public static class SurveyEndpoints
                 cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
+        // ------------------------------------------------------- Thống kê điểm
+
+        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/statistics", async (
+            int semesterSurveyId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.GetSemesterSurveyStatisticsAsync(semesterSurveyId, cancellationToken)));
+
+        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/normalization", async (
+            int semesterSurveyId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.GetSemesterSurveyNormalizationAsync(semesterSurveyId, cancellationToken)));
+
+        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/department-summary", async (
+            int semesterSurveyId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.GetSemesterSurveyDepartmentSummaryAsync(semesterSurveyId, cancellationToken)));
+
+        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/dashboard", async (
+            int semesterSurveyId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.GetSemesterSurveyDashboardAsync(semesterSurveyId, cancellationToken)));
+
+        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/course-diagnosis", async (
+            int semesterSurveyId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.GetSemesterSurveyCourseDiagnosisAsync(semesterSurveyId, cancellationToken)));
+
+        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/lecturers", async (
+            int semesterSurveyId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.GetSemesterSurveyLecturersAsync(semesterSurveyId, cancellationToken)));
+
+        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/lecturers/{lecturerId:int}", async (
+            int semesterSurveyId,
+            int lecturerId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.GetLecturerSurveyReportAsync(semesterSurveyId, lecturerId, cancellationToken)));
+
+        // Tính lại theo mẻ, chỉ chạy khi quản trị bấm nút.
+        statisticsGroup.MapPost("/semester-surveys/{semesterSurveyId:int}/recalculate-scores", async (
+            int semesterSurveyId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.RecalculateSemesterSurveyScoresAsync(semesterSurveyId, cancellationToken)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
         // Phiếu của sinh viên: mở bằng link hoặc mã QR nên không yêu cầu đăng nhập.
         var publicGroup = endpoints.MapGroup("/api/public/surveys")
             .AllowAnonymous();
@@ -150,14 +208,42 @@ public static class SurveyEndpoints
             ToResult(await service.GetPublicSurveyAsync(linkToken, cancellationToken)))
             .RequireRateLimiting("PublicSurveyConcurrency");
 
+        // Cú bấm "Bắt đầu làm bài" là mốc tính thời gian làm bài. Không cache
+        // được vì mỗi sinh viên phải nhận một vé riêng, và cũng không lưu gì.
+        publicGroup.MapPost("/{linkToken}/start", async (
+            string linkToken,
+            ISurveyService service,
+            [FromServices] SurveyStartTicket ticket,
+            CancellationToken cancellationToken) =>
+        {
+            // Vẫn phải kiểm link có thật và còn mở, tránh phát vé cho link rác.
+            var survey = await service.GetPublicSurveyAsync(linkToken, cancellationToken);
+            if (!survey.Succeeded || survey.Value is not { } value)
+            {
+                return ToResult(survey);
+            }
+            if (!value.IsOpen)
+            {
+                return Results.Json(
+                    new { errorCode = SurveyErrorCodes.LinkNotOpen },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            return Results.Ok(new StartSurveyResponse(ticket.Issue(linkToken, DateTime.UtcNow)));
+        }).RequireRateLimiting("PublicSurveyStart");
+
         publicGroup.MapPost("/{linkToken}/responses", async (
             string linkToken,
             SubmitSurveyResponseRequest request,
             ISurveyService service,
+            [FromServices] SurveyStartTicket ticket,
             CancellationToken cancellationToken) =>
             ToResult(await service.SubmitSurveyResponseAsync(
                 linkToken,
-                request.ToCommand(),
+                request.ToCommand(
+                    // Vé thiếu, sai chữ ký hay của lớp khác đều quy về 0 giây,
+                    // để luật TOO_FAST của bộ lọc tự bắt.
+                    ticket.ElapsedSeconds(request.StartTicket, linkToken, DateTime.UtcNow)),
                 cancellationToken)))
             .RequireRateLimiting("PublicSurveySubmission");
 
@@ -195,6 +281,7 @@ public static class SurveyEndpoints
             SurveyErrorCodes.SemesterNotFound => StatusCodes.Status404NotFound,
             SurveyErrorCodes.SemesterSurveyNotFound => StatusCodes.Status404NotFound,
             SurveyErrorCodes.SectionSurveyNotFound => StatusCodes.Status404NotFound,
+            SurveyErrorCodes.LecturerHasNoSections => StatusCodes.Status404NotFound,
             SurveyErrorCodes.ResponseNotFound => StatusCodes.Status404NotFound,
             SurveyErrorCodes.LinkNotFound => StatusCodes.Status404NotFound,
             SurveyErrorCodes.QuestionScaleNotFound => StatusCodes.Status404NotFound,
@@ -226,7 +313,14 @@ public static class SurveyEndpoints
                 .ToList() ?? []);
     }
 
-    public sealed record SaveSurveyQuestionRequest(string? QuestionText, int AnswerScaleId);
+    /// <summary>
+    /// <paramref name="AttentionCheckValue"/> để trống là câu hỏi bình thường;
+    /// điền một mức thì câu đó thành câu bẫy độ tập trung.
+    /// </summary>
+    public sealed record SaveSurveyQuestionRequest(
+        string? QuestionText,
+        int AnswerScaleId,
+        int? AttentionCheckValue);
 
     public sealed record SaveSurveyTemplateRequest(
         string TemplateName,
@@ -235,7 +329,10 @@ public static class SurveyEndpoints
         public SaveSurveyTemplateCommand ToCommand() => new(
             TemplateName,
             Questions?
-                .Select(x => new SaveSurveyQuestionCommand(x.QuestionText ?? string.Empty, x.AnswerScaleId))
+                .Select(x => new SaveSurveyQuestionCommand(
+                    x.QuestionText ?? string.Empty,
+                    x.AnswerScaleId,
+                    x.AttentionCheckValue))
                 .ToList() ?? []);
     }
 
@@ -253,14 +350,20 @@ public static class SurveyEndpoints
 
     public sealed record SubmitSurveyAnswerRequest(int QuestionId, string? AnswerValue);
 
+    /// <summary>Vé nhận được khi bấm "Bắt đầu làm bài".</summary>
+    public sealed record StartSurveyResponse(string StartTicket);
+
     public sealed record SubmitSurveyResponseRequest(
         IReadOnlyList<SubmitSurveyAnswerRequest>? Answers,
-        string? AdditionalComments)
+        string? AdditionalComments,
+        /// <summary>Vé lấy từ endpoint /start. Thiếu cũng nhận, phiếu sẽ bị lọc.</summary>
+        string? StartTicket)
     {
-        public SubmitSurveyResponseCommand ToCommand() => new(
+        public SubmitSurveyResponseCommand ToCommand(double elapsedSeconds) => new(
             Answers?
                 .Select(x => new SubmitSurveyAnswerCommand(x.QuestionId, x.AnswerValue ?? string.Empty))
                 .ToList() ?? [],
-            AdditionalComments);
+            AdditionalComments,
+            elapsedSeconds);
     }
 }

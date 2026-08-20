@@ -159,6 +159,11 @@ export interface SurveyQuestion {
   surveyTemplateId: number;
   questionText: string;
   answerScaleId: number;
+  /**
+   * Mức bắt buộc của câu bẫy độ tập trung; null là câu hỏi bình thường.
+   * Chỉ có ở màn quản trị — phiếu sinh viên cố ý không nhận trường này.
+   */
+  attentionCheckValue: number | null;
 }
 
 /** Bảng "SurveyTemplates", kèm danh sách câu hỏi của bộ. */
@@ -222,6 +227,27 @@ export interface SurveyResponseSummary {
   additionalComments: string | null;
   answerCount: number;
   valueCounts: SurveyResponseValueCount[];
+  /** Phiếu có qua bộ lọc nhiễu không. Phiếu bị lọc vẫn tính là một lượt nộp. */
+  isValid: boolean;
+  /** Các mã lý do bị lọc ngăn cách dấu phẩy; null khi phiếu hợp lệ. */
+  rejectionReasons: string | null;
+}
+
+/** Nhãn tiếng Việt của mã lý do lọc nhiễu, để không phơi mã ra màn hình. */
+export const rejectionReasonLabels: Record<string, string> = {
+  TOO_FAST: 'Làm bài quá nhanh',
+  SINGLE_ANSWER: 'Chọn cùng một mức cho mọi câu',
+  ATTENTION_CHECK_FAILED: 'Sai câu kiểm tra độ tập trung',
+};
+
+/** Đổi chuỗi mã lý do thành danh sách nhãn tiếng Việt. */
+export function rejectionReasonTexts(reasons: string | null): string[] {
+  if (!reasons) return [];
+  return reasons
+    .split(',')
+    .map((code) => code.trim())
+    .filter((code) => code.length > 0)
+    .map((code) => rejectionReasonLabels[code] ?? code);
 }
 
 export interface SurveyResponseAnswer {

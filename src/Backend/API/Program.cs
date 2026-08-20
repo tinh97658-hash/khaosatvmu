@@ -78,6 +78,18 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
+    // Phát vé bắt đầu làm bài. Nới tay hơn nộp bài vì bấm lại bao nhiêu lần cũng
+    // được, nhưng vẫn chặn kiểu quay vòng xin vé hàng loạt.
+    options.AddPolicy("PublicSurveyStart", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
 });
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -126,6 +138,18 @@ builder.Services.AddScoped<IAuthSessionService, EfAuthSessionService>();
 builder.Services.AddScoped<IUserAdministrationService, EfUserAdministrationService>();
 builder.Services.AddScoped<ICatalogService, EfCatalogService>();
 builder.Services.AddScoped<ISurveyService, EfSurveyService>();
+// Vé bắt đầu làm bài. Khóa ký khác nhau giữa máy dev và máy chạy thật, lấy từ
+// cấu hình chứ không viết trong mã. Đổi khóa thì mọi vé đang phát mất hiệu lực.
+builder.Services.AddSingleton(_ =>
+{
+    var signingKey = builder.Configuration["SurveyTicket:SigningKey"];
+    if (string.IsNullOrWhiteSpace(signingKey))
+    {
+        throw new InvalidOperationException(
+            "SurveyTicket:SigningKey is required. Set it via environment variable SurveyTicket__SigningKey.");
+    }
+    return new SurveyStartTicket(signingKey);
+});
 builder.Services.AddScoped<IReportService, EfReportService>();
 builder.Services.AddScoped<ApplicationCookieEvents>();
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();

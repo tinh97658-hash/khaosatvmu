@@ -312,6 +312,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.ToTable("SurveyQuestions");
             entity.HasKey(x => x.QuestionId);
             entity.Property(x => x.QuestionText).IsRequired();
+            // Ràng buộc "chỉ đặt bẫy trên thang Options và mức phải có thật" cần
+            // tra sang bảng khác nên kiểm ở tầng service, không đặt CHECK ở đây.
             entity.HasIndex(x => x.SurveyTemplateId);
             entity.HasIndex(x => x.AnswerScaleId);
             entity.HasOne<SurveyTemplate>()
@@ -349,6 +351,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                     "\"EndTime\" > \"StartTime\""));
             entity.HasKey(x => x.CourseSectionSurveyId);
             entity.Property(x => x.LinkToken).IsRequired();
+            // Ảnh chụp điểm của lần bấm tính gần nhất, không tự cập nhật.
+            entity.Property(x => x.AverageScore).HasColumnType("numeric(4,2)");
+            entity.Property(x => x.TotalResponseCount).HasDefaultValue(0);
+            entity.Property(x => x.ValidResponseCount).HasDefaultValue(0);
+            entity.Property(x => x.InvalidResponseCount).HasDefaultValue(0);
             entity.HasIndex(x => x.LinkToken).IsUnique();
             entity.HasIndex(x => new { x.SemesterSurveyId, x.CourseSectionId }).IsUnique();
             entity.HasIndex(x => x.CourseSectionId);
@@ -367,7 +374,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.ToTable("SurveyResponses");
             entity.HasKey(x => x.ResponseId);
             entity.Property(x => x.Score).HasColumnType("numeric(4,2)");
+            entity.Property(x => x.IsValid).HasDefaultValue(true);
+            entity.Property(x => x.RejectionReasons).HasMaxLength(200);
             entity.HasIndex(x => x.CourseSectionSurveyId);
+            // Tính điểm trung bình lớp luôn lọc theo IsValid nên đánh chỉ mục ghép.
+            entity.HasIndex(x => new { x.CourseSectionSurveyId, x.IsValid });
             entity.HasOne<CourseSectionSurvey>()
                 .WithMany()
                 .HasForeignKey(x => x.CourseSectionSurveyId)

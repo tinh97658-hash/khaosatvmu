@@ -25,12 +25,24 @@ const answerScaleCodeHeaders = new Set([
   'scale',
 ]);
 
+// Cột mức bắt buộc của câu bẫy độ tập trung, để trống là câu hỏi bình thường.
+const attentionCheckHeaders = new Set([
+  'muc bat buoc',
+  'cau bay',
+  'muc bay',
+  'muc dap an bat buoc',
+  'attentioncheckvalue',
+  'attention check',
+]);
+
 export interface ImportSurveyQuestionRow {
   rowNumber: number;
   questionText: string;
   /** Mã thang trả lời người dùng điền, đã đối chiếu với danh mục của hệ thống. */
   answerScaleId: number;
   answerScaleName: string;
+  /** Mức bắt buộc của câu bẫy; null là câu hỏi bình thường. */
+  attentionCheckValue: number | null;
 }
 
 export type SurveyTemplateImportFileErrorCode =
@@ -59,9 +71,18 @@ export interface InvalidScaleCodeRow {
   rawCode: string;
 }
 
+/** Dòng đặt câu bẫy nhưng mức bắt buộc không dùng được với thang của câu đó. */
+export interface InvalidAttentionCheckRow {
+  rowNumber: number;
+  questionText: string;
+  rawValue: string;
+  reason: 'TEXT_SCALE' | 'VALUE_NOT_IN_SCALE';
+}
+
 export interface SurveyTemplateImportResult {
   rows: ImportSurveyQuestionRow[];
   invalidScaleRows: InvalidScaleCodeRow[];
+  invalidAttentionCheckRows: InvalidAttentionCheckRow[];
 }
 
 // Dấu thanh tiếng Việt sau khi normalize('NFD') nằm trong dải U+0300..U+036F.
@@ -88,7 +109,7 @@ export const surveyTemplateTemplateFileName = 'mau-import-bo-cau-hoi.xlsx';
 /**
  * Tạo và tải tệp Excel mẫu cho một bộ câu hỏi khảo sát.
  *
- * Bố cục: cột A/B là hai cột dùng để import, chừa trống cột C và D, cột E/F là
+ * Bố cục: cột A/B/C là ba cột dùng để import, chừa trống cột D và E, cột F/G là
  * bảng tra thang trả lời. Bảng tra lấy thẳng từ danh mục thang của hệ thống nên
  * người soạn luôn thấy đúng mã đang có, không phải mã cố định trong mã nguồn.
  */
@@ -97,23 +118,37 @@ export async function downloadSurveyTemplateImportTemplate(
 ): Promise<void> {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
 
-  const sampleQuestions = [
-    'Giảng viên trình bày nội dung bài giảng rõ ràng, dễ hiểu.',
-    'Học liệu và tài liệu tham khảo của học phần đầy đủ, cập nhật.',
-    'Cách kiểm tra, đánh giá của học phần phản ánh đúng năng lực người học.',
-  ];
-
   // Câu mẫu gợi ý mã thang đầu tiên đang có để người dùng thấy cách điền.
-  const defaultScaleId = answerScales[0]?.answerScaleId ?? 1;
-  const sampleRows = sampleQuestions.map((questionText) => ({
-    questionText,
-    answerScaleId: defaultScaleId,
-  }));
+  const defaultScale = answerScales.find((scale) => scale.scaleKind === 'Options');
+  const defaultScaleId = defaultScale?.answerScaleId ?? answerScales[0]?.answerScaleId ?? 1;
+  // Mức mẫu cho câu bẫy phải là một mức có thật của chính thang đó.
+  const trapValue = defaultScale?.options?.[Math.floor((defaultScale.options.length - 1) / 2)]?.value;
+
+  const sampleRows: { questionText: string; answerScaleId: number; trap: number | null }[] = [
+    {
+      questionText: 'Giảng viên trình bày nội dung bài giảng rõ ràng, dễ hiểu.',
+      answerScaleId: defaultScaleId,
+      trap: null,
+    },
+    {
+      questionText: 'Học liệu và tài liệu tham khảo của học phần đầy đủ, cập nhật.',
+      answerScaleId: defaultScaleId,
+      trap: null,
+    },
+    {
+      questionText: trapValue
+        ? `Câu kiểm tra độ tập trung: hãy chọn đáp án ${trapValue}.`
+        : 'Cách kiểm tra, đánh giá của học phần phản ánh đúng năng lực người học.',
+      answerScaleId: defaultScaleId,
+      trap: trapValue ?? null,
+    },
+  ];
 
   const bold = { fontWeight: 'bold' as const };
   const header: SheetData[number] = [
     { value: 'Nội dung câu hỏi', type: String, ...bold },
     { value: 'Mã thang trả lời', type: String, ...bold },
+    { value: 'Mức bắt buộc', type: String, ...bold },
     null,
     null,
     { value: 'Thang trả lời của hệ thống', type: String, ...bold },
@@ -131,6 +166,7 @@ export async function downloadSurveyTemplateImportTemplate(
     body.push([
       question ? { value: question.questionText, type: String } : null,
       question ? { value: question.answerScaleId, type: Number } : null,
+      question?.trap ? { value: question.trap, type: Number } : null,
       null,
       null,
       scale ? { value: scale.answerScaleName, type: String } : null,
@@ -143,6 +179,7 @@ export async function downloadSurveyTemplateImportTemplate(
     columns: [
       { width: 70 },
       { width: 18 },
+      { width: 14 },
       { width: 4 },
       { width: 4 },
       { width: 30 },
@@ -193,6 +230,12 @@ export async function parseSurveyTemplateImportFile(
     throw new SurveyTemplateImportFileError('SCALE_HEADER_MISSING');
   }
 
+  // Cột câu bẫy là tùy chọn: tệp cũ không có cột này vẫn đọc được như thường.
+  const attentionIndex = headers.findIndex(
+    (header, index) =>
+      index !== questionIndex && index !== scaleIndex && attentionCheckHeaders.has(header)
+  );
+
   const scaleById = new Map(answerScales.map((scale) => [scale.answerScaleId, scale]));
 
   const dataRows = sheet
@@ -201,6 +244,7 @@ export async function parseSurveyTemplateImportFile(
       rowNumber: index + 2,
       questionText: cellText(row[questionIndex]),
       rawCode: cellText(row[scaleIndex]),
+      rawAttention: attentionIndex < 0 ? '' : cellText(row[attentionIndex]),
     }))
     .filter((row) => row.questionText.length > 0);
 
@@ -213,6 +257,7 @@ export async function parseSurveyTemplateImportFile(
 
   const rows: ImportSurveyQuestionRow[] = [];
   const invalidScaleRows: InvalidScaleCodeRow[] = [];
+  const invalidAttentionCheckRows: InvalidAttentionCheckRow[] = [];
 
   for (const row of dataRows) {
     const code = Number(row.rawCode);
@@ -227,13 +272,41 @@ export async function parseSurveyTemplateImportFile(
       continue;
     }
 
+    // Kiểm cùng luật với backend để người dùng biết lỗi ngay tại chỗ xem trước,
+    // khỏi gửi lên rồi mới bị trả về.
+    let attentionCheckValue: number | null = null;
+    if (row.rawAttention.length > 0) {
+      if (scale.scaleKind !== 'Options') {
+        invalidAttentionCheckRows.push({
+          rowNumber: row.rowNumber,
+          questionText: row.questionText,
+          rawValue: row.rawAttention,
+          reason: 'TEXT_SCALE',
+        });
+        continue;
+      }
+
+      const required = Number(row.rawAttention);
+      if (!Number.isInteger(required) || !scale.options.some((o) => o.value === required)) {
+        invalidAttentionCheckRows.push({
+          rowNumber: row.rowNumber,
+          questionText: row.questionText,
+          rawValue: row.rawAttention,
+          reason: 'VALUE_NOT_IN_SCALE',
+        });
+        continue;
+      }
+      attentionCheckValue = required;
+    }
+
     rows.push({
       rowNumber: row.rowNumber,
       questionText: row.questionText,
       answerScaleId: scale.answerScaleId,
       answerScaleName: scale.answerScaleName,
+      attentionCheckValue,
     });
   }
 
-  return { rows, invalidScaleRows };
+  return { rows, invalidScaleRows, invalidAttentionCheckRows };
 }
