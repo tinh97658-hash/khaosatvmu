@@ -26,16 +26,22 @@ Hai trường này đang là text tự do, phù hợp để ghi chú "đơn vị
 - Backend là nơi enforce scope. Frontend chỉ dùng scope để hiển thị bộ lọc/mặc định UI, không được là lớp bảo vệ chính.
 - Scope luôn đi theo `ActiveProfileId`, không cộng dồn scope của nhiều profile.
 - Scope phải cấu hình được bằng dữ liệu khi tạo/sửa hồ sơ làm việc, hạn chế hard-code theo `roleCode`.
-- Code có thể dùng role để chọn default action policy ban đầu, nhưng không được dùng role để bỏ qua scope query.
-- Scope phải dựa vào quan hệ dữ liệu thật: `Faculty`, `Department`, `Major`, `Lecturer`, `Course`, `CourseSection`, `CourseSectionSurvey`.
+- Business code không được rải điều kiện `roleCode` để quyết định nghiệp vụ. Nếu tạm thời action policy được suy ra từ role, việc suy ra đó phải nằm trong một authorization abstraction tập trung.
+- Scope phải dựa vào quan hệ dữ liệu thật: `Faculties`, `Departments`, `Majors`, `Lecturers`, `Courses`, `CourseSections`, `CourseSectionSurveys`.
+- `SYSTEM` là một loại scope dữ liệu, không phải quyền bypass authorization.
 
 Nguyên tắc chốt:
 
 ```text
 RolePermission quyết định vào module.
 UserProfileScope quyết định phạm vi dữ liệu.
-Action policy quyết định được làm gì trong phạm vi đó.
+ActionPolicy quyết định được làm gì trong phạm vi đó.
 ```
+
+Quy ước tên trong kế hoạch:
+
+- Khi nói đến bảng database, dùng đúng tên bảng PascalCase số nhiều: `Faculties`, `Departments`, `Majors`, `Lecturers`, `Courses`, `CourseSections`, `CourseSectionSurveys`.
+- Khi nói đến entity/model C# hoặc khái niệm nghiệp vụ, có thể dùng tên số ít như `Faculty`, `Department`, `CourseSection`.
 
 ## 3. Ranh giới phase này
 
@@ -100,18 +106,27 @@ ScopeCode varchar(100) null
 ScopeName varchar(200) null
 ```
 
-`OrganizationUnitCode` và `OrganizationUnitName` tạm thời giữ lại để tương thích UI/API hiện tại. Sau khi migrate ổn định có thể coi hai trường này là alias hiển thị hoặc deprecated.
+Nguồn dữ liệu authorization chỉ là:
+
+```text
+ScopeType
+ScopeId
+```
+
+`ScopeCode`, `ScopeName`, `OrganizationUnitCode` và `OrganizationUnitName` chỉ là dữ liệu hiển thị/denormalized cache để tương thích UI/API/audit trong giai đoạn chuyển tiếp. Không dùng các trường name/code này để authorize hoặc query nghiệp vụ.
+
+Nếu entity gốc đổi tên, cache hiển thị có thể được cập nhật sau; quyền truy cập vẫn không đổi vì dựa trên `ScopeType + ScopeId`.
 
 ### 5.2. Giá trị `ScopeType`
 
 | ScopeType | Ý nghĩa | ScopeId trỏ tới | Ví dụ |
 | --- | --- | --- | --- |
 | `SYSTEM` | Toàn hệ thống | null | Ban giám hiệu, thanh tra toàn trường |
-| `FACULTY` | Một khoa/viện | `Faculties.FacultyId` | Phó hiệu trưởng phụ trách khoa hoặc trưởng khoa nếu bổ sung |
-| `DEPARTMENT` | Một bộ môn | `Departments.DepartmentId` | Trưởng bộ môn |
-| `MAJOR` | Một ngành đào tạo | `Majors.MajorId` | Role tương lai cho khảo sát CTĐT |
-| `LECTURER` | Một giảng viên | `Lecturers.LecturerId` | Giảng viên cơ hữu |
-| `COURSE_SECTION` | Một lớp học phần cụ thể | `CourseSections.CourseSectionId` | Trường hợp phân công rất hẹp |
+| `FACULTY` | Một khoa/viện | `"Faculties"."FacultyId"` | Phó hiệu trưởng phụ trách khoa hoặc trưởng khoa nếu bổ sung |
+| `DEPARTMENT` | Một bộ môn | `"Departments"."DepartmentId"` | Trưởng bộ môn |
+| `MAJOR` | Một ngành đào tạo | `"Majors"."MajorId"` | Role tương lai cho khảo sát CTĐT |
+| `LECTURER` | Một giảng viên | `"Lecturers"."LecturerId"` | Giảng viên cơ hữu |
+| `COURSE_SECTION` | Một lớp học phần cụ thể | `"CourseSections"."CourseSectionId"` | Trường hợp phân công rất hẹp |
 
 Phase đầu nên triển khai chắc các scope:
 
@@ -126,11 +141,11 @@ Phase đầu nên triển khai chắc các scope:
 `ScopeId` có thể trỏ tới nhiều bảng khác nhau tùy `ScopeType`, nên không đặt một FK trực tiếp từ `UserProfiles.ScopeId`. Thay vào đó validate ở service khi tạo/sửa profile:
 
 ```text
-ScopeType = FACULTY     -> ScopeId phải tồn tại trong Faculties
-ScopeType = DEPARTMENT  -> ScopeId phải tồn tại trong Departments
-ScopeType = MAJOR       -> ScopeId phải tồn tại trong Majors
-ScopeType = LECTURER    -> ScopeId phải tồn tại trong Lecturers
-ScopeType = COURSE_SECTION -> ScopeId phải tồn tại trong CourseSections
+ScopeType = FACULTY     -> ScopeId phải tồn tại trong "Faculties"
+ScopeType = DEPARTMENT  -> ScopeId phải tồn tại trong "Departments"
+ScopeType = MAJOR       -> ScopeId phải tồn tại trong "Majors"
+ScopeType = LECTURER    -> ScopeId phải tồn tại trong "Lecturers"
+ScopeType = COURSE_SECTION -> ScopeId phải tồn tại trong "CourseSections"
 ScopeType = SYSTEM      -> ScopeId phải null
 ```
 
@@ -141,38 +156,64 @@ IX_UserProfiles_ScopeType_ScopeId
 IX_UserProfiles_UserId_RoleId_ScopeType_ScopeId
 ```
 
+Quyết định trước khi code:
+
+- Chấp nhận đây là polymorphic reference bằng `ScopeType + ScopeId`, không có FK cứng ở DB.
+- Đổi lại, mọi create/update profile phải validate scope bằng service.
+- Nếu sau này cần DB enforce FK thật cho từng loại scope, hướng thay thế là tách thành các cột nullable như `FacultyScopeId`, `DepartmentScopeId`, `LecturerScopeId`. Phase hiện tại chưa chọn hướng đó để tránh làm schema phình sớm.
+
 ## 6. Quan hệ scope với dữ liệu khảo sát
 
 Scope phải quy về được tập `CourseSectionId` được phép xem/thao tác.
 
 ```text
 SYSTEM
-  -> tất cả CourseSections
+  -> tất cả "CourseSections"
 
 FACULTY
-  -> CourseSections
-  -> Courses.FacultyId hoặc Lecturers.FacultyId hoặc Departments.FacultyId
+  -> "CourseSections"
+  -> theo source of truth được chốt cho dữ liệu học phần
 
 DEPARTMENT
-  -> CourseSections
-  -> Courses.DepartmentId hoặc Lecturers.DepartmentId
+  -> "CourseSections"
+  -> theo source of truth được chốt cho dữ liệu học phần
 
 MAJOR
-  -> chưa áp mạnh cho khảo sát học phần nếu CourseSection chưa gắn Major
+  -> chưa áp mạnh cho khảo sát học phần nếu "CourseSections" chưa gắn được "Majors"
 
 LECTURER
-  -> CourseSections.LecturerId = ScopeId
+  -> "CourseSections"."LecturerId" = ScopeId
 
 COURSE_SECTION
-  -> CourseSections.CourseSectionId = ScopeId
+  -> "CourseSections"."CourseSectionId" = ScopeId
 ```
 
 Điểm cần chốt khi triển khai:
 
-- Với lớp học phần, nguồn scope chính nên là `CourseSections.LecturerId` cho giảng viên.
-- Với trưởng bộ môn, nguồn scope chính nên là `Courses.DepartmentId`; nếu dữ liệu course thiếu department thì fallback sang `Lecturers.DepartmentId` cần được ghi rõ và test.
+- Với lớp học phần, nguồn scope chính nên là `"CourseSections"."LecturerId"` cho giảng viên.
+- Với trưởng bộ môn, phải chốt một đường mapping chính thức từ `"CourseSections"` về `"Departments"`. Gợi ý ban đầu là `"CourseSections" -> "Courses" -> "Courses"."DepartmentId"`.
+- Không để `IAccessScopeService` tự đoán theo nhiều đường như `"Courses"."DepartmentId"` hoặc `"Lecturers"."DepartmentId"` tùy dữ liệu có/không. Nếu cần fallback vì dữ liệu cũ thiếu, fallback phải là bước chuẩn hóa/backfill dữ liệu hoặc rule tạm được ghi rõ, test rõ, và có kế hoạch bỏ.
 - Không dùng tên giảng viên chưa định danh (`UnidentifiedLecturerName`) để cấp quyền cho giảng viên đăng nhập. Chỉ dữ liệu có `LecturerId` mới thuộc scope giảng viên.
-- Nếu cần ngành đào tạo cho khảo sát CTĐT, phải bổ sung quan hệ dữ liệu riêng thay vì ép qua `CourseSection`.
+- Nếu cần ngành đào tạo cho khảo sát CTĐT, phải bổ sung quan hệ dữ liệu riêng thay vì ép qua `CourseSections`.
+
+Nguyên tắc mapping:
+
+```text
+Scope xác định actor.
+Mapping dữ liệu xác định record nào thuộc actor đó.
+Mỗi entity nghiệp vụ phải có một đường mapping chính thức, ổn định.
+```
+
+Ví dụ cần chốt trong phase đầu:
+
+| Bảng cần lọc | ScopeType | Mapping chính thức |
+| --- | --- | --- |
+| `CourseSections` | `LECTURER` | `"CourseSections"."LecturerId" = ScopeId` |
+| `CourseSections` | `DEPARTMENT` | `"CourseSections"."CourseId" -> "Courses"."DepartmentId" = ScopeId` |
+| `CourseSectionSurveys` | `LECTURER` | `"CourseSectionSurveys"."CourseSectionId" -> "CourseSections"."LecturerId" = ScopeId` |
+| `CourseSectionSurveys` | `DEPARTMENT` | `"CourseSectionSurveys"."CourseSectionId" -> "CourseSections"."CourseId" -> "Courses"."DepartmentId" = ScopeId` |
+
+Nếu `"Courses"."DepartmentId"` đang thiếu nhiều, cần xử lý chất lượng dữ liệu trước khi bật scope `DEPARTMENT` cho trưởng bộ môn.
 
 ## 7. Thiết kế API authorization context
 
@@ -200,10 +241,12 @@ Quy tắc:
 - `organizationUnitCode/Name` có thể tiếp tục trả để tương thích, nhưng frontend mới nên đọc `scope`.
 - Với `SYSTEM`, `scope.id = null`.
 - Nếu profile thiếu scope nhưng role cần scope, backend phải xem là cấu hình sai và trả lỗi quản trị rõ ràng hoặc chặn truy cập dữ liệu scoped.
+- `scope.code` và `scope.name` chỉ phục vụ hiển thị; backend không dùng chúng để lọc dữ liệu.
+- `SYSTEM` chỉ có nghĩa tập dữ liệu được phép truy cập là toàn hệ thống. Đọc/sửa/xóa vẫn phải đi qua permission module và action policy.
 
 ## 8. Action policy ban đầu
 
-Phase scope cần tách `Module access`, `Scope` và `Action`. Vì hệ thống chưa có bảng action riêng, có thể dùng action policy theo role trong code ở mức tối thiểu, sau đó mới nâng cấp thành DB nếu cần.
+Phase scope cần tách `Module access`, `Scope` và `Action`. Vì hệ thống chưa có bảng action riêng, có thể suy ra action policy mặc định từ role ở một nơi tập trung, sau đó mới nâng cấp thành DB nếu cần.
 
 | Actor/Profile | Dashboard | Tiến độ | Báo cáo | Danh mục đào tạo | Khảo sát học phần |
 | --- | --- | --- | --- | --- | --- |
@@ -223,7 +266,26 @@ CanManageCourseSurveyWithinScope
 CanReadReportsWithinScope
 ```
 
-Các policy này luôn nhận `AccessContext`, không chỉ nhận role.
+Các policy này luôn nhận `AccessContext`, không chỉ nhận role. Business service/page không tự viết:
+
+```csharp
+if (context.RoleCode == "DEPARTMENT_MANAGER")
+```
+
+Thay vào đó chỉ hỏi abstraction:
+
+```text
+AccessContext
+  -> Module permissions
+  -> Scope
+  -> ActionPolicies
+
+Business code
+  -> access.Can(CanManageCatalogWithinScope)
+  -> scopeService.ApplyToCourseSections(query, access)
+```
+
+Nếu action policy tạm thời được suy ra từ role, mapping đó nằm trong một file/service duy nhất, ví dụ `AccessPolicyResolver`, và phải có test.
 
 ## 9. Ma trận module, scope và hành vi
 
@@ -245,8 +307,8 @@ Các policy này luôn nhận `AccessContext`, không chỉ nhận role.
   - số phiếu đã thu,
   - tỷ lệ hoàn thành,
   - danh sách lớp chậm tiến độ.
-- Giảng viên chỉ thấy các `CourseSectionSurvey` của `CourseSections.LecturerId = ScopeId`.
-- Trưởng bộ môn thấy các `CourseSectionSurvey` thuộc bộ môn.
+- Giảng viên chỉ thấy các `CourseSectionSurveys` của `"CourseSections"."LecturerId" = ScopeId`.
+- Trưởng bộ môn thấy các `CourseSectionSurveys` thuộc bộ môn.
 - Nếu sau này thay đổi cách tính tiến độ, logic mới vẫn phải bắt đầu từ tập dữ liệu đã được scoped.
 
 ### 9.3. Thống kê báo cáo
@@ -274,7 +336,7 @@ Manage catalog within allowed action/scope
 - Trưởng bộ môn được xem toàn bộ danh mục phục vụ tra cứu, và được thêm/sửa/xóa các phần nghiệp vụ được giao.
 - Giảng viên được xem khoa, ngành, bộ môn, giảng viên, ngành đào tạo, học phần, lớp học phần.
 - Giảng viên chỉ được tương tác với lớp học phần mình phụ trách, không được sửa khoa/ngành/bộ môn/giảng viên/học phần chung.
-- Các thao tác sửa/xóa dữ liệu dùng chung như `Faculty`, `Department`, `Major`, `Course`, `Lecturer` cần rất thận trọng vì ảnh hưởng nhiều scope; nếu chưa chốt, khóa CRUD cho giảng viên và chỉ mở cho trưởng bộ môn/admin.
+- Các thao tác sửa/xóa dữ liệu dùng chung như `Faculties`, `Departments`, `Majors`, `Courses`, `Lecturers` cần rất thận trọng vì ảnh hưởng nhiều scope; nếu chưa chốt, khóa CRUD cho giảng viên và chỉ mở cho trưởng bộ môn/admin.
 
 ### 9.5. Khảo sát học phần
 
@@ -320,11 +382,15 @@ Manage catalog within allowed action/scope
    - `ScopeId`
    - `ScopeCode`
    - `ScopeName`
+   - `ActionPolicies`
+   - `ScopeCode/ScopeName` chỉ dùng hiển thị, không dùng để authorize.
 
 5. Tạo service/helper lọc scope:
    - Ví dụ `IAccessScopeService`.
    - Có hàm áp scope cho `CourseSections`.
    - Có hàm kiểm tra một `CourseSectionId`, `CourseSectionSurveyId`, `LecturerId`, `DepartmentId` có thuộc scope không.
+   - Mỗi hàm phải dùng mapping chính thức đã chốt, không tự fallback theo nhiều quan hệ.
+   - Có test chứng minh `SYSTEM` mở tập dữ liệu nhưng không bypass action policy.
 
 6. Áp scope vào report/progress/dashboard ở mức base:
    - Mọi query aggregate hiện có phải filter scope từ đầu.
@@ -341,6 +407,7 @@ Manage catalog within allowed action/scope
    - Read catalog có thể rộng hơn manage catalog.
    - Mutations của lớp học phần kiểm tra scope.
    - Mutations của khoa/ngành/bộ môn/giảng viên/học phần dùng policy riêng, không mở mặc định cho giảng viên.
+   - Business service chỉ gọi `AccessContext.ActionPolicies` hoặc policy resolver, không tự rải `roleCode` condition.
 
 9. Audit:
    - Ghi `ActiveProfileId`, `ScopeType`, `ScopeId` trong audit metadata cho các thao tác scoped.
@@ -399,6 +466,10 @@ Không nên migration cứng khiến hệ thống lỗi đăng nhập nếu dữ
 - Không dùng frontend filter làm bảo mật chính.
 - Không thiết kế trước toàn bộ nghiệp vụ thống kê báo cáo khi module này còn do người khác triển khai và có thể thay đổi.
 - Không hard-code từng loại báo cáo vào scope phase; scope phase chỉ cung cấp context/helper/guard.
+- Không dùng `ScopeCode`, `ScopeName`, `OrganizationUnitCode`, `OrganizationUnitName` để authorize hoặc join/query nghiệp vụ.
+- Không để `IAccessScopeService` tự đoán scope bằng nhiều fallback ngầm.
+- Không dùng `SYSTEM` để bypass permission module hoặc action policy.
+- Không rải `if roleCode == ...` trong business service; action theo role nếu cần phải nằm trong resolver tập trung.
 - Không cho giảng viên xem dữ liệu lớp học phần chưa gắn `LecturerId`.
 - Không xử lý khảo sát chương trình đào tạo theo scope khi chưa chốt role phụ trách.
 - Không hard-code "Ban giám hiệu chỉ có 1 user" vào schema.
@@ -412,6 +483,7 @@ Không nên migration cứng khiến hệ thống lỗi đăng nhập nếu dữ
 - Giảng viên đăng nhập chỉ thấy dashboard/progress/report/course survey thuộc lớp học phần mình phụ trách.
 - Trưởng bộ môn chỉ thấy dữ liệu thuộc bộ môn của profile.
 - Thanh tra/Ban giám hiệu với `SYSTEM` thấy dữ liệu toàn trường.
+- `SYSTEM` vẫn bị chặn mutation nếu action policy không cho phép.
 - Frontend không hiển thị bộ lọc phạm vi ngoài scope.
 - Backend trả 403 khi user truy cập hoặc mutate record ngoài scope bằng URL/API thủ công.
 - Danh mục đào tạo cho giảng viên là read-mostly; chỉ lớp học phần thuộc scope mới có action tương tác nếu nghiệp vụ mở.
@@ -419,15 +491,19 @@ Không nên migration cứng khiến hệ thống lỗi đăng nhập nếu dữ
 - Có test cho `SYSTEM`, `DEPARTMENT`, `LECTURER` trên ít nhất report/progress/course survey.
 - Không còn query báo cáo/tiến độ nào trả dữ liệu toàn trường cho profile scope hẹp.
 - Có tài liệu/hàm mẫu để người triển khai báo cáo mới biết phải áp scope trước khi aggregate dữ liệu.
+- Có bảng mapping chính thức từ scope sang bảng nghiệp vụ, ít nhất cho `CourseSections` và `CourseSectionSurveys`.
+- Không có query authorization nào phụ thuộc vào `ScopeName` hoặc `OrganizationUnitName`.
+- Action policy được resolve tập trung; các service nghiệp vụ không tự kiểm tra role rải rác.
 
 ## 14. Thứ tự triển khai đề xuất
 
 1. Thiết kế và migrate schema scope trong `UserProfiles`.
 2. Cập nhật admin UI để chọn scope chuẩn khi tạo/sửa hồ sơ làm việc.
 3. Mở rộng `/api/auth/access` và type frontend.
-4. Tạo `AccessContext` + scope query helper backend.
-5. Áp scope cho dashboard/progress/report hiện có trước, vì đây là phần rủi ro lộ dữ liệu cao nhất.
-6. Áp scope cho khảo sát học phần.
-7. Áp action policy cho danh mục đào tạo.
-8. Backfill dữ liệu thật và khóa validation bắt buộc scope theo role.
-9. Viết test authorization/scope và smoke test UI theo từng actor.
+4. Chốt bảng mapping chính thức từ scope sang dữ liệu nghiệp vụ.
+5. Tạo `AccessContext` + action policy resolver + scope query helper backend.
+6. Áp scope cho dashboard/progress/report hiện có trước, vì đây là phần rủi ro lộ dữ liệu cao nhất.
+7. Áp scope cho khảo sát học phần.
+8. Áp action policy cho danh mục đào tạo.
+9. Backfill dữ liệu thật và khóa validation bắt buộc scope theo role.
+10. Viết test authorization/scope và smoke test UI theo từng actor.
