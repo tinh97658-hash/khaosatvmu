@@ -1,12 +1,35 @@
-Đúng — **với hệ thống của bạn thì tôi nghĩ không cần phức tạp hóa thành một hệ thống scope/permission quá lớn như tôi nói ở trên**. Nhìn ERD bạn đưa, cách bạn đang nghĩ là hoàn toàn khả thi và thậm chí phù hợp hơn với nghiệp vụ hiện tại.
+# Cấu trúc phân quyền của hệ thống
 
-Tôi hiểu ý bạn là:
+Với hệ thống hiện tại, không cần xây dựng một cơ chế `Scope/Permission` quá phức tạp. Mô hình phù hợp hơn là tách việc phân quyền thành **hai lớp**:
 
-> **User là tài khoản đăng nhập. UserProfile xác định user đang mang Role nào. Sau khi biết Role, hệ thống dùng Email của User để tìm bản ghi nghiệp vụ tương ứng trong `Lecturers`, từ đó truy ra Faculty, Department, CourseSection... và quyết định user được làm gì.**
+1. **Phân quyền truy cập module**: xác định Role có được truy cập module/chức năng hay không.
+2. **Phân quyền dữ liệu**: sau khi được phép truy cập module, dựa vào Role và thông tin nghiệp vụ của User để xác định User được xem và thao tác trên dữ liệu nào.
 
-## 1. Luồng của bạn thực chất là như này
+Có thể hình dung tổng quát:
 
-Ví dụ user đăng nhập:
+```text
+User
+  ↓
+UserProfile
+  ↓
+Role
+  ↓
+RolePermission
+  ↓
+Permission
+  ↓
+Module Access
+  ↓
+Business Logic theo Role
+  ↓
+Data Scope
+```
+
+---
+
+# 1. Luồng tổng quát
+
+Ví dụ một User đăng nhập:
 
 ```text
 Users
@@ -15,18 +38,19 @@ Id: 123
 Email: abc@vimaru.edu.vn
 ```
 
-Có profile:
+User có thể có nhiều `UserProfile`:
 
 ```text
 UserProfiles
 ──────────────────────────────
+Id: 10
 UserId: 123
 RoleId: 2
 ProfileName: Giảng viên
 ProfileCode: LECTURER
 ```
 
-Role:
+Role tương ứng:
 
 ```text
 Roles
@@ -36,95 +60,160 @@ Code: LECTURER
 Name: Giảng viên
 ```
 
-Sau đó:
+Sau khi xác định được Role, hệ thống thực hiện **hai bước phân quyền**.
+
+### Bước 1 — Kiểm tra quyền truy cập module
+
+```text
+Role
+  ↓
+RolePermissions
+  ↓
+Permissions
+  ↓
+Có quyền truy cập module?
+```
+
+Ví dụ:
+
+```text
+LECTURER
+   ↓
+COURSE_CAMPAIGNS_ACCESS
+   ↓
+✓ Được truy cập module "Khảo sát học phần"
+```
+
+### Bước 2 — Xác định phạm vi dữ liệu
+
+Sau khi User được phép vào module:
+
+```text
+Role = LECTURER
+        ↓
+Business Logic
+        ↓
+Lecturer
+        ↓
+CourseSections
+        ↓
+CourseCampaigns
+```
+
+→ Chỉ lấy dữ liệu mà giảng viên đó được phép xem.
+
+Như vậy:
+
+> **Permission quyết định User có được vào module hay không; Role và Business Logic quyết định User được làm gì trên dữ liệu nào trong module đó.**
+
+---
+
+# 2. Ví dụ với Role = Lecturer
+
+Giả sử User:
+
+```text
+User
+────────────────────
+Id: 123
+Email: abc@vimaru.edu.vn
+```
+
+Profile:
+
+```text
+UserProfile
+────────────────────
+UserId: 123
+RoleId: 2
+ProfileName: Giảng viên
+ProfileCode: LECTURER
+```
+
+Role:
+
+```text
+Role
+────────────────────
+Id: 2
+Code: LECTURER
+Name: Giảng viên
+```
+
+## Bước 1: Kiểm tra Module Permission
+
+Ví dụ Role `LECTURER` được cấp:
+
+```text
+COURSE_CAMPAIGNS_ACCESS
+COURSE_QUESTION_SETS_ACCESS
+```
+
+Khi đó User được phép truy cập:
+
+```text
+Khảo sát học phần             ✓
+Bộ câu hỏi khảo sát học phần  ✓
+```
+
+Nhưng không được:
+
+```text
+Quản trị người dùng            ✗
+Danh mục đào tạo               ✗
+Tiến độ thu phiếu              ✗
+```
+
+---
+
+## Bước 2: Xác định dữ liệu
+
+Sau khi User truy cập:
+
+```http
+GET /course-campaigns
+```
+
+Backend tiếp tục xác định Role:
+
+```text
+Role == LECTURER
+        ↓
+Tìm Lecturer tương ứng với User
+        ↓
+Lấy LecturerId
+        ↓
+Lấy CourseSections của Lecturer
+        ↓
+Lấy CourseCampaigns tương ứng
+```
+
+Ví dụ:
 
 ```text
 User
  │
- │ Email
+ │ UserId
  ▼
-Lecturers
+Lecturer
  │
  ├── LecturerId
  ├── DepartmentId
  ├── FacultyId
- ├── PositionId
- └── Email
+ └── PositionId
+        │
+        └── CourseSections
+                 │
+                 └── CourseCampaigns
 ```
 
-Từ `Lecturers`:
+Kết quả:
 
-```text
-Lecturer
-   │
-   ├──── Department
-   │
-   ├──── Faculty
-   │
-   ├──── Position
-   │
-   └──── CourseSections
-```
-
-Và cuối cùng:
-
-```text
-CourseSections
-      │
-      └── LecturerId
-```
-
-=> lấy ra **các lớp học phần mà giảng viên đó phụ trách**.
-
-Đây là một luồng rất hợp lý.
+> Giảng viên chỉ nhìn thấy các khảo sát học phần liên quan đến các lớp học phần mà mình phụ trách.
 
 ---
 
-# 2. Ví dụ cụ thể với Role = Lecturer
-
-Request:
-
-```http
-GET /course-sections
-```
-
-Backend có thể làm:
-
-```text
-1. Lấy User từ JWT
-        ↓
-2. Lấy Active UserProfile
-        ↓
-3. Kiểm tra Role
-        ↓
-4. Role == LECTURER ?
-        ↓
-5. Lấy Email của User
-        ↓
-6. Tìm Lecturer có Email tương ứng
-        ↓
-7. Lấy CourseSections theo LecturerId
-```
-
-Về SQL đại khái:
-
-```sql
-SELECT cs.*
-FROM CourseSections cs
-JOIN Lecturers l
-    ON cs.LecturerId = l.LecturerId
-JOIN Users u
-    ON u.Email = l.Email
-WHERE u.Id = @userId;
-```
-
-Thế là xong.
-
-**Không cần tạo thêm một bảng kiểu `LecturerPermissions` hay `LecturerScopes` chỉ để giải quyết trường hợp này.**
-
----
-
-# 3. Role = Trưởng bộ môn thì cũng tương tự
+# 3. Role = Trưởng bộ môn
 
 Giả sử:
 
@@ -136,28 +225,38 @@ UserProfile
 Role = HEAD_OF_DEPARTMENT
 ```
 
-Sau đó tìm:
+Role này cũng có:
 
 ```text
-Users.Email
-      ↓
-Lecturers.Email
-      ↓
-Lecturer.DepartmentId
+COURSE_CAMPAIGNS_ACCESS
 ```
 
-=> biết người đó thuộc bộ môn nào.
+nên **được phép truy cập module Khảo sát học phần**.
+
+Tuy nhiên phạm vi dữ liệu khác với Giảng viên.
+
+Backend có thể thực hiện:
+
+```text
+User
+ ↓
+Lecturer
+ ↓
+DepartmentId
+ ↓
+CourseSections thuộc Department
+ ↓
+CourseCampaigns
+```
 
 Ví dụ:
 
 ```text
 Nguyễn Văn A
-Email: a@vimaru.edu.vn
 
-Lecturer
-    LecturerId = 100
-    DepartmentId = 5
-    FacultyId = 2
+LecturerId = 100
+DepartmentId = 5
+FacultyId = 2
 ```
 
 Department:
@@ -175,9 +274,9 @@ Role = HEAD_OF_DEPARTMENT
 DepartmentId = 5
 ```
 
-Backend có thể hiểu:
+Backend hiểu:
 
-> Nguyễn Văn A là trưởng bộ môn Kỹ thuật phần mềm → được thao tác trên dữ liệu thuộc DepartmentId = 5.
+> Nguyễn Văn A là Trưởng bộ môn Kỹ thuật phần mềm → được thao tác trên dữ liệu thuộc Bộ môn Kỹ thuật phần mềm.
 
 Ví dụ:
 
@@ -189,9 +288,9 @@ WHERE DepartmentId = @departmentId;
 
 ---
 
-# 4. Và Role = Trưởng khoa
+# 4. Role = Trưởng khoa
 
-Lại rất đơn giản:
+Tương tự:
 
 ```text
 User
@@ -200,24 +299,12 @@ UserProfile
  ↓
 Role = DEAN
  ↓
-Users.Email
+Lecturer
  ↓
-Lecturers.Email
- ↓
-Lecturer.FacultyId
- ↓
-Faculty
+FacultyId
 ```
 
-Sau đó:
-
-```sql
-SELECT *
-FROM Departments
-WHERE FacultyId = @facultyId;
-```
-
-hoặc:
+Sau đó lấy dữ liệu thuộc Faculty:
 
 ```sql
 SELECT *
@@ -225,68 +312,260 @@ FROM CourseSections
 WHERE FacultyId = @facultyId;
 ```
 
-Tức là:
+Hoặc nếu cần lấy các Department thuộc Faculty:
+
+```sql
+SELECT *
+FROM Departments
+WHERE FacultyId = @facultyId;
+```
+
+Như vậy:
 
 ```text
 LECTURER
     → LecturerId
-    → CourseSections của mình
+    → Dữ liệu của chính mình
 
 HEAD_OF_DEPARTMENT
     → DepartmentId
-    → dữ liệu của Department
+    → Dữ liệu của Department
 
 DEAN
     → FacultyId
-    → dữ liệu của Faculty
+    → Dữ liệu của Faculty
 
 ADMIN
-    → toàn hệ thống
+    → Toàn bộ dữ liệu
 ```
-
-**Tôi đồng ý với cách tiếp cận này.**
 
 ---
 
-# 5. Nhưng tôi sẽ thay đổi một chi tiết rất quan trọng
+# 5. `Permission` trong hệ thống này có vai trò gì?
 
-Bạn nói:
+`Permission` **không đại diện cho quyền CRUD chi tiết trên dữ liệu**.
 
-> "có một câu lệnh check if role bằng cái gì thì lấy ra cái đó"
+Permission của hệ thống hiện tại nên được hiểu là:
 
-Về mặt ý tưởng thì đúng.
+> **Quyền truy cập một module/chức năng của hệ thống.**
 
-Nhưng tôi **không khuyến nghị viết kiểu này khắp Controller**:
+Ví dụ:
+
+```text
+COURSE_QUESTION_SETS_ACCESS
+PROGRAM_CAMPAIGNS_ACCESS
+PROGRESS_ACCESS
+CATALOG_ACCESS
+USER_ADMIN_ACCESS
+COURSE_CAMPAIGNS_ACCESS
+PROGRAM_CRITERIA_ACCESS
+REPORTS_ACCESS
+```
+
+Có thể phân nhóm:
+
+```text
+Khảo sát học phần
+    ├── COURSE_QUESTION_SETS_ACCESS
+    └── COURSE_CAMPAIGNS_ACCESS
+
+Khảo sát chương trình
+    ├── PROGRAM_CAMPAIGNS_ACCESS
+    └── PROGRAM_CRITERIA_ACCESS
+
+Tổng quan
+    └── PROGRESS_ACCESS
+
+Danh mục đào tạo
+    └── CATALOG_ACCESS
+
+Quản trị hệ thống
+    └── USER_ADMIN_ACCESS
+
+Báo cáo
+    └── REPORTS_ACCESS
+```
+
+---
+
+# 6. `RolePermission`
+
+`RolePermission` là bảng trung gian xác định:
+
+> **Role nào được truy cập module nào.**
+
+Ví dụ:
+
+```text
+LECTURER
+    │
+    ├── COURSE_CAMPAIGNS_ACCESS
+    └── COURSE_QUESTION_SETS_ACCESS
+```
+
+```text
+HEAD_OF_DEPARTMENT
+    │
+    ├── COURSE_CAMPAIGNS_ACCESS
+    ├── COURSE_QUESTION_SETS_ACCESS
+    ├── PROGRESS_ACCESS
+    └── REPORTS_ACCESS
+```
+
+```text
+DEAN
+    │
+    ├── COURSE_CAMPAIGNS_ACCESS
+    ├── PROGRAM_CAMPAIGNS_ACCESS
+    ├── PROGRESS_ACCESS
+    └── REPORTS_ACCESS
+```
+
+```text
+ADMIN
+    │
+    └── Các Permission cần thiết của hệ thống
+```
+
+Do đó:
+
+```text
+Role
+  ↓
+RolePermission
+  ↓
+Permission
+  ↓
+Module
+```
+
+chỉ trả lời:
+
+> **Có được truy cập module này không?**
+
+Không trả lời:
+
+> **Được xem dữ liệu nào trong module?**
+
+---
+
+# 7. Hai lớp phân quyền cần được tách biệt
+
+Đây là nguyên tắc quan trọng nhất của hệ thống.
+
+## Lớp 1 — Module Authorization
+
+```text
+Role
+ ↓
+RolePermission
+ ↓
+Permission
+ ↓
+Module
+```
+
+Trả lời:
+
+> User có được truy cập module này không?
+
+Ví dụ:
+
+```text
+LECTURER
+   ↓
+COURSE_CAMPAIGNS_ACCESS
+   ↓
+✓ Có thể vào module Khảo sát học phần
+```
+
+---
+
+## Lớp 2 — Data Authorization
+
+```text
+Role
+ ↓
+Business Logic
+ ↓
+Organization / Lecturer
+ ↓
+Data
+```
+
+Trả lời:
+
+> Sau khi vào module, User được xem và thao tác trên dữ liệu nào?
+
+Ví dụ:
+
+```text
+LECTURER
+    ↓
+LecturerId
+    ↓
+CourseSections của Lecturer
+```
+
+Trong khi:
+
+```text
+HEAD_OF_DEPARTMENT
+    ↓
+DepartmentId
+    ↓
+CourseSections của Department
+```
+
+Và:
+
+```text
+DEAN
+    ↓
+FacultyId
+    ↓
+CourseSections của Faculty
+```
+
+Hai lớp này **không nên gộp vào cùng một cơ chế**.
+
+---
+
+# 8. Không nên viết Role Check trực tiếp khắp Controller
+
+Về mặt ý tưởng, có thể viết:
 
 ```csharp
 if (role == "LECTURER")
 {
-    // lấy CourseSection
+    // Lấy dữ liệu giảng viên
 }
 else if (role == "HEAD_OF_DEPARTMENT")
 {
-    // lấy Department
+    // Lấy dữ liệu bộ môn
 }
 else if (role == "DEAN")
 {
-    // lấy Faculty
+    // Lấy dữ liệu khoa
 }
 else if (role == "ADMIN")
 {
-    // lấy tất cả
+    // Lấy toàn bộ dữ liệu
 }
 ```
 
-Nếu chỉ có vài Role thì vẫn chạy tốt, nhưng sau này hệ thống sẽ rất khó bảo trì.
+Nhưng không nên lặp cách này ở mọi Controller.
 
-Thay vào đó, hãy để:
+Nên tổ chức:
 
 ```text
 Controller
-     ↓
+    ↓
 Service
-     ↓
-Role-specific logic
+    ↓
+Role-specific Business Logic
+    ↓
+Repository / Query
 ```
 
 Ví dụ:
@@ -315,92 +594,40 @@ public async Task<IEnumerable<CourseSection>> GetCourseSections(
 }
 ```
 
-Với hệ thống nhỏ thì như vậy **hoàn toàn đủ**.
+Như vậy Controller không cần biết chi tiết về Lecturer, Department hay Faculty.
 
 ---
 
-# 6. Còn `RolePermission` của bạn dùng vào đâu?
+# 9. Cấu trúc database tổng thể
 
-Đây mới là chỗ tôi nghĩ ERD hiện tại của bạn đã có một nền tảng rất tốt.
-
-Bạn đang có:
-
-```text
-Roles
-   │
-   │
-   ▼
-RolePermissions
-   │
-   ▼
-Permissions
-```
-
-Tách thành **2 vấn đề khác nhau**:
-
-### Role xác định "được làm gì"
-
-Ví dụ:
-
-```text
-LECTURER
-    ├── VIEW_COURSE_SECTION
-    ├── VIEW_STUDENT
-    └── VIEW_SURVEY
-```
-
-Trong:
-
-```text
-RolePermissions
-```
-
-### Dữ liệu được lấy ra xác định "được làm trên cái gì"
-
-Ví dụ:
-
-```text
-LECTURER
-    → CourseSection của chính mình
-
-HEAD_OF_DEPARTMENT
-    → CourseSection thuộc Department của mình
-
-DEAN
-    → CourseSection thuộc Faculty của mình
-
-ADMIN
-    → toàn bộ CourseSection
-```
-
-Hai cái này **không cần nhét vào cùng một bảng**.
-
----
-
-# 7. Vì vậy kiến trúc của bạn có thể cực kỳ đơn giản
-
-Tôi sẽ hình dung nó như sau:
+Có thể hình dung:
 
 ```text
                          ┌──────────────┐
                          │ Permissions  │
+                         │              │
+                         │ MODULE_ACCESS│
                          └──────▲───────┘
                                 │
-                         RolePermissions
+                                │
+                         ┌──────┴───────┐
+                         │RolePermissions│
+                         └──────▲───────┘
                                 │
                                 ▼
-┌──────────┐             ┌───────────┐
-│  Users   │────────────►│   Roles   │
-└────┬─────┘             └─────▲─────┘
-     │                         │
-     │                         │
-     ▼                         │
-┌──────────────┐               │
-│ UserProfiles │───────────────┘
-└──────┬───────┘
-       │
-       │ Email
-       ▼
+                         ┌──────────────┐
+                         │    Roles     │
+                         └──────▲───────┘
+                                │
+                                │
+┌──────────┐              ┌─────┴──────┐
+│  Users   │─────────────►│UserProfiles│
+└────┬─────┘              └─────┬──────┘
+     │                          │
+     │                          └── RoleId
+     │
+     │ UserId
+     ▼
 ┌──────────────┐
 │  Lecturers   │
 └──────┬───────┘
@@ -408,14 +635,27 @@ Tôi sẽ hình dung nó như sau:
        ├──────────────► Positions
        │
        ├──────────────► Departments
-       │                       │
-       │                       ▼
-       │                   Faculties
+       │                      │
+       │                      ▼
+       │                  Faculties
        │
        └──────────────► CourseSections
+                              │
+                              ▼
+                       CourseCampaigns
 ```
 
-Và request sẽ chạy:
+---
+
+# 10. Luồng request hoàn chỉnh
+
+Ví dụ:
+
+```http
+GET /api/course-campaigns
+```
+
+Backend xử lý:
 
 ```text
 JWT
@@ -424,24 +664,54 @@ UserId
  ↓
 User
  ↓
-UserProfile
+Active UserProfile
  ↓
 Role
  ↓
+RolePermission
+ ↓
 Permission
  ↓
-Lecturer
- ↓
-Organization context
- ↓
-Business data
+COURSE_CAMPAIGNS_ACCESS?
+```
+
+Nếu **không có Permission**:
+
+```text
+403 Forbidden
+```
+
+Nếu **có Permission**:
+
+```text
+        ↓
+Business Logic
+        ↓
+Kiểm tra Role
+        ↓
+┌───────────────┬────────────────────┐
+│ LECTURER      │ Lecturer.UserId    │
+│               │ → dữ liệu của mình │
+├───────────────┼────────────────────┤
+│ HEAD_DEPT     │ DepartmentId       │
+│               │ → dữ liệu bộ môn   │
+├───────────────┼────────────────────┤
+│ DEAN          │ FacultyId          │
+│               │ → dữ liệu khoa     │
+├───────────────┼────────────────────┤
+│ ADMIN         │ Không giới hạn     │
+└───────────────┴────────────────────┘
+        ↓
+Query Database
+        ↓
+Return Data
 ```
 
 ---
 
-# 8. Có một điểm tôi khuyên bạn nên sửa: đừng dùng Email làm khóa liên kết lâu dài
+# 11. Không nên dùng Email làm khóa liên kết lâu dài
 
-Trong ERD của bạn hiện tại:
+Trong thiết kế hiện tại nếu đang có:
 
 ```text
 Users.Email
@@ -449,35 +719,44 @@ Users.Email
 Lecturers.Email
 ```
 
-Cách này **chạy được**, nhưng nếu thiết kế database lâu dài thì tôi không thích nó.
+thì cách này **có thể chạy**, nhưng không nên dùng Email làm khóa liên kết chính.
 
-Tốt hơn:
+Nên chuyển thành:
 
 ```text
 Users
-    Id
-    Email
+────────────────
+Id PK
+Email
+...
 ```
 
 và:
 
 ```text
 Lecturers
-    LecturerId
-    UserId
-    ...
+────────────────
+LecturerId PK
+UserId FK UNIQUE
+DepartmentId FK
+FacultyId FK
+PositionId FK
+...
 ```
 
-quan hệ:
+Quan hệ:
 
 ```text
 Users.Id
    │
+   │ 1
+   │
+   │ 0..1
    ▼
 Lecturers.UserId
 ```
 
-Khi đó:
+Ví dụ:
 
 ```sql
 SELECT cs.*
@@ -494,17 +773,15 @@ JOIN Lecturers l
     ON u.Email = l.Email
 ```
 
-### Tại sao?
+### Lý do
 
 Email có thể thay đổi:
 
 ```text
 abc@vimaru.edu.vn
-       ↓
+        ↓
 newemail@vimaru.edu.vn
 ```
-
-Nếu dùng Email làm liên kết thì phải cập nhật nhiều nơi.
 
 Trong khi:
 
@@ -512,11 +789,17 @@ Trong khi:
 UserId = 123
 ```
 
-thì không đổi.
+không thay đổi.
+
+Vì vậy:
+
+> **Email nên được coi là thuộc tính nhận dạng/đăng nhập, không nên là khóa quan hệ giữa các bảng nghiệp vụ.**
 
 ---
 
-# 9. Và điều này giải quyết luôn vấn đề "một người nhiều chức vụ"
+# 12. Mô hình một User có nhiều chức vụ
+
+Cấu trúc này cũng giải quyết bài toán một người có nhiều chức vụ.
 
 Ví dụ:
 
@@ -527,16 +810,18 @@ Id = 123
 Email = abc@vimaru.edu.vn
 ```
 
-UserProfile:
+Có:
 
 ```text
+UserProfiles
+
 UserId | Role
 -------|--------------------
 123    | LECTURER
 123    | HEAD_OF_DEPARTMENT
 ```
 
-Sau khi user chọn Profile:
+Khi User chọn Profile:
 
 ```text
 ProfileId = 10
@@ -547,15 +832,15 @@ thì:
 
 ```text
 UserId
-  ↓
+   ↓
 Lecturer.UserId
-  ↓
+   ↓
 LecturerId
-  ↓
+   ↓
 CourseSections
 ```
 
-Nếu chuyển:
+Nếu User chuyển sang:
 
 ```text
 ProfileId = 11
@@ -566,70 +851,98 @@ thì:
 
 ```text
 UserId
-  ↓
+   ↓
 Lecturer.UserId
-  ↓
+   ↓
 DepartmentId
-  ↓
-CourseSections / Lecturers / ...
+   ↓
+Dữ liệu của Department
 ```
 
-**Cùng một User, cùng một Lecturer, nhưng business context khác nhau dựa trên `UserProfile.RoleId`.**
+Điểm quan trọng:
 
-Đây chính là mô hình tôi nghĩ bạn đang hướng tới.
+> **Không tạo User mới cho mỗi chức vụ.**
+
+Một người chỉ có **một User**, nhưng có thể có **nhiều UserProfile**.
 
 ---
 
-## Tóm lại
+# 13. Mô hình cuối cùng
 
-Tôi **đồng ý với hướng đơn giản của bạn**. Với hệ thống hiện tại, tôi sẽ không cố xây dựng một authorization framework quá phức tạp.
+Có thể cô đọng toàn bộ cơ chế thành:
 
-Tách rõ:
+```text
+                    AUTHENTICATION
+                         │
+                         ▼
+                       User
+                         │
+                         ▼
+                    UserProfile
+                         │
+                         ▼
+                       Role
+                         │
+              ┌──────────┴──────────┐
+              │                     │
+              ▼                     ▼
+       RolePermission          Business Logic
+              │                     │
+              ▼                     ▼
+          Permission          Lecturer / Department
+              │                / Faculty / ...
+              ▼                     │
+        Module Access               ▼
+                               Data Scope
+```
+
+Hay đơn giản hơn:
 
 ```text
 User
-    ↓
+ ↓
 UserProfile
-    ↓
+ ↓
 Role
-    ↓
-Permission
+ ├──────────────► Permission
+ │                    ↓
+ │              Module Access
+ │
+ └──────────────► Business Logic
+                       ↓
+                   Data Scope
 ```
 
-để trả lời:
+### Nguyên tắc cốt lõi
 
-> **Người này đang là ai và được phép làm gì?**
+> **Role xác định User đang đóng vai trò gì.**
 
-Sau đó:
+> **Permission xác định Role được truy cập module nào.**
+
+> **Business Logic xác định Role được xem/thao tác dữ liệu nào trong module đó.**
+
+Ví dụ:
 
 ```text
-User
-    ↓
-Lecturer
-    ↓
-Faculty / Department / Position
-    ↓
-Course / CourseSection / ...
+Nguyễn Văn A
+      ↓
+Profile: Giảng viên
+      ↓
+Role: LECTURER
+      │
+      ├── Permission:
+      │      COURSE_CAMPAIGNS_ACCESS ✓
+      │
+      │      → Được vào module Khảo sát học phần
+      │
+      └── Business Logic:
+             Lecturer.UserId = User.Id
+                    ↓
+             CourseSections
+                    ↓
+             CourseCampaigns
+                    ↓
+             Chỉ dữ liệu của A
 ```
 
-để trả lời:
-
-> **Người này được thao tác trên dữ liệu nào?**
-
-Và Role chỉ cần điều khiển business logic ở tầng Service:
-
-```text
-LECTURER
-    → dữ liệu của Lecturer
-
-HEAD_OF_DEPARTMENT
-    → dữ liệu của Department
-
-DEAN
-    → dữ liệu của Faculty
-
-ADMIN
-    → toàn hệ thống
-```
-
-**Đây là một thiết kế đơn giản, dễ triển khai và rất phù hợp với ERD hiện tại của bạn.** Tôi chỉ đặc biệt khuyên bạn đổi quan hệ `Users.Email ↔ Lecturers.Email` thành `Users.Id ↔ Lecturers.UserId` nếu bạn còn đang ở giai đoạn thiết kế.
+Đây là mô hình **đủ đơn giản để triển khai**, nhưng vẫn tách biệt rõ **authentication → module authorization → business/data authorization**, và phù hợp với cấu trúc `Users`, `UserProfiles`, `Roles`, `Permissions`, `RolePermissions` cùng các bảng nghiệp vụ như `Lecturers`, `Departments`, `Faculties`, `CourseSections` của hệ thống bạn.:::
