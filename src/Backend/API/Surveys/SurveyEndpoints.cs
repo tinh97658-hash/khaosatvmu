@@ -1,5 +1,6 @@
 using API.Auth;
 using Application.Surveys;
+using Domain;
 
 namespace API.Surveys;
 
@@ -190,9 +191,11 @@ public static class SurveyEndpoints
             SurveyErrorCodes.SectionSurveyNotFound => StatusCodes.Status404NotFound,
             SurveyErrorCodes.ResponseNotFound => StatusCodes.Status404NotFound,
             SurveyErrorCodes.LinkNotFound => StatusCodes.Status404NotFound,
+            SurveyErrorCodes.QuestionScaleNotFound => StatusCodes.Status404NotFound,
             SurveyErrorCodes.AnswerScaleNameExists => StatusCodes.Status409Conflict,
             SurveyErrorCodes.TemplateNameExists => StatusCodes.Status409Conflict,
             SurveyErrorCodes.AnswerScaleInUse => StatusCodes.Status409Conflict,
+            SurveyErrorCodes.AnswerScaleKindLocked => StatusCodes.Status409Conflict,
             SurveyErrorCodes.TemplateInUse => StatusCodes.Status409Conflict,
             SurveyErrorCodes.SemesterSurveyHasResponses => StatusCodes.Status409Conflict,
             SurveyErrorCodes.LinkNotOpen => StatusCodes.Status409Conflict,
@@ -205,24 +208,29 @@ public static class SurveyEndpoints
 
     public sealed record SaveAnswerScaleRequest(
         string AnswerScaleName,
+        string? ScaleKind,
         IReadOnlyList<SaveAnswerScaleOptionRequest>? Options)
     {
         public SaveAnswerScaleCommand ToCommand() => new(
             AnswerScaleName,
+            // Bỏ trống thì hiểu là thang có mức chọn, giữ tương thích với client cũ.
+            string.IsNullOrWhiteSpace(ScaleKind) ? AnswerScaleKinds.Options : ScaleKind,
             Options?
                 .Select(x => new SaveAnswerScaleOptionCommand(x.Value, x.DisplayText ?? string.Empty))
                 .ToList() ?? []);
     }
 
+    public sealed record SaveSurveyQuestionRequest(string? QuestionText, int AnswerScaleId);
+
     public sealed record SaveSurveyTemplateRequest(
         string TemplateName,
-        int AnswerScaleId,
-        IReadOnlyList<string>? Questions)
+        IReadOnlyList<SaveSurveyQuestionRequest>? Questions)
     {
         public SaveSurveyTemplateCommand ToCommand() => new(
             TemplateName,
-            AnswerScaleId,
-            Questions ?? []);
+            Questions?
+                .Select(x => new SaveSurveyQuestionCommand(x.QuestionText ?? string.Empty, x.AnswerScaleId))
+                .ToList() ?? []);
     }
 
     public sealed record CreateSemesterSurveyRequest(
@@ -237,7 +245,7 @@ public static class SurveyEndpoints
 
     public sealed record SaveSurveyScheduleRequest(DateTime StartTime, DateTime EndTime);
 
-    public sealed record SubmitSurveyAnswerRequest(int QuestionId, int SelectedValue);
+    public sealed record SubmitSurveyAnswerRequest(int QuestionId, string? AnswerValue);
 
     public sealed record SubmitSurveyResponseRequest(
         IReadOnlyList<SubmitSurveyAnswerRequest>? Answers,
@@ -245,7 +253,7 @@ public static class SurveyEndpoints
     {
         public SubmitSurveyResponseCommand ToCommand() => new(
             Answers?
-                .Select(x => new SubmitSurveyAnswerCommand(x.QuestionId, x.SelectedValue))
+                .Select(x => new SubmitSurveyAnswerCommand(x.QuestionId, x.AnswerValue ?? string.Empty))
                 .ToList() ?? [],
             AdditionalComments);
     }

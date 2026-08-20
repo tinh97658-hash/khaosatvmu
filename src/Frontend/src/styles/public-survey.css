@@ -196,6 +196,39 @@
   border: 0;
 }
 
+/* Câu hỏi tự nhập chữ: đứng riêng giữa các bảng ma trận của thang chọn mức. */
+.public-survey-text-question {
+  position: relative;
+  margin-top: 20px;
+}
+
+.public-survey-text-question label {
+  display: block;
+  margin-bottom: 6px;
+  color: #20262c;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.public-survey-text-question textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #d7dee2;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #20262c;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.public-survey-text-question textarea:focus {
+  border-color: #0788b8;
+  box-shadow: 0 0 0 2px rgba(7, 136, 184, 0.14);
+  outline: 0;
+}
+
 .public-survey-comments {
   position: relative;
   margin-top: 20px;
@@ -436,7 +469,8 @@
     font-size: 11px;
   }
 
-  .public-survey-comments textarea {
+  .public-survey-comments textarea,
+  .public-survey-text-question textarea {
     font-size: 16px; /* dưới 16px Safari iOS tự phóng to trang khi gõ */
   }
 

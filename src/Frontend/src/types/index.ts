@@ -125,6 +125,9 @@ export const maximumQuestionsPerTemplate = 30;
 /** Số mức tối đa của một thang trả lời ("AnswerScaleOptions"."Value" CHECK 1..5). */
 export const maximumAnswerScaleOptions = 5;
 
+/** Độ dài tối đa của câu trả lời tự nhập ("SurveyResponseAnswers"."AnswerValue"). */
+export const maximumTextAnswerLength = 2000;
+
 /** Bảng "AnswerScaleOptions" */
 export interface AnswerScaleOption {
   answerScaleOptionId: number;
@@ -134,26 +137,34 @@ export interface AnswerScaleOption {
   displayText: string;
 }
 
+/**
+ * Loại thang trả lời ("AnswerScales"."ScaleKind").
+ * - `Options`: có sẵn các mức chọn (Mức độ hài lòng, Có/Không, Phần trăm...).
+ * - `Text`: người trả lời tự nhập chữ, không có mức nào.
+ */
+export type AnswerScaleKind = 'Options' | 'Text';
+
 /** Bảng "AnswerScales", kèm các mức trả lời để hiển thị trong một lần gọi. */
 export interface AnswerScale {
   answerScaleId: number;
   answerScaleName: string;
+  scaleKind: AnswerScaleKind;
+  /** Rỗng với thang loại `Text`. */
   options: AnswerScaleOption[];
 }
 
-/** Bảng "SurveyQuestions" */
+/** Bảng "SurveyQuestions". Thang trả lời gắn ở từng câu, không gắn cho cả bộ. */
 export interface SurveyQuestion {
   questionId: number;
   surveyTemplateId: number;
   questionText: string;
+  answerScaleId: number;
 }
 
 /** Bảng "SurveyTemplates", kèm danh sách câu hỏi của bộ. */
 export interface SurveyTemplate {
   surveyTemplateId: number;
   templateName: string;
-  /** NOT NULL: cả bộ dùng chung một thang trả lời. */
-  answerScaleId: number;
   /** ISO 8601 */
   createdAt: string;
   questions: SurveyQuestion[];
@@ -216,7 +227,12 @@ export interface SurveyResponseSummary {
 export interface SurveyResponseAnswer {
   questionId: number;
   questionText: string;
-  selectedValue: number;
+  answerScaleId: number;
+  scaleKind: AnswerScaleKind;
+  /** Giá trị thô: số mức đã chọn với thang `Options`, nội dung gõ với thang `Text`. */
+  answerValue: string;
+  /** Chỉ có giá trị với câu thuộc thang `Options`. */
+  selectedValue: number | null;
   selectedText: string;
 }
 
@@ -232,7 +248,8 @@ export interface SurveyResponseDetail {
   courseName: string;
   sectionName: string;
   lecturerName: string;
-  answerOptions: AnswerScaleOption[];
+  /** Các thang mà bộ câu hỏi của phiếu đang dùng. */
+  answerScales: AnswerScale[];
   answers: SurveyResponseAnswer[];
 }
 
@@ -249,8 +266,9 @@ export interface PublicSurvey {
   startTime: string;
   endTime: string;
   isOpen: boolean;
-  answerOptions: AnswerScaleOption[];
-  questions: { questionId: number; questionText: string }[];
+  /** Các thang mà bộ câu hỏi đang dùng; mỗi câu trỏ tới một thang qua `answerScaleId`. */
+  answerScales: AnswerScale[];
+  questions: { questionId: number; questionText: string; answerScaleId: number }[];
 }
 
 export interface SurveyCampaign {
@@ -459,9 +477,15 @@ export interface OptionCount {
 export interface QuestionRating {
   questionId: number;
   questionText: string;
+  /** Chỉ có ý nghĩa với câu thuộc thang `Options`. */
   averageScore: number;
   totalAnswers: number;
+  /** Theo đúng các mức của thang câu đó, rỗng với câu thang `Text`. */
   optionDistribution: OptionCount[];
+  scaleKind: AnswerScaleKind;
+  answerScaleName: string;
+  /** Nội dung người học tự nhập, chỉ có với câu thang `Text`. */
+  textAnswers: string[] | null;
 }
 
 export interface LecturerSectionSummary {

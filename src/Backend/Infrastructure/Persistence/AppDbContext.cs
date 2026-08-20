@@ -277,9 +277,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         // service (dtb.md cho phép bỏ trigger và validate trong backend).
         modelBuilder.Entity<AnswerScale>(entity =>
         {
-            entity.ToTable("AnswerScales");
+            entity.ToTable("AnswerScales", table =>
+                table.HasCheckConstraint(
+                    "CK_AnswerScales_ScaleKind",
+                    "\"ScaleKind\" IN ('Options', 'Text')"));
             entity.HasKey(x => x.AnswerScaleId);
             entity.Property(x => x.AnswerScaleName).IsRequired();
+            entity.Property(x => x.ScaleKind).HasMaxLength(20).IsRequired();
         });
 
         modelBuilder.Entity<AnswerScaleOption>(entity =>
@@ -300,23 +304,24 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.ToTable("SurveyTemplates");
             entity.HasKey(x => x.SurveyTemplateId);
             entity.Property(x => x.TemplateName).IsRequired();
-            entity.HasIndex(x => x.AnswerScaleId);
-            entity.HasOne<AnswerScale>()
-                .WithMany()
-                .HasForeignKey(x => x.AnswerScaleId)
-                .OnDelete(DeleteBehavior.Restrict);
         });
 
+        // Thang trả lời gắn ở từng câu hỏi nên một bộ trộn được nhiều loại thang.
         modelBuilder.Entity<SurveyQuestion>(entity =>
         {
             entity.ToTable("SurveyQuestions");
             entity.HasKey(x => x.QuestionId);
             entity.Property(x => x.QuestionText).IsRequired();
             entity.HasIndex(x => x.SurveyTemplateId);
+            entity.HasIndex(x => x.AnswerScaleId);
             entity.HasOne<SurveyTemplate>()
                 .WithMany()
                 .HasForeignKey(x => x.SurveyTemplateId)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<AnswerScale>()
+                .WithMany()
+                .HasForeignKey(x => x.AnswerScaleId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Đợt khảo sát theo học kỳ và bài khảo sát riêng của từng lớp học phần.
@@ -369,13 +374,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // "AnswerValue" lưu dạng chữ cho cả hai loại thang: câu thang Options lưu
+        // số mức ("1".."5"), câu thang Text lưu nội dung người học gõ.
         modelBuilder.Entity<SurveyResponseAnswer>(entity =>
         {
-            entity.ToTable("SurveyResponseAnswers", table =>
-                table.HasCheckConstraint(
-                    "CK_SurveyResponseAnswers_SelectedValue",
-                    "\"SelectedValue\" BETWEEN 1 AND 5"));
+            entity.ToTable("SurveyResponseAnswers");
             entity.HasKey(x => new { x.ResponseId, x.QuestionId });
+            entity.Property(x => x.AnswerValue).HasMaxLength(2000).IsRequired();
             entity.HasIndex(x => x.QuestionId);
             entity.HasOne(x => x.SurveyResponse)
                 .WithMany()

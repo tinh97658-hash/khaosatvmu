@@ -1,5 +1,6 @@
 import type {
   AnswerScale,
+  AnswerScaleKind,
   CourseSectionSurvey,
   PublicSurvey,
   SemesterSurvey,
@@ -10,21 +11,28 @@ import type {
 import { apiRequest, csrfRequest } from './apiClient';
 
 export interface SaveAnswerScaleOptionPayload {
-  /** 1..5 */
+  /** 1..5, không bắt buộc liên tiếp (thang Có/Không dùng 1 và 5). */
   value: number;
   displayText: string;
 }
 
 export interface SaveAnswerScalePayload {
   answerScaleName: string;
+  scaleKind: AnswerScaleKind;
+  /** Phải rỗng khi `scaleKind` là `Text`. */
   options: SaveAnswerScaleOptionPayload[];
+}
+
+export interface SaveSurveyQuestionPayload {
+  questionText: string;
+  /** Thang trả lời của riêng câu này. */
+  answerScaleId: number;
 }
 
 export interface SaveSurveyTemplatePayload {
   templateName: string;
-  answerScaleId: number;
-  /** Nội dung từng câu hỏi, ghi đè toàn bộ "SurveyQuestions" của bộ. */
-  questions: string[];
+  /** Ghi đè toàn bộ "SurveyQuestions" của bộ theo đúng thứ tự gửi lên. */
+  questions: SaveSurveyQuestionPayload[];
 }
 
 export const surveyApi = {
@@ -106,7 +114,8 @@ export interface CreateSemesterSurveyPayload {
 }
 
 export interface SubmitSurveyResponsePayload {
-  answers: { questionId: number; selectedValue: number }[];
+  /** `answerValue`: số mức đã chọn dạng chuỗi, hoặc nội dung tự nhập. */
+  answers: { questionId: number; answerValue: string }[];
   additionalComments: string | null;
 }
 
@@ -124,13 +133,19 @@ export const surveyErrorMessages: Record<string, string> = {
   SURVEY_ANSWER_SCALE_NAME_EXISTS: 'Tên thang trả lời đã tồn tại.',
   SURVEY_ANSWER_SCALE_OPTIONS_INVALID: 'Thang trả lời cần từ 2 đến 5 mức, mỗi mức một giá trị 1-5.',
   SURVEY_ANSWER_SCALE_OPTION_TEXT_REQUIRED: 'Thiếu nhãn hiển thị của một mức trả lời.',
-  SURVEY_ANSWER_SCALE_IN_USE: 'Thang trả lời đang được bộ câu hỏi sử dụng.',
+  SURVEY_ANSWER_SCALE_IN_USE: 'Thang trả lời đang được câu hỏi sử dụng.',
+  SURVEY_ANSWER_SCALE_KIND_INVALID: 'Loại thang trả lời không hợp lệ.',
+  SURVEY_ANSWER_SCALE_TEXT_HAS_OPTIONS: 'Thang tự nhập không được có mức trả lời nào.',
+  SURVEY_ANSWER_SCALE_KIND_LOCKED:
+    'Không đổi được loại thang vì đã có câu hỏi dùng thang này.',
+  SURVEY_QUESTION_SCALE_NOT_FOUND: 'Một câu hỏi đang trỏ tới mã thang trả lời không tồn tại.',
   SURVEY_TEMPLATE_NOT_FOUND: 'Không tìm thấy bộ câu hỏi.',
   SURVEY_TEMPLATE_NAME_REQUIRED: 'Thiếu tên bộ câu hỏi.',
   SURVEY_TEMPLATE_NAME_EXISTS: 'Tên bộ câu hỏi đã tồn tại.',
   SURVEY_TEMPLATE_QUESTIONS_REQUIRED: 'Bộ câu hỏi cần ít nhất một câu hỏi.',
   SURVEY_TEMPLATE_TOO_MANY_QUESTIONS: 'Mỗi bộ câu hỏi chỉ được tối đa 30 câu.',
-  SURVEY_TEMPLATE_IN_USE: 'Bộ câu hỏi đang được đợt khảo sát sử dụng.',
+  SURVEY_TEMPLATE_IN_USE:
+    'Bộ câu hỏi đang được đợt khảo sát sử dụng, hoặc có câu đã thu phiếu nên không đổi được thang trả lời.',
   SURVEY_SEMESTER_NOT_FOUND: 'Không tìm thấy học kỳ.',
   SURVEY_SEMESTER_HAS_NO_SECTIONS: 'Học kỳ này chưa có lớp học phần nào để tạo bài khảo sát.',
   SURVEY_SCHEDULE_INVALID: 'Thời gian đóng phải sau thời gian mở.',
@@ -142,6 +157,7 @@ export const surveyErrorMessages: Record<string, string> = {
   SURVEY_LINK_NOT_OPEN: 'Bài khảo sát chưa mở hoặc đã hết hạn.',
   SURVEY_ANSWERS_INCOMPLETE: 'Vui lòng trả lời đầy đủ tất cả câu hỏi.',
   SURVEY_ANSWER_VALUE_INVALID: 'Mức đánh giá không hợp lệ.',
+  SURVEY_ANSWER_TEXT_TOO_LONG: 'Câu trả lời tự nhập không được vượt quá 2000 ký tự.',
   SURVEY_COMMENTS_TOO_LONG: 'Ý kiến khác không được vượt quá 1000 ký tự.',
   AUTH_CSRF_INVALID: 'Phiên bảo mật đã thay đổi. Vui lòng tải lại trang.',
 };

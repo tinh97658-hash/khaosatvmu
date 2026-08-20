@@ -149,18 +149,31 @@ export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
     );
   }
 
-  // Chuẩn hóa dữ liệu với nhãn C1, C2, C3...
-  const chartData: ChartDataItem[] = questions.map((q, idx) => ({
+  // Mã C1, C2... đánh theo thứ tự câu trong bộ để khớp với phiếu khảo sát.
+  const coded: ChartDataItem[] = questions.map((q, idx) => ({
     ...q,
     code: `C${idx + 1}`,
     index: idx + 1,
   }));
 
+  // Câu tự nhập không có điểm nên tách khỏi biểu đồ và bảng phân bố.
+  const chartData = coded.filter((q) => q.scaleKind !== 'Text');
+  const textQuestions = coded.filter((q) => q.scaleKind === 'Text');
+
+  // Mỗi thang có bộ mức riêng nên bảng phân bố tách theo từng thang.
+  const distributionGroups = chartData.reduce<Map<string, ChartDataItem[]>>((groups, question) => {
+    const key = question.answerScaleName || 'Thang trả lời';
+    const current = groups.get(key);
+    if (current) current.push(question);
+    else groups.set(key, [question]);
+    return groups;
+  }, new Map());
+
   // Tính điểm trung bình nếu chưa truyền vào
   const computedAverage =
     overallAverageScore !== undefined
       ? overallAverageScore
-      : questions.reduce((sum, q) => sum + q.averageScore, 0) / (questions.length || 1);
+      : chartData.reduce((sum, q) => sum + q.averageScore, 0) / (chartData.length || 1);
 
   const needsScroll = chartData.length > 14;
   const chartInnerWidth = needsScroll ? Math.max(680, chartData.length * 48) : undefined;
@@ -217,7 +230,8 @@ export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
         </div>
       </div>
 
-      {/* Khu vực Biểu đồ cột đứng */}
+      {/* Khu vực Biểu đồ cột đứng. Bộ chỉ toàn câu tự nhập thì không có gì để vẽ. */}
+      {chartData.length > 0 && (
       <div className="section-analysis-chart-container">
         <div
           className="section-analysis-chart-scroll"
@@ -341,92 +355,141 @@ export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
           </div>
         </div>
       </div>
+      )}
 
-      {/* Bảng chi tiết phân bố lựa chọn theo từng câu hỏi */}
-      {showDistributionTable && (
+      {/* Bảng chi tiết phân bố lựa chọn, tách riêng cho từng thang trả lời vì
+          mỗi thang có bộ mức khác nhau (Có/Không chỉ có 2 mức là 1 và 5). */}
+      {showDistributionTable &&
+        [...distributionGroups.entries()].map(([scaleName, groupQuestions]) => {
+          const options = groupQuestions[0]?.optionDistribution ?? [];
+
+          return (
+            <div className="section-analysis-distribution" key={scaleName}>
+              <div className="distribution-table-header">
+                <h4 className="distribution-table-title">
+                  Bảng điểm chi tiết &amp; tỷ lệ phân bố · {scaleName}
+                </h4>
+                <span className="distribution-table-subtitle">
+                  Đối chiếu mã câu hỏi <strong>C1, C2...</strong> với biểu đồ bên trên
+                </span>
+              </div>
+
+              <table className="campaign-table analysis-detail-table">
+                <thead>
+                  <tr>
+                    <th className="analysis-table-code-col">Mã</th>
+                    <th className="section-analysis-question-col">Nội dung câu hỏi khảo sát</th>
+                    {options.map((option) => (
+                      <th key={option.value} className="section-analysis-option-col">
+                        Mức {option.value}
+                        <small>{option.displayText}</small>
+                      </th>
+                    ))}
+                    <th className="section-analysis-avg-col">Điểm TB</th>
+                    <th className="analysis-table-rating-col">Đánh giá</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupQuestions.map((question) => {
+                    const isHovered = hoveredCode === question.code;
+                    const score = question.averageScore;
+                    const scoreColor = getScoreColor(score);
+                    const ratingText = getScoreRatingText(score);
+
+                    return (
+                      <tr
+                        key={question.questionId}
+                        className={`analysis-table-row ${isHovered ? 'is-highlighted' : ''}`}
+                      >
+                        <td className="analysis-code-cell">
+                          <span
+                            className="analysis-code-badge"
+                            style={{
+                              backgroundColor: `${scoreColor}18`,
+                              color: scoreColor,
+                              borderColor: `${scoreColor}50`,
+                            }}
+                          >
+                            {question.code}
+                          </span>
+                        </td>
+                        <td className="campaign-primary-cell">
+                          <span className="campaign-primary-value">{question.questionText}</span>
+                          <span className="campaign-secondary-value">
+                            {question.totalAnswers} lượt trả lời
+                          </span>
+                        </td>
+                        {options.map((column) => {
+                          const cell = question.optionDistribution?.find(
+                            (option) => option.value === column.value
+                          );
+
+                          return (
+                            <td key={column.value} className="section-analysis-option-cell">
+                              <span className="section-analysis-option-count">
+                                {cell?.count ?? 0}
+                              </span>
+                              <span className="section-analysis-option-pct">
+                                ({(cell?.percentage ?? 0).toFixed(0)}%)
+                              </span>
+                            </td>
+                          );
+                        })}
+                        <td className="section-analysis-avg-cell" style={{ color: scoreColor }}>
+                          <strong>{score > 0 ? score.toFixed(2) : '—'}</strong>
+                        </td>
+                        <td className="analysis-rating-cell">
+                          <span
+                            className="analysis-status-pill"
+                            style={{
+                              color: scoreColor,
+                              backgroundColor: `${scoreColor}14`,
+                              borderColor: `${scoreColor}30`,
+                            }}
+                          >
+                            {ratingText}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
+
+      {/* Câu tự nhập: không có điểm nên liệt kê nội dung người học đã gõ. */}
+      {textQuestions.length > 0 && (
         <div className="section-analysis-distribution">
           <div className="distribution-table-header">
-            <h4 className="distribution-table-title">
-              Bảng điểm chi tiết &amp; tỷ lệ phân bố câu hỏi
-            </h4>
+            <h4 className="distribution-table-title">Câu hỏi tự nhập</h4>
             <span className="distribution-table-subtitle">
-              Đối chiếu mã câu hỏi <strong>C1, C2...</strong> với biểu đồ bên trên
+              Không tính vào điểm trung bình
             </span>
           </div>
 
-          <table className="campaign-table analysis-detail-table">
-            <thead>
-              <tr>
-                <th className="analysis-table-code-col">Mã</th>
-                <th className="section-analysis-question-col">Nội dung câu hỏi khảo sát</th>
-                {questions[0]?.optionDistribution?.map((option) => (
-                  <th key={option.value} className="section-analysis-option-col">
-                    Mức {option.value}
-                    <small>{option.displayText}</small>
-                  </th>
-                ))}
-                <th className="section-analysis-avg-col">Điểm TB</th>
-                <th className="analysis-table-rating-col">Đánh giá</th>
-              </tr>
-            </thead>
-            <tbody>
-              {chartData.map((question) => {
-                const isHovered = hoveredCode === question.code;
-                const score = question.averageScore;
-                const scoreColor = getScoreColor(score);
-                const ratingText = getScoreRatingText(score);
-
-                return (
-                  <tr
-                    key={question.questionId}
-                    className={`analysis-table-row ${isHovered ? 'is-highlighted' : ''}`}
-                  >
-                    <td className="analysis-code-cell">
-                      <span
-                        className="analysis-code-badge"
-                        style={{
-                          backgroundColor: `${scoreColor}18`,
-                          color: scoreColor,
-                          borderColor: `${scoreColor}50`,
-                        }}
-                      >
-                        {question.code}
-                      </span>
-                    </td>
-                    <td className="campaign-primary-cell">
-                      <span className="campaign-primary-value">{question.questionText}</span>
-                      <span className="campaign-secondary-value">
-                        {question.totalAnswers} lượt trả lời
-                      </span>
-                    </td>
-                    {question.optionDistribution?.map((option) => (
-                      <td key={option.value} className="section-analysis-option-cell">
-                        <span className="section-analysis-option-count">{option.count}</span>
-                        <span className="section-analysis-option-pct">
-                          ({option.percentage.toFixed(0)}%)
-                        </span>
-                      </td>
+          <div className="analysis-text-answers">
+            {textQuestions.map((question) => (
+              <div className="analysis-text-question" key={question.questionId}>
+                <p className="analysis-text-question-title">
+                  <span className="analysis-code-badge">{question.code}</span>
+                  {question.questionText}
+                  <small>{question.totalAnswers} lượt trả lời</small>
+                </p>
+                {question.textAnswers && question.textAnswers.length > 0 ? (
+                  <ul>
+                    {question.textAnswers.map((answer, index) => (
+                      // Nội dung có thể trùng nhau nên dùng vị trí làm key.
+                      <li key={index}>{answer}</li>
                     ))}
-                    <td className="section-analysis-avg-cell" style={{ color: scoreColor }}>
-                      <strong>{score > 0 ? score.toFixed(2) : '—'}</strong>
-                    </td>
-                    <td className="analysis-rating-cell">
-                      <span
-                        className="analysis-status-pill"
-                        style={{
-                          color: scoreColor,
-                          backgroundColor: `${scoreColor}14`,
-                          borderColor: `${scoreColor}30`,
-                        }}
-                      >
-                        {ratingText}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  </ul>
+                ) : (
+                  <p className="analysis-text-empty">Chưa có nội dung nào.</p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </section>

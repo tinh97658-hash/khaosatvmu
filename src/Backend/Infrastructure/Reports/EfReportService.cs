@@ -20,6 +20,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     /// <summary>Số câu hỏi yếu nhất hiển thị trong bảng tổng quan.</summary>
     private const int WeakQuestionCount = 5;
 
+    /// <summary>Trần số câu trả lời tự nhập trả kèm mỗi câu hỏi, tránh payload quá lớn.</summary>
+    private const int MaxTextAnswersPerQuestion = 200;
+
     public async Task<OperationalProgressReportDto?> GetOperationalProgressReportAsync(
         int semesterId,
         CancellationToken cancellationToken = default)
@@ -279,29 +282,16 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         var questionIds = answers.Select(x => x.QuestionId).Distinct().ToList();
         var questions = await db.SurveyQuestions.AsNoTracking()
             .Where(x => questionIds.Contains(x.QuestionId))
-            .ToDictionaryAsync(x => x.QuestionId, x => x.QuestionText, cancellationToken);
+            .ToListAsync(cancellationToken);
+        var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
 
-        var questionRatings = new List<QuestionRatingDto>();
-        var groupedAnswers = answers.GroupBy(x => x.QuestionId);
-
-        foreach (var group in groupedAnswers)
-        {
-            int qId = group.Key;
-            string qText = questions.TryGetValue(qId, out var txt) ? txt : $"Câu hỏi #{qId}";
-            var qAnswers = group.ToList();
-            int totalCount = qAnswers.Count;
-            decimal avg = totalCount > 0 ? Math.Round((decimal)qAnswers.Average(x => x.SelectedValue), 2) : 0;
-
-            var options = new List<OptionCountDto>();
-            for (int val = 1; val <= 5; val++)
-            {
-                int valCount = qAnswers.Count(x => x.SelectedValue == val);
-                decimal pct = totalCount > 0 ? Math.Round((decimal)valCount / totalCount * 100, 1) : 0;
-                options.Add(new OptionCountDto(val, $"Mức {val}", valCount, pct));
-            }
-
-            questionRatings.Add(new QuestionRatingDto(qId, qText, avg, totalCount, options));
-        }
+        var questionRatings = questions
+            .Select(question => BuildQuestionRating(
+                question.QuestionId,
+                question.QuestionText,
+                answers.Where(x => x.QuestionId == question.QuestionId).ToList(),
+                scaleByQuestion.GetValueOrDefault(question.QuestionId)))
+            .ToList();
 
         return report with { QuestionRatings = questionRatings.OrderBy(x => x.QuestionId).ToList() };
     }
@@ -464,25 +454,15 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         var answers = await db.SurveyResponseAnswers.AsNoTracking()
             .Where(x => responseIds.Contains(x.ResponseId))
             .ToListAsync(cancellationToken);
+        var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
 
-        var questionRatings = new List<QuestionRatingDto>();
-
-        foreach (var q in questions)
-        {
-            var qAnswers = answers.Where(x => x.QuestionId == q.QuestionId).ToList();
-            int totalAnswers = qAnswers.Count;
-            decimal avg = totalAnswers > 0 ? Math.Round((decimal)qAnswers.Average(x => x.SelectedValue), 2) : 0;
-
-            var options = new List<OptionCountDto>();
-            for (int val = 1; val <= 5; val++)
-            {
-                int valCount = qAnswers.Count(x => x.SelectedValue == val);
-                decimal pct = totalAnswers > 0 ? Math.Round((decimal)valCount / totalAnswers * 100, 1) : 0;
-                options.Add(new OptionCountDto(val, $"Mức {val}", valCount, pct));
-            }
-
-            questionRatings.Add(new QuestionRatingDto(q.QuestionId, q.QuestionText, avg, totalAnswers, options));
-        }
+        var questionRatings = questions
+            .Select(q => BuildQuestionRating(
+                q.QuestionId,
+                q.QuestionText,
+                answers.Where(x => x.QuestionId == q.QuestionId).ToList(),
+                scaleByQuestion.GetValueOrDefault(q.QuestionId)))
+            .ToList();
 
         return new SurveyQuestionSummaryReportDto(
             semesterSurveyId,
@@ -539,23 +519,13 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             var answers = await db.SurveyResponseAnswers.AsNoTracking()
                 .Where(x => responseIds.Contains(x.ResponseId))
                 .ToListAsync(cancellationToken);
+            var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
 
-            foreach (var q in questions)
-            {
-                var qAnswers = answers.Where(x => x.QuestionId == q.QuestionId).ToList();
-                int totalAnswers = qAnswers.Count;
-                decimal avg = totalAnswers > 0 ? Math.Round((decimal)qAnswers.Average(x => x.SelectedValue), 2) : 0;
-
-                var options = new List<OptionCountDto>();
-                for (int val = 1; val <= 5; val++)
-                {
-                    int valCount = qAnswers.Count(x => x.SelectedValue == val);
-                    decimal pct = totalAnswers > 0 ? Math.Round((decimal)valCount / totalAnswers * 100, 1) : 0;
-                    options.Add(new OptionCountDto(val, $"Mức {val}", valCount, pct));
-                }
-
-                questionRatings.Add(new QuestionRatingDto(q.QuestionId, q.QuestionText, avg, totalAnswers, options));
-            }
+            questionRatings.AddRange(questions.Select(q => BuildQuestionRating(
+                q.QuestionId,
+                q.QuestionText,
+                answers.Where(x => x.QuestionId == q.QuestionId).ToList(),
+                scaleByQuestion.GetValueOrDefault(q.QuestionId))));
         }
         else
         {
@@ -1037,47 +1007,65 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     {
         if (cssIds.Count == 0) return [];
 
-        // Số lượt trả lời theo (Câu hỏi, Mức) gộp trong SQL qua join Responses → Answers.
+        // Số lượt trả lời theo (Câu hỏi, Giá trị) gộp trong SQL qua join Responses →
+        // Answers. "AnswerValue" là chuỗi nên gộp nguyên văn rồi mới ép sang số ở
+        // dưới, chỉ với câu thuộc thang 'Options'.
         var valueCounts = await (from r in db.SurveyResponses.AsNoTracking()
                                  join a in db.SurveyResponseAnswers.AsNoTracking()
                                      on r.ResponseId equals a.ResponseId
                                  where cssIds.Contains(r.CourseSectionSurveyId)
-                                 group a by new { a.QuestionId, a.SelectedValue } into g
-                                 select new { g.Key.QuestionId, g.Key.SelectedValue, Count = g.Count() })
+                                 group a by new { a.QuestionId, a.AnswerValue } into g
+                                 select new { g.Key.QuestionId, g.Key.AnswerValue, Count = g.Count() })
             .ToListAsync(cancellationToken);
 
         if (valueCounts.Count == 0) return [];
 
         var questionIds = valueCounts.Select(x => x.QuestionId).Distinct().ToList();
-        Dictionary<int, string> texts = questionIds.Count == 0
-            ? []
-            : await db.SurveyQuestions.AsNoTracking()
-                .Where(x => questionIds.Contains(x.QuestionId))
-                .ToDictionaryAsync(x => x.QuestionId, x => x.QuestionText, cancellationToken);
+        var questions = await db.SurveyQuestions.AsNoTracking()
+            .Where(x => questionIds.Contains(x.QuestionId))
+            .ToListAsync(cancellationToken);
+        var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
+        var textById = questions.ToDictionary(x => x.QuestionId, x => x.QuestionText);
 
         var ratings = new List<QuestionRatingDto>();
         foreach (var group in valueCounts.GroupBy(x => x.QuestionId))
         {
             int qId = group.Key;
+
+            // Câu tự nhập không có điểm nên không xếp hạng "yếu nhất" được.
+            var scale = scaleByQuestion.GetValueOrDefault(qId);
+            if (scale is null || scale.IsText) continue;
+
             int total = group.Sum(x => x.Count);
             if (total < WeakQuestionMinAnswers) continue;
 
-            decimal sum = 0;
-            var options = new List<OptionCountDto>();
-            for (int val = 1; val <= 5; val++)
-            {
-                int count = group.FirstOrDefault(x => x.SelectedValue == val)?.Count ?? 0;
-                sum += count * val;
-                decimal pct = total > 0 ? Math.Round((decimal)count / total * 100, 1) : 0;
-                options.Add(new OptionCountDto(val, $"Mức {val}", count, pct));
-            }
+            var counts = group
+                .Select(x => (Value: int.TryParse(x.AnswerValue, out var v) ? v : (int?)null, x.Count))
+                .Where(x => x.Value.HasValue)
+                .ToList();
+
+            int scored = counts.Sum(x => x.Count);
+            if (scored == 0) continue;
+
+            decimal sum = counts.Sum(x => (decimal)x.Value!.Value * x.Count);
+            var options = scale.Options
+                .OrderBy(option => option.Value)
+                .Select(option =>
+                {
+                    int count = counts.Where(x => x.Value == option.Value).Sum(x => x.Count);
+                    decimal pct = Math.Round((decimal)count / scored * 100, 1);
+                    return new OptionCountDto(option.Value, option.DisplayText, count, pct);
+                })
+                .ToList();
 
             ratings.Add(new QuestionRatingDto(
                 qId,
-                texts.TryGetValue(qId, out var txt) ? txt : $"Câu hỏi #{qId}",
-                Math.Round(sum / total, 2),
+                textById.TryGetValue(qId, out var txt) ? txt : $"Câu hỏi #{qId}",
+                Math.Round(sum / scored, 2),
                 total,
-                options));
+                options,
+                AnswerScaleKinds.Options,
+                scale.AnswerScaleName));
         }
 
         return ratings
@@ -1176,4 +1164,111 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
     /// <summary>Bản ghi trung gian cho phép gộp phân bố điểm không cần anonymous type.</summary>
     private sealed record BandCount(int Band, int Count);
+
+    // ------------------------------------------------- Thang trả lời theo câu hỏi
+
+    /// <summary>Thang trả lời kèm các mức của nó, dùng để đọc "AnswerValue".</summary>
+    private sealed record ScaleInfo(
+        int AnswerScaleId,
+        string AnswerScaleName,
+        string ScaleKind,
+        IReadOnlyList<AnswerScaleOption> Options)
+    {
+        public bool IsText => ScaleKind == AnswerScaleKinds.Text;
+    }
+
+    /// <summary>Nạp thang trả lời của một tập câu hỏi, tra theo "QuestionId".</summary>
+    private async Task<Dictionary<int, ScaleInfo>> LoadScalesByQuestionAsync(
+        IReadOnlyList<SurveyQuestion> questions,
+        CancellationToken cancellationToken)
+    {
+        if (questions.Count == 0) return [];
+
+        var scaleIds = questions.Select(x => x.AnswerScaleId).Distinct().ToList();
+        var scales = await db.AnswerScales.AsNoTracking()
+            .Where(x => scaleIds.Contains(x.AnswerScaleId))
+            .ToListAsync(cancellationToken);
+        var options = await db.AnswerScaleOptions.AsNoTracking()
+            .Where(x => scaleIds.Contains(x.AnswerScaleId))
+            .OrderBy(x => x.Value)
+            .ToListAsync(cancellationToken);
+
+        var infoById = scales.ToDictionary(
+            scale => scale.AnswerScaleId,
+            scale => new ScaleInfo(
+                scale.AnswerScaleId,
+                scale.AnswerScaleName,
+                scale.ScaleKind,
+                options.Where(option => option.AnswerScaleId == scale.AnswerScaleId).ToList()));
+
+        return questions
+            .Where(question => infoById.ContainsKey(question.AnswerScaleId))
+            .ToDictionary(question => question.QuestionId, question => infoById[question.AnswerScaleId]);
+    }
+
+    /// <summary>
+    /// Thống kê một câu hỏi. Câu thang 'Options' ra điểm trung bình và phân bố các
+    /// mức của chính thang đó; câu thang 'Text' ra danh sách nội dung người học gõ.
+    /// </summary>
+    private static QuestionRatingDto BuildQuestionRating(
+        int questionId,
+        string questionText,
+        IReadOnlyList<SurveyResponseAnswer> answers,
+        ScaleInfo? scale)
+    {
+        int total = answers.Count;
+
+        if (scale is null)
+        {
+            return new QuestionRatingDto(questionId, questionText, 0, total, []);
+        }
+
+        if (scale.IsText)
+        {
+            var texts = answers
+                .Select(x => x.AnswerValue)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Take(MaxTextAnswersPerQuestion)
+                .ToList();
+
+            return new QuestionRatingDto(
+                questionId,
+                questionText,
+                0,
+                total,
+                [],
+                AnswerScaleKinds.Text,
+                scale.AnswerScaleName,
+                texts);
+        }
+
+        // Chỉ "AnswerValue" đọc được ra số mới vào điểm; dòng hỏng thì bỏ qua.
+        var values = answers
+            .Select(x => int.TryParse(x.AnswerValue, out var value) ? value : (int?)null)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .ToList();
+
+        decimal average = values.Count > 0 ? Math.Round((decimal)values.Average(), 2) : 0;
+
+        // Phân bố theo đúng các mức mà thang này có, không cứng 1..5.
+        var distribution = scale.Options
+            .OrderBy(option => option.Value)
+            .Select(option =>
+            {
+                int count = values.Count(value => value == option.Value);
+                decimal pct = values.Count > 0 ? Math.Round((decimal)count / values.Count * 100, 1) : 0;
+                return new OptionCountDto(option.Value, option.DisplayText, count, pct);
+            })
+            .ToList();
+
+        return new QuestionRatingDto(
+            questionId,
+            questionText,
+            average,
+            total,
+            distribution,
+            AnswerScaleKinds.Options,
+            scale.AnswerScaleName);
+    }
 }
