@@ -193,6 +193,24 @@
   cursor: pointer;
 }
 
+/* Tiêu đề cột có menu lọc: chữ bên trái, nút xổ đẩy sát mép phải của ô. Bọc
+   trong span thay vì đổi display của chính th, vì th đang position: sticky. */
+.catalog-th-filterable {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.catalog-th-filterable .catalog-th-label {
+  margin-right: auto;
+}
+
+/* Nút sắp xếp mặc định rộng 100%; trong ô có menu lọc thì phải co lại,
+   nếu không nó đẩy nút xổ ra ngoài mép ô. */
+.catalog-th-filterable .catalog-sort-button {
+  width: auto;
+}
+
 .catalog-sort-button:hover {
   color: #057fae;
 }
@@ -255,6 +273,35 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Lớp học phần chưa gắn được giảng viên vì tệp import thiếu email. */
+.catalog-cell-unidentified {
+  padding: 4px 8px;
+  border-left: 3px solid #d92d20;
+  background: #fef3f2;
+}
+
+.catalog-cell-unidentified .catalog-cell-primary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #b42318;
+}
+
+.catalog-cell-unidentified .catalog-cell-meta {
+  color: #d92d20;
+  font-weight: 600;
+}
+
+.catalog-field-warning {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  color: #b42318;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .catalog-code {

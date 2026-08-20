@@ -1755,6 +1755,26 @@
   font-weight: 650;
 }
 
+/* Giá trị backend sẽ tự điền khi ô trong tệp bị bỏ trống. */
+.admin-import-default {
+  color: var(--ops-text-muted, #64748b);
+  font-style: italic;
+}
+
+/* Khối giảng viên thiếu email sau khi import lớp học phần. */
+.admin-import-unidentified {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.admin-alert--warning {
+  border-left: 3px solid #d92d20;
+  background: #fef3f2;
+  color: #b42318;
+}
+
 .admin-import-summary {
   min-height: 68px;
   display: flex;

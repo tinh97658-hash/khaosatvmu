@@ -313,17 +313,21 @@ export const SurveyTemplatesPage: React.FC = () => {
       key: 'surveyTemplateId',
       header: 'Mã bộ',
       width: '90px',
+      filterValue: (item) => String(item.surveyTemplateId),
+      numeric: true,
       render: (item) => <span className="catalog-code">{item.surveyTemplateId}</span>,
     },
     {
       key: 'templateName',
       header: 'Tên bộ câu hỏi',
+      filterValue: (item) => item.templateName,
       render: (item) => <span className="catalog-cell-primary">{item.templateName}</span>,
     },
     {
       key: 'answerScaleId',
       header: 'Thang trả lời',
       width: '220px',
+      filterValue: (item) => scaleNameOf(item.answerScaleId),
       render: (item) => (
         <span className="catalog-cell-primary">{scaleNameOf(item.answerScaleId)}</span>
       ),
@@ -332,6 +336,8 @@ export const SurveyTemplatesPage: React.FC = () => {
       key: 'questions',
       header: 'Số câu hỏi',
       width: '120px',
+      filterValue: (item) => String(item.questions.length),
+      numeric: true,
       render: (item) => (
         <span className="catalog-cell-primary">
           {item.questions.length}/{maximumQuestionsPerTemplate}
@@ -342,6 +348,7 @@ export const SurveyTemplatesPage: React.FC = () => {
       key: 'createdAt',
       header: 'Ngày tạo',
       width: '120px',
+      filterValue: (item) => formatDate(item.createdAt),
       render: (item) => <span className="catalog-cell-primary">{formatDate(item.createdAt)}</span>,
     },
     {

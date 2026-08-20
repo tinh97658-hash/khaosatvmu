@@ -68,7 +68,7 @@ public static class CatalogEndpoints
             ICatalogService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.CreateDepartmentAsync(
-                new SaveDepartmentCommand(request.DepartmentName, request.FacultyId),
+                new SaveDepartmentCommand(request.DepartmentId, request.DepartmentName, request.FacultyId),
                 cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
@@ -79,7 +79,7 @@ public static class CatalogEndpoints
             CancellationToken cancellationToken) =>
             ToResult(await service.UpdateDepartmentAsync(
                 departmentId,
-                new SaveDepartmentCommand(request.DepartmentName, request.FacultyId),
+                new SaveDepartmentCommand(departmentId, request.DepartmentName, request.FacultyId),
                 cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
@@ -98,11 +98,46 @@ public static class CatalogEndpoints
             var rows = request.Rows?
                 .Select(x => new ImportDepartmentRowCommand(
                     x.RowNumber,
+                    x.DepartmentId,
                     x.DepartmentName ?? string.Empty,
                     x.FacultyName))
                 .ToList() ?? [];
             return ToResult(await service.ImportDepartmentsAsync(rows, cancellationToken));
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        // ------------------------------------------------------------ Positions
+
+        group.MapGet("/positions", async (
+            ICatalogService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetPositionsAsync(cancellationToken)));
+
+        group.MapPost("/positions", async (
+            SavePositionRequest request,
+            ICatalogService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.CreatePositionAsync(
+                new SavePositionCommand(request.PositionName),
+                cancellationToken)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapPut("/positions/{positionId:int}", async (
+            int positionId,
+            SavePositionRequest request,
+            ICatalogService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.UpdatePositionAsync(
+                positionId,
+                new SavePositionCommand(request.PositionName),
+                cancellationToken)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapDelete("/positions/{positionId:int}", async (
+            int positionId,
+            ICatalogService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.DeletePositionAsync(positionId, cancellationToken)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
 
         // --------------------------------------------------------------- Majors
 
@@ -253,12 +288,15 @@ public static class CatalogEndpoints
                 .Select(x => new ImportCourseSectionRowCommand(
                     x.RowNumber,
                     x.CourseCode ?? string.Empty,
+                    x.CourseName,
                     x.SectionName ?? string.Empty,
+                    x.Credits,
                     x.ClassSize,
-                    x.LecturerEmail,
+                    x.DepartmentName,
+                    x.DepartmentCode,
+                    x.FacultyName,
                     x.LecturerFullName,
-                    x.LecturerDepartmentName,
-                    x.LecturerFacultyName))
+                    x.LecturerEmail))
                 .ToList() ?? [];
             return ToResult(await service.ImportCourseSectionsAsync(
                 request.SemesterId,
@@ -307,7 +345,8 @@ public static class CatalogEndpoints
                     x.Email,
                     x.PhoneNumber,
                     x.FacultyName,
-                    x.DepartmentName))
+                    x.DepartmentName,
+                    x.PositionName))
                 .ToList() ?? [];
             return ToResult(await service.ImportLecturersAsync(rows, cancellationToken));
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
@@ -417,6 +456,10 @@ public static class CatalogEndpoints
             CatalogErrorCodes.FacultyNotFound => StatusCodes.Status404NotFound,
             CatalogErrorCodes.DepartmentNotFound => StatusCodes.Status404NotFound,
             CatalogErrorCodes.MajorNotFound => StatusCodes.Status404NotFound,
+            CatalogErrorCodes.PositionNotFound => StatusCodes.Status404NotFound,
+            CatalogErrorCodes.PositionNameExists => StatusCodes.Status409Conflict,
+            CatalogErrorCodes.DepartmentCodeInvalid => StatusCodes.Status400BadRequest,
+            CatalogErrorCodes.CourseNameRequiredForAutoCreate => StatusCodes.Status400BadRequest,
             CatalogErrorCodes.CourseNotFound => StatusCodes.Status404NotFound,
             CatalogErrorCodes.LecturerNotFound => StatusCodes.Status404NotFound,
             CatalogErrorCodes.AcademicYearNotFound => StatusCodes.Status404NotFound,
@@ -441,7 +484,9 @@ public static class CatalogEndpoints
 
     public sealed record SaveFacultyRequest(string FacultyName);
 
-    public sealed record SaveDepartmentRequest(string DepartmentName, int? FacultyId);
+    public sealed record SaveDepartmentRequest(int DepartmentId, string DepartmentName, int? FacultyId);
+
+    public sealed record SavePositionRequest(string PositionName);
 
     public sealed record SaveMajorRequest(string MajorName, int FacultyId);
 
@@ -451,7 +496,7 @@ public static class CatalogEndpoints
 
     public sealed record ImportDepartmentsRequest(IReadOnlyList<ImportDepartmentRowRequest>? Rows);
 
-    public sealed record ImportDepartmentRowRequest(int RowNumber, string DepartmentName, string? FacultyName);
+    public sealed record ImportDepartmentRowRequest(int RowNumber, int DepartmentId, string DepartmentName, string? FacultyName);
 
     public sealed record ImportMajorsRequest(IReadOnlyList<ImportMajorRowRequest>? Rows);
 
@@ -470,41 +515,48 @@ public static class CatalogEndpoints
     public sealed record SaveCourseSectionRequest(
         int CourseId,
         int SemesterId,
-        int LecturerId,
+        int? LecturerId,
         string SectionName,
-        int ClassSize)
+        int ClassSize,
+        string? UnidentifiedLecturerName)
     {
         public SaveCourseSectionCommand ToCommand() =>
-            new(CourseId, SemesterId, LecturerId, SectionName, ClassSize);
+            new(CourseId, SemesterId, LecturerId, SectionName, ClassSize, UnidentifiedLecturerName);
     }
 
     public sealed record ImportCourseSectionsRequest(
         int SemesterId,
         IReadOnlyList<ImportCourseSectionRowRequest>? Rows);
 
+    /// <summary>Các trường tương ứng cột trong tệp Excel gốc của đơn vị đào tạo.</summary>
     public sealed record ImportCourseSectionRowRequest(
         int RowNumber,
         string CourseCode,
+        string? CourseName,
         string SectionName,
+        string? Credits,
         string? ClassSize,
-        string? LecturerEmail,
+        string? DepartmentName,
+        string? DepartmentCode,
+        string? FacultyName,
         string? LecturerFullName,
-        string? LecturerDepartmentName,
-        string? LecturerFacultyName);
+        string? LecturerEmail);
 
     public sealed record SaveLecturerRequest(
         string FullName,
         int? DepartmentId,
         int? FacultyId,
         string? Email,
-        string? PhoneNumber)
+        string? PhoneNumber,
+        int? PositionId)
     {
         public SaveLecturerCommand ToCommand() => new(
             FullName,
             DepartmentId,
             FacultyId,
             Email,
-            PhoneNumber);
+            PhoneNumber,
+            PositionId);
     }
 
     public sealed record ImportLecturersRequest(IReadOnlyList<ImportLecturerRowRequest>? Rows);
@@ -515,7 +567,8 @@ public static class CatalogEndpoints
         string? Email,
         string? PhoneNumber,
         string? FacultyName,
-        string? DepartmentName);
+        string? DepartmentName,
+        string? PositionName);
 
     public sealed record SaveCourseRequest(
         string CourseCode,
@@ -530,7 +583,7 @@ public static class CatalogEndpoints
             CourseCode,
             CourseName,
             Credits,
-            CourseType ?? string.Empty,
+            CourseType,
             DepartmentId,
             FacultyId,
             PrerequisiteCourseId);

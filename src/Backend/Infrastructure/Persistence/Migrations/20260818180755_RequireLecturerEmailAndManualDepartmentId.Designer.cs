@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260818180755_RequireLecturerEmailAndManualDepartmentId")]
+    partial class RequireLecturerEmailAndManualDepartmentId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -251,8 +254,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("CourseType")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("");
 
                     b.Property<int>("Credits")
                         .HasColumnType("integer");
@@ -306,7 +311,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<int?>("LecturerId")
+                    b.Property<int>("LecturerId")
                         .HasColumnType("integer");
 
                     b.Property<string>("SectionName")
@@ -316,18 +321,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("SemesterId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("UnidentifiedLecturerName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
                     b.HasKey("CourseSectionId");
 
                     b.HasIndex("LecturerId");
 
                     b.HasIndex("SemesterId");
-
-                    b.HasIndex("UnidentifiedLecturerName")
-                        .HasFilter("\"UnidentifiedLecturerName\" IS NOT NULL");
 
                     b.HasIndex("CourseId", "SemesterId", "SectionName")
                         .IsUnique();
@@ -466,9 +464,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("text");
 
-                    b.Property<int?>("PositionId")
-                        .HasColumnType("integer");
-
                     b.HasKey("LecturerId");
 
                     b.HasIndex("DepartmentId");
@@ -477,8 +472,6 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.HasIndex("FacultyId");
-
-                    b.HasIndex("PositionId");
 
                     b.ToTable("Lecturers", (string)null);
                 });
@@ -542,32 +535,6 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Permissions", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.Position", b =>
-                {
-                    b.Property<int>("PositionId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("PositionId"));
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("PositionName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("PositionId");
-
-                    b.HasIndex("PositionName")
-                        .IsUnique();
-
-                    b.ToTable("Positions", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Role", b =>
@@ -985,7 +952,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasOne("Domain.Lecturer", null)
                         .WithMany()
                         .HasForeignKey("LecturerId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("Domain.Semester", null)
                         .WithMany()
@@ -1027,11 +995,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasOne("Domain.Faculty", null)
                         .WithMany()
                         .HasForeignKey("FacultyId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Domain.Position", null)
-                        .WithMany()
-                        .HasForeignKey("PositionId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

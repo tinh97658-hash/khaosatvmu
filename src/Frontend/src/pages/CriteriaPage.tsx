@@ -83,12 +83,14 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
       key: 'code',
       header: 'Mã Tiêu Chí',
       width: '110px',
+      filterValue: (item) => item.code,
       render: (item) => <span className="operations-code">{item.code}</span>,
     },
     {
       key: 'groupName',
       header: 'Nhóm Tiêu Chí Đánh Giá',
       width: '240px',
+      filterValue: (item) => item.groupName,
       render: (item) => <span className="operations-primary-text">{item.groupName}</span>,
     },
     {
@@ -100,12 +102,15 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
       key: 'weight',
       header: 'Trọng Số',
       width: '90px',
+      filterValue: (item) => String(item.weight),
+      numeric: true,
       render: (item) => <span className="operations-primary-text">{item.weight}</span>,
     },
     {
       key: 'status',
       header: 'Trạng Thái',
       width: '110px',
+      filterValue: (item) => item.status,
       render: (item) => (
         <span className={`operations-status ${item.status === 'Kích hoạt' ? 'operations-status--success' : 'operations-status--danger'}`}>
           {item.status}

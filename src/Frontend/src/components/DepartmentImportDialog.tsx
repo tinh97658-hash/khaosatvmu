@@ -30,6 +30,7 @@ const fileErrorMessages: Record<DepartmentImportFileErrorCode, string> = {
   FILE_TYPE: 'Chỉ chấp nhận tệp Excel có định dạng .xlsx.',
   FILE_SIZE: 'Tệp Excel không được lớn hơn 5 MB.',
   FILE_EMPTY: 'Tệp Excel không có dữ liệu.',
+  ID_HEADER_MISSING: 'Không tìm thấy cột "Mã bộ môn" trong hàng tiêu đề.',
   NAME_HEADER_MISSING: 'Không tìm thấy cột "Tên bộ môn" trong hàng tiêu đề.',
   FACULTY_HEADER_MISSING: 'Không tìm thấy cột "Tên khoa viện" trong hàng tiêu đề.',
   NO_DATA_ROWS: 'Tệp Excel chưa có dòng bộ môn nào.',
@@ -123,9 +124,10 @@ export function DepartmentImportDialog({
         <div className="admin-form-intro">
           <FileSpreadsheet aria-hidden="true" />
           <p>
-            Hàng đầu tiên cần có cột <strong>Tên bộ môn</strong> và cột{' '}
-            <strong>Tên khoa viện</strong>. Tên khoa viện được tra ngược trong danh mục Khoa / Viện
-            để lấy đúng <strong>FacultyId</strong>. Tối đa 500 dòng.
+            Hàng đầu tiên cần có cột <strong>Mã bộ môn</strong>, <strong>Tên bộ môn</strong> và cột{' '}
+            <strong>Tên khoa viện</strong>. Mã bộ môn phải tự điền, là số nguyên dương và không được
+            trùng. Tên khoa viện được tra ngược trong danh mục Khoa / Viện để lấy đúng{' '}
+            <strong>FacultyId</strong>. Tối đa 500 dòng.
           </p>
         </div>
 
@@ -204,6 +206,7 @@ export function DepartmentImportDialog({
                     <thead>
                       <tr>
                         <th>Dòng</th>
+                        <th>Mã bộ môn</th>
                         <th>Tên bộ môn</th>
                         <th>Tên khoa viện</th>
                       </tr>
@@ -212,6 +215,13 @@ export function DepartmentImportDialog({
                       {rows.slice(0, 8).map((row) => (
                         <tr key={row.rowNumber}>
                           <td>{row.rowNumber}</td>
+                          <td>
+                            {row.departmentId > 0 ? (
+                              row.departmentId
+                            ) : (
+                              <span className="admin-import-invalid">Thiếu mã bộ môn</span>
+                            )}
+                          </td>
                           <td>
                             {row.departmentName || (
                               <span className="admin-import-invalid">Thiếu tên bộ môn</span>

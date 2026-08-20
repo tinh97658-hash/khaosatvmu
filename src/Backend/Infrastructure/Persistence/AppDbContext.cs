@@ -15,6 +15,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Faculty> Faculties => Set<Faculty>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Major> Majors => Set<Major>();
+    public DbSet<Position> Positions => Set<Position>();
     public DbSet<Course> Courses => Set<Course>();
     public DbSet<Lecturer> Lecturers => Set<Lecturer>();
     public DbSet<AcademicYear> AcademicYears => Set<AcademicYear>();
@@ -37,6 +38,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<Faculty>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Department>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Major>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Position>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<AcademicYear>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Semester>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<CourseSection>().HasQueryFilter(e => !e.IsDeleted);
@@ -146,12 +148,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.ToTable("Departments");
             entity.HasKey(x => x.DepartmentId);
+            entity.Property(x => x.DepartmentId).ValueGeneratedNever();
             entity.Property(x => x.DepartmentName).IsRequired();
             entity.HasIndex(x => x.FacultyId);
             entity.HasOne<Faculty>()
                 .WithMany()
                 .HasForeignKey(x => x.FacultyId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Position>(entity =>
+        {
+            entity.ToTable("Positions");
+            entity.HasKey(x => x.PositionId);
+            entity.Property(x => x.PositionName).IsRequired();
+            entity.HasIndex(x => x.PositionName).IsUnique();
         });
 
         modelBuilder.Entity<Major>(entity =>
@@ -191,9 +202,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.ToTable("CourseSections");
             entity.HasKey(x => x.CourseSectionId);
             entity.Property(x => x.SectionName).IsRequired();
+            entity.Property(x => x.UnidentifiedLecturerName).HasMaxLength(200);
             entity.HasIndex(x => new { x.CourseId, x.SemesterId, x.SectionName }).IsUnique();
             entity.HasIndex(x => x.SemesterId);
             entity.HasIndex(x => x.LecturerId);
+            // Lọc nhanh các lớp còn chờ bổ sung email giảng viên.
+            entity.HasIndex(x => x.UnidentifiedLecturerName)
+                .HasFilter("\"UnidentifiedLecturerName\" IS NOT NULL");
             entity.HasOne<Course>()
                 .WithMany()
                 .HasForeignKey(x => x.CourseId)
@@ -213,9 +228,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.ToTable("Lecturers");
             entity.HasKey(x => x.LecturerId);
             entity.Property(x => x.FullName).IsRequired();
+            entity.Property(x => x.Email).IsRequired();
             entity.HasIndex(x => x.Email).IsUnique();
             entity.HasIndex(x => x.DepartmentId);
             entity.HasIndex(x => x.FacultyId);
+            entity.HasIndex(x => x.PositionId);
             entity.HasOne<Department>()
                 .WithMany()
                 .HasForeignKey(x => x.DepartmentId)
@@ -223,6 +240,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasOne<Faculty>()
                 .WithMany()
                 .HasForeignKey(x => x.FacultyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Position>()
+                .WithMany()
+                .HasForeignKey(x => x.PositionId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -232,7 +253,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasKey(x => x.CourseId);
             entity.Property(x => x.CourseCode).IsRequired();
             entity.Property(x => x.CourseName).IsRequired();
-            entity.Property(x => x.CourseType).IsRequired().HasDefaultValue(string.Empty);
+            // Nullable: học phần tạo tự động khi import lớp học phần chưa biết loại.
+            entity.Property(x => x.CourseType).HasMaxLength(20);
             entity.HasIndex(x => x.CourseCode).IsUnique();
             entity.HasIndex(x => x.DepartmentId);
             entity.HasIndex(x => x.FacultyId);
