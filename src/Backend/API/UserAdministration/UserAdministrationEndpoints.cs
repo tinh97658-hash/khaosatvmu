@@ -10,7 +10,7 @@ public static class UserAdministrationEndpoints
     {
         var group = endpoints
             .MapGroup("/api/admin")
-            .RequireAuthorization(AuthPolicies.AdminAccess);
+            .RequireAuthorization(AuthPolicies.UserAdminAccess);
 
         group.MapGet("/users", async (
             string? search,

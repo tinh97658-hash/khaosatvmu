@@ -379,9 +379,12 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
 
     private static readonly Dictionary<string, int> CategoryOrderMap = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Quản trị hệ thống"] = 1,
-        ["Khảo sát"] = 2,
-        ["Báo cáo"] = 3
+        ["Tổng quan"] = 1,
+        ["Báo cáo"] = 2,
+        ["Danh mục đào tạo"] = 3,
+        ["Khảo sát học phần"] = 4,
+        ["Khảo sát chương trình"] = 5,
+        ["Quản trị hệ thống"] = 6
     };
 
     private static int GetCategoryOrder(string category) =>

@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { StatCard } from '../components/StatCard';
+import { canAccessModule } from '../auth/modulePermissions';
 import type { SystemStats, SurveyCampaign } from '../types';
 import '../styles/dashboard.css';
 
@@ -19,6 +20,7 @@ interface DashboardOverviewProps {
   campaigns: SurveyCampaign[];
   onOpenQR: (campaign: SurveyCampaign) => void;
   onNavigateTab: (tab: string) => void;
+  permissions: readonly string[];
 }
 
 interface QuickAction {
@@ -91,7 +93,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   campaigns,
   onOpenQR,
   onNavigateTab,
+  permissions,
 }) => {
+  const visibleQuickActions = quickActions.filter((action) =>
+    canAccessModule(permissions, action.tab));
+  const canViewSurveyOperations = ['progress', 'reports', 'course-campaigns']
+    .some((moduleId) => canAccessModule(permissions, moduleId));
+  const canManageCourseCampaigns = canAccessModule(permissions, 'course-campaigns');
+
   return (
     <div className="dashboard-overview">
       <section className="dashboard-block" aria-labelledby="dashboard-summary-title">
@@ -159,7 +168,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
       </section>
 
-      <section className="dashboard-block" aria-labelledby="dashboard-catalog-title">
+      {visibleQuickActions.length > 0 && <section className="dashboard-block" aria-labelledby="dashboard-catalog-title">
         <header className="dashboard-block-heading">
           <div>
             <h2 id="dashboard-catalog-title">Danh mục và công cụ</h2>
@@ -168,7 +177,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </header>
 
         <div className="dashboard-quick-grid">
-          {quickActions.map((action) => {
+          {visibleQuickActions.map((action) => {
             const Icon = action.icon;
             return (
               <button
@@ -189,9 +198,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             );
           })}
         </div>
-      </section>
+      </section>}
 
-      <section className="dashboard-block dashboard-campaigns" aria-labelledby="dashboard-campaigns-title">
+      {canViewSurveyOperations && <section className="dashboard-block dashboard-campaigns" aria-labelledby="dashboard-campaigns-title">
         <header className="dashboard-block-heading dashboard-campaigns-heading">
           <div>
             <h2 id="dashboard-campaigns-title">Đợt khảo sát đang mở</h2>
@@ -199,14 +208,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
           <div className="dashboard-heading-actions">
             <span className="dashboard-result-count">{campaigns.length} đợt khảo sát</span>
-            <button
+            {canManageCourseCampaigns && <button
               type="button"
               className="dashboard-manage-button"
               onClick={() => onNavigateTab('course-campaigns')}
             >
               Quản lý tất cả
               <ArrowRight aria-hidden="true" />
-            </button>
+            </button>}
           </div>
         </header>
 
@@ -285,7 +294,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </tbody>
           </table>
         </div>
-      </section>
+      </section>}
     </div>
   );
 };

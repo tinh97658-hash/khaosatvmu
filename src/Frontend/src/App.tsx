@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from './auth/authContext';
+import { canAccessModule } from './auth/modulePermissions';
 import { AuthLoading } from './components/AuthLoading';
 import { getHashRoot } from './pages/reportRoute';
 
@@ -74,11 +75,16 @@ function PageFallback() {
   );
 }
 
+const EMPTY_PERMISSIONS: readonly string[] = [];
+
 function DashboardApp() {
   const auth = useAuth();
   const [currentTab, setCurrentTabState] = useState<string>(getInitialTab);
   const [isStudentView, setIsStudentView] = useState<boolean>(false);
-  const canManageUsers = auth.access?.permissions.includes('ADMIN_ACCESS') ?? false;
+  const permissions = auth.access?.permissions ?? EMPTY_PERMISSIONS;
+  const canLoadCatalog = canAccessModule(permissions, 'faculties');
+  const canLoadSurveyOperations = ['progress', 'reports', 'course-campaigns']
+    .some((moduleId) => canAccessModule(permissions, moduleId));
 
   const setCurrentTab = useCallback((tab: string) => {
     setCurrentTabState(tab);
@@ -105,13 +111,23 @@ function DashboardApp() {
   }, [currentTab]);
 
   useEffect(() => {
-    if (currentTab === 'users-admin' && !canManageUsers) {
+    if (!canAccessModule(permissions, currentTab)) {
       setCurrentTab('overview');
     }
-  }, [canManageUsers, currentTab, setCurrentTab]);
+  }, [currentTab, permissions, setCurrentTab]);
 
   // Nạp danh mục đã lưu trong database khi vào hệ thống.
   useEffect(() => {
+    if (!canLoadCatalog) {
+      setFaculties([]);
+      setDepartments([]);
+      setMajors([]);
+      setCourses([]);
+      setLecturers([]);
+      setSections([]);
+      return;
+    }
+
     let cancelled = false;
 
     const load = async () => {
@@ -149,7 +165,7 @@ function DashboardApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canLoadCatalog]);
 
   // Danh mục đào tạo. Mọi danh mục bắt đầu rỗng, dữ liệu chỉ nằm trong phiên
   // làm việc cho tới khi backend có API cho các bảng này.
@@ -175,7 +191,16 @@ function DashboardApp() {
   const [surveyLoadError, setSurveyLoadError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!canLoadSurveyOperations) {
+      setSemesterSurveys([]);
+      setSectionSurveys([]);
+      setSurveyLoadError(null);
+      setSurveyLoading(false);
+      return;
+    }
+
     let cancelled = false;
+    setSurveyLoading(true);
 
     const load = async () => {
       try {
@@ -201,7 +226,7 @@ function DashboardApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canLoadSurveyOperations]);
 
   const stats: SystemStats = useMemo(
     () => ({
@@ -510,7 +535,7 @@ function DashboardApp() {
         currentTab={currentTab}
         onSelectTab={(tab) => setCurrentTab(tab)}
         activeCampaignsCount={stats.activeCampaigns}
-        canManageUsers={canManageUsers}
+        permissions={permissions}
       />
 
       {/* Main Content Area */}
@@ -527,10 +552,12 @@ function DashboardApp() {
 
         <main className="content-area">
           <Suspense fallback={<PageFallback />}>
+            {canAccessModule(permissions, currentTab) && <>
             {currentTab === 'overview' && (
               <DashboardOverview
                 stats={stats}
                 campaigns={campaigns}
+                permissions={permissions}
                 onOpenQR={handleOpenCampaignQR}
                 onNavigateTab={(tab) => setCurrentTab(tab)}
               />
@@ -649,7 +676,8 @@ function DashboardApp() {
               />
             )}
 
-            {currentTab === 'users-admin' && canManageUsers && <UsersAdminPage />}
+            {currentTab === 'users-admin' && <UsersAdminPage />}
+            </>}
           </Suspense>
         </main>
       </div>

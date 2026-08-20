@@ -8,7 +8,7 @@ public static class ReportEndpoints
     public static IEndpointRouteBuilder MapReportEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/reports")
-            .RequireAuthorization(AuthPolicies.ViewReports);
+            .RequireAuthorization(AuthPolicies.ReportsAccess);
 
         group.MapGet("/operational-progress", async (
             int semesterId,

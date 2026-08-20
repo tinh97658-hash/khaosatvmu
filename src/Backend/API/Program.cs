@@ -101,15 +101,23 @@ builder.Services.AddAntiforgery(options =>
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy(AuthPolicies.AdminAccess, policy =>
-        policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement("ADMIN_ACCESS")));
-    options.AddPolicy(AuthPolicies.SurveyManage, policy =>
-        policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement("SURVEY_MANAGE")));
-    options.AddPolicy(AuthPolicies.SurveyManageInOrganization, policy =>
-        policy.RequireAuthenticatedUser().AddRequirements(
-            new PermissionRequirement("SURVEY_MANAGE", "organizationUnitCode")));
-    options.AddPolicy(AuthPolicies.ViewReports, policy =>
-        policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement("VIEW_REPORTS")));
+    AddPermissionPolicy(AuthPolicies.UserAdminAccess, "USER_ADMIN_ACCESS");
+    AddPermissionPolicy(AuthPolicies.CatalogAccess, "CATALOG_ACCESS");
+    AddPermissionPolicy(AuthPolicies.CourseQuestionSetsAccess, "COURSE_QUESTION_SETS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.CourseCampaignsAccess, "COURSE_CAMPAIGNS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.ProgramCampaignsAccess, "PROGRAM_CAMPAIGNS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.ProgramCriteriaAccess, "PROGRAM_CRITERIA_ACCESS");
+    AddPermissionPolicy(AuthPolicies.ProgressAccess, "PROGRESS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.ReportsAccess, "REPORTS_ACCESS");
+    options.AddPolicy(AuthPolicies.SurveyOperationalRead, policy =>
+        policy.RequireAuthenticatedUser().AddRequirements(new AnyPermissionRequirement(
+            "PROGRESS_ACCESS",
+            "REPORTS_ACCESS",
+            "COURSE_CAMPAIGNS_ACCESS")));
+
+    void AddPermissionPolicy(string policyName, string permissionCode) =>
+        options.AddPolicy(policyName, policy =>
+            policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement(permissionCode)));
 });
 
 builder.Services.AddHttpClient<IAgentMemoryService, AgentMemoryService>();
@@ -121,6 +129,7 @@ builder.Services.AddScoped<ISurveyService, EfSurveyService>();
 builder.Services.AddScoped<IReportService, EfReportService>();
 builder.Services.AddScoped<ApplicationCookieEvents>();
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, AnyPermissionAuthorizationHandler>();
 
 var app = builder.Build();
 
