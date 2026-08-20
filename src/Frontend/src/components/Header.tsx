@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { ChevronRight, QrCode } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AuthProfile, AuthUser } from '../types';
-import { HeaderSemesterPicker } from './HeaderSemesterPicker';
 import { ProfileSelectionDialog } from './ProfileSelectionDialog';
 import { UserAccountMenu } from './UserAccountMenu';
 
@@ -109,8 +108,6 @@ export function Header({
       </div>
 
       <div className="header-actions">
-        <HeaderSemesterPicker />
-
         <button
           type="button"
           className="header-preview-button"

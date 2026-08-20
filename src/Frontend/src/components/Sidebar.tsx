@@ -13,13 +13,13 @@ import {
   PanelLeftOpen,
   Presentation,
   School,
-  ShieldCheck,
   UserCog,
   UsersRound,
   X,
   type LucideIcon,
 } from 'lucide-react';
 import { canAccessModule } from '../auth/modulePermissions';
+import { HeaderSemesterPicker } from './HeaderSemesterPicker';
 
 interface SidebarProps {
   currentTab: string;
@@ -190,17 +190,7 @@ export function Sidebar({
         </nav>
 
         <div className="sidebar-footer">
-          <div className="sidebar-footer-icon" aria-hidden="true">
-            <ShieldCheck />
-          </div>
-          <div className="sidebar-footer-copy">
-            <strong>Hệ thống nội bộ</strong>
-            <span>Phiên bản 2.5 · 2026</span>
-          </div>
-          <span className="sidebar-status" title="Hệ thống đang kết nối">
-            <span aria-hidden="true" />
-            Kết nối
-          </span>
+          <HeaderSemesterPicker />
         </div>
       </aside>
     </>
