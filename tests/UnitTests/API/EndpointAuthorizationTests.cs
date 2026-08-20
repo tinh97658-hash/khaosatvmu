@@ -44,8 +44,25 @@ public sealed class EndpointAuthorizationTests
             .Any(data => data.Policy == expectedPolicy));
     }
 
-    [Fact]
-    public void CatalogEndpoints_RequireCatalogAccessPermission()
+    [Theory]
+    [InlineData("/api/catalog/faculties", "GET", AuthPolicies.FacultiesRead)]
+    [InlineData("/api/catalog/faculties", "POST", AuthPolicies.FacultiesAccess)]
+    [InlineData("/api/catalog/departments", "GET", AuthPolicies.DepartmentsRead)]
+    [InlineData("/api/catalog/departments", "POST", AuthPolicies.DepartmentsAccess)]
+    [InlineData("/api/catalog/positions", "GET", AuthPolicies.LecturersRead)]
+    [InlineData("/api/catalog/positions", "POST", AuthPolicies.LecturersAccess)]
+    [InlineData("/api/catalog/majors", "GET", AuthPolicies.MajorsRead)]
+    [InlineData("/api/catalog/majors", "POST", AuthPolicies.MajorsAccess)]
+    [InlineData("/api/catalog/courses", "GET", AuthPolicies.CoursesRead)]
+    [InlineData("/api/catalog/courses", "POST", AuthPolicies.CoursesAccess)]
+    [InlineData("/api/catalog/course-sections", "GET", AuthPolicies.CourseSectionsAccess)]
+    [InlineData("/api/catalog/lecturers", "GET", AuthPolicies.LecturersRead)]
+    [InlineData("/api/catalog/lecturers", "POST", AuthPolicies.LecturersAccess)]
+    [InlineData("/api/catalog/academic-years", "POST", AuthPolicies.CourseSectionsAccess)]
+    public void CatalogEndpoints_RequireResourcePermission(
+        string route,
+        string method,
+        string expectedPolicy)
     {
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddAuthorization();
@@ -55,16 +72,14 @@ public sealed class EndpointAuthorizationTests
         app.MapCatalogEndpoints();
         app.MapSurveyEndpoints();
 
-        var endpoints = ((IEndpointRouteBuilder)app).DataSources
+        var endpoint = ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(source => source.Endpoints)
             .OfType<RouteEndpoint>()
-            .Where(endpoint => endpoint.RoutePattern.RawText?.StartsWith("/api/catalog") == true)
-            .ToList();
+            .Single(candidate => candidate.RoutePattern.RawText?.TrimEnd('/') == route
+                && candidate.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods.Contains(method) == true);
 
-        endpoints.Should().NotBeEmpty();
-        endpoints.Should().OnlyContain(endpoint => endpoint.Metadata
-            .GetOrderedMetadata<IAuthorizeData>()
-            .Any(data => data.Policy == AuthPolicies.CatalogAccess));
+        endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>()
+            .Should().Contain(data => data.Policy == expectedPolicy);
     }
 
     [Theory]

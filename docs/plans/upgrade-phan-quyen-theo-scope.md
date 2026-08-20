@@ -160,7 +160,12 @@ Nhưng không được:
 
 ```text
 Quản trị người dùng            ✗
-Danh mục đào tạo               ✗
+Khoa / Viện                    ✗
+Bộ môn                         ✗
+Giảng viên                     ✗
+Ngành đào tạo                  ✗
+Học phần                       ✗
+Lớp học phần                   ✗
 Tiến độ thu phiếu              ✗
 ```
 
@@ -355,7 +360,12 @@ Ví dụ:
 COURSE_QUESTION_SETS_ACCESS
 PROGRAM_CAMPAIGNS_ACCESS
 PROGRESS_ACCESS
-CATALOG_ACCESS
+FACULTIES_ACCESS
+DEPARTMENTS_ACCESS
+LECTURERS_ACCESS
+MAJORS_ACCESS
+COURSES_ACCESS
+COURSE_SECTIONS_ACCESS
 USER_ADMIN_ACCESS
 COURSE_CAMPAIGNS_ACCESS
 PROGRAM_CRITERIA_ACCESS
@@ -377,7 +387,12 @@ Tổng quan
     └── PROGRESS_ACCESS
 
 Danh mục đào tạo
-    └── CATALOG_ACCESS
+    ├── FACULTIES_ACCESS        → Khoa / Viện
+    ├── DEPARTMENTS_ACCESS      → Bộ môn
+    ├── LECTURERS_ACCESS        → Giảng viên và chức vụ
+    ├── MAJORS_ACCESS           → Ngành đào tạo
+    ├── COURSES_ACCESS          → Học phần
+    └── COURSE_SECTIONS_ACCESS  → Lớp học phần, năm học và học kỳ
 
 Quản trị hệ thống
     └── USER_ADMIN_ACCESS

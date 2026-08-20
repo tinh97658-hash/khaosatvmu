@@ -82,7 +82,18 @@ function DashboardApp() {
   const [currentTab, setCurrentTabState] = useState<string>(getInitialTab);
   const [isStudentView, setIsStudentView] = useState<boolean>(false);
   const permissions = auth.access?.permissions ?? EMPTY_PERMISSIONS;
-  const canLoadCatalog = canAccessModule(permissions, 'faculties');
+  const canLoadFaculties = [
+    'faculties', 'departments', 'lecturers', 'majors', 'courses', 'classes',
+  ].some((moduleId) => canAccessModule(permissions, moduleId));
+  const canLoadDepartments = ['faculties', 'departments', 'lecturers', 'courses', 'classes']
+    .some((moduleId) => canAccessModule(permissions, moduleId));
+  const canLoadMajors = ['faculties', 'majors']
+    .some((moduleId) => canAccessModule(permissions, moduleId));
+  const canLoadCourses = ['departments', 'courses', 'classes']
+    .some((moduleId) => canAccessModule(permissions, moduleId));
+  const canLoadLecturers = ['departments', 'lecturers', 'classes']
+    .some((moduleId) => canAccessModule(permissions, moduleId));
+  const canLoadCourseSections = canAccessModule(permissions, 'classes');
   const canLoadSurveyOperations = ['progress', 'reports', 'course-campaigns']
     .some((moduleId) => canAccessModule(permissions, moduleId));
 
@@ -118,16 +129,6 @@ function DashboardApp() {
 
   // Nạp danh mục đã lưu trong database khi vào hệ thống.
   useEffect(() => {
-    if (!canLoadCatalog) {
-      setFaculties([]);
-      setDepartments([]);
-      setMajors([]);
-      setCourses([]);
-      setLecturers([]);
-      setSections([]);
-      return;
-    }
-
     let cancelled = false;
 
     const load = async () => {
@@ -140,12 +141,12 @@ function DashboardApp() {
           nextLecturers,
           nextSections,
         ] = await Promise.all([
-          catalogApi.faculties(),
-          catalogApi.departments(),
-          catalogApi.majors(),
-          catalogApi.courses(),
-          catalogApi.lecturers(),
-          catalogApi.courseSections(),
+          canLoadFaculties ? catalogApi.faculties() : Promise.resolve([]),
+          canLoadDepartments ? catalogApi.departments() : Promise.resolve([]),
+          canLoadMajors ? catalogApi.majors() : Promise.resolve([]),
+          canLoadCourses ? catalogApi.courses() : Promise.resolve([]),
+          canLoadLecturers ? catalogApi.lecturers() : Promise.resolve([]),
+          canLoadCourseSections ? catalogApi.courseSections() : Promise.resolve([]),
         ]);
         if (cancelled) return;
         setFaculties(nextFaculties);
@@ -165,7 +166,14 @@ function DashboardApp() {
     return () => {
       cancelled = true;
     };
-  }, [canLoadCatalog]);
+  }, [
+    canLoadCourseSections,
+    canLoadCourses,
+    canLoadDepartments,
+    canLoadFaculties,
+    canLoadLecturers,
+    canLoadMajors,
+  ]);
 
   // Danh mục đào tạo. Mọi danh mục bắt đầu rỗng, dữ liệu chỉ nằm trong phiên
   // làm việc cho tới khi backend có API cho các bảng này.
