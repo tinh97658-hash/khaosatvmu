@@ -13,18 +13,19 @@ import {
   PanelLeftOpen,
   Presentation,
   School,
-  ShieldCheck,
   UserCog,
   UsersRound,
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { canAccessModule } from '../auth/modulePermissions';
+import { HeaderSemesterPicker } from './HeaderSemesterPicker';
 
 interface SidebarProps {
   currentTab: string;
   onSelectTab: (tab: string) => void;
   activeCampaignsCount: number;
-  canManageUsers: boolean;
+  permissions: readonly string[];
 }
 
 interface SidebarItem {
@@ -43,7 +44,7 @@ export function Sidebar({
   currentTab,
   onSelectTab,
   activeCampaignsCount,
-  canManageUsers,
+  permissions,
 }: SidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -97,15 +98,18 @@ export function Sidebar({
         { id: 'program-criteria', label: 'Tiêu chí CTĐT', icon: FileCheck2 },
       ],
     },
-    ...(canManageUsers
-      ? [{
-          section: 'QUẢN TRỊ',
-          items: [
-            { id: 'users-admin', label: 'Người dùng & phân quyền', icon: UserCog },
-          ],
-        } satisfies SidebarGroup]
-      : []),
-  ];
+    {
+      section: 'QUẢN TRỊ',
+      items: [
+        { id: 'users-admin', label: 'Người dùng & phân quyền', icon: UserCog },
+      ],
+    },
+  ]
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => canAccessModule(permissions, item.id)),
+    }))
+    .filter((group) => group.items.length > 0);
 
   const handleSelect = (tab: string) => {
     onSelectTab(tab);
@@ -186,17 +190,7 @@ export function Sidebar({
         </nav>
 
         <div className="sidebar-footer">
-          <div className="sidebar-footer-icon" aria-hidden="true">
-            <ShieldCheck />
-          </div>
-          <div className="sidebar-footer-copy">
-            <strong>Hệ thống nội bộ</strong>
-            <span>Phiên bản 2.5 · 2026</span>
-          </div>
-          <span className="sidebar-status" title="Hệ thống đang kết nối">
-            <span aria-hidden="true" />
-            Kết nối
-          </span>
+          <HeaderSemesterPicker />
         </div>
       </aside>
     </>

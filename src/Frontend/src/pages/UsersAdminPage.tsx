@@ -65,7 +65,103 @@ const eventNames: Record<string, string> = {
   PROFILE_SWITCHED: 'Chuyển profile',
   GOOGLE_LOGIN_PROFILE_REQUIRED: 'Yêu cầu chọn profile',
   GOOGLE_LOGIN_NO_PROFILE: 'Đăng nhập không có profile',
+  CREATE: 'Tạo dữ liệu',
+  UPDATE: 'Cập nhật dữ liệu',
+  DELETE: 'Xóa dữ liệu',
+  RESTORE: 'Khôi phục dữ liệu',
 };
+
+const auditFieldNames: Record<string, string> = {
+  ProfileCode: 'Mã hồ sơ',
+  ProfileName: 'Tên hồ sơ',
+  actorUserId: 'Người thực hiện',
+  details: 'Chi tiết',
+};
+
+interface AuditDetailItem {
+  label: string;
+  value: string;
+}
+
+function auditFieldName(key: string): string {
+  return auditFieldNames[key]
+    ?? key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function auditValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'boolean') return value ? 'Có' : 'Không';
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  return JSON.stringify(value);
+}
+
+function parseAuditDetails(json: string | null, parentLabel = ''): AuditDetailItem[] {
+  if (!json) return [];
+
+  try {
+    const parsed: unknown = JSON.parse(json);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return [{ label: parentLabel || 'Giá trị', value: auditValue(parsed) }];
+    }
+
+    return Object.entries(parsed as Record<string, unknown>).flatMap(([key, value]) => {
+      const label = parentLabel
+        ? `${parentLabel} · ${auditFieldName(key)}`
+        : auditFieldName(key);
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return parseAuditDetails(JSON.stringify(value), label);
+      }
+      return [{ label, value: auditValue(value) }];
+    });
+  } catch {
+    return [{ label: parentLabel || 'Chi tiết', value: json }];
+  }
+}
+
+function AuditDetailList({ items }: { items: AuditDetailItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <dl className="admin-audit-detail-list">
+      {items.map((item, index) => (
+        <div key={`${item.label}-${index}`}>
+          <dt>{item.label}</dt>
+          <dd>{item.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function AuditLogDetails({ log }: { log: AdminAuditLog }) {
+  const metadata = parseAuditDetails(log.metadata);
+  const oldValues = parseAuditDetails(log.oldValues);
+  const newValues = parseAuditDetails(log.newValues);
+
+  if (log.source === 'AUTH') {
+    return metadata.length > 0 ? <AuditDetailList items={metadata} /> : <span>—</span>;
+  }
+
+  return (
+    <div className="admin-audit-change-details">
+      <div className="admin-audit-record">
+        <span><strong>Đối tượng:</strong> {log.entityName ?? '—'}</span>
+        <span><strong>Mã bản ghi:</strong> {log.recordId || '—'}</span>
+      </div>
+      {oldValues.length > 0 && (
+        <details>
+          <summary>Dữ liệu trước thay đổi</summary>
+          <AuditDetailList items={oldValues} />
+        </details>
+      )}
+      {newValues.length > 0 && (
+        <details>
+          <summary>Dữ liệu sau thay đổi</summary>
+          <AuditDetailList items={newValues} />
+        </details>
+      )}
+    </div>
+  );
+}
 
 const errorMessages: Record<string, string> = {
   ADMIN_INVALID_REQUEST: 'Dữ liệu chưa hợp lệ. Vui lòng kiểm tra lại các trường.',
@@ -524,8 +620,8 @@ export function UsersAdminPage() {
         >
           <div className="admin-audit-heading">
             <div>
-              <h3>Lịch sử xác thực và quản trị</h3>
-              <p>Các sự kiện mới nhất được ghi nhận trực tiếp từ hệ thống.</p>
+              <h3>Nhật ký hệ thống</h3>
+              <p>Sự kiện xác thực, quản trị và thay đổi dữ liệu mới nhất.</p>
             </div>
             <div className="admin-audit-actions">
               <span className="admin-result-count" aria-live="polite">
@@ -546,7 +642,7 @@ export function UsersAdminPage() {
 
           <div className="table-container admin-table-container" aria-busy={loading}>
             <table className="vmu-table admin-audit-table">
-              <caption className="admin-visually-hidden">Nhật ký xác thực và thao tác quản trị</caption>
+              <caption className="admin-visually-hidden">Nhật ký xác thực, quản trị và thay đổi dữ liệu</caption>
               <thead>
                 <tr>
                   <th scope="col">Thời gian</th>
@@ -570,10 +666,11 @@ export function UsersAdminPage() {
                       <td>
                         <span className="badge badge-neutral">
                           {eventNames[log.event] ?? log.event}
+                          {log.entityName ? ` · ${log.entityName}` : ''}
                         </span>
                       </td>
                       <td>{log.email ?? 'Hệ thống'}</td>
-                      <td className="admin-audit-metadata">{log.metadata ?? '-'}</td>
+                      <td className="admin-audit-metadata"><AuditLogDetails log={log} /></td>
                     </tr>
                   ))
                 ) : (
@@ -581,7 +678,7 @@ export function UsersAdminPage() {
                     <td colSpan={4} className="admin-state-row admin-empty-row">
                       <FileClock aria-hidden="true" />
                       <strong>Chưa có sự kiện nhật ký</strong>
-                      <span>Các hoạt động xác thực và quản trị sẽ xuất hiện tại đây.</span>
+                      <span>Các hoạt động xác thực, quản trị và thay đổi dữ liệu sẽ xuất hiện tại đây.</span>
                     </td>
                   </tr>
                 )}

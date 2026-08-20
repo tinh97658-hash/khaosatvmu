@@ -92,9 +92,8 @@ export const ReportsOverviewPage: React.FC = () => {
     }
   }, [activeSemesterId]);
 
-  const hasPermission = (code: string) =>
-    !access || access.permissions.includes('ADMIN_ACCESS') || access.permissions.includes(code);
-  const canViewReports = hasPermission('VIEW_REPORTS');
+  const canViewReports = access?.permissions.includes('REPORTS_ACCESS') === true;
+  const canLoadCatalog = access?.permissions.includes('CATALOG_ACCESS') === true;
 
   // Danh sách lựa chọn bộ lọc.
   const [faculties, setFaculties] = useState<Faculty[]>([]);
@@ -333,6 +332,13 @@ export const ReportsOverviewPage: React.FC = () => {
 
   // Nạp danh mục để dựng bộ lọc.
   useEffect(() => {
+    if (!canLoadCatalog) {
+      setFaculties([]);
+      setDepartments([]);
+      setLecturers([]);
+      return;
+    }
+
     let cancelled = false;
     async function load() {
       try {
@@ -353,7 +359,7 @@ export const ReportsOverviewPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canLoadCatalog]);
 
   // Nạp danh sách đợt khảo sát theo học kỳ (bộ lọc "đợt khảo sát").
   useEffect(() => {
@@ -560,7 +566,7 @@ export const ReportsOverviewPage: React.FC = () => {
           <ShieldAlert style={{ width: '48px', height: '48px', color: '#b52d2d', margin: '0 auto 16px' }} />
           <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px', color: '#20262c' }}>Không có quyền truy cập</h2>
           <p style={{ color: '#68737d', fontSize: '14px', lineHeight: '1.5' }}>
-            Tài khoản của bạn chưa được cấp quyền <code>VIEW_REPORTS</code> để xem báo cáo thống kê. Vui lòng liên hệ Quản trị viên hệ thống để được phân quyền.
+            Tài khoản của bạn chưa được cấp quyền <code>REPORTS_ACCESS</code> để xem báo cáo thống kê. Vui lòng liên hệ Quản trị viên hệ thống để được phân quyền.
           </p>
         </div>
       </div>

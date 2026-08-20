@@ -1446,6 +1446,61 @@
   font-size: 11px;
 }
 
+.admin-audit-metadata {
+  min-width: 320px;
+  color: #34434c;
+  font-size: 11px;
+  vertical-align: top;
+}
+
+.admin-audit-detail-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.admin-audit-detail-list > div {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.45fr) minmax(140px, 1fr);
+  gap: 8px;
+}
+
+.admin-audit-detail-list dt {
+  color: var(--ops-muted);
+  font-weight: 600;
+}
+
+.admin-audit-detail-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ops-text);
+}
+
+.admin-audit-change-details,
+.admin-audit-record {
+  display: grid;
+  gap: 5px;
+}
+
+.admin-audit-record {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-audit-change-details details {
+  padding-top: 4px;
+  border-top: 1px solid #e1e7ea;
+}
+
+.admin-audit-change-details summary {
+  cursor: pointer;
+  color: #087da5;
+  font-weight: 600;
+}
+
+.admin-audit-change-details details[open] summary {
+  margin-bottom: 6px;
+}
+
 .admin-visually-hidden {
   position: absolute !important;
   width: 1px !important;

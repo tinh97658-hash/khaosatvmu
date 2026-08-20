@@ -1,34 +1,60 @@
-Đúng. Nếu đã chốt **phân quyền theo module**, thì bản kế hoạch hiện tại cần sửa khá mạnh, đặc biệt là bỏ tư duy `VIEW_REPORTS_FACULTIES`, `VIEW_REPORTS_LECTURERS`, `SURVEY_MANAGE_OWN`... vì những cái đó lại quay về **phân quyền theo nội dung/phạm vi**.
+# Kế hoạch nâng cấp phân quyền theo module
 
-Tôi đề xuất chốt kiến trúc như sau:
+## 1. Nhận xét sau khi đối soát hệ thống hiện tại
 
-> **Permission quyết định user có được vào module hay không.**
-> **Role quyết định tập module được phép truy cập.**
-> **Scope/action bên trong module là lớp phân quyền khác, chỉ bổ sung khi nghiệp vụ thực sự cần.**
+Hệ thống đã có nền tảng phân quyền: `User -> UserProfile -> Role -> RolePermission -> Permission`. API `/api/auth/access` đã trả về `roleCode`, `organizationUnitCode` và `permissions[]`. Màn hình `RolePermissionEditor` cũng đã chỉnh được quyền theo vai trò.
 
-Với Phase 2 hiện tại, **chỉ làm module-level access**.
+Tuy nhiên mô hình quyền hiện tại chưa khớp với nhu cầu ẩn/khóa module trên giao diện:
 
-Dưới đây là bản kế hoạch tôi sẽ sửa lại.
+- Backend vẫn seed permission kiểu cũ trong `DatabaseSeeder.cs`: `ADMIN_ACCESS`, `SURVEY_MANAGE`, `VIEW_REPORTS`, `VIEW_REPORTS_OPERATIONAL`, `VIEW_REPORTS_LECTURERS`, `VIEW_REPORTS_FACULTIES`, `VIEW_REPORTS_QUESTIONS`.
+- Policy backend hiện chỉ có các nhóm cũ trong `PermissionAuth.cs`: `AdminAccess`, `SurveyManage`, `SurveyManageInOrganization`, `ViewReports`.
+- Sidebar frontend chỉ kiểm tra riêng `users-admin` bằng `ADMIN_ACCESS`; các module còn lại luôn hiển thị.
+- `App.tsx` render route theo `currentTab` nhưng chưa dùng chung một bảng `module -> permission`.
+- `App.tsx` gọi API catalog/survey ngay sau đăng nhập, kể cả khi user không có quyền vào các module đó, dễ sinh 403/toast lỗi không cần thiết.
+- Quyền báo cáo đang bị tách theo nội dung (`VIEW_REPORTS_*`), trong khi yêu cầu Phase 2 là quyền truy cập module, không phải phân quyền từng loại báo cáo.
+- Chưa nên cấp quyền module nghiệp vụ cho `LECTURER` nếu backend chưa có data scope theo `LecturerId`.
+- Cần nói rõ hơn về `ActiveProfileId`: hệ thống hiện đã có `AuthSession.ActiveProfileId` và claim `active_profile_id`; đây mới là profile đang dùng trong authorization context, không phải `UserProfile.IsActive`.
+- `RolePermissions.IsGranted` đang tồn tại trong schema, nhưng Phase 2 chưa nên triển khai explicit deny hoặc deny precedence.
 
----
+Kết luận: trước khi code Phase 2 cần có **Phase 0 - Actor/Module Matrix** để chốt ai dùng hệ thống, vào module nào, phạm vi dữ liệu ra sao. Sau đó Phase 2 mới triển khai **module-level access**. Permission chỉ trả lời câu hỏi "user có được vào module này không?". Data scope và action/CRUD để phase sau.
 
-# Bổ sung: Ẩn UI theo quyền trên toàn Sidebar — Phase 2
+## 2. Mục tiêu sau khi nâng cấp
 
-> Kế hoạch bổ sung cho `nang-cap-phan-quyen.md`
-> Phase 1 — `Category` + `RolePermissionEditor` — đã hoàn thành.
->
-> **Phase 2:** làm cho Frontend thực sự tôn trọng quyền truy cập module của user.
+Sau khi hoàn thành, quyền sẽ vận hành theo một nguồn sự thật duy nhất:
 
-> [!IMPORTANT]
-> `RolePermissions` hiện tại **không được coi là thiết kế cuối cùng**. Permission sẽ được thiết kế lại theo **module**, không theo nội dung báo cáo hay từng thao tác UI.
+```text
+RolePermission trong DB
+  -> /api/auth/access.permissions[]
+  -> canAccessModule()
+  -> Sidebar / route guard / fetch guard
+```
 
----
+Kết quả mong muốn:
 
-# 1. Nguyên tắc phân quyền được chốt
+- User chỉ thấy module được cấp quyền.
+- Nếu mở URL/hash module không có quyền, app tự chuyển về `overview`.
+- Frontend không gọi API của module không có quyền.
+- Backend policy dùng permission module mới, không còn phụ thuộc permission báo cáo chi tiết kiểu `VIEW_REPORTS_*`.
+- `ADMIN` không cần hard-code bypass ở frontend; role này được cấp đủ permission trong DB.
 
-## 1.1 Permission = quyền truy cập module
+## 3. Nguyên tắc thiết kế
 
-Không thiết kế permission kiểu:
+- `Permission` = quyền truy cập module.
+- `Role` = tập permission được cấp.
+- `Scope` = user được xem dữ liệu của ai/đơn vị nào, không làm trong Phase 2.
+- `Action/CRUD` = user được tạo/sửa/xóa hay chỉ xem, không làm trong Phase 2.
+- `UserProfile.IsActive` = profile còn hiệu lực hay không.
+- `ActiveProfileId` = profile đang được dùng trong authorization context hiện tại.
+- `IsDefault` = profile được chọn mặc định khi user chưa có lựa chọn trước đó.
+- `LastSelectedAt` = dữ liệu hỗ trợ UX để gợi ý profile được dùng gần nhất.
+- Dashboard là màn hình mặc định cho mọi authenticated user, không cần lưu `DASHBOARD_ACCESS`.
+- Vì nghiệp vụ phân quyền chưa chốt hoàn toàn, thiết kế phải ưu tiên cấu hình được thay vì hard-code theo role, profile hoặc phòng ban cụ thể.
+- Seed data chỉ là cấu hình mặc định ban đầu; quyền thực tế phải chỉnh được qua `RolePermissionEditor` hoặc dữ liệu DB.
+- Mọi mapping cố định trong code phải nằm ở một nơi duy nhất, dễ thay đổi khi đổi tên module, tách module hoặc gom module.
+
+Không dùng `IsActive` để biểu diễn profile đang được chọn. Một user có thể có nhiều profile `IsActive = true`, nhưng tại một thời điểm chỉ có một `ActiveProfileId`.
+
+Không tạo các permission như:
 
 ```text
 VIEW_REPORTS_FACULTIES
@@ -37,1113 +63,316 @@ VIEW_REPORTS_QUESTIONS
 SURVEY_MANAGE_OWN
 CAN_CREATE_COURSE
 CAN_EDIT_COURSE
-CAN_DELETE_COURSE
 ```
 
-ở Phase này.
+## 4. Thiết kế mở để dễ thay đổi nghiệp vụ
 
-Thay vào đó:
+Do chưa có nghiệp vụ phân quyền chính xác, Phase 2 không nên thiết kế theo các giả định quá cụ thể như "role A chắc chắn được module B" hoặc "giảng viên luôn chỉ có quyền C". Các giả định này chỉ nên tồn tại dưới dạng seed/config ban đầu, không phải logic cố định trong code.
+
+Các điểm cần giữ mở:
+
+- Role có thể thêm/sửa/xóa quyền bằng DB/admin UI mà không sửa frontend.
+- Một module có thể đổi permission yêu cầu tại `modulePermissions.ts` mà không sửa từng component.
+- Sidebar, route guard và fetch guard dùng chung `canAccessModule()`, tránh mỗi nơi tự viết logic riêng.
+- Backend policy nên dùng permission code ổn định, không kiểm tra trực tiếp `roleCode`, `profileCode` hoặc tên đơn vị.
+- `OrganizationUnitCode`, `LecturerId` và các thông tin nghiệp vụ khác chỉ là dữ liệu đầu vào cho scope sau này; Phase 2 không khóa cứng cách hiểu các trường này.
+- Không thiết kế permission quá mịn khi chưa có nghiệp vụ rõ, vì sau này rất dễ phải đổi hàng loạt quyền và dữ liệu seed.
+- Khi cần scope/action trong tương lai, bổ sung lớp policy riêng bên dưới module access thay vì phá lại model `UserProfile -> Role -> Permission`.
+
+Nguyên tắc chốt:
 
 ```text
-REPORTS_ACCESS
-PROGRESS_ACCESS
-CATALOG_ACCESS
-COURSE_QUESTION_SETS_ACCESS
-COURSE_CAMPAIGNS_ACCESS
-PROGRAM_CAMPAIGNS_ACCESS
-PROGRAM_CRITERIA_ACCESS
-USER_ADMIN_ACCESS
+Code chỉ biết cách kiểm tra permission.
+DB/admin UI quyết định role nào có permission nào.
+Scope/action sẽ là lớp mở rộng sau module access.
 ```
 
-Permission trả lời một câu hỏi đơn giản:
+## 5. Phase 0 - Actor/Module Matrix
 
-> **User này có được truy cập module này không?**
+Trước khi code Phase 2, cần lập và duyệt ma trận nghiệp vụ tối thiểu:
 
-Ví dụ:
+| Actor/Profile | Module | Access | Scope dự kiến | Ghi chú |
+| --- | --- | --- | --- | --- |
+| `ADMIN` | Reports | Có | All | Gợi ý ban đầu |
+| `ADMIN` | Catalog | Có | All | Gợi ý ban đầu |
+| `SURVEY_ADMIN` | Course Campaigns | Có | All hoặc theo phân công | Cần nghiệp vụ xác nhận |
+| `INSPECTOR` | Reports | Có | All | Nếu có actor này |
+| `DEPARTMENT_MANAGER` | Reports | Có | Organization Unit | Cần định nghĩa đơn vị quản lý |
+| `LECTURER` | Course Campaigns | Chưa chốt | Chưa chốt | Không cấp nếu chưa rõ scope |
+| `GUEST_LECTURER` | Course Campaigns | Chưa chốt | Chưa chốt | Không cấp nếu chưa rõ scope |
+
+Quy trình đúng:
 
 ```text
-DEPARTMENT_MANAGER
-    ├── PROGRESS_ACCESS
-    ├── REPORTS_ACCESS
-    └── CATALOG_ACCESS? ❌
+Actor/Profile
+  -> Module Access
+  -> Scope dự kiến
+  -> Permission
+  -> Role
 ```
 
-thì Sidebar sẽ quyết định:
+Role và permission là kết quả của nghiệp vụ đã được duyệt, không phải thứ nghĩ ra trước rồi ép nghiệp vụ vào. Vì hệ thống hiện còn nhỏ, không xây framework authorization tổng quát trước khi có nhu cầu thật.
+
+## 6. Permission module cần chốt
+
+| Permission | Module |
+| --- | --- |
+| `PROGRESS_ACCESS` | Tiến độ thu phiếu |
+| `REPORTS_ACCESS` | Thống kê & Báo cáo |
+| `CATALOG_ACCESS` | Danh mục đào tạo |
+| `COURSE_QUESTION_SETS_ACCESS` | Bộ câu hỏi khảo sát học phần |
+| `COURSE_CAMPAIGNS_ACCESS` | Khảo sát học phần |
+| `PROGRAM_CAMPAIGNS_ACCESS` | Đợt khảo sát CTĐT |
+| `PROGRAM_CRITERIA_ACCESS` | Tiêu chí CTĐT |
+| `USER_ADMIN_ACCESS` | Người dùng & phân quyền |
+
+Mapping frontend:
+
+| Tab/module id | Permission |
+| --- | --- |
+| `overview` | Không cần |
+| `progress` | `PROGRESS_ACCESS` |
+| `reports` | `REPORTS_ACCESS` |
+| `faculties`, `departments`, `lecturers`, `majors`, `courses`, `classes` | `CATALOG_ACCESS` |
+| `course-question-sets` | `COURSE_QUESTION_SETS_ACCESS` |
+| `course-campaigns` | `COURSE_CAMPAIGNS_ACCESS` |
+| `program-campaigns` | `PROGRAM_CAMPAIGNS_ACCESS` |
+| `program-criteria` | `PROGRAM_CRITERIA_ACCESS` |
+| `users-admin` | `USER_ADMIN_ACCESS` |
+
+## 7. Phân quyền mặc định theo role
+
+Đây chỉ là cấu hình gợi ý để seed ban đầu. Không coi bảng này là nghiệp vụ cố định; khi nhà trường thay đổi phân công, chỉ cần sửa role-permission trong DB/admin UI.
+
+| Role | Quyền được cấp mặc định trong Phase 2 |
+| --- | --- |
+| `ADMIN` | Tất cả permission module |
+| `SURVEY_ADMIN` | `PROGRESS_ACCESS`, `REPORTS_ACCESS`, `CATALOG_ACCESS`, `COURSE_QUESTION_SETS_ACCESS`, `COURSE_CAMPAIGNS_ACCESS`, `PROGRAM_CAMPAIGNS_ACCESS`, `PROGRAM_CRITERIA_ACCESS` |
+| `DEPARTMENT_MANAGER` | `PROGRESS_ACCESS`, `REPORTS_ACCESS` |
+| `INSPECTOR` nếu bổ sung role này | `PROGRESS_ACCESS`, `REPORTS_ACCESS` |
+| `LECTURER` | Chỉ dashboard trong Phase 2 nếu chưa duyệt module/scope cụ thể |
+| `GUEST_LECTURER` nếu bổ sung role này | Chỉ dashboard trong Phase 2 nếu chưa duyệt module/scope cụ thể |
+
+Ghi chú: nếu chưa xác định Lecturer thực sự cần truy cập module nào và scope tương ứng là gì, Phase 2 không cấp permission nghiệp vụ cho `LECTURER` hoặc `GUEST_LECTURER`. Không cấp `COURSE_CAMPAIGNS_ACCESS` chỉ vì "sau này có thể cần".
+
+## 8. ActiveProfileId và authorization context
+
+`ActiveProfileId` phải do backend xác định và xác minh. Frontend không được tự gửi `roleCode`, `profileCode` hoặc quyền rồi backend tin theo.
+
+Luồng đăng nhập:
 
 ```text
-Dashboard              ✓
-Tiến độ thu phiếu       ✓
-Thống kê & Báo cáo      ✓
-Khoa / Viện             ✗
-Bộ môn                  ✗
-...
+Login
+  -> Load User
+  -> Load UserProfiles còn hiệu lực
+  -> Chọn ActiveProfileId từ lựa chọn user / LastSelectedAt / IsDefault
+  -> Tạo server auth session + claim active_profile_id
+  -> Resolve permissions từ Role của ActiveProfileId
 ```
 
----
-
-# 2. Không phân quyền theo từng nội dung bên trong module
-
-Ví dụ module:
+Luồng đổi profile:
 
 ```text
-THỐNG KÊ & BÁO CÁO
+Current User
+  -> Select Profile B
+  -> Backend validate Profile B thuộc User hiện tại
+  -> Backend validate Profile B IsActive = true
+  -> Update authorization context / active_profile_id
+  -> Reload permissions
+  -> Reload UI/data theo profile mới
 ```
 
-chỉ có:
+Mọi API authorization phải resolve lại user context từ principal/session hiện tại:
 
 ```text
-REPORTS_ACCESS
+UserId + ActiveProfileId
+  -> User còn active
+  -> UserProfile thuộc User và còn active
+  -> Role
+  -> RolePermissions
+  -> Effective permissions
 ```
 
-Không tạo:
+## 9. RolePermissions.IsGranted
+
+Schema hiện tại có `RolePermissions.IsGranted`. Phase 2 chỉ dùng theo nghĩa đơn giản:
 
 ```text
-REPORTS_FACULTIES_ACCESS
-REPORTS_LECTURERS_ACCESS
-REPORTS_QUESTIONS_ACCESS
+IsGranted = true
+  -> Granted
+
+IsGranted = false
+  -> Không được tính vào effective permissions
 ```
 
-Nếu một user có:
+Phase 2 chưa triển khai explicit deny và chưa có deny precedence. Không thiết kế tình huống:
 
 ```text
-REPORTS_ACCESS
+Role A grant REPORTS
+Role B deny REPORTS
 ```
 
-thì họ được vào module **Thống kê & Báo cáo**.
-
-Việc bên trong module hiển thị dữ liệu nào, phạm vi dữ liệu nào sẽ **không được giải quyết bằng permission mới ở Phase 2**.
-
-Nếu sau này cần:
+vì authorization chỉ dựa trên role của active profile, không cộng nhiều role/profile. Nếu sau này không cần deny semantics, có thể cân nhắc đơn giản hóa model về:
 
 ```text
-Trưởng khoa → chỉ xem dữ liệu khoa mình
-Thanh tra → xem toàn trường
-Giảng viên → chỉ xem dữ liệu của bản thân
+RolePermissions
+  -> RoleId
+  -> PermissionId
 ```
 
-thì đó là **data scope / authorization policy**, không phải tạo thêm hàng loạt permission.
-
----
-
-# 3. Permission model mới
-
-Tôi đề xuất bảng permission cuối cùng cho Phase 2 như sau:
-
-| Permission                    | Module                  |
-| ----------------------------- | ----------------------- |
-| `DASHBOARD_ACCESS`            | Bảng điều khiển         |
-| `PROGRESS_ACCESS`             | Tiến độ thu phiếu       |
-| `REPORTS_ACCESS`              | Thống kê & Báo cáo      |
-| `CATALOG_ACCESS`              | Danh mục đào tạo        |
-| `COURSE_QUESTION_SETS_ACCESS` | Bộ câu hỏi khảo sát     |
-| `COURSE_CAMPAIGNS_ACCESS`     | Khảo sát học phần       |
-| `PROGRAM_CAMPAIGNS_ACCESS`    | Đợt khảo sát CTĐT       |
-| `PROGRAM_CRITERIA_ACCESS`     | Tiêu chí CTĐT           |
-| `USER_ADMIN_ACCESS`           | Người dùng & phân quyền |
-
-### Tuy nhiên
-
-`DASHBOARD_ACCESS` có thể **không cần lưu trong DB**.
-
-Dashboard là module cơ bản mà mọi authenticated user đều được truy cập.
-
-Do đó permission thực tế trong DB có thể chỉ cần:
-
-```text
-PROGRESS_ACCESS
-REPORTS_ACCESS
-CATALOG_ACCESS
-COURSE_QUESTION_SETS_ACCESS
-COURSE_CAMPAIGNS_ACCESS
-PROGRAM_CAMPAIGNS_ACCESS
-PROGRAM_CRITERIA_ACCESS
-USER_ADMIN_ACCESS
-```
-
-Đây là cách tôi khuyến nghị.
-
----
-
-# 4. Mapping Sidebar → Permission
-
-Hiện tại Sidebar có 12 module/tab.
-
-## TỔNG QUAN
-
-| Module             | Permission        |
-| ------------------ | ----------------- |
-| Bảng điều khiển    | Không cần         |
-| Tiến độ thu phiếu  | `PROGRESS_ACCESS` |
-| Thống kê & Báo cáo | `REPORTS_ACCESS`  |
-
-## DANH MỤC ĐÀO TẠO
-
-6 module này dùng chung một quyền vì chúng thuộc cùng một nghiệp vụ:
-
-| Module        | Permission       |
-| ------------- | ---------------- |
-| Khoa / Viện   | `CATALOG_ACCESS` |
-| Bộ môn        | `CATALOG_ACCESS` |
-| Giảng viên    | `CATALOG_ACCESS` |
-| Ngành đào tạo | `CATALOG_ACCESS` |
-| Học phần      | `CATALOG_ACCESS` |
-| Lớp học phần  | `CATALOG_ACCESS` |
-
-## KHẢO SÁT HỌC PHẦN
-
-| Module              | Permission                    |
-| ------------------- | ----------------------------- |
-| Bộ câu hỏi khảo sát | `COURSE_QUESTION_SETS_ACCESS` |
-| Khảo sát học phần   | `COURSE_CAMPAIGNS_ACCESS`     |
-
-## KHẢO SÁT CHƯƠNG TRÌNH
-
-| Module            | Permission                 |
-| ----------------- | -------------------------- |
-| Đợt khảo sát CTĐT | `PROGRAM_CAMPAIGNS_ACCESS` |
-| Tiêu chí CTĐT     | `PROGRAM_CRITERIA_ACCESS`  |
-
-## QUẢN TRỊ
-
-| Module                  | Permission          |
-| ----------------------- | ------------------- |
-| Người dùng & phân quyền | `USER_ADMIN_ACCESS` |
-
----
-
-# 5. Vì sao không dùng `SURVEY_MANAGE`
-
-Permission cũ:
-
-```text
-SURVEY_MANAGE
-```
-
-thực chất đang gom:
-
-```text
-Catalog
-Question Sets
-Course Campaigns
-Program Campaigns
-Program Criteria
-```
-
-vào một permission.
-
-Điều này vẫn mang tính **business capability**, nhưng không phản ánh rõ quyền truy cập module.
-
-Ví dụ:
-
-```text
-SURVEY_ADMIN
-```
-
-có thể quản lý tất cả.
-
-Nhưng một role khác trong tương lai có thể cần:
-
-```text
-COURSE_CAMPAIGNS_ACCESS
-```
-
-mà không cần:
-
-```text
-CATALOG_ACCESS
-PROGRAM_CAMPAIGNS_ACCESS
-```
-
-Với module-based permission, việc này rất dễ cấu hình trong `RolePermissionEditor`.
-
----
-
-# 6. Role model
-
-Sau khi chuyển sang module-based permission, role có thể thiết kế như sau.
-
-| Role                 | Dashboard | Progress | Reports | Catalog | Question Sets | Course Campaigns | Program Campaigns | Program Criteria | User Admin |
-| -------------------- | --------: | -------: | ------: | ------: | ------------: | ---------------: | ----------------: | ---------------: | ---------: |
-| `ADMIN`              |         ✓ |        ✓ |       ✓ |       ✓ |             ✓ |                ✓ |                 ✓ |                ✓ |          ✓ |
-| `SURVEY_ADMIN`       |         ✓ |        ✓ |       ✓ |       ✓ |             ✓ |                ✓ |                 ✓ |                ✓ |          ✗ |
-| `INSPECTOR`          |         ✓ |        ✓ |       ✓ |       ✗ |             ✗ |                ✗ |                 ✗ |                ✗ |          ✗ |
-| `DEPARTMENT_MANAGER` |         ✓ |        ✓ |       ✓ |       ✗ |             ✗ |                ✗ |                 ✗ |                ✗ |          ✗ |
-| `LECTURER`           |         ✓ |        ✗ |       ✗ |       ✗ |             ✗ |            **?** |                 ✗ |                ✗ |          ✗ |
-| `GUEST_LECTURER`     |         ✓ |        ✗ |       ✗ |       ✗ |             ✗ |            **?** |                 ✗ |                ✗ |          ✗ |
-
-### Quan trọng: `LECTURER`
-
-Tôi **không khuyến nghị tiếp tục đưa `SURVEY_MANAGE_OWN` vào Phase 2**.
-
-Lý do:
-
-`COURSE_CAMPAIGNS_ACCESS` chỉ trả lời:
-
-> Có được vào module Khảo sát học phần không?
-
-Nó không trả lời:
-
-> Được xem/sửa campaign của ai?
-
-Đây là **scope dữ liệu**.
-
-Ví dụ:
-
-```text
-LECTURER
-    COURSE_CAMPAIGNS_ACCESS
-           ↓
-    Course Campaign module
-           ↓
-    chỉ lấy CourseSection mà
-    LecturerId = currentUser.LecturerId
-```
-
-Nhưng backend hiện tại chưa có cơ chế đó.
-
-Vì vậy:
-
-> **Phase 2 không tự ý cấp `COURSE_CAMPAIGNS_ACCESS` cho Lecturer nếu backend chưa hỗ trợ scope.**
-
-Phần này nên đưa sang Phase 3.
-
----
-
-# 7. Role không còn quyết định trực tiếp UI
-
-Luồng chính sẽ là:
-
-```text
-User
-  ↓
-UserProfile
-  ↓
-Role
-  ↓
-RolePermission
-  ↓
-Permission
-  ↓
-Frontend AuthContext
-  ↓
-permissions[]
-  ↓
-canAccessModule()
-  ↓
-Sidebar
-```
-
-Ví dụ:
-
-```text
-User: Nguyễn Văn A
-        ↓
-Role: DEPARTMENT_MANAGER
-        ↓
-Permissions:
-    PROGRESS_ACCESS
-    REPORTS_ACCESS
-        ↓
-Sidebar:
-    Dashboard             ✓
-    Tiến độ thu phiếu      ✓
-    Thống kê & Báo cáo     ✓
-    Catalog                ✗
-    Course Campaign        ✗
-    Program Campaign       ✗
-    User Admin             ✗
-```
-
-Đây là luồng rất dễ hiểu.
-
----
-
-# 8. Thay `tabPermissions.ts` thành `modulePermissions.ts`
-
-Tôi khuyến nghị đổi tên file để thể hiện đúng kiến trúc.
-
-### `[NEW]`
-
-```text
-src/Frontend/src/auth/modulePermissions.ts
-```
-
-Nội dung:
+Khi đó có record là granted, không có record là không granted.
+
+## 10. Việc cần làm
+
+### Backend
+
+0. Hoàn thành Phase 0:
+   - Lập Actor/Module Matrix.
+   - Chốt module access tối thiểu cho từng actor/profile.
+   - Ghi rõ scope dự kiến, kể cả khi scope chưa làm trong Phase 2.
+   - Không bắt đầu seed role-permission khi matrix chưa được duyệt.
+
+1. Cập nhật `DatabaseSeeder.cs`:
+   - Thêm 8 permission module mới.
+   - Cấp quyền mặc định theo bảng role ở trên.
+   - Không seed thêm các permission `VIEW_REPORTS_*` cho thiết kế mới.
+   - Không viết logic nghiệp vụ cố định vào seeder; seeder chỉ đảm bảo dữ liệu nền tối thiểu.
+   - Với `RolePermissions.IsGranted`, Phase 2 chỉ seed record `IsGranted = true`.
+
+2. Cập nhật `PermissionAuth.cs`:
+   - `USER_ADMIN_ACCESS`
+   - `CATALOG_ACCESS`
+   - `COURSE_QUESTION_SETS_ACCESS`
+   - `COURSE_CAMPAIGNS_ACCESS`
+   - `PROGRAM_CAMPAIGNS_ACCESS`
+   - `PROGRAM_CRITERIA_ACCESS`
+   - `PROGRESS_ACCESS`
+   - `REPORTS_ACCESS`
+
+3. Cập nhật endpoint authorization:
+   - `/api/admin/*` dùng `USER_ADMIN_ACCESS`.
+   - `/api/catalog/*` dùng `CATALOG_ACCESS`.
+   - `/api/v1/reports/*` dùng `REPORTS_ACCESS`.
+   - Các endpoint survey cần tách theo module thay vì gom toàn bộ vào `SURVEY_MANAGE`.
+
+4. Giữ `/api/auth/access` như hiện tại vì đã trả đủ `permissions[]`.
+
+5. Làm rõ `ActiveProfileId`:
+   - Dùng claim `active_profile_id` / auth session làm source cho active profile hiện tại.
+   - Khi switch profile, backend phải validate profile thuộc user hiện tại và `IsActive = true`.
+   - Sau khi switch profile, reload permissions từ role của profile mới.
+
+6. Chuẩn bị extension point cho scope/action sau này:
+   - Giữ `OrganizationUnitCode` trong access context.
+   - Nếu sau này cần `LecturerId` hoặc scope khác, bổ sung vào context/API hợp đồng rõ ràng.
+   - Không nhồi scope/action vào permission code.
+
+### Frontend
+
+1. Tạo `src/Frontend/src/auth/modulePermissions.ts`:
 
 ```typescript
 export const MODULE_REQUIRED_PERMISSION: Record<string, string | null> = {
   overview: null,
-
   progress: 'PROGRESS_ACCESS',
   reports: 'REPORTS_ACCESS',
-
   faculties: 'CATALOG_ACCESS',
   departments: 'CATALOG_ACCESS',
   lecturers: 'CATALOG_ACCESS',
   majors: 'CATALOG_ACCESS',
   courses: 'CATALOG_ACCESS',
   classes: 'CATALOG_ACCESS',
-
   'course-question-sets': 'COURSE_QUESTION_SETS_ACCESS',
   'course-campaigns': 'COURSE_CAMPAIGNS_ACCESS',
-
   'program-campaigns': 'PROGRAM_CAMPAIGNS_ACCESS',
   'program-criteria': 'PROGRAM_CRITERIA_ACCESS',
-
   'users-admin': 'USER_ADMIN_ACCESS',
 };
-```
 
-Sau đó:
-
-```typescript
 export function canAccessModule(
   permissions: readonly string[] | undefined,
   moduleId: string,
 ): boolean {
   const required = MODULE_REQUIRED_PERMISSION[moduleId] ?? null;
-
-  if (required === null) {
-    return true;
-  }
-
-  if (!permissions) {
-    return false;
-  }
-
-  return (
-    permissions.includes('USER_ADMIN_ACCESS') &&
-    required === 'USER_ADMIN_ACCESS'
-  ) || permissions.includes(required);
+  return required === null || permissions?.includes(required) === true;
 }
 ```
 
-Tuy nhiên tôi còn khuyến nghị đơn giản hơn:
+2. Cập nhật `Sidebar.tsx`:
+   - Nhận `permissions` thay vì `canManageUsers`.
+   - Filter toàn bộ menu bằng `canAccessModule`.
 
-```typescript
-export function canAccessModule(
-  permissions: readonly string[] | undefined,
-  moduleId: string,
-): boolean {
-  const required = MODULE_REQUIRED_PERMISSION[moduleId] ?? null;
+3. Cập nhật `App.tsx`:
+   - Dùng `auth.access?.permissions ?? []`.
+   - Guard `currentTab`; nếu không có quyền thì redirect về `overview`.
+   - Chỉ render page khi `canAccessModule(permissions, currentTab)` hợp lệ.
+   - Chỉ gọi API catalog/survey/report tương ứng khi user có quyền module.
 
-  if (required === null) {
-    return true;
-  }
+4. Cập nhật logic `users-admin`:
+   - Thay `ADMIN_ACCESS` bằng `USER_ADMIN_ACCESS`.
 
-  if (!permissions) {
-    return false;
-  }
+5. Tránh hard-code nghiệp vụ chưa chốt:
+   - Không viết điều kiện theo `roleCode` trong sidebar/page.
+   - Không viết điều kiện theo `profileCode` trong UI.
+   - Không copy mapping module-permission sang nhiều file.
+   - Khi đổi profile, reload `auth.access` và dữ liệu trang theo permissions mới.
 
-  return permissions.includes(required);
-}
-```
+## 11. Không làm trong Phase 2
 
-**Không nên hard-code `ADMIN_ACCESS` bypass ở đây** nếu DB đã được thiết kế đúng.
+- Không phân quyền từng button.
+- Không phân quyền từng thao tác tạo/sửa/xóa.
+- Không phân quyền từng loại báo cáo.
+- Không scope dữ liệu theo Khoa/Bộ môn.
+- Không scope dữ liệu theo giảng viên.
+- Không thêm `SURVEY_MANAGE_OWN`.
+- Không hard-code `roleCode === 'ADMIN'` để bypass frontend.
+- Không hard-code nghiệp vụ tạm thời thành logic lâu dài.
+- Không cộng quyền của tất cả profile; chỉ dùng quyền của active profile.
+- Không dùng `IsActive` với nghĩa "profile đang được chọn".
+- Không triển khai deny precedence cho `RolePermissions.IsGranted`.
+- Không cấp permission nghiệp vụ cho `LECTURER`/`GUEST_LECTURER` nếu chưa có Actor/Module Matrix và scope rõ ràng.
 
-Thay vào đó, `ADMIN` phải thực sự có toàn bộ permission.
+## 12. Trạng thái trước và sau
 
-Như vậy:
-
-> **Permission là source of truth.**
-
-Không có ngoại lệ kiểu:
-
-```typescript
-if (role === 'ADMIN') ...
-```
-
----
-
-# 9. Sidebar
-
-`Sidebar.tsx` chỉ cần biết:
-
-```typescript
-permissions
-```
-
-và:
-
-```typescript
-const visibleMenuGroups = menuGroups
-  .map((group) => ({
-    ...group,
-    items: group.items.filter((item) =>
-      canAccessModule(permissions, item.id),
-    ),
-  }))
-  .filter((group) => group.items.length > 0);
-```
-
-Sidebar **không cần biết role**.
-
-Không cần:
-
-```typescript
-if (role === 'ADMIN')
-if (role === 'SURVEY_ADMIN')
-if (role === 'INSPECTOR')
-```
-
-Đây là điểm rất quan trọng.
-
----
-
-# 10. App.tsx
-
-`App.tsx` cũng dùng cùng một source:
-
-```typescript
-const permissions = auth.access?.permissions ?? [];
-```
-
-Redirect:
-
-```typescript
-useEffect(() => {
-  if (!canAccessModule(permissions, currentTab)) {
-    setCurrentTab('overview');
-  }
-}, [permissions, currentTab]);
-```
-
-Như vậy:
+Trước khi nâng cấp:
 
 ```text
-Sidebar
-   ↓
-canAccessModule()
-
-App routing
-   ↓
-canAccessModule()
+Permission cũ lẫn module/content/action
+Sidebar gần như luôn hiện đủ menu
+App gọi nhiều API dù user không có quyền
+Backend gom catalog/survey bằng SURVEY_MANAGE
+Reports có nhiều VIEW_REPORTS_* không đúng mục tiêu Phase 2
+ActiveProfileId chưa được mô tả rõ trong kế hoạch triển khai
+Chưa có Actor/Module Matrix được duyệt trước khi seed role-permission
 ```
 
-cùng sử dụng:
+Sau khi nâng cấp:
 
 ```text
-MODULE_REQUIRED_PERMISSION
+Permission chỉ đại diện quyền vào module
+Sidebar ẩn đúng theo permissions[]
+Route/hash bị chặn bằng cùng một canAccessModule()
+API fetch được gate theo module
+Backend policy dùng permission module mới
+RolePermissionEditor trở thành nơi cấu hình module access
+Khi nghiệp vụ đổi, ưu tiên đổi cấu hình role-permission thay vì sửa code
+ActiveProfileId là authorization context duy nhất của phiên hiện tại
+Role-permission được sinh ra từ Actor/Module Matrix đã duyệt
 ```
 
-Không có hai bảng mapping khác nhau.
-
----
-
-# 11. Fetch API
-
-Đây là phần rất quan trọng.
-
-Không nên chỉ:
-
-```text
-ẩn Sidebar
-```
-
-mà vẫn:
-
-```text
-App mount
-   ↓
-fetch tất cả API
-   ↓
-403
-```
-
-Mỗi nhóm API phải được gate theo **module tương ứng**.
-
-Ví dụ:
-
-```typescript
-const canAccessCatalog =
-  canAccessModule(permissions, 'faculties');
-
-const canAccessCourseCampaigns =
-  canAccessModule(permissions, 'course-campaigns');
-
-const canAccessReports =
-  canAccessModule(permissions, 'reports');
-```
-
-Sau đó:
-
-```typescript
-if (!canAccessCatalog) {
-  return;
-}
-```
-
-hoặc:
-
-```typescript
-if (!canAccessCourseCampaigns) {
-  return;
-}
-```
-
-### Nhưng phải verify route backend trước
-
-Không được giả định:
-
-```text
-REPORTS_ACCESS → mọi /api/reports/*
-CATALOG_ACCESS → mọi /api/catalog/*
-```
-
-mà phải kiểm tra authorization thực tế.
-
----
-
-# 12. Reports
-
-Đây là thay đổi quan trọng nhất so với kế hoạch cũ.
-
-**Không còn:**
-
-```text
-VIEW_REPORTS
-VIEW_REPORTS_FACULTIES
-VIEW_REPORTS_LECTURERS
-VIEW_REPORTS_QUESTIONS
-VIEW_REPORTS_OPERATIONAL
-```
-
-nữa.
-
-Chỉ:
-
-```text
-REPORTS_ACCESS
-```
-
-và:
-
-```text
-PROGRESS_ACCESS
-```
-
-Ví dụ:
-
-```text
-Thống kê & Báo cáo
-       ↓
-REPORTS_ACCESS
-       ↓
-ReportsOverviewPage
-       ↓
-    các loại báo cáo
-```
-
-Nếu sau này cần:
-
-```text
-DEPARTMENT_MANAGER
-→ chỉ xem báo cáo Khoa mình
-```
-
-thì không tạo:
-
-```text
-REPORTS_FACULTIES_ACCESS
-```
-
-mà backend xử lý:
-
-```text
-currentUser
-    ↓
-OrganizationUnitCode
-    ↓
-lọc dữ liệu báo cáo
-```
-
-Đây chính là **scope**, không phải module permission.
-
----
-
-# 13. `SURVEY_MANAGE_OWN` cũng bỏ khỏi Phase 2
-
-Phần này trong kế hoạch cũ nên xóa:
-
-```text
-SURVEY_MANAGE_OWN
-```
-
-Thay bằng:
-
-```text
-COURSE_CAMPAIGNS_ACCESS
-```
-
-Nhưng chỉ cấp cho Lecturer khi backend đã hỗ trợ:
-
-```text
-UserProfile
-    ↓
-LecturerId
-    ↓
-CourseSection.LecturerId
-    ↓
-lọc CourseCampaign
-```
-
-Nếu chưa có:
-
-> Lecturer vẫn chưa được mở module `course-campaigns`.
-
-Điều này giúp Phase 2 không bị biến thành một dự án backend authorization mới.
-
----
-
-# 14. Phase 2 thực sự làm gì?
-
-Sau khi sửa, phạm vi Phase 2 rất rõ:
-
-### Làm
-
-```text
-Permission model theo module
-        ↓
-Seed permission mới
-        ↓
-RolePermission cập nhật
-        ↓
-RolePermissionEditor hiển thị permission module
-        ↓
-AuthContext lấy permissions
-        ↓
-Sidebar filter
-        ↓
-App route guard
-        ↓
-App fetch guard
-        ↓
-Reports không còn content-level permission
-```
-
-### Không làm
-
-```text
-❌ Phân quyền từng button
-❌ Phân quyền từng loại báo cáo
-❌ Phân quyền từng loại dữ liệu
-❌ Scope theo Khoa/Bộ môn
-❌ Scope theo Lecturer
-❌ CRUD permission riêng
-❌ ADMIN bypass hard-code
-❌ Thay đổi authorization backend
-```
-
-Ngoại trừ những thay đổi backend **bắt buộc để permission module mới khớp route hiện tại**, nếu cần.
-
----
-
-# 15. Verification mới
-
-Kiểm thử theo **module**, không kiểm thử theo từng nội dung.
-
-### ADMIN
-
-```text
-Dashboard             ✓
-Progress              ✓
-Reports               ✓
-Catalog               ✓
-Question Sets         ✓
-Course Campaigns      ✓
-Program Campaigns     ✓
-Program Criteria      ✓
-User Admin            ✓
-```
-
-### SURVEY_ADMIN
-
-```text
-Dashboard             ✓
-Progress              ✓
-Reports               ✓
-Catalog               ✓
-Question Sets         ✓
-Course Campaigns      ✓
-Program Campaigns     ✓
-Program Criteria      ✓
-User Admin            ✗
-```
-
-### INSPECTOR
-
-```text
-Dashboard             ✓
-Progress              ✓
-Reports               ✓
-
-Catalog               ✗
-Question Sets         ✗
-Course Campaigns      ✗
-Program Campaigns     ✗
-Program Criteria      ✗
-User Admin            ✗
-```
-
-### DEPARTMENT_MANAGER
-
-```text
-Dashboard             ✓
-Progress              ✓
-Reports               ✓
-
-Catalog               ✗
-Question Sets         ✗
-Course Campaigns      ✗
-Program Campaigns     ✗
-Program Criteria      ✗
-User Admin            ✗
-```
-
-Scope dữ liệu của Reports:
-
-```text
-DEPARTMENT_MANAGER
-        ↓
-REPORTS_ACCESS ✓
-        ↓
-backend lọc OrganizationUnitCode
-```
-
-Không tạo permission riêng cho việc đó.
-
-### LECTURER
-
-Phase 2:
-
-```text
-Dashboard ✓
-```
-
-`COURSE_CAMPAIGNS_ACCESS` chỉ bật sau khi backend hỗ trợ ownership/scope.
-
----
-
-# 16. Kiến trúc cuối cùng nên chốt
-
-Tôi khuyên chốt hẳn mô hình này:
-
-```text
-                 ┌──────────────┐
-                 │     User     │
-                 └──────┬───────┘
-                        ↓
-                 ┌──────────────┐
-                 │  UserProfile │
-                 └──────┬───────┘
-                        ↓
-                 ┌──────────────┐
-                 │     Role     │
-                 └──────┬───────┘
-                        ↓
-                 ┌──────────────┐
-                 │RolePermission│
-                 └──────┬───────┘
-                        ↓
-                 ┌──────────────┐
-                 │  Permission  │
-                 └──────┬───────┘
-                        ↓
-              ┌─────────────────────┐
-              │   Module Access     │
-              └──────────┬──────────┘
-                         ↓
-        ┌────────────────────────────────┐
-        │ Sidebar / Routing / API Fetch  │
-        └────────────────┬───────────────┘
-                         ↓
-                     Module
-                         ↓
-              ┌─────────────────────┐
-              │ Data Scope / Action │
-              │    (future phase)  │
-              └─────────────────────┘
-```
-
-**Đây là điểm tôi nghĩ nên chốt:**
-**Permission = "được vào module nào".**
-**Role = "được vào những module nào".**
-**Scope = "trong module đó được xem dữ liệu nào".**
-**Action/CRUD = "trong module đó được làm gì".**
-
-Ba lớp này không nên trộn vào nhau.
-
-Với hệ thống hiện tại của bạn, **Phase 2 chỉ xử lý lớp đầu tiên: Module Access**. Như vậy thiết kế sẽ đơn giản hơn rất nhiều, `RolePermissionEditor` cũng trực quan hơn, và sau này muốn bổ sung scope cho `DEPARTMENT_MANAGER`, `LECTURER`, `INSPECTOR` sẽ không phải đập lại permission model.
-Đây là sơ đồ cây tôi khuyên bạn **chốt làm kiến trúc phân quyền** cho hệ thống hiện tại:
-
-```text
-HỆ THỐNG PHÂN QUYỀN
-│
-├── 1. USER
-│   │
-│   ├── User
-│   │   ├── Id
-│   │   ├── Email
-│   │   └── ...
-│   │
-│   └── UserProfile
-│       ├── UserId
-│       ├── RoleId
-│       ├── OrganizationUnitCode
-│       └── ... (thông tin nghiệp vụ)
-│
-├── 2. ROLE
-│   │
-│   ├── ADMIN
-│   │   │   └── Toàn quyền hệ thống
-│   │   │
-│   │   ├── DASHBOARD
-│   │   ├── PROGRESS
-│   │   ├── REPORTS
-│   │   ├── CATALOG
-│   │   ├── COURSE_QUESTION_SETS
-│   │   ├── COURSE_CAMPAIGNS
-│   │   ├── PROGRAM_CAMPAIGNS
-│   │   ├── PROGRAM_CRITERIA
-│   │   └── USER_ADMIN
-│   │
-│   ├── SURVEY_ADMIN
-│   │   │   └── Vận hành khảo sát toàn trường
-│   │   │
-│   │   ├── DASHBOARD
-│   │   ├── PROGRESS
-│   │   ├── REPORTS
-│   │   ├── CATALOG
-│   │   ├── COURSE_QUESTION_SETS
-│   │   ├── COURSE_CAMPAIGNS
-│   │   ├── PROGRAM_CAMPAIGNS
-│   │   └── PROGRAM_CRITERIA
-│   │
-│   ├── INSPECTOR
-│   │   │   └── Thanh tra / giám sát độc lập
-│   │   │
-│   │   ├── DASHBOARD
-│   │   ├── PROGRESS
-│   │   └── REPORTS
-│   │
-│   ├── DEPARTMENT_MANAGER
-│   │   │   └── Quản lý Khoa / Bộ môn
-│   │   │
-│   │   ├── DASHBOARD
-│   │   ├── PROGRESS
-│   │   └── REPORTS
-│   │       └── Scope theo OrganizationUnitCode
-│   │
-│   ├── LECTURER
-│   │   │   └── Giảng viên cơ hữu
-│   │   │
-│   │   └── DASHBOARD
-│   │
-│   └── GUEST_LECTURER
-│       │   └── Giảng viên thỉnh giảng
-│       │
-│       └── DASHBOARD
-│
-├── 3. PERMISSION
-│   │
-│   ├── PROGRESS_ACCESS
-│   │   └── Truy cập module "Tiến độ thu phiếu"
-│   │
-│   ├── REPORTS_ACCESS
-│   │   └── Truy cập module "Thống kê & Báo cáo"
-│   │
-│   ├── CATALOG_ACCESS
-│   │   └── Truy cập module "Danh mục đào tạo"
-│   │
-│   ├── COURSE_QUESTION_SETS_ACCESS
-│   │   └── Truy cập module "Bộ câu hỏi khảo sát"
-│   │
-│   ├── COURSE_CAMPAIGNS_ACCESS
-│   │   └── Truy cập module "Khảo sát học phần"
-│   │
-│   ├── PROGRAM_CAMPAIGNS_ACCESS
-│   │   └── Truy cập module "Đợt khảo sát CTĐT"
-│   │
-│   ├── PROGRAM_CRITERIA_ACCESS
-│   │   └── Truy cập module "Tiêu chí CTĐT"
-│   │
-│   └── USER_ADMIN_ACCESS
-│       └── Truy cập module "Người dùng & phân quyền"
-│
-├── 4. ROLE_PERMISSION
-│   │
-│   ├── ADMIN
-│   │   ├── PROGRESS_ACCESS
-│   │   ├── REPORTS_ACCESS
-│   │   ├── CATALOG_ACCESS
-│   │   ├── COURSE_QUESTION_SETS_ACCESS
-│   │   ├── COURSE_CAMPAIGNS_ACCESS
-│   │   ├── PROGRAM_CAMPAIGNS_ACCESS
-│   │   ├── PROGRAM_CRITERIA_ACCESS
-│   │   └── USER_ADMIN_ACCESS
-│   │
-│   ├── SURVEY_ADMIN
-│   │   ├── PROGRESS_ACCESS
-│   │   ├── REPORTS_ACCESS
-│   │   ├── CATALOG_ACCESS
-│   │   ├── COURSE_QUESTION_SETS_ACCESS
-│   │   ├── COURSE_CAMPAIGNS_ACCESS
-│   │   ├── PROGRAM_CAMPAIGNS_ACCESS
-│   │   └── PROGRAM_CRITERIA_ACCESS
-│   │
-│   ├── INSPECTOR
-│   │   ├── PROGRESS_ACCESS
-│   │   └── REPORTS_ACCESS
-│   │
-│   ├── DEPARTMENT_MANAGER
-│   │   ├── PROGRESS_ACCESS
-│   │   └── REPORTS_ACCESS
-│   │
-│   ├── LECTURER
-│   │   └── (không có module nghiệp vụ ở Phase 2)
-│   │
-│   └── GUEST_LECTURER
-│       └── (không có module nghiệp vụ ở Phase 2)
-│
-└── 5. MODULE
-    │
-    ├── TỔNG QUAN
-    │   │
-    │   ├── Bảng điều khiển
-    │   │   └── Không cần permission
-    │   │
-    │   ├── Tiến độ thu phiếu
-    │   │   └── PROGRESS_ACCESS
-    │   │
-    │   └── Thống kê & Báo cáo
-    │       └── REPORTS_ACCESS
-    │
-    ├── DANH MỤC ĐÀO TẠO
-    │   │
-    │   └── CATALOG_ACCESS
-    │       │
-    │       ├── Khoa / Viện
-    │       ├── Bộ môn
-    │       ├── Giảng viên
-    │       ├── Ngành đào tạo
-    │       ├── Học phần
-    │       └── Lớp học phần
-    │
-    ├── KHẢO SÁT HỌC PHẦN
-    │   │
-    │   ├── Bộ câu hỏi khảo sát
-    │   │   └── COURSE_QUESTION_SETS_ACCESS
-    │   │
-    │   └── Khảo sát học phần
-    │       └── COURSE_CAMPAIGNS_ACCESS
-    │
-    ├── KHẢO SÁT CHƯƠNG TRÌNH
-    │   │
-    │   ├── Đợt khảo sát CTĐT
-    │   │   └── PROGRAM_CAMPAIGNS_ACCESS
-    │   │
-    │   └── Tiêu chí CTĐT
-    │       └── PROGRAM_CRITERIA_ACCESS
-    │
-    └── QUẢN TRỊ
-        │
-        └── Người dùng & phân quyền
-            └── USER_ADMIN_ACCESS
-```
-
-## Và quan trọng nhất: 4 lớp này phải tách biệt
-
-```text
-                    USER
-                      │
-                      ▼
-                    ROLE
-                      │
-                      ▼
-              ROLE_PERMISSION
-                      │
-                      ▼
-                 PERMISSION
-                      │
-                      ▼
-                   MODULE
-                      │
-                      ▼
-              ┌───────────────┐
-              │               │
-              ▼               ▼
-           SCOPE            ACTION
-        Dữ liệu nào?       Làm gì?
-```
-
-### Ví dụ `DEPARTMENT_MANAGER`
-
-```text
-DEPARTMENT_MANAGER
-        │
-        ├── PROGRESS_ACCESS
-        │       └── Có thể vào "Tiến độ thu phiếu"
-        │
-        └── REPORTS_ACCESS
-                │
-                └── Có thể vào "Thống kê & Báo cáo"
-                        │
-                        └── SCOPE
-                            └── OrganizationUnitCode
-                                └── Chỉ dữ liệu Khoa/Bộ môn phụ trách
-```
-
-### Ví dụ `LECTURER` sau này
-
-```text
-LECTURER
-    │
-    └── COURSE_CAMPAIGNS_ACCESS
-            │
-            └── MODULE
-                └── Khảo sát học phần
-                        │
-                        └── SCOPE
-                            └── LecturerId = CurrentUser.LecturerId
-                                │
-                                ├── Xem campaign của mình
-                                ├── Tạo campaign cho lớp mình
-                                └── Không thấy campaign người khác
-```
-
-### Ví dụ `INSPECTOR`
-
-```text
-INSPECTOR
-    │
-    ├── PROGRESS_ACCESS
-    │
-    └── REPORTS_ACCESS
-            │
-            └── SCOPE
-                └── Toàn trường
-```
-
----
-
-### Chốt kiến trúc
-
-**Permission không trả lời "được xem loại nội dung nào".**
-
-Nó chỉ trả lời:
-
-> **"Có được truy cập module này không?"**
-
-Còn:
-
-> **"Được xem dữ liệu của ai/đơn vị nào?"**
-
-→ **Scope**
-
-Và:
-
-> **"Được xem, tạo, sửa, xóa hay chỉ đọc?"**
-
-→ **Action/CRUD authorization**
-
-Đây là kiến trúc sạch nhất cho hệ thống hiện tại, và đặc biệt tránh việc bảng `Permission` ngày càng phình ra thành hàng chục/hàng trăm permission kiểu `VIEW_REPORTS_XXX`.
+## 13. Tiêu chí nghiệm thu
+
+- Có Actor/Module Matrix được duyệt trước khi triển khai seed role-permission.
+- `ADMIN` thấy và vào được toàn bộ module.
+- `SURVEY_ADMIN` thấy toàn bộ module nghiệp vụ, không thấy `users-admin`.
+- `DEPARTMENT_MANAGER` chỉ thấy `overview`, `progress`, `reports`.
+- `LECTURER` và `GUEST_LECTURER` chỉ thấy `overview` trong Phase 2 nếu chưa có module/scope được duyệt.
+- User không có `CATALOG_ACCESS` không gọi `/api/catalog/*` từ frontend sau đăng nhập.
+- User không có `REPORTS_ACCESS` không vào được tab `reports`.
+- User không có `USER_ADMIN_ACCESS` không thấy và không vào được `users-admin`.
+- `/api/auth/access` trả đúng danh sách permission sau khi đổi profile.
+- Backend từ chối switch sang profile không thuộc user hiện tại hoặc `IsActive = false`.
+- `IsActive`, `IsDefault`, `LastSelectedAt` không bị dùng thay cho `ActiveProfileId`.
+- Phase 2 chỉ tính `RolePermissions.IsGranted = true`; không có deny precedence.
+- Khi đổi quyền của một role trong `RolePermissionEditor`, sidebar/route/fetch phản ánh theo `permissions[]` mà không cần sửa code.
+- Test authorization backend và smoke test frontend đều qua.

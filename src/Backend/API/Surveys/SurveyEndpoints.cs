@@ -8,25 +8,31 @@ public static class SurveyEndpoints
 {
     public static IEndpointRouteBuilder MapSurveyEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints
+        var questionSetGroup = endpoints
             .MapGroup("/api/surveys")
-            .RequireAuthorization(AuthPolicies.SurveyManage);
+            .RequireAuthorization(AuthPolicies.CourseQuestionSetsAccess);
+        var campaignGroup = endpoints
+            .MapGroup("/api/surveys")
+            .RequireAuthorization(AuthPolicies.CourseCampaignsAccess);
+        var operationalReadGroup = endpoints
+            .MapGroup("/api/surveys")
+            .RequireAuthorization(AuthPolicies.SurveyOperationalRead);
 
         // --------------------------------------------------------- Answer scales
 
-        group.MapGet("/answer-scales", async (
+        questionSetGroup.MapGet("/answer-scales", async (
             ISurveyService service,
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetAnswerScalesAsync(cancellationToken)));
 
-        group.MapPost("/answer-scales", async (
+        questionSetGroup.MapPost("/answer-scales", async (
             SaveAnswerScaleRequest request,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.CreateAnswerScaleAsync(request.ToCommand(), cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        group.MapPut("/answer-scales/{answerScaleId:int}", async (
+        questionSetGroup.MapPut("/answer-scales/{answerScaleId:int}", async (
             int answerScaleId,
             SaveAnswerScaleRequest request,
             ISurveyService service,
@@ -37,7 +43,7 @@ public static class SurveyEndpoints
                 cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        group.MapDelete("/answer-scales/{answerScaleId:int}", async (
+        questionSetGroup.MapDelete("/answer-scales/{answerScaleId:int}", async (
             int answerScaleId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
@@ -46,19 +52,19 @@ public static class SurveyEndpoints
 
         // ------------------------------------------------------ Survey templates
 
-        group.MapGet("/templates", async (
+        questionSetGroup.MapGet("/templates", async (
             ISurveyService service,
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetSurveyTemplatesAsync(cancellationToken)));
 
-        group.MapPost("/templates", async (
+        questionSetGroup.MapPost("/templates", async (
             SaveSurveyTemplateRequest request,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.CreateSurveyTemplateAsync(request.ToCommand(), cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        group.MapPut("/templates/{surveyTemplateId:int}", async (
+        questionSetGroup.MapPut("/templates/{surveyTemplateId:int}", async (
             int surveyTemplateId,
             SaveSurveyTemplateRequest request,
             ISurveyService service,
@@ -69,7 +75,7 @@ public static class SurveyEndpoints
                 cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        group.MapDelete("/templates/{surveyTemplateId:int}", async (
+        questionSetGroup.MapDelete("/templates/{surveyTemplateId:int}", async (
             int surveyTemplateId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
@@ -78,51 +84,51 @@ public static class SurveyEndpoints
 
         // ------------------------------------------- Đợt khảo sát theo học kỳ
 
-        group.MapGet("/semester-surveys", async (
+        operationalReadGroup.MapGet("/semester-surveys", async (
             int? semesterId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetSemesterSurveysAsync(semesterId, cancellationToken)));
 
-        group.MapPost("/semester-surveys", async (
+        campaignGroup.MapPost("/semester-surveys", async (
             CreateSemesterSurveyRequest request,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.CreateSemesterSurveyAsync(request.ToCommand(), cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        group.MapDelete("/semester-surveys/{semesterSurveyId:int}", async (
+        campaignGroup.MapDelete("/semester-surveys/{semesterSurveyId:int}", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.DeleteSemesterSurveyAsync(semesterSurveyId, cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        group.MapGet("/semester-surveys/{semesterSurveyId:int}/sections", async (
+        operationalReadGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/sections", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetCourseSectionSurveysAsync(semesterSurveyId, cancellationToken)));
 
-        group.MapGet("/course-section-surveys/{courseSectionSurveyId:int}", async (
+        operationalReadGroup.MapGet("/course-section-surveys/{courseSectionSurveyId:int}", async (
             int courseSectionSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetCourseSectionSurveyAsync(courseSectionSurveyId, cancellationToken)));
 
-        group.MapGet("/course-section-surveys/{courseSectionSurveyId:int}/responses", async (
+        operationalReadGroup.MapGet("/course-section-surveys/{courseSectionSurveyId:int}/responses", async (
             int courseSectionSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSurveyResponsesAsync(courseSectionSurveyId, cancellationToken)));
 
-        group.MapGet("/responses/{responseId:int}", async (
+        operationalReadGroup.MapGet("/responses/{responseId:int}", async (
             int responseId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSurveyResponseAsync(responseId, cancellationToken)));
 
-        group.MapPut("/course-section-surveys/{courseSectionSurveyId:int}/schedule", async (
+        campaignGroup.MapPut("/course-section-surveys/{courseSectionSurveyId:int}/schedule", async (
             int courseSectionSurveyId,
             SaveSurveyScheduleRequest request,
             ISurveyService service,
@@ -157,17 +163,17 @@ public static class SurveyEndpoints
 
         // ------------------------------------------------------------ Restore
 
-        group.MapPatch("/answer-scales/{answerScaleId:int}/restore", async (
+        questionSetGroup.MapPatch("/answer-scales/{answerScaleId:int}/restore", async (
             int answerScaleId, ISurveyService service, CancellationToken ct) =>
             ToResult(await service.RestoreAnswerScaleAsync(answerScaleId, ct)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        group.MapPatch("/survey-templates/{surveyTemplateId:int}/restore", async (
+        questionSetGroup.MapPatch("/survey-templates/{surveyTemplateId:int}/restore", async (
             int surveyTemplateId, ISurveyService service, CancellationToken ct) =>
             ToResult(await service.RestoreSurveyTemplateAsync(surveyTemplateId, ct)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        group.MapPatch("/semester-surveys/{semesterSurveyId:int}/restore", async (
+        campaignGroup.MapPatch("/semester-surveys/{semesterSurveyId:int}/restore", async (
             int semesterSurveyId, ISurveyService service, CancellationToken ct) =>
             ToResult(await service.RestoreSemesterSurveyAsync(semesterSurveyId, ct)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
