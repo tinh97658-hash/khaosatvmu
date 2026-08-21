@@ -93,7 +93,7 @@ export const ReportsOverviewPage: React.FC = () => {
   }, [activeSemesterId]);
 
   const canViewReports = access?.permissions.includes('REPORTS_ACCESS') === true;
-  const canLoadCatalog = access?.permissions.includes('CATALOG_ACCESS') === true;
+  const canLoadCatalog = canViewReports;
 
   // Danh sách lựa chọn bộ lọc.
   const [faculties, setFaculties] = useState<Faculty[]>([]);

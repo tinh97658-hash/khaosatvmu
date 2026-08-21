@@ -205,7 +205,7 @@ public static class AuthEndpoints
 
             group.MapGet("/dev/access/{organizationUnitCode}", (string organizationUnitCode) =>
                     Results.Ok(new { organizationUnitCode, authorized = true }))
-                .RequireAuthorization(AuthPolicies.CatalogAccess);
+                .RequireAuthorization(AuthPolicies.FacultiesAccess);
         }
 
         return endpoints;

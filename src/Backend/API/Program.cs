@@ -114,7 +114,12 @@ builder.Services.AddAntiforgery(options =>
 builder.Services.AddAuthorization(options =>
 {
     AddPermissionPolicy(AuthPolicies.UserAdminAccess, "USER_ADMIN_ACCESS");
-    AddPermissionPolicy(AuthPolicies.CatalogAccess, "CATALOG_ACCESS");
+    AddPermissionPolicy(AuthPolicies.FacultiesAccess, "FACULTIES_ACCESS");
+    AddPermissionPolicy(AuthPolicies.DepartmentsAccess, "DEPARTMENTS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.LecturersAccess, "LECTURERS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.MajorsAccess, "MAJORS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.CoursesAccess, "COURSES_ACCESS");
+    AddPermissionPolicy(AuthPolicies.CourseSectionsAccess, "COURSE_SECTIONS_ACCESS");
     AddPermissionPolicy(AuthPolicies.CourseQuestionSetsAccess, "COURSE_QUESTION_SETS_ACCESS");
     AddPermissionPolicy(AuthPolicies.CourseCampaignsAccess, "COURSE_CAMPAIGNS_ACCESS");
     AddPermissionPolicy(AuthPolicies.ProgramCampaignsAccess, "PROGRAM_CAMPAIGNS_ACCESS");
@@ -126,10 +131,26 @@ builder.Services.AddAuthorization(options =>
             "PROGRESS_ACCESS",
             "REPORTS_ACCESS",
             "COURSE_CAMPAIGNS_ACCESS")));
+    AddAnyPermissionPolicy(AuthPolicies.FacultiesRead,
+        "FACULTIES_ACCESS", "DEPARTMENTS_ACCESS", "LECTURERS_ACCESS", "MAJORS_ACCESS",
+        "COURSES_ACCESS", "COURSE_SECTIONS_ACCESS", "REPORTS_ACCESS");
+    AddAnyPermissionPolicy(AuthPolicies.DepartmentsRead,
+        "FACULTIES_ACCESS", "DEPARTMENTS_ACCESS", "LECTURERS_ACCESS", "COURSES_ACCESS",
+        "COURSE_SECTIONS_ACCESS", "REPORTS_ACCESS");
+    AddAnyPermissionPolicy(AuthPolicies.LecturersRead,
+        "DEPARTMENTS_ACCESS", "LECTURERS_ACCESS", "COURSE_SECTIONS_ACCESS", "REPORTS_ACCESS");
+    AddAnyPermissionPolicy(AuthPolicies.MajorsRead,
+        "FACULTIES_ACCESS", "MAJORS_ACCESS");
+    AddAnyPermissionPolicy(AuthPolicies.CoursesRead,
+        "DEPARTMENTS_ACCESS", "COURSES_ACCESS", "COURSE_SECTIONS_ACCESS");
 
     void AddPermissionPolicy(string policyName, string permissionCode) =>
         options.AddPolicy(policyName, policy =>
             policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement(permissionCode)));
+
+    void AddAnyPermissionPolicy(string policyName, params string[] permissionCodes) =>
+        options.AddPolicy(policyName, policy =>
+            policy.RequireAuthenticatedUser().AddRequirements(new AnyPermissionRequirement(permissionCodes)));
 });
 
 builder.Services.AddHttpClient<IAgentMemoryService, AgentMemoryService>();

@@ -7,7 +7,17 @@ namespace API.Auth;
 public static class AuthPolicies
 {
     public const string UserAdminAccess = "PERMISSION_USER_ADMIN_ACCESS";
-    public const string CatalogAccess = "PERMISSION_CATALOG_ACCESS";
+    public const string FacultiesAccess = "PERMISSION_FACULTIES_ACCESS";
+    public const string DepartmentsAccess = "PERMISSION_DEPARTMENTS_ACCESS";
+    public const string LecturersAccess = "PERMISSION_LECTURERS_ACCESS";
+    public const string MajorsAccess = "PERMISSION_MAJORS_ACCESS";
+    public const string CoursesAccess = "PERMISSION_COURSES_ACCESS";
+    public const string CourseSectionsAccess = "PERMISSION_COURSE_SECTIONS_ACCESS";
+    public const string FacultiesRead = "PERMISSION_FACULTIES_READ";
+    public const string DepartmentsRead = "PERMISSION_DEPARTMENTS_READ";
+    public const string LecturersRead = "PERMISSION_LECTURERS_READ";
+    public const string MajorsRead = "PERMISSION_MAJORS_READ";
+    public const string CoursesRead = "PERMISSION_COURSES_READ";
     public const string CourseQuestionSetsAccess = "PERMISSION_COURSE_QUESTION_SETS_ACCESS";
     public const string CourseCampaignsAccess = "PERMISSION_COURSE_CAMPAIGNS_ACCESS";
     public const string ProgramCampaignsAccess = "PERMISSION_PROGRAM_CAMPAIGNS_ACCESS";

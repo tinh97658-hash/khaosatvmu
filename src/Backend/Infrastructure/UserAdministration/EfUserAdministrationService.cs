@@ -433,6 +433,19 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
     private static int GetCategoryOrder(string category) =>
         CategoryOrderMap.TryGetValue(category, out var order) ? order : 99;
 
+    private static readonly Dictionary<string, int> PermissionOrderMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["FACULTIES_ACCESS"] = 1,
+        ["DEPARTMENTS_ACCESS"] = 2,
+        ["LECTURERS_ACCESS"] = 3,
+        ["MAJORS_ACCESS"] = 4,
+        ["COURSES_ACCESS"] = 5,
+        ["COURSE_SECTIONS_ACCESS"] = 6
+    };
+
+    private static int GetPermissionOrder(string code) =>
+        PermissionOrderMap.TryGetValue(code, out var order) ? order : 99;
+
     public async Task<IReadOnlyList<PermissionDto>> GetPermissionsAsync(CancellationToken cancellationToken = default) =>
         await db.Permissions
             .AsNoTracking()
@@ -451,6 +464,7 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
             .AsNoTracking()
             .ToListAsync(cancellationToken))
             .OrderBy(x => GetCategoryOrder(x.Category))
+            .ThenBy(x => GetPermissionOrder(x.Code))
             .ThenBy(x => x.Name)
             .ToList();
 
@@ -492,6 +506,7 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
             .AsNoTracking()
             .ToListAsync(cancellationToken))
             .OrderBy(x => GetCategoryOrder(x.Category))
+            .ThenBy(x => GetPermissionOrder(x.Code))
             .ThenBy(x => x.Name)
             .ToList();
 
