@@ -733,6 +733,17 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         SaveCourseSectionCommand command,
         CancellationToken cancellationToken = default)
     {
+        // Kiểm phạm vi TRƯỚC khi validate. Nếu validate trước thì người ngoài bộ môn
+        // dò được dữ liệu của bộ môn khác qua chính mã lỗi trả về.
+        // Lớp thuộc bộ môn nào là theo học phần sở hữu, nên chỉ được tạo lớp cho học
+        // phần của bộ môn mình.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        var departmentId = await DepartmentOfCourseAsync(command.CourseId, cancellationToken);
+        if (CheckDepartmentInScope(scope, departmentId) is { } outOfScope)
+        {
+            return Failed<CourseSectionDto>(outOfScope);
+        }
+
         var validation = await ValidateCourseSectionAsync(null, command, cancellationToken);
         if (validation is not null)
         {
@@ -769,6 +780,23 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             return Failed<CourseSectionDto>(CatalogErrorCodes.CourseSectionNotFound);
         }
 
+        // Kiểm cả học phần cũ lẫn học phần mới: không được lấy lớp của bộ môn khác về,
+        // cũng không được đẩy lớp của mình sang bộ môn khác bằng cách đổi học phần.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        var currentDepartmentId = await DepartmentOfCourseAsync(section.CourseId, cancellationToken);
+        if (CheckDepartmentInScope(scope, currentDepartmentId) is { } currentOutOfScope)
+        {
+            return Failed<CourseSectionDto>(currentOutOfScope);
+        }
+        if (command.CourseId != section.CourseId)
+        {
+            var nextDepartmentId = await DepartmentOfCourseAsync(command.CourseId, cancellationToken);
+            if (CheckDepartmentInScope(scope, nextDepartmentId) is { } nextOutOfScope)
+            {
+                return Failed<CourseSectionDto>(nextOutOfScope);
+            }
+        }
+
         var validation = await ValidateCourseSectionAsync(courseSectionId, command, cancellationToken);
         if (validation is not null)
         {
@@ -799,6 +827,13 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             return Failed<bool>(CatalogErrorCodes.CourseSectionNotFound);
         }
 
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        var departmentId = await DepartmentOfCourseAsync(section.CourseId, cancellationToken);
+        if (CheckDepartmentInScope(scope, departmentId) is { } outOfScope)
+        {
+            return Failed<bool>(outOfScope);
+        }
+
         // Cascade soft-delete: lớp học phần → bài khảo sát lớp.
         var sectionSurveys = await db.CourseSectionSurveys
             .Where(x => x.CourseSectionId == courseSectionId).ToListAsync(cancellationToken);
@@ -815,6 +850,15 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         IReadOnlyList<ImportCourseSectionRowCommand> rows,
         CancellationToken cancellationToken = default)
     {
+        // Import chỉ dành cho quản trị, đúng câu D-d. Mỗi dòng trong tệp mang bộ môn
+        // riêng và còn tự tạo học phần lẫn giảng viên mới, nên không có cách nào ép
+        // toàn bộ về một bộ môn mà vẫn giữ đúng nghĩa của tệp.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<CourseSectionImportDto>(adminOnly);
+        }
+
         if (rows.Count > MaximumImportRows)
         {
             return Failed<CourseSectionImportDto>(CatalogErrorCodes.ImportTooManyRows);
@@ -1216,6 +1260,19 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         SaveLecturerCommand command,
         CancellationToken cancellationToken = default)
     {
+        // Ép bộ môn về bộ môn của chính mình TRƯỚC khi validate, để validate chạy trên
+        // đúng giá trị sẽ được lưu. Không ép thì trưởng bộ môn thêm được người vào bộ
+        // môn khác, mà thêm xong lại không thấy để sửa.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.SeesEverything)
+        {
+            if (scope.DepartmentId is not { } ownDepartmentId)
+            {
+                return Failed<LecturerDto>(CatalogErrorCodes.OutOfScope);
+            }
+            command = command with { DepartmentId = ownDepartmentId };
+        }
+
         var validation = await ValidateLecturerAsync(null, command, cancellationToken);
         if (validation is not null)
         {
@@ -1253,6 +1310,19 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             return Failed<LecturerDto>(CatalogErrorCodes.LecturerNotFound);
         }
 
+        // Kiểm hai đầu: bản ghi đang sửa phải thuộc bộ môn mình, VÀ không được đổi
+        // sang bộ môn khác. Thiếu vế thứ hai thì sửa một phát là đẩy người của mình
+        // sang bộ môn khác, hoặc kéo người bộ môn khác về mình.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckDepartmentInScope(scope, lecturer.DepartmentId) is { } outOfScope)
+        {
+            return Failed<LecturerDto>(outOfScope);
+        }
+        if (!scope.SeesEverything && command.DepartmentId != lecturer.DepartmentId)
+        {
+            return Failed<LecturerDto>(CatalogErrorCodes.OutOfScope);
+        }
+
         var validation = await ValidateLecturerAsync(lecturerId, command, cancellationToken);
         if (validation is not null)
         {
@@ -1278,6 +1348,14 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         int lecturerId,
         CancellationToken cancellationToken = default)
     {
+        // Xoá giảng viên chỉ dành cho quản trị, đúng câu D-c. Trưởng bộ môn được thêm
+        // và sửa nhưng không được xoá.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<bool>(adminOnly);
+        }
+
         var lecturer = await db.Lecturers.FirstOrDefaultAsync(x => x.LecturerId == lecturerId, cancellationToken);
         if (lecturer is null)
         {
@@ -1317,6 +1395,15 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         IReadOnlyList<ImportLecturerRowCommand> rows,
         CancellationToken cancellationToken = default)
     {
+        // Cùng lý do với import lớp học phần: bộ môn của từng dòng lấy từ tệp nên
+        // trưởng bộ môn có thể vô tình hoặc cố ý ghi sang bộ môn khác. Thêm từng
+        // người một thì vẫn được, và chỗ đó đã ép bộ môn rồi.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<CatalogImportDto>(adminOnly);
+        }
+
         if (rows.Count > MaximumImportRows)
         {
             return Failed<CatalogImportDto>(CatalogErrorCodes.ImportTooManyRows);
@@ -1459,6 +1546,17 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         SaveCourseCommand command,
         CancellationToken cancellationToken = default)
     {
+        // Cùng luật với giảng viên: ép bộ môn về bộ môn của mình trước khi validate.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.SeesEverything)
+        {
+            if (scope.DepartmentId is not { } ownDepartmentId)
+            {
+                return Failed<CourseDto>(CatalogErrorCodes.OutOfScope);
+            }
+            command = command with { DepartmentId = ownDepartmentId };
+        }
+
         var validation = await ValidateCourseAsync(null, command, cancellationToken);
         if (validation is not null)
         {
@@ -1497,6 +1595,18 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             return Failed<CourseDto>(CatalogErrorCodes.PrerequisiteNotFound);
         }
 
+        // Kiểm hai đầu như khi sửa giảng viên: học phần đang sửa phải thuộc bộ môn
+        // mình, và không được đổi sang bộ môn khác.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckDepartmentInScope(scope, course.DepartmentId) is { } outOfScope)
+        {
+            return Failed<CourseDto>(outOfScope);
+        }
+        if (!scope.SeesEverything && command.DepartmentId != course.DepartmentId)
+        {
+            return Failed<CourseDto>(CatalogErrorCodes.OutOfScope);
+        }
+
         var validation = await ValidateCourseAsync(courseId, command, cancellationToken);
         if (validation is not null)
         {
@@ -1519,6 +1629,13 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         int courseId,
         CancellationToken cancellationToken = default)
     {
+        // Xoá học phần chỉ dành cho quản trị, cùng luật với xoá giảng viên ở câu D-c.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<bool>(adminOnly);
+        }
+
         var course = await db.Courses.FirstOrDefaultAsync(x => x.CourseId == courseId, cancellationToken);
         if (course is null)
         {
@@ -1542,6 +1659,15 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         IReadOnlyList<ImportCourseRowCommand> rows,
         CancellationToken cancellationToken = default)
     {
+        // Cùng lý do với hai import kia: bộ môn của từng dòng lấy từ tệp. Import khoa,
+        // bộ môn và ngành thì không cần gác ở đây vì tầng quyền module đã chặn —
+        // trưởng bộ môn không có FACULTIES_ACCESS, DEPARTMENTS_ACCESS, MAJORS_ACCESS.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<CatalogImportDto>(adminOnly);
+        }
+
         if (rows.Count > MaximumImportRows)
         {
             return Failed<CatalogImportDto>(CatalogErrorCodes.ImportTooManyRows);
@@ -1664,6 +1790,38 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
     // ------------------------------------------------------------------ Helpers
 
     private static string NormalizeKey(string value) => value.Trim().ToLowerInvariant();
+
+    // ------------------------------------------------------- Gác phạm vi khi ghi
+    //
+    // Lọc danh sách chỉ giấu dữ liệu đi, không chặn được gì: biết mã bản ghi là gọi
+    // thẳng API sửa hay xoá được. Nên mọi endpoint ghi phải tự kiểm lại, không tin
+    // vào chuyện nút đã bị ẩn trên giao diện.
+
+    /// <summary>
+    /// Bản ghi thuộc <paramref name="departmentId"/> có nằm trong phạm vi của người
+    /// đang đăng nhập không. Trả về mã lỗi nếu không, null nếu được phép.
+    /// </summary>
+    private static string? CheckDepartmentInScope(UserScope scope, int? departmentId)
+    {
+        if (scope.SeesEverything) return null;
+        if (scope.DepartmentId is not { } allowed) return CatalogErrorCodes.OutOfScope;
+        return departmentId == allowed ? null : CatalogErrorCodes.OutOfScope;
+    }
+
+    /// <summary>
+    /// Hành động chỉ dành cho quản trị, ví dụ xoá giảng viên hay import theo tệp.
+    /// Import bị chặn vì đơn vị của từng dòng lấy từ tệp, người nhập không kiểm soát
+    /// được nên rất dễ ghi sang bộ môn khác.
+    /// </summary>
+    private static string? CheckAdminOnly(UserScope scope) =>
+        scope.SeesEverything ? null : CatalogErrorCodes.OutOfScope;
+
+    /// <summary>Bộ môn sở hữu học phần của một lớp, dùng để quy phạm vi cho lớp.</summary>
+    private Task<int?> DepartmentOfCourseAsync(int courseId, CancellationToken cancellationToken) =>
+        db.Courses
+            .Where(x => x.CourseId == courseId)
+            .Select(x => x.DepartmentId)
+            .FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>
     /// Bảo đảm mỗi giảng viên có đúng một tài khoản đăng nhập gắn kèm qua
@@ -2075,6 +2233,13 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         int lecturerId,
         CancellationToken cancellationToken = default)
     {
+        // Khôi phục đi cùng cặp với xoá, mà xoá chỉ dành cho quản trị.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<LecturerDto>(adminOnly);
+        }
+
         var lecturer = await db.Lecturers.IgnoreQueryFilters()
             .FirstOrDefaultAsync(x => x.LecturerId == lecturerId && x.IsDeleted, cancellationToken);
         if (lecturer is null) return Failed<LecturerDto>(CatalogErrorCodes.LecturerNotFound);

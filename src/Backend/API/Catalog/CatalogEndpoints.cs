@@ -514,6 +514,7 @@ public static class CatalogEndpoints
 
         var statusCode = result.ErrorCode switch
         {
+            CatalogErrorCodes.OutOfScope => StatusCodes.Status403Forbidden,
             CatalogErrorCodes.FacultyNotFound => StatusCodes.Status404NotFound,
             CatalogErrorCodes.DepartmentNotFound => StatusCodes.Status404NotFound,
             CatalogErrorCodes.MajorNotFound => StatusCodes.Status404NotFound,

@@ -463,6 +463,12 @@ public static class CatalogErrorCodes
     public const string LecturerAmbiguous = "CATALOG_LECTURER_AMBIGUOUS";
 
     public const string LecturerNotFound = "CATALOG_LECTURER_NOT_FOUND";
+    /// <summary>
+    /// Bản ghi đích nằm ngoài phạm vi của người đang đăng nhập, hoặc hành động này
+    /// không dành cho vai trò đó. Endpoint trả 403.
+    /// </summary>
+    public const string OutOfScope = "CATALOG_OUT_OF_SCOPE";
+
     public const string LecturerNameRequired = "CATALOG_LECTURER_NAME_REQUIRED";
     public const string LecturerEmailRequired = "CATALOG_LECTURER_EMAIL_REQUIRED";
     public const string LecturerEmailExists = "CATALOG_LECTURER_EMAIL_EXISTS";

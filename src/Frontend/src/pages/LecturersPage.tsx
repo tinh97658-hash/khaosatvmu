@@ -14,6 +14,8 @@ import {
 } from '../services/catalogApi';
 import type { ImportLecturerRow } from '../utils/lecturerImportExcel';
 import type { Department, Faculty, Lecturer, Position } from '../types';
+import { useAuth } from '../auth/authContext';
+import { isUnrestrictedRole } from '../auth/roles';
 
 interface LecturersPageProps {
   lecturers: Lecturer[];
@@ -64,6 +66,10 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [facultyFilter, setFacultyFilter] = useState('');
+  // Trưởng bộ môn chỉ thấy bộ môn mình nên lọc theo khoa là vô nghĩa, và các thao tác
+  // chỉ dành cho quản trị thì ẩn nút đi cho gọn. Chặn thật nằm ở backend.
+  const { activeProfile } = useAuth();
+  const canManageAll = isUnrestrictedRole(activeProfile?.roleCode);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -315,15 +321,17 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
           >
             <Pencil aria-hidden="true" size={15} />
           </button>
-          <button
-            type="button"
-            className="catalog-icon-button catalog-icon-button--danger"
-            onClick={() => setToDelete(row)}
-            aria-label={`Xóa ${row.fullName}`}
-            title="Xóa"
-          >
-            <Trash2 aria-hidden="true" size={15} />
-          </button>
+          {canManageAll && (
+            <button
+              type="button"
+              className="catalog-icon-button catalog-icon-button--danger"
+              onClick={() => setToDelete(row)}
+              aria-label={`Xóa ${row.fullName}`}
+              title="Xóa"
+            >
+              <Trash2 aria-hidden="true" size={15} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -344,13 +352,13 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm họ tên hoặc email..."
-        filterOptions={[
+        filterOptions={canManageAll ? [
           { label: 'Tất cả khoa / viện', value: '' },
           ...faculties.map((faculty) => ({
             label: faculty.facultyName,
             value: String(faculty.facultyId),
           })),
-        ]}
+        ] : undefined}
         currentFilter={facultyFilter}
         onFilterChange={setFacultyFilter}
         onAddNew={openCreate}
@@ -368,14 +376,16 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
               <BriefcaseBusiness aria-hidden="true" size={16} />
               <span>Chức vụ</span>
             </button>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm catalog-add-button"
-              onClick={() => setIsImportOpen(true)}
-            >
-              <FileSpreadsheet aria-hidden="true" size={16} />
-              <span>Import Excel</span>
-            </button>
+            {canManageAll && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm catalog-add-button"
+                onClick={() => setIsImportOpen(true)}
+              >
+                <FileSpreadsheet aria-hidden="true" size={16} />
+                <span>Import Excel</span>
+              </button>
+            )}
           </>
         )}
         emptyMessage="Chưa có giảng viên nào trong danh mục."

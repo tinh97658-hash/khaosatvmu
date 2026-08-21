@@ -12,6 +12,8 @@ import {
 } from '../services/catalogApi';
 import type { ImportCourseRow } from '../utils/courseImportExcel';
 import type { Course, CourseType, Department, Faculty } from '../types';
+import { useAuth } from '../auth/authContext';
+import { isUnrestrictedRole } from '../auth/roles';
 
 interface CoursesPageProps {
   courses: Course[];
@@ -62,6 +64,9 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [facultyFilter, setFacultyFilter] = useState('');
+  // Xoá học phần và import chỉ dành cho quản trị; ẩn nút cho gọn, chặn thật ở backend.
+  const { activeProfile } = useAuth();
+  const canManageAll = isUnrestrictedRole(activeProfile?.roleCode);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -243,15 +248,17 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
           >
             <Pencil aria-hidden="true" size={15} />
           </button>
-          <button
-            type="button"
-            className="catalog-icon-button catalog-icon-button--danger"
-            onClick={() => setToDelete(item)}
-            aria-label={`Xóa ${item.courseName}`}
-            title="Xóa"
-          >
-            <Trash2 aria-hidden="true" size={15} />
-          </button>
+          {canManageAll && (
+            <button
+              type="button"
+              className="catalog-icon-button catalog-icon-button--danger"
+              onClick={() => setToDelete(item)}
+              aria-label={`Xóa ${item.courseName}`}
+              title="Xóa"
+            >
+              <Trash2 aria-hidden="true" size={15} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -283,7 +290,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
         onFilterChange={setFacultyFilter}
         onAddNew={openCreate}
         addNewLabel="Thêm học phần"
-        toolbarActions={(
+        toolbarActions={canManageAll ? (
           <button
             type="button"
             className="btn btn-secondary btn-sm catalog-add-button"
@@ -292,7 +299,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
             <FileSpreadsheet aria-hidden="true" size={16} />
             <span>Import Excel</span>
           </button>
-        )}
+        ) : undefined}
         emptyMessage="Chưa có học phần nào trong danh mục."
         keyExtractor={(item) => String(item.courseId)}
         pageSize={20}

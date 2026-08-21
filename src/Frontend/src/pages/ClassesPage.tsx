@@ -26,6 +26,8 @@ import {
 } from '../services/catalogApi';
 import type { AcademicYear, Course, CourseSection, Lecturer, Semester } from '../types';
 import { useSemester } from '../context/semesterContext';
+import { useAuth } from '../auth/authContext';
+import { isUnrestrictedRole } from '../auth/roles';
 
 interface ClassesPageProps {
   courses: Course[];
@@ -137,6 +139,10 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
   const courseOf = (courseId: number) => courses.find((course) => course.courseId === courseId);
   const lecturerOf = (lecturerId: number) =>
     lecturers.find((lecturer) => lecturer.lecturerId === lecturerId);
+
+  // Import lấy bộ môn từ tệp nên chỉ quản trị mới được dùng; ẩn nút cho gọn.
+  const { activeProfile } = useAuth();
+  const canManageAll = isUnrestrictedRole(activeProfile?.roleCode);
 
   // ----- Giảng viên chưa xác định -------------------------------------------
   // Backend đã lọc sẵn theo phạm vi, nên trưởng bộ môn chỉ thấy bộ môn mình mà
@@ -825,7 +831,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
               searchPlaceholder="Tìm tên lớp hoặc học phần..."
               onAddNew={openCreateSection}
               addNewLabel="Thêm lớp học phần"
-              toolbarActions={(
+              toolbarActions={canManageAll ? (
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm catalog-add-button"
@@ -834,7 +840,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
                   <FileSpreadsheet aria-hidden="true" size={16} />
                   <span>Import Excel</span>
                 </button>
-              )}
+              ) : undefined}
               emptyMessage="Học kỳ này chưa có lớp học phần nào."
               keyExtractor={(item) => String(item.courseSectionId)}
               pageSize={20}
