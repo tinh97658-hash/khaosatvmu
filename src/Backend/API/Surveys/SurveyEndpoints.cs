@@ -164,6 +164,14 @@ public static class SurveyEndpoints
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSemesterSurveyDepartmentSummaryAsync(semesterSurveyId, cancellationToken)));
 
+        // Dải chỉ số gọn cho bảng điều khiển riêng của trưởng bộ môn. Số của bộ môn
+        // kèm số toàn trường để so; mặt bằng vẫn tính trên toàn bộ dữ liệu.
+        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/department-dashboard", async (
+            int semesterSurveyId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.GetDepartmentDashboardAsync(semesterSurveyId, cancellationToken)));
+
         statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/dashboard", async (
             int semesterSurveyId,
             ISurveyService service,

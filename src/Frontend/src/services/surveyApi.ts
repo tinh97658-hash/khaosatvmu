@@ -110,7 +110,14 @@ export interface SemesterSurveyDepartmentSummary {
   templateName: string;
   semesterName: string;
   academicYearName: string;
+  /** Đã lọc theo phạm vi; trưởng bộ môn chỉ còn đúng dòng bộ môn mình. */
   rows: DepartmentSummaryRow[];
+  /** Dòng tổng ở chân bảng, luôn tính trên toàn trường kể cả khi rows đã bị lọc. */
+  schoolDepartmentCount: number;
+  schoolSectionCount: number;
+  schoolResponseCount: number;
+  schoolAverageScore: number | null;
+  schoolWarningCount: number;
 }
 
 /** Một dòng của bảng chẩn đoán học phần. */
@@ -147,6 +154,27 @@ export const courseDiagnosisLabels: Record<string, string> = {
   ALL_GOOD: 'Mọi lớp đều tốt — nên nhân rộng',
   INCONCLUSIVE: 'Chưa đủ căn cứ kết luận',
 };
+
+/**
+ * Dải chỉ số gọn cho bảng điều khiển của trưởng bộ môn. Mỗi con số của bộ môn đi kèm
+ * một con số toàn trường để so — mặt bằng luôn tính trên toàn bộ dữ liệu.
+ */
+export interface DepartmentDashboard {
+  semesterSurveyId: number;
+  templateName: string;
+  semesterName: string;
+  academicYearName: string;
+  /** Rỗng khi người xem là quản trị. */
+  departmentName: string | null;
+  sectionCount: number;
+  schoolSectionCount: number;
+  completionRate: number;
+  schoolCompletionRate: number;
+  averageScore: number | null;
+  schoolAverageScore: number | null;
+  weakSectionCount: number;
+  weakScoreThreshold: number;
+}
 
 /** Một giảng viên có dạy trong đợt, dùng cho ô chọn ở bộ lọc. */
 export interface LecturerOption {
@@ -344,6 +372,12 @@ export const surveyApi = {
     ),
 
   /** Bỏ trống semesterId để lấy toàn bộ đợt khảo sát. */
+  /** Dải chỉ số gọn cho bảng điều khiển của trưởng bộ môn. */
+  departmentDashboard: (semesterSurveyId: number) =>
+    apiRequest<DepartmentDashboard>(
+      `/api/surveys/semester-surveys/${semesterSurveyId}/department-dashboard`,
+    ),
+
   semesterSurveys: (semesterId?: number) =>
     apiRequest<SemesterSurvey[]>(
       semesterId === undefined

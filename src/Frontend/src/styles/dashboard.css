@@ -1282,3 +1282,123 @@
     min-width: calc(100% - 38px);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Bảng điều khiển riêng của trưởng bộ môn. Dùng lại khung `dashboard-block` và
+   hàng thẻ `dashboard-quick-*` của bản quản trị để hai trang trông là một hệ,
+   chỉ thêm dải chỉ số và bảng việc cần làm.
+   --------------------------------------------------------------------------- */
+
+.department-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  padding: 14px 16px 16px;
+}
+
+.department-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid #e0e6ea;
+  border-left: 3px solid #0788b8;
+  background: #ffffff;
+}
+
+.department-metric__label {
+  color: #40505a;
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.department-metric__value {
+  color: #20262c;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* Con số toàn trường để so. Nhạt hơn hẳn số chính để không ai đọc nhầm hai cái. */
+.department-metric__compare {
+  color: #6b7a85;
+  font-size: 11px;
+}
+
+.department-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 16px 16px;
+  list-style: none;
+}
+
+.department-feed__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #e0e6ea;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.department-feed__item:hover {
+  border-color: #0788b8;
+  background: #f2f8fa;
+}
+
+.department-feed__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #eaf4f8;
+  color: #0788b8;
+}
+
+.department-feed__icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.department-feed__icon.is-warning {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.department-feed__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.department-feed__copy strong {
+  color: #20262c;
+  font-size: 13px;
+}
+
+.department-feed__copy small {
+  color: #6b7a85;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.department-feed__empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  color: #40505a;
+  font-size: 12px;
+}

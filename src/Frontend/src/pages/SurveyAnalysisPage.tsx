@@ -448,23 +448,25 @@ const DepartmentTab: React.FC<{ data: SemesterSurveyDepartmentSummary | null }> 
     );
   }
 
-  const totalSections = data.rows.reduce((sum, row) => sum + row.sectionCount, 0);
-  const totalResponses = data.rows.reduce((sum, row) => sum + row.responseCount, 0);
-  const totalWarnings = data.rows.reduce((sum, row) => sum + row.warningSectionCount, 0);
-  const scored = data.rows.filter((row) => row.averageScore !== null);
-  const overallScore =
-    scored.length === 0
-      ? null
-      : scored.reduce((sum, row) => sum + row.averageScore!, 0) / scored.length;
+  // Dòng tổng lấy thẳng số toàn trường từ backend chứ không cộng lại từ `rows`.
+  // Trưởng bộ môn chỉ nhận đúng dòng bộ môn mình, cộng lại thì mất mặt bằng để so.
+  const totalSections = data.schoolSectionCount;
+  const totalResponses = data.schoolResponseCount;
+  const totalWarnings = data.schoolWarningCount;
+  const overallScore = data.schoolAverageScore;
+  const isScoped = data.rows.length < data.schoolDepartmentCount;
 
   return (
     <>
       <section className="statistics-summary">
         <span>
-          {data.rows.length} bộ môn · {totalSections} lớp có phiếu
+          {isScoped
+            ? `${data.rows.length} bộ môn của bạn · toàn trường ${data.schoolDepartmentCount} bộ môn`
+            : `${data.rows.length} bộ môn`}
+          {' · '}{totalSections} lớp có phiếu
         </span>
         <span>
-          Tổng phiếu: <strong>{totalResponses}</strong>
+          Tổng phiếu toàn trường: <strong>{totalResponses}</strong>
         </span>
         {totalWarnings > 0 && (
           <span className="statistics-trap-note">
@@ -524,8 +526,8 @@ const DepartmentTab: React.FC<{ data: SemesterSurveyDepartmentSummary | null }> 
 
           <tfoot>
             <tr>
-              <th className="col-left col-dept-1" scope="row">Tổng kết</th>
-              <td className="col-left col-dept-2">{data.rows.length} bộ môn</td>
+              <th className="col-left col-dept-1" scope="row">Toàn trường</th>
+              <td className="col-left col-dept-2">{data.schoolDepartmentCount} bộ môn</td>
               <td className="num is-sum">{totalSections}</td>
               <td />
               <td className="num is-sum">{totalResponses}</td>

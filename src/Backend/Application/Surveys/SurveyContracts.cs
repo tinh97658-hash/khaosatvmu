@@ -148,7 +148,17 @@ public sealed record SemesterSurveyDepartmentSummaryDto(
     string TemplateName,
     string SemesterName,
     string AcademicYearName,
-    IReadOnlyList<DepartmentSummaryRowDto> Rows);
+    /// <summary>Đã lọc theo phạm vi người xem; trưởng bộ môn chỉ còn đúng dòng bộ môn mình.</summary>
+    IReadOnlyList<DepartmentSummaryRowDto> Rows,
+    /// <summary>
+    /// Dòng tổng ở chân bảng. LUÔN tính trên toàn trường kể cả khi Rows đã bị lọc, để
+    /// trưởng bộ môn còn có cái mà so — xem congviec2.md mục D6.
+    /// </summary>
+    int SchoolDepartmentCount,
+    int SchoolSectionCount,
+    int SchoolResponseCount,
+    decimal? SchoolAverageScore,
+    int SchoolWarningCount);
 
 // -------------------- Sheet 4: tách nguyên nhân học phần / giảng viên
 
@@ -266,6 +276,29 @@ public sealed record SemesterSurveyDashboardDto(
     int CourseIssueCount,
     /// <summary>Số học phần có biên độ điểm giữa các lớp quá rộng.</summary>
     int LecturerVarianceCount);
+
+/// <summary>
+/// Dải chỉ số gọn cho bảng điều khiển riêng của trưởng bộ môn. Mỗi con số của bộ môn
+/// đi kèm một con số toàn trường để so — mặt bằng LUÔN tính trên toàn bộ dữ liệu chứ
+/// không tính lại trong phạm vi bộ môn, xem congviec2.md mục D6.
+/// </summary>
+public sealed record DepartmentDashboardDto(
+    int SemesterSurveyId,
+    string TemplateName,
+    string SemesterName,
+    string AcademicYearName,
+    /// <summary>Rỗng khi người xem là quản trị, lúc đó số bộ môn chính là số toàn trường.</summary>
+    string? DepartmentName,
+    int SectionCount,
+    int SchoolSectionCount,
+    decimal CompletionRate,
+    decimal SchoolCompletionRate,
+    /// <summary>Null khi chưa lớp nào của bộ môn thu được phiếu hợp lệ.</summary>
+    decimal? AverageScore,
+    decimal? SchoolAverageScore,
+    /// <summary>Số lớp của bộ môn có điểm dưới <see cref="ReportThresholds.LowScore"/>.</summary>
+    int WeakSectionCount,
+    decimal WeakScoreThreshold);
 
 /// <summary>Kết quả một lần bấm tính lại điểm theo mẻ cho cả đợt khảo sát.</summary>
 public sealed record RecalculateScoresDto(
@@ -570,6 +603,14 @@ public interface ISurveyService
 
     /// <summary>Tổng quan một đợt khảo sát ở phạm vi toàn trường.</summary>
     Task<SurveyOperationResult<SemesterSurveyDashboardDto>> GetSemesterSurveyDashboardAsync(
+        int semesterSurveyId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Dải chỉ số gọn cho bảng điều khiển của trưởng bộ môn: số của bộ môn kèm số
+    /// toàn trường để so.
+    /// </summary>
+    Task<SurveyOperationResult<DepartmentDashboardDto>> GetDepartmentDashboardAsync(
         int semesterSurveyId,
         CancellationToken cancellationToken = default);
 
