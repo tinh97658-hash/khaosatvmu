@@ -824,6 +824,10 @@ giảng viên tương ứng. Một lần, xong thôi.
 
 ## 6. Các bước sẽ làm
 
+> **Đã làm xong toàn bộ 11 bước** trong ngày 22/08/2026. Danh sách dưới đây giữ
+> nguyên để đối chiếu; chi tiết từng bước xem nhật ký ở mục 10.
+
+
 1. Làm phần tự tạo tài khoản theo G1 và G2, gắn vào chỗ thêm giảng viên.
 2. Chạy backfill 111 bản ghi `Users` đang thiếu theo G3. Kiểm bằng cách cấp tay
    một profile cho một giảng viên rồi đăng nhập thử — không cấp profile thì chưa
@@ -966,4 +970,10 @@ _(chờ anh mô tả thêm)_
 | 2026-08-22 | Soát lại toàn file trước khi triển. Sửa sáu chỗ: bỏ đoạn thừa ở G3 nói ngược lại quyết định dùng migration, xếp lại G4 trước G4-b và E4 trước E5, sửa "bảy trang" thành "chín trang" ở F2, làm rõ chỗ trưởng bộ môn thêm giảng viên cũng sinh `Users`, và bỏ chữ "khớp email" còn sót trong bước 3. |
 | 2026-08-22 | Chốt nốt nhóm F. F-a: bốn thẻ theo việc phải làm — Lớp học phần, Giảng viên, Tiến độ thu phiếu, Phân tích chuyên sâu. F-b: không làm thông báo do người viết, và đợt này **chỉ làm một loại thông báo** là đếm giảng viên chưa xác định. F-c: có dải bốn ô chỉ số, mỗi ô kèm số toàn trường để so. F-d: hai loại thông báo còn lại tuỳ biến về sau. **Toàn bộ câu hỏi đã chốt, bắt đầu code.** |
 | 2026-08-22 | Xong bước 1 và 2 của nhóm G. Migration `20260821172439_LinkUsersToLecturers`: thêm `Users.LecturerId`, nối 1 tài khoản cũ, tạo 111 tài khoản mới. Đã thử cả vòng `Down` rồi `Up` lại, số liệu khớp. Viết `EnsureUserForLecturerAsync` và `SetLecturerAccountActiveAsync`, nối vào 6 chỗ: ba chỗ tạo giảng viên (thêm tay, import giảng viên, import lớp học phần), sửa, xoá, khôi phục. Thêm 5 test tích hợp chạy trên DB thật trong transaction rồi rollback. |
-| 2026-08-22 | Hai lỗi phát hiện lúc code, đều đã sửa và ghi lại ở G2 và G4-b: (1) thêm giảng viên bỏ trống email đang crash vì schema sau revert không cho email rỗng — đã ép email thành bắt buộc; (2) EF tự set `Users.LecturerId = NULL` khi xoá giảng viên nếu bản ghi `User` còn trong change tracker, dù khoá ngoại là `Restrict` — đã sửa bằng cách detach trước khi xoá. |
+| 2026-08-22 | Hai lỗi phát hiện lúc code nhóm G, đều đã sửa và ghi lại ở G2 và G4-b: (1) thêm giảng viên bỏ trống email đang crash vì schema sau revert không cho email rỗng — đã ép email thành bắt buộc; (2) EF tự set `Users.LecturerId = NULL` khi xoá giảng viên nếu bản ghi `User` còn trong change tracker, dù khoá ngoại là `Restrict` — đã sửa bằng cách detach trước khi xoá. |
+| 2026-08-22 | Xong D1: service `UserScope` đi thẳng qua khoá ngoại. Ba thứ thiết kế để khó dùng sai — `SeesEverything` cho quản trị, `SeesNothing` tách riêng cho ca bị giới hạn mà không tra ra bộ môn, và vai trò lấy theo profile đang hoạt động chứ không theo user. |
+| 2026-08-22 | Xong nhóm E: endpoint dựng lại danh sách giảng viên chưa xác định từ dữ liệu, cộng băng cảnh báo, modal gom theo giảng viên và nút tải Excel trên trang Lớp học phần. Nới tham số hàm xuất Excel thành `Omit<UnidentifiedLecturer, 'rowNumber'>` vì danh sách mới không có số dòng của tệp import nào. |
+| 2026-08-22 | Xong D3: lọc bốn danh sách đọc. Tài khoản Luật hàng hải từ 112 giảng viên xuống 14, 486 học phần xuống 28, 500 lớp xuống 115. Đã rà trước luồng công khai của sinh viên — `GetPublicSurveyAsync` truy vấn thẳng `db` nên không dính. |
+| 2026-08-22 | Xong D4 và D5. Thêm mã lỗi `CATALOG_OUT_OF_SCOPE` trả 403. Phát hiện lúc viết test: đặt kiểm phạm vi SAU validate thì lộ thông tin bộ môn khác qua chính mã lỗi trả về — đã đảo lại, kiểm phạm vi trước. Mở rộng ra ngoài bảng D4: chặn thêm ghi trên học phần và `ImportCoursesAsync`, vì trưởng bộ môn có `COURSES_ACCESS`. |
+| 2026-08-22 | Xong F1, F2 và D6. Dòng tổng của tab bộ môn trước đây cộng lại từ `rows` ở frontend nên lọc rows là mất luôn mặt bằng — đã thêm năm trường số toàn trường vào DTO và đổi nhãn thành "Toàn trường". Nguyên tắc D6 viết thành hàm dùng chung `VisibleTo` kèm chú thích, chỉ gọi ở bước cuối. |
+| 2026-08-22 | **Hết 11 bước.** 125 test, build và lint sạch cả hai phía. Còn lại để sau: hai loại thông báo ở F3 (giục tiến độ, lớp chậm) và phạm vi cho role `LECTURER`. |
