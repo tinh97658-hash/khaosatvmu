@@ -48,6 +48,7 @@ interface DashboardOverviewProps {
   campaigns: SurveyCampaign[];
   onOpenQR: (campaign: SurveyCampaign) => void;
   onNavigateTab: (tab: string) => void;
+  permissions: readonly string[];
 }
 
 interface QuickAction {

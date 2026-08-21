@@ -78,6 +78,18 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
+    // Phát vé bắt đầu làm bài. Nới tay hơn nộp bài vì bấm lại bao nhiêu lần cũng
+    // được, nhưng vẫn chặn kiểu quay vòng xin vé hàng loạt.
+    options.AddPolicy("PublicSurveyStart", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
 });
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -101,15 +113,44 @@ builder.Services.AddAntiforgery(options =>
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy(AuthPolicies.AdminAccess, policy =>
-        policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement("ADMIN_ACCESS")));
-    options.AddPolicy(AuthPolicies.SurveyManage, policy =>
-        policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement("SURVEY_MANAGE")));
-    options.AddPolicy(AuthPolicies.SurveyManageInOrganization, policy =>
-        policy.RequireAuthenticatedUser().AddRequirements(
-            new PermissionRequirement("SURVEY_MANAGE", "organizationUnitCode")));
-    options.AddPolicy(AuthPolicies.ViewReports, policy =>
-        policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement("VIEW_REPORTS")));
+    AddPermissionPolicy(AuthPolicies.UserAdminAccess, "USER_ADMIN_ACCESS");
+    AddPermissionPolicy(AuthPolicies.FacultiesAccess, "FACULTIES_ACCESS");
+    AddPermissionPolicy(AuthPolicies.DepartmentsAccess, "DEPARTMENTS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.LecturersAccess, "LECTURERS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.MajorsAccess, "MAJORS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.CoursesAccess, "COURSES_ACCESS");
+    AddPermissionPolicy(AuthPolicies.CourseSectionsAccess, "COURSE_SECTIONS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.CourseQuestionSetsAccess, "COURSE_QUESTION_SETS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.CourseCampaignsAccess, "COURSE_CAMPAIGNS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.ProgramCampaignsAccess, "PROGRAM_CAMPAIGNS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.ProgramCriteriaAccess, "PROGRAM_CRITERIA_ACCESS");
+    AddPermissionPolicy(AuthPolicies.ProgressAccess, "PROGRESS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.ReportsAccess, "REPORTS_ACCESS");
+    options.AddPolicy(AuthPolicies.SurveyOperationalRead, policy =>
+        policy.RequireAuthenticatedUser().AddRequirements(new AnyPermissionRequirement(
+            "PROGRESS_ACCESS",
+            "REPORTS_ACCESS",
+            "COURSE_CAMPAIGNS_ACCESS")));
+    AddAnyPermissionPolicy(AuthPolicies.FacultiesRead,
+        "FACULTIES_ACCESS", "DEPARTMENTS_ACCESS", "LECTURERS_ACCESS", "MAJORS_ACCESS",
+        "COURSES_ACCESS", "COURSE_SECTIONS_ACCESS", "REPORTS_ACCESS");
+    AddAnyPermissionPolicy(AuthPolicies.DepartmentsRead,
+        "FACULTIES_ACCESS", "DEPARTMENTS_ACCESS", "LECTURERS_ACCESS", "COURSES_ACCESS",
+        "COURSE_SECTIONS_ACCESS", "REPORTS_ACCESS");
+    AddAnyPermissionPolicy(AuthPolicies.LecturersRead,
+        "DEPARTMENTS_ACCESS", "LECTURERS_ACCESS", "COURSE_SECTIONS_ACCESS", "REPORTS_ACCESS");
+    AddAnyPermissionPolicy(AuthPolicies.MajorsRead,
+        "FACULTIES_ACCESS", "MAJORS_ACCESS");
+    AddAnyPermissionPolicy(AuthPolicies.CoursesRead,
+        "DEPARTMENTS_ACCESS", "COURSES_ACCESS", "COURSE_SECTIONS_ACCESS");
+
+    void AddPermissionPolicy(string policyName, string permissionCode) =>
+        options.AddPolicy(policyName, policy =>
+            policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement(permissionCode)));
+
+    void AddAnyPermissionPolicy(string policyName, params string[] permissionCodes) =>
+        options.AddPolicy(policyName, policy =>
+            policy.RequireAuthenticatedUser().AddRequirements(new AnyPermissionRequirement(permissionCodes)));
 });
 
 builder.Services.AddHttpClient<IAgentMemoryService, AgentMemoryService>();
@@ -118,9 +159,22 @@ builder.Services.AddScoped<IAuthSessionService, EfAuthSessionService>();
 builder.Services.AddScoped<IUserAdministrationService, EfUserAdministrationService>();
 builder.Services.AddScoped<ICatalogService, EfCatalogService>();
 builder.Services.AddScoped<ISurveyService, EfSurveyService>();
+// Vé bắt đầu làm bài. Khóa ký khác nhau giữa máy dev và máy chạy thật, lấy từ
+// cấu hình chứ không viết trong mã. Đổi khóa thì mọi vé đang phát mất hiệu lực.
+builder.Services.AddSingleton(_ =>
+{
+    var signingKey = builder.Configuration["SurveyTicket:SigningKey"];
+    if (string.IsNullOrWhiteSpace(signingKey))
+    {
+        throw new InvalidOperationException(
+            "SurveyTicket:SigningKey is required. Set it via environment variable SurveyTicket__SigningKey.");
+    }
+    return new SurveyStartTicket(signingKey);
+});
 builder.Services.AddScoped<IReportService, EfReportService>();
 builder.Services.AddScoped<ApplicationCookieEvents>();
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, AnyPermissionAuthorizationHandler>();
 
 var app = builder.Build();
 

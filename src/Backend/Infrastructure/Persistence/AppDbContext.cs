@@ -15,6 +15,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Faculty> Faculties => Set<Faculty>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Major> Majors => Set<Major>();
+    public DbSet<Position> Positions => Set<Position>();
     public DbSet<Course> Courses => Set<Course>();
     public DbSet<Lecturer> Lecturers => Set<Lecturer>();
     public DbSet<AcademicYear> AcademicYears => Set<AcademicYear>();
@@ -26,6 +27,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<SurveyQuestion> SurveyQuestions => Set<SurveyQuestion>();
     public DbSet<SemesterSurvey> SemesterSurveys => Set<SemesterSurvey>();
     public DbSet<CourseSectionSurvey> CourseSectionSurveys => Set<CourseSectionSurvey>();
+    public DbSet<CourseSectionSurveyQuestionScore> CourseSectionSurveyQuestionScores =>
+        Set<CourseSectionSurveyQuestionScore>();
     public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
     public DbSet<SurveyResponseAnswer> SurveyResponseAnswers => Set<SurveyResponseAnswer>();
     public DbSet<ChangeAuditLog> ChangeAuditLogs => Set<ChangeAuditLog>();
@@ -37,6 +40,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<Faculty>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Department>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Major>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Position>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<AcademicYear>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Semester>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<CourseSection>().HasQueryFilter(e => !e.IsDeleted);
@@ -95,6 +99,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.Code).HasMaxLength(150).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.Category).HasMaxLength(100).IsRequired();
             entity.HasIndex(x => x.Code).IsUnique();
         });
 
@@ -145,12 +150,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.ToTable("Departments");
             entity.HasKey(x => x.DepartmentId);
+            entity.Property(x => x.DepartmentId).ValueGeneratedNever();
             entity.Property(x => x.DepartmentName).IsRequired();
             entity.HasIndex(x => x.FacultyId);
             entity.HasOne<Faculty>()
                 .WithMany()
                 .HasForeignKey(x => x.FacultyId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Position>(entity =>
+        {
+            entity.ToTable("Positions");
+            entity.HasKey(x => x.PositionId);
+            entity.Property(x => x.PositionName).IsRequired();
+            entity.HasIndex(x => x.PositionName).IsUnique();
         });
 
         modelBuilder.Entity<Major>(entity =>
@@ -190,9 +204,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.ToTable("CourseSections");
             entity.HasKey(x => x.CourseSectionId);
             entity.Property(x => x.SectionName).IsRequired();
+            entity.Property(x => x.UnidentifiedLecturerName).HasMaxLength(200);
             entity.HasIndex(x => new { x.CourseId, x.SemesterId, x.SectionName }).IsUnique();
             entity.HasIndex(x => x.SemesterId);
             entity.HasIndex(x => x.LecturerId);
+            // Lọc nhanh các lớp còn chờ bổ sung email giảng viên.
+            entity.HasIndex(x => x.UnidentifiedLecturerName)
+                .HasFilter("\"UnidentifiedLecturerName\" IS NOT NULL");
             entity.HasOne<Course>()
                 .WithMany()
                 .HasForeignKey(x => x.CourseId)
@@ -212,9 +230,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.ToTable("Lecturers");
             entity.HasKey(x => x.LecturerId);
             entity.Property(x => x.FullName).IsRequired();
+            entity.Property(x => x.Email).IsRequired();
             entity.HasIndex(x => x.Email).IsUnique();
             entity.HasIndex(x => x.DepartmentId);
             entity.HasIndex(x => x.FacultyId);
+            entity.HasIndex(x => x.PositionId);
             entity.HasOne<Department>()
                 .WithMany()
                 .HasForeignKey(x => x.DepartmentId)
@@ -222,6 +242,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasOne<Faculty>()
                 .WithMany()
                 .HasForeignKey(x => x.FacultyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Position>()
+                .WithMany()
+                .HasForeignKey(x => x.PositionId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -231,7 +255,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasKey(x => x.CourseId);
             entity.Property(x => x.CourseCode).IsRequired();
             entity.Property(x => x.CourseName).IsRequired();
-            entity.Property(x => x.CourseType).IsRequired().HasDefaultValue(string.Empty);
+            // Nullable: học phần tạo tự động khi import lớp học phần chưa biết loại.
+            entity.Property(x => x.CourseType).HasMaxLength(20);
             entity.HasIndex(x => x.CourseCode).IsUnique();
             entity.HasIndex(x => x.DepartmentId);
             entity.HasIndex(x => x.FacultyId);
@@ -254,9 +279,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         // service (dtb.md cho phép bỏ trigger và validate trong backend).
         modelBuilder.Entity<AnswerScale>(entity =>
         {
-            entity.ToTable("AnswerScales");
+            entity.ToTable("AnswerScales", table =>
+                table.HasCheckConstraint(
+                    "CK_AnswerScales_ScaleKind",
+                    "\"ScaleKind\" IN ('Options', 'Text')"));
             entity.HasKey(x => x.AnswerScaleId);
             entity.Property(x => x.AnswerScaleName).IsRequired();
+            entity.Property(x => x.ScaleKind).HasMaxLength(20).IsRequired();
         });
 
         modelBuilder.Entity<AnswerScaleOption>(entity =>
@@ -277,23 +306,26 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.ToTable("SurveyTemplates");
             entity.HasKey(x => x.SurveyTemplateId);
             entity.Property(x => x.TemplateName).IsRequired();
-            entity.HasIndex(x => x.AnswerScaleId);
-            entity.HasOne<AnswerScale>()
-                .WithMany()
-                .HasForeignKey(x => x.AnswerScaleId)
-                .OnDelete(DeleteBehavior.Restrict);
         });
 
+        // Thang trả lời gắn ở từng câu hỏi nên một bộ trộn được nhiều loại thang.
         modelBuilder.Entity<SurveyQuestion>(entity =>
         {
             entity.ToTable("SurveyQuestions");
             entity.HasKey(x => x.QuestionId);
             entity.Property(x => x.QuestionText).IsRequired();
+            // Ràng buộc "chỉ đặt bẫy trên thang Options và mức phải có thật" cần
+            // tra sang bảng khác nên kiểm ở tầng service, không đặt CHECK ở đây.
             entity.HasIndex(x => x.SurveyTemplateId);
+            entity.HasIndex(x => x.AnswerScaleId);
             entity.HasOne<SurveyTemplate>()
                 .WithMany()
                 .HasForeignKey(x => x.SurveyTemplateId)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<AnswerScale>()
+                .WithMany()
+                .HasForeignKey(x => x.AnswerScaleId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Đợt khảo sát theo học kỳ và bài khảo sát riêng của từng lớp học phần.
@@ -321,6 +353,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                     "\"EndTime\" > \"StartTime\""));
             entity.HasKey(x => x.CourseSectionSurveyId);
             entity.Property(x => x.LinkToken).IsRequired();
+            // Ảnh chụp điểm của lần bấm tính gần nhất, không tự cập nhật.
+            entity.Property(x => x.AverageScore).HasColumnType("numeric(4,2)");
+            entity.Property(x => x.TotalResponseCount).HasDefaultValue(0);
+            entity.Property(x => x.ValidResponseCount).HasDefaultValue(0);
+            entity.Property(x => x.InvalidResponseCount).HasDefaultValue(0);
             entity.HasIndex(x => x.LinkToken).IsUnique();
             entity.HasIndex(x => new { x.SemesterSurveyId, x.CourseSectionId }).IsUnique();
             entity.HasIndex(x => x.CourseSectionId);
@@ -334,25 +371,46 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // Điểm từng câu đã gộp sẵn của mỗi lớp. Ghi lại trọn vẹn mỗi lần bấm tính
+        // điểm; giữa hai lần bấm thì không ai đụng vào.
+        modelBuilder.Entity<CourseSectionSurveyQuestionScore>(entity =>
+        {
+            entity.ToTable("CourseSectionSurveyQuestionScores");
+            entity.HasKey(x => new { x.CourseSectionSurveyId, x.QuestionId });
+            entity.Property(x => x.AverageScore).HasColumnType("numeric(4,2)");
+            entity.HasOne<CourseSectionSurvey>()
+                .WithMany()
+                .HasForeignKey(x => x.CourseSectionSurveyId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<SurveyQuestion>()
+                .WithMany()
+                .HasForeignKey(x => x.QuestionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<SurveyResponse>(entity =>
         {
             entity.ToTable("SurveyResponses");
             entity.HasKey(x => x.ResponseId);
             entity.Property(x => x.Score).HasColumnType("numeric(4,2)");
+            entity.Property(x => x.IsValid).HasDefaultValue(true);
+            entity.Property(x => x.RejectionReasons).HasMaxLength(200);
             entity.HasIndex(x => x.CourseSectionSurveyId);
+            // Tính điểm trung bình lớp luôn lọc theo IsValid nên đánh chỉ mục ghép.
+            entity.HasIndex(x => new { x.CourseSectionSurveyId, x.IsValid });
             entity.HasOne<CourseSectionSurvey>()
                 .WithMany()
                 .HasForeignKey(x => x.CourseSectionSurveyId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // "AnswerValue" lưu dạng chữ cho cả hai loại thang: câu thang Options lưu
+        // số mức ("1".."5"), câu thang Text lưu nội dung người học gõ.
         modelBuilder.Entity<SurveyResponseAnswer>(entity =>
         {
-            entity.ToTable("SurveyResponseAnswers", table =>
-                table.HasCheckConstraint(
-                    "CK_SurveyResponseAnswers_SelectedValue",
-                    "\"SelectedValue\" BETWEEN 1 AND 5"));
+            entity.ToTable("SurveyResponseAnswers");
             entity.HasKey(x => new { x.ResponseId, x.QuestionId });
+            entity.Property(x => x.AnswerValue).HasMaxLength(2000).IsRequired();
             entity.HasIndex(x => x.QuestionId);
             entity.HasOne(x => x.SurveyResponse)
                 .WithMany()

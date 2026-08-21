@@ -8,6 +8,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  TriangleAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
@@ -27,6 +28,11 @@ import { useSemester } from '../context/semesterContext';
 interface ClassesPageProps {
   courses: Course[];
   lecturers: Lecturer[];
+  /**
+   * Gọi sau khi import lớp học phần, vì bước đó có thể tạo thêm học phần và
+   * giảng viên mà hai danh mục ở App chưa biết.
+   */
+  onCatalogChanged: () => Promise<void>;
 }
 
 interface YearForm {
@@ -58,7 +64,11 @@ const emptySectionForm: SectionForm = {
 const errorCodeOf = (error: unknown): string =>
   error instanceof ApiError ? error.errorCode : 'API_REQUEST_FAILED';
 
-export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) => {
+export const ClassesPage: React.FC<ClassesPageProps> = ({
+  courses,
+  lecturers,
+  onCatalogChanged,
+}) => {
   const {
     academicYears,
     activeSemesterId,
@@ -335,7 +345,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) 
     setEditingSection(section);
     setSectionForm({
       courseId: String(section.courseId),
-      lecturerId: String(section.lecturerId),
+      lecturerId: section.lecturerId === null ? '' : String(section.lecturerId),
       sectionName: section.sectionName,
       classSize: String(section.classSize),
     });
@@ -356,22 +366,22 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) 
       setSectionError('Vui lòng chọn học phần và nhập tên lớp.');
       return;
     }
-    // "CourseSections"."LecturerId" là NOT NULL.
-    if (!sectionForm.lecturerId) {
-      setSectionError('Vui lòng chọn giảng viên.');
-      return;
-    }
     if (!Number.isFinite(classSize) || classSize < 0) {
       setSectionError('Sĩ số không hợp lệ.');
       return;
     }
 
+    // Để trống giảng viên là hợp lệ: lớp import từ tệp thiếu email vẫn phải sửa được.
+    // Chọn được giảng viên thì tên chưa xác định bị xoá đi.
+    const lecturerId = sectionForm.lecturerId ? Number(sectionForm.lecturerId) : null;
     const payload = {
       courseId: Number(sectionForm.courseId),
       semesterId: selectedSemesterId,
-      lecturerId: Number(sectionForm.lecturerId),
+      lecturerId,
       sectionName,
       classSize,
+      unidentifiedLecturerName:
+        lecturerId === null ? (editingSection?.unidentifiedLecturerName ?? null) : null,
     };
 
     setSavingSection(true);
@@ -415,6 +425,10 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) 
       throw new ApiError(400, 'CATALOG_SEMESTER_NOT_FOUND');
     }
     const result = await catalogApi.importCourseSections(selectedSemesterId, rows);
+    // Nạp học phần và giảng viên TRƯỚC, vì import vừa rồi có thể đã tự tạo thêm.
+    // Nạp lớp học phần trước thì bảng vẽ ra khi hai danh mục kia còn thiếu,
+    // cột Học phần và Giảng viên sẽ tra không ra tên.
+    await onCatalogChanged();
     await reloadSections();
     if (result.createdCount > 0) {
       toast.success(`Đã import ${result.createdCount} lớp học phần`, {
@@ -446,6 +460,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) 
       key: 'courseId',
       header: 'Học phần',
       width: '260px',
+      filterValue: (item) => courseOf(item.courseId)?.courseName ?? '—',
       render: (item) => {
         const course = courseOf(item.courseId);
         return (
@@ -460,19 +475,42 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) 
       key: 'sectionName',
       header: 'Tên lớp',
       width: '160px',
+      filterValue: (item) => item.sectionName,
       render: (item) => <span className="catalog-cell-primary">{item.sectionName}</span>,
     },
     {
       key: 'classSize',
       header: 'Sĩ số',
       width: '90px',
+      filterValue: (item) => String(item.classSize),
+      numeric: true,
       render: (item) => item.classSize,
     },
     {
       key: 'lecturerId',
       header: 'Giảng viên',
       width: '260px',
+      // Lọc gộp cả giảng viên có mã lẫn tên chưa xác định, để admin lọc riêng
+      // ra các lớp còn thiếu email.
+      filterValue: (item) =>
+        item.lecturerId === null
+          ? `⚠ ${item.unidentifiedLecturerName || 'Chưa có giảng viên'}`
+          : (lecturerOf(item.lecturerId)?.fullName ?? '—'),
       render: (item) => {
+        // Lớp chưa xác định được giảng viên: hiện tên đọc từ tệp import kèm
+        // cảnh báo để quản trị hoặc trưởng bộ môn biết cần bổ sung email.
+        if (item.lecturerId === null) {
+          return (
+            <div className="catalog-cell-unidentified">
+              <div className="catalog-cell-primary">
+                <TriangleAlert aria-hidden="true" size={14} />
+                {item.unidentifiedLecturerName || 'Chưa có giảng viên'}
+              </div>
+              <div className="catalog-cell-meta">Chưa xác định — thiếu email</div>
+            </div>
+          );
+        }
+
         const lecturer = lecturerOf(item.lecturerId);
         return (
           <div>
@@ -881,9 +919,8 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) 
               onChange={(event) =>
                 setSectionForm((prev) => ({ ...prev, lecturerId: event.target.value }))
               }
-              required
             >
-              <option value="">Chọn giảng viên</option>
+              <option value="">Chưa xác định</option>
               {lecturers.map((lecturer) => (
                 <option key={lecturer.lecturerId} value={String(lecturer.lecturerId)}>
                   {lecturer.fullName}
@@ -891,6 +928,14 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ courses, lecturers }) 
                 </option>
               ))}
             </select>
+            {!sectionForm.lecturerId && editingSection?.unidentifiedLecturerName && (
+              <small className="catalog-field-warning">
+                <TriangleAlert aria-hidden="true" size={13} />
+                Tên đọc từ tệp import: <strong>
+                  {editingSection.unidentifiedLecturerName}
+                </strong>. Chọn đúng giảng viên để gắn mã và xoá cảnh báo này.
+              </small>
+            )}
           </div>
 
           <div className="catalog-form-grid catalog-form-grid--2">

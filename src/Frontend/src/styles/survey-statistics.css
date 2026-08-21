@@ -1,0 +1,421 @@
+/* ---------------------------------------------------------------------------
+   Trang "Bảng dữ liệu khảo sát". Bảng rất rộng vì mỗi câu hỏi chấm điểm là một
+   cột, nên phải cuộn ngang và ghim ba cột đầu.
+   --------------------------------------------------------------------------- */
+
+/* Trang chiếm trọn chiều cao vùng nội dung để dòng tổng kết nằm sát đáy màn hình
+   thay vì lơ lửng giữa trang. Vùng cuộn là phần duy nhất co giãn; thanh công cụ
+   và các băng thông báo giữ nguyên chiều cao của chúng. */
+.survey-statistics-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.statistics-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e0e6ea;
+  background: #ffffff;
+  flex: 0 0 auto;
+}
+
+.statistics-toolbar .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 240px;
+  margin: 0;
+}
+
+.statistics-toolbar .form-group > span {
+  color: #40505a;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.statistics-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.statistics-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-left: 3px solid #0788b8;
+  background: #f2f8fa;
+  color: #40505a;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.survey-statistics-page .admin-alert,
+.survey-statistics-page .operations-empty {
+  flex: 0 0 auto;
+}
+
+/* Chú thích câu bẫy: tô khác để mắt bắt được ngay khi thắc mắc "sao thiếu câu". */
+.statistics-trap-note {
+  padding: 1px 8px;
+  border: 1px solid #f3c7c2;
+  border-radius: 999px;
+  background: #fef3f2;
+  color: #b42318;
+}
+
+/* Chiếm hết chỗ trống còn lại. min-height: 0 là bắt buộc, nếu thiếu thì flex item
+   không co xuống dưới kích thước nội dung và bảng sẽ tràn khỏi trang. */
+.statistics-table-scroll {
+  flex: 1 1 auto;
+  min-height: 200px;
+  overflow: auto;
+  border: 1px solid #dfe4e8;
+  background: #ffffff;
+  outline: none;
+}
+
+.statistics-table-scroll:focus-visible {
+  box-shadow: inset 0 0 0 2px #0788b8;
+}
+
+/* width 100% để bảng ít cột vẫn trải hết chiều ngang thay vì co về bề rộng nội
+   dung. Bảng nhiều cột vẫn tự rộng hơn và cuộn ngang như thường. */
+.statistics-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: #20262c;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Dùng cho bảng CÓ dòng tổng kết: kéo bảng cao bằng khung cuộn để dòng cuối
+   nằm sát đáy ngay cả khi ít dòng. Ô đệm dưới đây nuốt hết chỗ thừa. */
+.statistics-table--fill {
+  height: 100%;
+}
+
+.statistics-table .table-spacer td {
+  height: 100%;
+  padding: 0;
+  border-right: 0;
+  border-bottom: 0;
+  background: #ffffff;
+}
+
+.statistics-table th,
+.statistics-table td {
+  padding: 6px 10px;
+  border-right: 1px solid #eef2f4;
+  border-bottom: 1px solid #eef2f4;
+  text-align: left;
+}
+
+/* Hàng tiêu đề ghim khi cuộn dọc. z-index cao hơn ô thân để không bị đè. */
+.statistics-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f7f9fa;
+  color: #404a52;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.statistics-table tbody tr:hover td {
+  background: #f7fafb;
+}
+
+.statistics-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cột ghim hai bên khi cuộn ngang. Phải có nền đục, nếu không nội dung phía sau
+   sẽ hiện xuyên qua. */
+.statistics-table .col-left,
+.statistics-table .col-right {
+  position: sticky;
+  z-index: 1;
+  background: #ffffff;
+}
+
+.statistics-table thead .col-left,
+.statistics-table thead .col-right {
+  z-index: 3;
+  background: #f7f9fa;
+}
+
+.statistics-table tbody tr:hover .col-left,
+.statistics-table tbody tr:hover .col-right {
+  background: #f7fafb;
+}
+
+/* Cột ghim phải chốt CỨNG bề rộng: giá trị `left` của cột sau là tổng bề rộng
+   các cột trước, lệch một pixel là cột này đè lên cột kia. Nội dung dài thì cắt
+   bằng dấu ba chấm chứ không cho ô nở ra. */
+.statistics-table .col-left,
+.statistics-table .col-right {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ba cột trái của tab chuẩn hoá: Mã HP, Lớp, Học phần. */
+.statistics-table .col-left-1 { left: 0; width: 86px; min-width: 86px; max-width: 86px; }
+.statistics-table .col-left-2 { left: 86px; width: 66px; min-width: 66px; max-width: 66px; }
+.statistics-table .col-left-3 {
+  left: 152px;
+  width: 190px;
+  min-width: 190px;
+  max-width: 190px;
+  border-right: 1px solid #cfd7dc;
+}
+
+/* Năm cột phải, đánh số từ mép phải vào trong. */
+.statistics-table .col-right-1 { right: 0; min-width: 104px; }
+.statistics-table .col-right-2 { right: 104px; min-width: 84px; }
+.statistics-table .col-right-3 { right: 188px; min-width: 100px; }
+.statistics-table .col-right-4 { right: 288px; min-width: 100px; }
+.statistics-table .col-right-5 {
+  right: 388px;
+  min-width: 104px;
+  border-left: 1px solid #cfd7dc;
+}
+
+/* Dòng tổng kết ghim đáy bảng. z-index cao hơn ô thân, và ô vừa ghim trái/phải
+   vừa ghim đáy thì phải cao hơn nữa để không bị ô thường đè lên. */
+.statistics-table tfoot th,
+.statistics-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  border-top: 1px solid #cfd7dc;
+  font-weight: 650;
+}
+
+.statistics-table tfoot .col-left,
+.statistics-table tfoot .col-right {
+  z-index: 4;
+}
+
+/* Ô trung bình nền xanh, ô tổng nền vàng — theo đúng mẫu Excel. */
+.statistics-table tfoot .is-mean {
+  background: #e8f5ec;
+  color: #0f6b47;
+}
+
+.statistics-table tfoot .is-sum {
+  background: #fdf4d3;
+  color: #7a5b00;
+}
+
+.statistics-table tfoot th,
+.statistics-table tfoot td:not(.is-mean):not(.is-sum) {
+  background: #f7f9fa;
+}
+
+/* ------------------------------------- Trang phân tích chuyên sâu (2 tab) */
+
+.analysis-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+  flex: 0 0 auto;
+}
+
+.analysis-tab {
+  padding: 7px 16px;
+  border: 1px solid #dfe4e8;
+  border-bottom: 0;
+  background: #f2f5f7;
+  color: #40505a;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.analysis-tab:hover {
+  background: #eef7fb;
+}
+
+.analysis-tab.is-active {
+  border-color: #0788b8;
+  border-bottom: 0;
+  background: #ffffff;
+  color: #036e99;
+  box-shadow: inset 0 2px 0 #0788b8;
+}
+
+.analysis-hint {
+  margin: 0 0 12px;
+  color: #68737d;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+/* Bảng nhóm khoa/viện đứng riêng phía trên, không cần cuộn. */
+.analysis-group-table {
+  margin-bottom: 12px;
+  overflow-x: auto;
+  border: 1px solid #dfe4e8;
+  background: #ffffff;
+  flex: 0 0 auto;
+}
+
+/* Hai cột trái của tab tổng hợp bộ môn. Bề rộng khác tab chuẩn hoá nên phải có
+   bộ lớp riêng, dùng chung sẽ lệch `left` và sinh ra cảnh đè cột. */
+.statistics-table .col-dept-1 { left: 0; width: 150px; min-width: 150px; max-width: 150px; }
+.statistics-table .col-dept-2 {
+  left: 150px;
+  width: 200px;
+  min-width: 200px;
+  max-width: 200px;
+  border-right: 1px solid #cfd7dc;
+}
+
+/* Hai cột trái của tab chẩn đoán học phần: Mã HP, Tên học phần. */
+.statistics-table .col-course-1 { left: 0; width: 96px; min-width: 96px; max-width: 96px; }
+.statistics-table .col-course-2 {
+  left: 96px;
+  width: 240px;
+  min-width: 240px;
+  max-width: 240px;
+  border-right: 1px solid #cfd7dc;
+}
+
+/* Bộ lọc của tab báo cáo giảng viên. Dùng đúng khung của thanh công cụ trên đầu
+   trang để hai hàng chọn trông là một hệ, không phải hai kiểu khác nhau. */
+.analysis-picker .form-group {
+  flex: 1 1 200px;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+/* Tên giảng viên nổi hơn phần còn lại của băng tóm tắt, nhưng vẫn nằm trong
+   băng `statistics-summary` chung để không đẻ thêm một kiểu thẻ riêng. */
+.statistics-summary .summary-title {
+  color: #20262c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Mỗi bảng của tab giảng viên là một khối: tiêu đề đứng ngoài khung cuộn để
+   dòng tiêu đề của bảng ghim được lên đầu khi cuộn. */
+.analysis-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-bottom: 12px;
+  flex: 0 0 auto;
+}
+
+.analysis-section:last-child {
+  margin-bottom: 0;
+}
+
+/* Bảng so sánh dài hơn nên nhận hết chỗ trống còn lại của trang. */
+.analysis-section--grow {
+  flex: 1 1 auto;
+}
+
+.analysis-section-title {
+  margin: 0 0 6px;
+  color: #40505a;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Bảng các lớp thường chỉ vài dòng: cho cao tự nhiên, chỉ cuộn khi quá dài. */
+.analysis-scroll--compact {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 240px;
+}
+
+/* Chênh lệch so với mặt bằng bộ môn: âm đỏ, dương xanh. */
+.delta--down { color: #b3261e; font-weight: 650; }
+.delta--up { color: #0f6b47; font-weight: 650; }
+
+/* Thang màu điểm, theo đúng mẫu Excel: đỏ → cam → vàng → xanh. */
+.statistics-table .score-band {
+  font-weight: 650;
+}
+
+.statistics-table .score-band--bad { background: #f8c9c4; color: #8a1c14; }
+.statistics-table .score-band--poor { background: #fbd9b5; color: #8a4b0a; }
+.statistics-table .score-band--fair { background: #fdefb8; color: #6b5300; }
+.statistics-table .score-band--good { background: #cdeccd; color: #1a6b2f; }
+
+.verdict {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Dòng đáng chú ý nhất của cả sheet: chuẩn hoá làm đảo kết luận. */
+.verdict--flip {
+  border: 1px solid #b58bd6;
+  background: #f4ecfa;
+  color: #6b2fa0;
+}
+
+.verdict--below {
+  border: 1px solid #f3c7c2;
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.verdict--above {
+  border: 1px solid #cfe6d8;
+  background: #f2faf6;
+  color: #0f6b47;
+}
+
+.verdict--muted {
+  border: 1px solid #dfe4e8;
+  background: #f2f5f7;
+  color: #68737d;
+  font-style: italic;
+}
+
+/* Điểm dưới ngưỡng: tô để nhặt nhanh lớp cần để ý. */
+.statistics-table .is-weak {
+  background: #fef3f2;
+  color: #b42318;
+  font-weight: 650;
+}
+
+.statistics-table .is-total {
+  font-weight: 700;
+}
+
+.statistics-table .is-flagged {
+  color: #b42318;
+  font-weight: 650;
+}
+
+@media (max-width: 900px) {
+  .statistics-toolbar-actions {
+    margin-left: 0;
+  }
+
+  .statistics-toolbar .form-group {
+    min-width: 0;
+    flex: 1 1 200px;
+  }
+}

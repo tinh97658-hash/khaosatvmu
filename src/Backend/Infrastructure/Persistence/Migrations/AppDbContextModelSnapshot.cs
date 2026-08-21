@@ -72,9 +72,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("ScaleKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.HasKey("AnswerScaleId");
 
-                    b.ToTable("AnswerScales", (string)null);
+                    b.ToTable("AnswerScales", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AnswerScales_ScaleKind", "\"ScaleKind\" IN ('Options', 'Text')");
+                        });
                 });
 
             modelBuilder.Entity("Domain.AnswerScaleOption", b =>
@@ -251,10 +259,8 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("CourseType")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasDefaultValue("");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<int>("Credits")
                         .HasColumnType("integer");
@@ -308,7 +314,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("LecturerId")
+                    b.Property<int?>("LecturerId")
                         .HasColumnType("integer");
 
                     b.Property<string>("SectionName")
@@ -318,11 +324,18 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("SemesterId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("UnidentifiedLecturerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.HasKey("CourseSectionId");
 
                     b.HasIndex("LecturerId");
 
                     b.HasIndex("SemesterId");
+
+                    b.HasIndex("UnidentifiedLecturerName")
+                        .HasFilter("\"UnidentifiedLecturerName\" IS NOT NULL");
 
                     b.HasIndex("CourseId", "SemesterId", "SectionName")
                         .IsUnique();
@@ -338,6 +351,9 @@ namespace Infrastructure.Persistence.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("CourseSectionSurveyId"));
 
+                    b.Property<decimal?>("AverageScore")
+                        .HasColumnType("numeric(4,2)");
+
                     b.Property<int>("CourseSectionId")
                         .HasColumnType("integer");
 
@@ -350,6 +366,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("EndTime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("InvalidResponseCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -357,11 +378,24 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("ScoreCalculatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("SemesterSurveyId")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("StartTime")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TotalResponseCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("ValidResponseCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.HasKey("CourseSectionSurveyId");
 
@@ -379,13 +413,31 @@ namespace Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Domain.CourseSectionSurveyQuestionScore", b =>
+                {
+                    b.Property<int>("CourseSectionSurveyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuestionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AnswerCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("AverageScore")
+                        .HasColumnType("numeric(4,2)");
+
+                    b.HasKey("CourseSectionSurveyId", "QuestionId");
+
+                    b.HasIndex("QuestionId");
+
+                    b.ToTable("CourseSectionSurveyQuestionScores", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Department", b =>
                 {
                     b.Property<int>("DepartmentId")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("DepartmentId"));
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
@@ -448,6 +500,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("Email")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int?>("FacultyId")
@@ -463,6 +516,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("text");
 
+                    b.Property<int?>("PositionId")
+                        .HasColumnType("integer");
+
                     b.HasKey("LecturerId");
 
                     b.HasIndex("DepartmentId");
@@ -471,6 +527,8 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.HasIndex("FacultyId");
+
+                    b.HasIndex("PositionId");
 
                     b.ToTable("Lecturers", (string)null);
                 });
@@ -509,6 +567,11 @@ namespace Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -529,6 +592,32 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Permissions", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Position", b =>
+                {
+                    b.Property<int>("PositionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("PositionId"));
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PositionName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("PositionId");
+
+                    b.HasIndex("PositionName")
+                        .IsUnique();
+
+                    b.ToTable("Positions", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Role", b =>
@@ -665,6 +754,12 @@ namespace Infrastructure.Persistence.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("QuestionId"));
 
+                    b.Property<int>("AnswerScaleId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AttentionCheckValue")
+                        .HasColumnType("integer");
+
                     b.Property<string>("QuestionText")
                         .IsRequired()
                         .HasColumnType("text");
@@ -673,6 +768,8 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("QuestionId");
+
+                    b.HasIndex("AnswerScaleId");
 
                     b.HasIndex("SurveyTemplateId");
 
@@ -693,6 +790,15 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("CourseSectionSurveyId")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("IsValid")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("RejectionReasons")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<decimal>("Score")
                         .HasColumnType("numeric(4,2)");
 
@@ -702,6 +808,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasKey("ResponseId");
 
                     b.HasIndex("CourseSectionSurveyId");
+
+                    b.HasIndex("CourseSectionSurveyId", "IsValid");
 
                     b.ToTable("SurveyResponses", (string)null);
                 });
@@ -714,17 +822,16 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("QuestionId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("SelectedValue")
-                        .HasColumnType("integer");
+                    b.Property<string>("AnswerValue")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
                     b.HasKey("ResponseId", "QuestionId");
 
                     b.HasIndex("QuestionId");
 
-                    b.ToTable("SurveyResponseAnswers", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_SurveyResponseAnswers_SelectedValue", "\"SelectedValue\" BETWEEN 1 AND 5");
-                        });
+                    b.ToTable("SurveyResponseAnswers", (string)null);
                 });
 
             modelBuilder.Entity("Domain.SurveyTemplate", b =>
@@ -734,9 +841,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("SurveyTemplateId"));
-
-                    b.Property<int>("AnswerScaleId")
-                        .HasColumnType("integer");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -752,8 +856,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("SurveyTemplateId");
-
-                    b.HasIndex("AnswerScaleId");
 
                     b.ToTable("SurveyTemplates", (string)null);
                 });
@@ -946,8 +1048,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasOne("Domain.Lecturer", null)
                         .WithMany()
                         .HasForeignKey("LecturerId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Domain.Semester", null)
                         .WithMany()
@@ -971,6 +1072,21 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Domain.CourseSectionSurveyQuestionScore", b =>
+                {
+                    b.HasOne("Domain.CourseSectionSurvey", null)
+                        .WithMany()
+                        .HasForeignKey("CourseSectionSurveyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.SurveyQuestion", null)
+                        .WithMany()
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Domain.Department", b =>
                 {
                     b.HasOne("Domain.Faculty", null)
@@ -989,6 +1105,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasOne("Domain.Faculty", null)
                         .WithMany()
                         .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Domain.Position", null)
+                        .WithMany()
+                        .HasForeignKey("PositionId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
@@ -1042,6 +1163,12 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.SurveyQuestion", b =>
                 {
+                    b.HasOne("Domain.AnswerScale", null)
+                        .WithMany()
+                        .HasForeignKey("AnswerScaleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("Domain.SurveyTemplate", null)
                         .WithMany()
                         .HasForeignKey("SurveyTemplateId")
@@ -1073,15 +1200,6 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("SurveyResponse");
-                });
-
-            modelBuilder.Entity("Domain.SurveyTemplate", b =>
-                {
-                    b.HasOne("Domain.AnswerScale", null)
-                        .WithMany()
-                        .HasForeignKey("AnswerScaleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Domain.UserProfile", b =>

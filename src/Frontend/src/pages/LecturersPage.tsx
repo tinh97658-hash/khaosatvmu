@@ -1,17 +1,19 @@
-import React, { useState } from 'react';
-import { FileSpreadsheet, Pencil, Trash2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { BriefcaseBusiness, FileSpreadsheet, LoaderCircle, Pencil, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { LecturerImportDialog } from '../components/LecturerImportDialog';
+import { ApiError } from '../services/apiClient';
 import {
+  catalogApi,
   catalogErrorMessage,
   type CatalogImportResponse,
   type SaveLecturerPayload,
 } from '../services/catalogApi';
 import type { ImportLecturerRow } from '../utils/lecturerImportExcel';
-import type { Department, Faculty, Lecturer } from '../types';
+import type { Department, Faculty, Lecturer, Position } from '../types';
 
 interface LecturersPageProps {
   lecturers: Lecturer[];
@@ -32,6 +34,7 @@ interface LecturerForm {
   facultyId: string;
   email: string;
   phoneNumber: string;
+  positionId: string;
 }
 
 const emptyForm: LecturerForm = {
@@ -40,7 +43,16 @@ const emptyForm: LecturerForm = {
   facultyId: '',
   email: '',
   phoneNumber: '',
+  positionId: '',
 };
+
+/** Form quản lý chức vụ; positionId null nghĩa là đang thêm mới. */
+interface PositionForm {
+  positionId: number | null;
+  positionName: string;
+}
+
+const emptyPositionForm: PositionForm = { positionId: null, positionName: '' };
 
 export const LecturersPage: React.FC<LecturersPageProps> = ({
   lecturers,
@@ -59,6 +71,89 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
   const [toDelete, setToDelete] = useState<Lecturer | null>(null);
   const [validationError, setValidationError] = useState('');
   const [form, setForm] = useState<LecturerForm>(emptyForm);
+
+  // ----------------------------------------------------------- Chức vụ
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [isPositionsOpen, setIsPositionsOpen] = useState(false);
+  const [positionForm, setPositionForm] = useState<PositionForm>(emptyPositionForm);
+  const [positionError, setPositionError] = useState<string | null>(null);
+  const [positionSaving, setPositionSaving] = useState(false);
+  const [deletingPositionId, setDeletingPositionId] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void catalogApi
+      .positions()
+      .then((next) => {
+        if (active) setPositions(next);
+      })
+      .catch(() => {
+        if (active) setPositionError('Không tải được danh sách chức vụ.');
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const messageFrom = (error: unknown) =>
+    error instanceof ApiError ? catalogErrorMessage(error.errorCode) : catalogErrorMessage(null);
+
+  const openPositionCreate = () => {
+    setPositionError(null);
+    setDeletingPositionId(null);
+    setPositionForm(emptyPositionForm);
+  };
+
+  const openPositionEdit = (position: Position) => {
+    setPositionError(null);
+    setDeletingPositionId(null);
+    setPositionForm({ positionId: position.positionId, positionName: position.positionName });
+  };
+
+  const handleSavePosition = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    const positionName = positionForm.positionName.trim();
+    if (!positionName) {
+      setPositionError('Vui lòng nhập tên chức vụ.');
+      return;
+    }
+
+    setPositionSaving(true);
+    try {
+      if (positionForm.positionId === null) {
+        await catalogApi.createPosition(positionName);
+      } else {
+        await catalogApi.updatePosition(positionForm.positionId, positionName);
+      }
+      setPositions(await catalogApi.positions());
+      toast.success(positionForm.positionId === null ? 'Đã thêm chức vụ' : 'Đã cập nhật chức vụ', {
+        description: positionName,
+      });
+      setPositionForm(emptyPositionForm);
+      setPositionError(null);
+    } catch (error) {
+      setPositionError(messageFrom(error));
+    } finally {
+      setPositionSaving(false);
+    }
+  };
+
+  const handleDeletePosition = async (positionId: number) => {
+    try {
+      await catalogApi.deletePosition(positionId);
+      setPositions(await catalogApi.positions());
+      toast.success('Đã xóa chức vụ');
+      if (positionForm.positionId === positionId) setPositionForm(emptyPositionForm);
+    } catch (error) {
+      setPositionError(messageFrom(error));
+    } finally {
+      setDeletingPositionId(null);
+    }
+  };
+
+  const positionNameOf = (positionId: number | null) =>
+    positions.find((position) => position.positionId === positionId)?.positionName ?? '—';
 
   const updateForm = (patch: Partial<LecturerForm>) => setForm((prev) => ({ ...prev, ...patch }));
   const facultyNameOf = (facultyId: number | null) =>
@@ -81,6 +176,7 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
       facultyId: lecturer.facultyId === null ? '' : String(lecturer.facultyId),
       email: lecturer.email ?? '',
       phoneNumber: lecturer.phoneNumber ?? '',
+      positionId: lecturer.positionId === null ? '' : String(lecturer.positionId),
     });
     setValidationError('');
     setIsModalOpen(true);
@@ -103,6 +199,7 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
       facultyId: form.facultyId ? Number(form.facultyId) : null,
       email: email || null,
       phoneNumber: form.phoneNumber.trim() || null,
+      positionId: form.positionId ? Number(form.positionId) : null,
     });
     setSaving(false);
     if (errorCode) {
@@ -160,19 +257,29 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
     {
       key: 'fullName',
       header: 'Họ và tên',
+      filterValue: (row) => row.fullName,
       render: (row) => <span className="catalog-cell-primary">{row.fullName}</span>,
     },
     {
       key: 'departmentId',
       header: 'Bộ môn',
       width: '250px',
+      filterValue: (row) => (row.departmentId === null ? '—' : departmentNameOf(row.departmentId)),
       render: (row) => (row.departmentId === null ? '—' : departmentNameOf(row.departmentId)),
     },
     {
       key: 'facultyId',
       header: 'Khoa viện',
       width: '250px',
+      filterValue: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
       render: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
+    },
+    {
+      key: 'positionId',
+      header: 'Chức vụ',
+      width: '170px',
+      filterValue: (row) => (row.positionId === null ? '—' : positionNameOf(row.positionId)),
+      render: (row) => (row.positionId === null ? '—' : positionNameOf(row.positionId)),
     },
     {
       key: 'email',
@@ -242,14 +349,27 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
         onAddNew={openCreate}
         addNewLabel="Thêm giảng viên"
         toolbarActions={(
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm catalog-add-button"
-            onClick={() => setIsImportOpen(true)}
-          >
-            <FileSpreadsheet aria-hidden="true" size={16} />
-            <span>Import Excel</span>
-          </button>
+          <>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm catalog-add-button"
+              onClick={() => {
+                openPositionCreate();
+                setIsPositionsOpen(true);
+              }}
+            >
+              <BriefcaseBusiness aria-hidden="true" size={16} />
+              <span>Chức vụ</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm catalog-add-button"
+              onClick={() => setIsImportOpen(true)}
+            >
+              <FileSpreadsheet aria-hidden="true" size={16} />
+              <span>Import Excel</span>
+            </button>
+          </>
         )}
         emptyMessage="Chưa có giảng viên nào trong danh mục."
         keyExtractor={(item) => String(item.lecturerId)}
@@ -330,6 +450,21 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
               />
             </div>
           </div>
+          <div className="form-group">
+            <label htmlFor="lecturer-position">Chức vụ</label>
+            <select
+              id="lecturer-position"
+              value={form.positionId}
+              onChange={(event) => updateForm({ positionId: event.target.value })}
+            >
+              <option value="">Chưa phân công</option>
+              {positions.map((position) => (
+                <option key={position.positionId} value={String(position.positionId)}>
+                  {position.positionName}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="modal-footer catalog-form-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>
               Hủy
@@ -339,6 +474,114 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        isOpen={isPositionsOpen}
+        onClose={() => {
+          if (positionSaving) return;
+          setIsPositionsOpen(false);
+          setPositionError(null);
+        }}
+        title="Chức vụ"
+      >
+        <div className="answer-scale-manager">
+          {positionError && (
+            <div className="catalog-validation-error" role="alert">{positionError}</div>
+          )}
+
+          <section className="answer-scale-list" aria-label="Danh sách chức vụ">
+            {positions.length === 0 && (
+              <p className="answer-scale-empty">Chưa có chức vụ nào.</p>
+            )}
+            {positions.map((position) => (
+              <div className="answer-scale-row" key={position.positionId}>
+                <div className="answer-scale-row-body">
+                  <strong>{position.positionName}</strong>
+                </div>
+                {deletingPositionId === position.positionId ? (
+                  <div className="answer-scale-confirm">
+                    <span>Xóa chức vụ này?</span>
+                    <button
+                      type="button"
+                      className="btn catalog-danger-button btn-sm"
+                      onClick={() => void handleDeletePosition(position.positionId)}
+                    >
+                      Xóa
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setDeletingPositionId(null)}
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                ) : (
+                  <div className="catalog-actions">
+                    <button
+                      type="button"
+                      className="catalog-icon-button"
+                      onClick={() => openPositionEdit(position)}
+                      aria-label={`Sửa chức vụ ${position.positionName}`}
+                      title="Sửa"
+                    >
+                      <Pencil aria-hidden="true" size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      className="catalog-icon-button catalog-icon-button--danger"
+                      onClick={() => setDeletingPositionId(position.positionId)}
+                      aria-label={`Xóa chức vụ ${position.positionName}`}
+                      title="Xóa"
+                    >
+                      <Trash2 aria-hidden="true" size={15} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </section>
+
+          <form className="catalog-form" onSubmit={(event) => void handleSavePosition(event)}>
+            <div className="form-group">
+              <label htmlFor="position-name">
+                {positionForm.positionId === null ? 'Tên chức vụ mới' : 'Tên chức vụ'}
+              </label>
+              <input
+                id="position-name"
+                type="text"
+                placeholder="VD: Giảng viên chính"
+                value={positionForm.positionName}
+                onChange={(event) =>
+                  setPositionForm((prev) => ({ ...prev, positionName: event.target.value }))
+                }
+                required
+              />
+            </div>
+
+            <div className="modal-footer catalog-form-actions">
+              {positionForm.positionId !== null && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={openPositionCreate}
+                  disabled={positionSaving}
+                >
+                  Thêm chức vụ mới
+                </button>
+              )}
+              <button type="submit" className="btn btn-primary" disabled={positionSaving}>
+                {positionSaving ? (
+                  <LoaderCircle className="auth-spin" aria-hidden="true" size={16} />
+                ) : (
+                  <Save aria-hidden="true" size={16} />
+                )}
+                {positionForm.positionId === null ? 'Thêm chức vụ' : 'Lưu chức vụ'}
+              </button>
+            </div>
+          </form>
+        </div>
       </Modal>
 
       <LecturerImportDialog

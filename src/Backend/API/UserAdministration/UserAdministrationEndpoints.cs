@@ -10,7 +10,7 @@ public static class UserAdministrationEndpoints
     {
         var group = endpoints
             .MapGroup("/api/admin")
-            .RequireAuthorization(AuthPolicies.AdminAccess);
+            .RequireAuthorization(AuthPolicies.UserAdminAccess);
 
         group.MapGet("/users", async (
             string? search,
@@ -139,6 +139,15 @@ public static class UserAdministrationEndpoints
             IUserAdministrationService service,
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetRolePermissionMatrixAsync(cancellationToken)));
+
+        group.MapGet("/roles/{roleId:guid}/permissions", async (
+            Guid roleId,
+            IUserAdministrationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await service.GetRolePermissionsAsync(roleId, cancellationToken);
+            return result is null ? Results.NotFound() : Results.Ok(result);
+        });
 
         group.MapPut("/roles/{roleId:guid}/permissions", async (
             Guid roleId,

@@ -33,13 +33,15 @@ public sealed record PermissionDto(
     Guid Id,
     string Code,
     string Name,
-    string? Description);
+    string? Description,
+    string Category);
 
 /// <summary>Trạng thái permission (được cấp hay không) của một role.</summary>
 public sealed record RolePermissionStatusDto(
     Guid PermissionId,
     string PermissionCode,
     string PermissionName,
+    string Category,
     bool IsGranted);
 
 /// <summary>Toàn bộ permission matrix của một role.</summary>
@@ -59,11 +61,16 @@ public sealed record RolePermissionGrantDto(Guid PermissionId, bool IsGranted);
 
 public sealed record AdminAuditLogDto(
     Guid Id,
+    string Source,
     Guid? UserId,
     Guid? ProfileId,
     string? Email,
     string Event,
+    string? EntityName,
+    string? RecordId,
     string? Metadata,
+    string? OldValues,
+    string? NewValues,
     DateTime CreatedAt);
 
 public sealed record AdminPage<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount);
@@ -165,6 +172,11 @@ public interface IUserAdministrationService
 
     /// <summary>Lấy trạng thái permissions (granted/denied) của tất cả roles.</summary>
     Task<IReadOnlyList<RolePermissionMatrixDto>> GetRolePermissionMatrixAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Lấy permissions của một role cụ thể. Trả về null nếu roleId không tồn tại.</summary>
+    Task<RolePermissionMatrixDto?> GetRolePermissionsAsync(
+        Guid roleId,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Cập nhật danh sách permissions của một role.</summary>
     Task UpdateRolePermissionsAsync(

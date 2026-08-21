@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from './auth/authContext';
+import { canAccessModule } from './auth/modulePermissions';
 import { AuthLoading } from './components/AuthLoading';
 import { getHashRoot } from './pages/reportRoute';
 
@@ -24,6 +25,9 @@ const PublicSurveyPage = lazy(() => import('./pages/PublicSurveyPage').then(m =>
 const CampaignsPage = lazy(() => import('./pages/CampaignsPage').then(m => ({ default: m.CampaignsPage })));
 const SurveyProgressPage = lazy(() => import('./pages/SurveyProgressPage').then(m => ({ default: m.SurveyProgressPage })));
 const ReportsOverviewPage = lazy(() => import('./pages/ReportsOverviewPage').then(m => ({ default: m.ReportsOverviewPage })));
+const SurveyStatisticsPage = lazy(() => import('./pages/SurveyStatisticsPage').then(m => ({ default: m.SurveyStatisticsPage })));
+const SurveyAnalysisPage = lazy(() => import('./pages/SurveyAnalysisPage').then(m => ({ default: m.SurveyAnalysisPage })));
+const SurveyDashboardPage = lazy(() => import('./pages/SurveyDashboardPage').then(m => ({ default: m.SurveyDashboardPage })));
 const StudentSurveyView = lazy(() => import('./pages/StudentSurveyView').then(m => ({ default: m.StudentSurveyView })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const ProfileSelectionPage = lazy(() => import('./pages/ProfileSelectionPage').then(m => ({ default: m.ProfileSelectionPage })));
@@ -74,11 +78,27 @@ function PageFallback() {
   );
 }
 
+const EMPTY_PERMISSIONS: readonly string[] = [];
+
 function DashboardApp() {
   const auth = useAuth();
   const [currentTab, setCurrentTabState] = useState<string>(getInitialTab);
   const [isStudentView, setIsStudentView] = useState<boolean>(false);
-  const canManageUsers = auth.access?.permissions.includes('ADMIN_ACCESS') ?? false;
+  const permissions = auth.access?.permissions ?? EMPTY_PERMISSIONS;
+  const canLoadFaculties = [
+    'faculties', 'departments', 'lecturers', 'majors', 'courses', 'classes',
+  ].some((moduleId) => canAccessModule(permissions, moduleId));
+  const canLoadDepartments = ['faculties', 'departments', 'lecturers', 'courses', 'classes']
+    .some((moduleId) => canAccessModule(permissions, moduleId));
+  const canLoadMajors = ['faculties', 'majors']
+    .some((moduleId) => canAccessModule(permissions, moduleId));
+  const canLoadCourses = ['departments', 'courses', 'classes']
+    .some((moduleId) => canAccessModule(permissions, moduleId));
+  const canLoadLecturers = ['departments', 'lecturers', 'classes']
+    .some((moduleId) => canAccessModule(permissions, moduleId));
+  const canLoadCourseSections = canAccessModule(permissions, 'classes');
+  const canLoadSurveyOperations = ['progress', 'reports', 'course-campaigns']
+    .some((moduleId) => canAccessModule(permissions, moduleId));
 
   const setCurrentTab = useCallback((tab: string) => {
     setCurrentTabState(tab);
@@ -105,10 +125,10 @@ function DashboardApp() {
   }, [currentTab]);
 
   useEffect(() => {
-    if (currentTab === 'users-admin' && !canManageUsers) {
+    if (!canAccessModule(permissions, currentTab)) {
       setCurrentTab('overview');
     }
-  }, [canManageUsers, currentTab, setCurrentTab]);
+  }, [currentTab, permissions, setCurrentTab]);
 
   // Nạp danh mục đã lưu trong database khi vào hệ thống.
   useEffect(() => {
@@ -124,12 +144,12 @@ function DashboardApp() {
           nextLecturers,
           nextSections,
         ] = await Promise.all([
-          catalogApi.faculties(),
-          catalogApi.departments(),
-          catalogApi.majors(),
-          catalogApi.courses(),
-          catalogApi.lecturers(),
-          catalogApi.courseSections(),
+          canLoadFaculties ? catalogApi.faculties() : Promise.resolve([]),
+          canLoadDepartments ? catalogApi.departments() : Promise.resolve([]),
+          canLoadMajors ? catalogApi.majors() : Promise.resolve([]),
+          canLoadCourses ? catalogApi.courses() : Promise.resolve([]),
+          canLoadLecturers ? catalogApi.lecturers() : Promise.resolve([]),
+          canLoadCourseSections ? catalogApi.courseSections() : Promise.resolve([]),
         ]);
         if (cancelled) return;
         setFaculties(nextFaculties);
@@ -149,7 +169,14 @@ function DashboardApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [
+    canLoadCourseSections,
+    canLoadCourses,
+    canLoadDepartments,
+    canLoadFaculties,
+    canLoadLecturers,
+    canLoadMajors,
+  ]);
 
   // Danh mục đào tạo. Mọi danh mục bắt đầu rỗng, dữ liệu chỉ nằm trong phiên
   // làm việc cho tới khi backend có API cho các bảng này.
@@ -175,7 +202,16 @@ function DashboardApp() {
   const [surveyLoadError, setSurveyLoadError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!canLoadSurveyOperations) {
+      setSemesterSurveys([]);
+      setSectionSurveys([]);
+      setSurveyLoadError(null);
+      setSurveyLoading(false);
+      return;
+    }
+
     let cancelled = false;
+    setSurveyLoading(true);
 
     const load = async () => {
       try {
@@ -201,7 +237,7 @@ function DashboardApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canLoadSurveyOperations]);
 
   const stats: SystemStats = useMemo(
     () => ({
@@ -283,15 +319,16 @@ function DashboardApp() {
   };
 
   const handleSaveDepartment = async (
-    departmentId: number | null,
+    editingDepartmentId: number | null,
+    departmentId: number,
     departmentName: string,
     facultyId: number | null
   ): Promise<string | null> => {
     try {
-      if (departmentId === null) {
-        await catalogApi.createDepartment(departmentName, facultyId);
+      if (editingDepartmentId === null) {
+        await catalogApi.createDepartment(departmentId, departmentName, facultyId);
       } else {
-        await catalogApi.updateDepartment(departmentId, departmentName, facultyId);
+        await catalogApi.updateDepartment(editingDepartmentId, departmentName, facultyId);
       }
       setDepartments(await catalogApi.departments());
       return null;
@@ -406,6 +443,20 @@ function DashboardApp() {
     return result;
   };
 
+  /**
+   * Import lớp học phần có thể tạo thêm học phần và giảng viên, nên phải nạp lại
+   * hai danh mục này. Không nạp thì bảng Học phần vẫn cũ và cột Giảng viên của
+   * lớp mới tra không ra tên.
+   */
+  const reloadCoursesAndLecturers = async () => {
+    const [nextCourses, nextLecturers] = await Promise.all([
+      catalogApi.courses(),
+      catalogApi.lecturers(),
+    ]);
+    setCourses(nextCourses);
+    setLecturers(nextLecturers);
+  };
+
   const handleDeleteCourse = async (courseId: number): Promise<string | null> => {
     try {
       await catalogApi.deleteCourse(courseId);
@@ -495,7 +546,7 @@ function DashboardApp() {
         currentTab={currentTab}
         onSelectTab={(tab) => setCurrentTab(tab)}
         activeCampaignsCount={stats.activeCampaigns}
-        canManageUsers={canManageUsers}
+        permissions={permissions}
       />
 
       {/* Main Content Area */}
@@ -512,13 +563,19 @@ function DashboardApp() {
 
         <main className="content-area">
           <Suspense fallback={<PageFallback />}>
+            {canAccessModule(permissions, currentTab) && <>
             {currentTab === 'overview' && (
               <DashboardOverview
                 stats={stats}
                 campaigns={campaigns}
                 onOpenQR={handleOpenCampaignQR}
+                permissions={permissions}
                 onNavigateTab={(tab) => setCurrentTab(tab)}
               />
+            )}
+
+            {currentTab === 'survey-dashboard' && (
+              <SurveyDashboardPage />
             )}
 
             {currentTab === 'progress' && (
@@ -532,6 +589,14 @@ function DashboardApp() {
 
             {currentTab === 'reports' && (
               <ReportsOverviewPage />
+            )}
+
+            {currentTab === 'survey-statistics' && (
+              <SurveyStatisticsPage />
+            )}
+
+            {currentTab === 'survey-analysis' && (
+              <SurveyAnalysisPage />
             )}
 
             {currentTab === 'faculties' && (
@@ -593,7 +658,11 @@ function DashboardApp() {
             )}
 
             {currentTab === 'classes' && (
-              <ClassesPage courses={courses} lecturers={lecturers} />
+              <ClassesPage
+                courses={courses}
+                lecturers={lecturers}
+                onCatalogChanged={reloadCoursesAndLecturers}
+              />
             )}
 
             {(currentTab === 'course-question-sets' || currentTab === 'criteria') && (
@@ -630,7 +699,8 @@ function DashboardApp() {
               />
             )}
 
-            {currentTab === 'users-admin' && canManageUsers && <UsersAdminPage />}
+            {currentTab === 'users-admin' && <UsersAdminPage />}
+            </>}
           </Suspense>
         </main>
       </div>

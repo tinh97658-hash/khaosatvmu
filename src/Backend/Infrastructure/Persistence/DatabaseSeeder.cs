@@ -61,13 +61,19 @@ public static class DatabaseSeeder
     {
         var definitions = new[]
         {
-            (Code: "ADMIN_ACCESS",             Name: "Admin access",                  Description: "Access administrative actions"),
-            (Code: "SURVEY_MANAGE",            Name: "Manage surveys",                Description: "Create and manage surveys"),
-            (Code: "VIEW_REPORTS",             Name: "View reports",                  Description: "Access the reports and statistics section"),
-            (Code: "VIEW_REPORTS_OPERATIONAL", Name: "View operational progress",     Description: "View operational survey collection progress report"),
-            (Code: "VIEW_REPORTS_LECTURERS",   Name: "View lecturer evaluations",     Description: "View lecturer performance evaluation reports"),
-            (Code: "VIEW_REPORTS_FACULTIES",   Name: "View faculty statistics",       Description: "View faculty and department statistics reports"),
-            (Code: "VIEW_REPORTS_QUESTIONS",   Name: "View question analysis",        Description: "View survey question and criteria analysis reports"),
+            (Code: "PROGRESS_ACCESS",             Name: "Tiến độ thu phiếu",                Description: "Truy cập module tiến độ thu phiếu",                    Category: "Tổng quan"),
+            (Code: "REPORTS_ACCESS",              Name: "Thống kê và báo cáo",              Description: "Truy cập module thống kê và báo cáo",                  Category: "Báo cáo"),
+            (Code: "FACULTIES_ACCESS",            Name: "Khoa / Viện",                       Description: "Truy cập module quản lý khoa và viện",                  Category: "Danh mục đào tạo"),
+            (Code: "DEPARTMENTS_ACCESS",          Name: "Bộ môn",                            Description: "Truy cập module quản lý bộ môn",                        Category: "Danh mục đào tạo"),
+            (Code: "LECTURERS_ACCESS",            Name: "Giảng viên",                        Description: "Truy cập module quản lý giảng viên và chức vụ",         Category: "Danh mục đào tạo"),
+            (Code: "MAJORS_ACCESS",               Name: "Ngành đào tạo",                     Description: "Truy cập module quản lý ngành đào tạo",                 Category: "Danh mục đào tạo"),
+            (Code: "COURSES_ACCESS",              Name: "Học phần",                          Description: "Truy cập module quản lý học phần",                      Category: "Danh mục đào tạo"),
+            (Code: "COURSE_SECTIONS_ACCESS",      Name: "Lớp học phần",                      Description: "Truy cập module quản lý lớp học phần, năm học và học kỳ", Category: "Danh mục đào tạo"),
+            (Code: "COURSE_QUESTION_SETS_ACCESS", Name: "Bộ câu hỏi khảo sát học phần",      Description: "Truy cập module bộ câu hỏi khảo sát học phần",         Category: "Khảo sát học phần"),
+            (Code: "COURSE_CAMPAIGNS_ACCESS",     Name: "Khảo sát học phần",                 Description: "Truy cập module khảo sát học phần",                    Category: "Khảo sát học phần"),
+            (Code: "PROGRAM_CAMPAIGNS_ACCESS",    Name: "Đợt khảo sát chương trình đào tạo", Description: "Truy cập module đợt khảo sát chương trình đào tạo",     Category: "Khảo sát chương trình"),
+            (Code: "PROGRAM_CRITERIA_ACCESS",     Name: "Tiêu chí chương trình đào tạo",     Description: "Truy cập module tiêu chí chương trình đào tạo",        Category: "Khảo sát chương trình"),
+            (Code: "USER_ADMIN_ACCESS",           Name: "Người dùng và phân quyền",          Description: "Truy cập module quản trị người dùng và phân quyền",    Category: "Quản trị hệ thống"),
         };
 
         var permissions = new Dictionary<string, Permission>(StringComparer.OrdinalIgnoreCase);
@@ -81,7 +87,8 @@ public static class DatabaseSeeder
                     Id = Guid.NewGuid(),
                     Code = definition.Code,
                     Name = definition.Name,
-                    Description = definition.Description
+                    Description = definition.Description,
+                    Category = definition.Category
                 };
                 db.Permissions.Add(permission);
             }
@@ -101,27 +108,38 @@ public static class DatabaseSeeder
     {
         var definitions = new[]
         {
-            // ADMIN: tất cả permissions
-            (RoleCode: "ADMIN", PermissionCode: "ADMIN_ACCESS"),
-            (RoleCode: "ADMIN", PermissionCode: "SURVEY_MANAGE"),
-            (RoleCode: "ADMIN", PermissionCode: "VIEW_REPORTS"),
-            (RoleCode: "ADMIN", PermissionCode: "VIEW_REPORTS_OPERATIONAL"),
-            (RoleCode: "ADMIN", PermissionCode: "VIEW_REPORTS_LECTURERS"),
-            (RoleCode: "ADMIN", PermissionCode: "VIEW_REPORTS_FACULTIES"),
-            (RoleCode: "ADMIN", PermissionCode: "VIEW_REPORTS_QUESTIONS"),
+            // ADMIN: truy cập toàn bộ module.
+            (RoleCode: "ADMIN", PermissionCode: "PROGRESS_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "REPORTS_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "FACULTIES_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "DEPARTMENTS_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "LECTURERS_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "MAJORS_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "COURSES_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "COURSE_SECTIONS_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "COURSE_QUESTION_SETS_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "COURSE_CAMPAIGNS_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "PROGRAM_CAMPAIGNS_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "PROGRAM_CRITERIA_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "USER_ADMIN_ACCESS"),
 
-            // SURVEY_ADMIN: quản lý khảo sát + xem toàn bộ báo cáo
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "SURVEY_MANAGE"),
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "VIEW_REPORTS"),
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "VIEW_REPORTS_OPERATIONAL"),
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "VIEW_REPORTS_LECTURERS"),
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "VIEW_REPORTS_FACULTIES"),
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "VIEW_REPORTS_QUESTIONS"),
+            // SURVEY_ADMIN: toàn bộ module nghiệp vụ, không có quản trị người dùng.
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "PROGRESS_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "REPORTS_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "FACULTIES_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "DEPARTMENTS_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "LECTURERS_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "MAJORS_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "COURSES_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "COURSE_SECTIONS_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "COURSE_QUESTION_SETS_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "COURSE_CAMPAIGNS_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "PROGRAM_CAMPAIGNS_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "PROGRAM_CRITERIA_ACCESS"),
 
-            // DEPARTMENT_MANAGER: xem báo cáo giảng viên và khoa/bộ môn
-            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "VIEW_REPORTS"),
-            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "VIEW_REPORTS_LECTURERS"),
-            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "VIEW_REPORTS_FACULTIES"),
+            // DEPARTMENT_MANAGER: chỉ tiến độ và báo cáo trong Phase 2.
+            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "PROGRESS_ACCESS"),
+            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "REPORTS_ACCESS"),
         };
 
         foreach (var definition in definitions)

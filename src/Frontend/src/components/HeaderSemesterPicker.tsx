@@ -8,37 +8,41 @@ export const HeaderSemesterPicker: React.FC = () => {
     activeSemesterId,
     setActiveSemesterId,
     isLoading,
+    error,
   } = useSemester();
-
-  if (isLoading && academicYears.length === 0) {
-    return (
-      <div className="header-semester-picker is-loading" title="Đang tải học kỳ...">
-        <LoaderCircle className="header-semester-icon auth-spin" aria-hidden="true" />
-        <span className="header-semester-text">Đang tải...</span>
-      </div>
-    );
-  }
-
-  if (academicYears.length === 0) {
-    return null;
-  }
+  const hasSemesters = academicYears.some((year) => year.semesters.length > 0);
+  const emptyLabel = isLoading
+    ? 'Đang tải học kỳ...'
+    : error
+      ? 'Không tải được học kỳ'
+      : 'Chưa có học kỳ';
+  const isDisabled = isLoading || !hasSemesters;
 
   return (
-    <div className="header-semester-picker" title="Chọn học kỳ làm việc toàn hệ thống">
-      <div className="header-semester-inner">
-        <CalendarDays className="header-semester-icon" aria-hidden="true" />
-        <label htmlFor="header-global-semester-select" className="sr-only">
-          Học kỳ làm việc
-        </label>
+    <div
+      className={`sidebar-semester-picker${error ? ' has-error' : ''}`}
+      title={error ?? 'Chọn học kỳ làm việc toàn hệ thống'}
+    >
+      <label htmlFor="global-semester-select" className="sidebar-semester-label">
+        Học kỳ làm việc
+      </label>
+      <div className="sidebar-semester-inner">
+        {isLoading ? (
+          <LoaderCircle className="sidebar-semester-icon auth-spin" aria-hidden="true" />
+        ) : (
+          <CalendarDays className="sidebar-semester-icon" aria-hidden="true" />
+        )}
         <select
-          id="header-global-semester-select"
-          className="header-semester-select"
-          value={activeSemesterId ?? ''}
+          id="global-semester-select"
+          className="sidebar-semester-select"
+          value={hasSemesters ? activeSemesterId ?? '' : ''}
+          disabled={isDisabled}
           onChange={(e) => {
             const val = e.target.value;
             setActiveSemesterId(val ? Number(val) : null);
           }}
         >
+          {!hasSemesters && <option value="">{emptyLabel}</option>}
           {academicYears.map((year) => (
             <optgroup key={year.academicYearId} label={`Năm học ${year.academicYearName}`}>
               {year.semesters.map((semester) => (
@@ -49,7 +53,7 @@ export const HeaderSemesterPicker: React.FC = () => {
             </optgroup>
           ))}
         </select>
-        <ChevronDown className="header-semester-arrow" aria-hidden="true" />
+        <ChevronDown className="sidebar-semester-arrow" aria-hidden="true" />
       </div>
     </div>
   );

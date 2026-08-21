@@ -24,6 +24,13 @@ export interface Lecturer {
   facultyId: number | null;
   email: string | null;
   phoneNumber: string | null;
+  positionId: number | null;
+}
+
+/** Bảng "Positions". Chức vụ của giảng viên. */
+export interface Position {
+  positionId: number;
+  positionName: string;
 }
 
 /** Bảng "Majors" */
@@ -59,8 +66,11 @@ export interface Course {
   courseCode: string;
   courseName: string;
   credits: number;
-  /** Chuỗi rỗng khi tệp import không ghi loại học phần; cột có DEFAULT ''. */
-  courseType: CourseType | '';
+  /**
+   * Null khi chưa xác định bắt buộc hay tự chọn — học phần tạo tự động lúc
+   * import lớp học phần rơi vào trường hợp này, quản trị điền sau.
+   */
+  courseType: CourseType | null;
   departmentId: number | null;
   facultyId: number | null;
   prerequisiteCourseId: number | null;
@@ -88,10 +98,15 @@ export interface CourseSection {
   courseSectionId: number;
   courseId: number;
   semesterId: number;
-  /** NOT NULL: mỗi lớp học phần có đúng một giảng viên. */
-  lecturerId: number;
+  /**
+   * Null khi tệp import không có email để xác định giảng viên; khi đó tên đọc
+   * được nằm ở unidentifiedLecturerName. Hai trường này loại trừ nhau.
+   */
+  lecturerId: number | null;
   sectionName: string;
   classSize: number;
+  /** Tên giảng viên chưa gắn được vào bảng "Lecturers" vì thiếu email. */
+  unidentifiedLecturerName: string | null;
 }
 
 export interface Criterion {
@@ -110,6 +125,9 @@ export const maximumQuestionsPerTemplate = 30;
 /** Số mức tối đa của một thang trả lời ("AnswerScaleOptions"."Value" CHECK 1..5). */
 export const maximumAnswerScaleOptions = 5;
 
+/** Độ dài tối đa của câu trả lời tự nhập ("SurveyResponseAnswers"."AnswerValue"). */
+export const maximumTextAnswerLength = 2000;
+
 /** Bảng "AnswerScaleOptions" */
 export interface AnswerScaleOption {
   answerScaleOptionId: number;
@@ -119,26 +137,39 @@ export interface AnswerScaleOption {
   displayText: string;
 }
 
+/**
+ * Loại thang trả lời ("AnswerScales"."ScaleKind").
+ * - `Options`: có sẵn các mức chọn (Mức độ hài lòng, Có/Không, Phần trăm...).
+ * - `Text`: người trả lời tự nhập chữ, không có mức nào.
+ */
+export type AnswerScaleKind = 'Options' | 'Text';
+
 /** Bảng "AnswerScales", kèm các mức trả lời để hiển thị trong một lần gọi. */
 export interface AnswerScale {
   answerScaleId: number;
   answerScaleName: string;
+  scaleKind: AnswerScaleKind;
+  /** Rỗng với thang loại `Text`. */
   options: AnswerScaleOption[];
 }
 
-/** Bảng "SurveyQuestions" */
+/** Bảng "SurveyQuestions". Thang trả lời gắn ở từng câu, không gắn cho cả bộ. */
 export interface SurveyQuestion {
   questionId: number;
   surveyTemplateId: number;
   questionText: string;
+  answerScaleId: number;
+  /**
+   * Mức bắt buộc của câu bẫy độ tập trung; null là câu hỏi bình thường.
+   * Chỉ có ở màn quản trị — phiếu sinh viên cố ý không nhận trường này.
+   */
+  attentionCheckValue: number | null;
 }
 
 /** Bảng "SurveyTemplates", kèm danh sách câu hỏi của bộ. */
 export interface SurveyTemplate {
   surveyTemplateId: number;
   templateName: string;
-  /** NOT NULL: cả bộ dùng chung một thang trả lời. */
-  answerScaleId: number;
   /** ISO 8601 */
   createdAt: string;
   questions: SurveyQuestion[];
@@ -196,12 +227,38 @@ export interface SurveyResponseSummary {
   additionalComments: string | null;
   answerCount: number;
   valueCounts: SurveyResponseValueCount[];
+  /** Phiếu có qua bộ lọc nhiễu không. Phiếu bị lọc vẫn tính là một lượt nộp. */
+  isValid: boolean;
+  /** Các mã lý do bị lọc ngăn cách dấu phẩy; null khi phiếu hợp lệ. */
+  rejectionReasons: string | null;
+}
+
+/** Nhãn tiếng Việt của mã lý do lọc nhiễu, để không phơi mã ra màn hình. */
+export const rejectionReasonLabels: Record<string, string> = {
+  TOO_FAST: 'Làm bài quá nhanh',
+  SINGLE_ANSWER: 'Chọn cùng một mức cho mọi câu',
+  ATTENTION_CHECK_FAILED: 'Sai câu kiểm tra độ tập trung',
+};
+
+/** Đổi chuỗi mã lý do thành danh sách nhãn tiếng Việt. */
+export function rejectionReasonTexts(reasons: string | null): string[] {
+  if (!reasons) return [];
+  return reasons
+    .split(',')
+    .map((code) => code.trim())
+    .filter((code) => code.length > 0)
+    .map((code) => rejectionReasonLabels[code] ?? code);
 }
 
 export interface SurveyResponseAnswer {
   questionId: number;
   questionText: string;
-  selectedValue: number;
+  answerScaleId: number;
+  scaleKind: AnswerScaleKind;
+  /** Giá trị thô: số mức đã chọn với thang `Options`, nội dung gõ với thang `Text`. */
+  answerValue: string;
+  /** Chỉ có giá trị với câu thuộc thang `Options`. */
+  selectedValue: number | null;
   selectedText: string;
 }
 
@@ -217,7 +274,8 @@ export interface SurveyResponseDetail {
   courseName: string;
   sectionName: string;
   lecturerName: string;
-  answerOptions: AnswerScaleOption[];
+  /** Các thang mà bộ câu hỏi của phiếu đang dùng. */
+  answerScales: AnswerScale[];
   answers: SurveyResponseAnswer[];
 }
 
@@ -234,8 +292,9 @@ export interface PublicSurvey {
   startTime: string;
   endTime: string;
   isOpen: boolean;
-  answerOptions: AnswerScaleOption[];
-  questions: { questionId: number; questionText: string }[];
+  /** Các thang mà bộ câu hỏi đang dùng; mỗi câu trỏ tới một thang qua `answerScaleId`. */
+  answerScales: AnswerScale[];
+  questions: { questionId: number; questionText: string; answerScaleId: number }[];
 }
 
 export interface SurveyCampaign {
@@ -381,11 +440,16 @@ export interface AdminRole {
 
 export interface AdminAuditLog {
   id: string;
+  source: 'AUTH' | 'CHANGE';
   userId: string | null;
   profileId: string | null;
   email: string | null;
   event: string;
+  entityName: string | null;
+  recordId: string | null;
   metadata: string | null;
+  oldValues: string | null;
+  newValues: string | null;
   createdAt: string;
 }
 
@@ -444,9 +508,15 @@ export interface OptionCount {
 export interface QuestionRating {
   questionId: number;
   questionText: string;
+  /** Chỉ có ý nghĩa với câu thuộc thang `Options`. */
   averageScore: number;
   totalAnswers: number;
+  /** Theo đúng các mức của thang câu đó, rỗng với câu thang `Text`. */
   optionDistribution: OptionCount[];
+  scaleKind: AnswerScaleKind;
+  answerScaleName: string;
+  /** Nội dung người học tự nhập, chỉ có với câu thang `Text`. */
+  textAnswers: string[] | null;
 }
 
 export interface LecturerSectionSummary {
@@ -614,12 +684,14 @@ export interface PermissionDto {
   code: string;
   name: string;
   description: string | null;
+  category: string;
 }
 
 export interface RolePermissionStatus {
   permissionId: string;
   permissionCode: string;
   permissionName: string;
+  category: string;
   isGranted: boolean;
 }
 

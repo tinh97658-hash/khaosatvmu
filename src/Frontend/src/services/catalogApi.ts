@@ -7,6 +7,7 @@ import type {
   Faculty,
   Lecturer,
   Major,
+  Position,
   Semester,
 } from '../types';
 import type { ImportFacultyRow } from '../utils/facultyImportExcel';
@@ -14,7 +15,10 @@ import type { ImportDepartmentRow } from '../utils/departmentImportExcel';
 import type { ImportMajorRow } from '../utils/majorImportExcel';
 import type { ImportCourseRow } from '../utils/courseImportExcel';
 import type { ImportLecturerRow } from '../utils/lecturerImportExcel';
-import type { ImportCourseSectionRow } from '../utils/courseSectionImportExcel';
+import type {
+  ImportCourseSectionRow,
+  UnidentifiedLecturer,
+} from '../utils/courseSectionImportExcel';
 import { apiRequest, csrfRequest } from './apiClient';
 
 /** Kết quả import trả về từ API, dùng chung cho ba danh mục. */
@@ -33,6 +37,17 @@ export interface CatalogImportResponse {
   items: CatalogImportItem[];
 }
 
+/** Kết quả import lớp học phần, rộng hơn CatalogImportResponse. */
+export interface CourseSectionImportResponse extends CatalogImportResponse {
+  /** Số học phần được tạo tự động vì chưa có trong danh mục. */
+  createdCourseCount: number;
+  /** Số giảng viên được tạo tự động từ email trong tệp. */
+  createdLecturerCount: number;
+  /** Số lớp đã có sẵn và được cập nhật lại mã giảng viên. */
+  updatedSectionCount: number;
+  unidentifiedLecturers: UnidentifiedLecturer[];
+}
+
 export const catalogApi = {
   faculties: () => apiRequest<Faculty[]>('/api/catalog/faculties'),
   createFaculty: (facultyName: string) =>
@@ -45,8 +60,13 @@ export const catalogApi = {
     csrfRequest<CatalogImportResponse>('/api/catalog/faculties/import', 'POST', { rows }),
 
   departments: () => apiRequest<Department[]>('/api/catalog/departments'),
-  createDepartment: (departmentName: string, facultyId: number | null) =>
-    csrfRequest<Department>('/api/catalog/departments', 'POST', { departmentName, facultyId }),
+  /** departmentId phải tự nhập vì "Departments"."DepartmentId" không tự tăng. */
+  createDepartment: (departmentId: number, departmentName: string, facultyId: number | null) =>
+    csrfRequest<Department>('/api/catalog/departments', 'POST', {
+      departmentId,
+      departmentName,
+      facultyId,
+    }),
   updateDepartment: (departmentId: number, departmentName: string, facultyId: number | null) =>
     csrfRequest<Department>(`/api/catalog/departments/${departmentId}`, 'PUT', {
       departmentName,
@@ -56,6 +76,14 @@ export const catalogApi = {
     csrfRequest<boolean>(`/api/catalog/departments/${departmentId}`, 'DELETE'),
   importDepartments: (rows: ImportDepartmentRow[]) =>
     csrfRequest<CatalogImportResponse>('/api/catalog/departments/import', 'POST', { rows }),
+
+  positions: () => apiRequest<Position[]>('/api/catalog/positions'),
+  createPosition: (positionName: string) =>
+    csrfRequest<Position>('/api/catalog/positions', 'POST', { positionName }),
+  updatePosition: (positionId: number, positionName: string) =>
+    csrfRequest<Position>(`/api/catalog/positions/${positionId}`, 'PUT', { positionName }),
+  deletePosition: (positionId: number) =>
+    csrfRequest<boolean>(`/api/catalog/positions/${positionId}`, 'DELETE'),
 
   majors: () => apiRequest<Major[]>('/api/catalog/majors'),
   createMajor: (majorName: string, facultyId: number) =>
@@ -99,7 +127,7 @@ export const catalogApi = {
   deleteCourseSection: (courseSectionId: number) =>
     csrfRequest<boolean>(`/api/catalog/course-sections/${courseSectionId}`, 'DELETE'),
   importCourseSections: (semesterId: number, rows: ImportCourseSectionRow[]) =>
-    csrfRequest<CatalogImportResponse>('/api/catalog/course-sections/import', 'POST', {
+    csrfRequest<CourseSectionImportResponse>('/api/catalog/course-sections/import', 'POST', {
       semesterId,
       rows,
     }),
@@ -135,9 +163,12 @@ export interface SaveAcademicYearPayload {
 export interface SaveCourseSectionPayload {
   courseId: number;
   semesterId: number;
-  lecturerId: number;
+  /** Null khi lớp chưa xác định được giảng viên. */
+  lecturerId: number | null;
   sectionName: string;
   classSize: number;
+  /** Chỉ điền khi lecturerId là null. */
+  unidentifiedLecturerName: string | null;
 }
 
 export interface SaveLecturerPayload {
@@ -146,13 +177,15 @@ export interface SaveLecturerPayload {
   facultyId: number | null;
   email: string | null;
   phoneNumber: string | null;
+  positionId: number | null;
 }
 
 export interface SaveCoursePayload {
   courseCode: string;
   courseName: string;
   credits: number;
-  courseType: CourseType | '';
+  /** Null khi chưa xác định bắt buộc hay tự chọn. */
+  courseType: CourseType | null;
   departmentId: number | null;
   facultyId: number | null;
   prerequisiteCourseId: number | null;
@@ -169,7 +202,16 @@ export const catalogErrorMessages: Record<string, string> = {
   CATALOG_FACULTY_IN_USE: 'Khoa viện đang được giảng viên hoặc học phần tham chiếu.',
   CATALOG_DEPARTMENT_NOT_FOUND: 'Không tìm thấy bộ môn.',
   CATALOG_DEPARTMENT_NAME_REQUIRED: 'Thiếu tên bộ môn.',
+  CATALOG_DEPARTMENT_ID_REQUIRED: 'Thiếu mã bộ môn hoặc mã không phải số nguyên dương.',
+  CATALOG_DEPARTMENT_ID_EXISTS: 'Mã bộ môn đã tồn tại trong hệ thống.',
+  CATALOG_DEPARTMENT_ID_DUPLICATE_IN_FILE: 'Mã bộ môn bị lặp trong tệp.',
   CATALOG_DEPARTMENT_IN_USE: 'Bộ môn đang được giảng viên hoặc học phần tham chiếu.',
+  CATALOG_DEPARTMENT_CODE_INVALID: 'Cột "Mã BM" phải là số nguyên dương.',
+  CATALOG_COURSE_NAME_REQUIRED_FOR_AUTO_CREATE:
+    'Học phần chưa có trong danh mục nên cần cột "Học phần" để tạo mới.',
+  CATALOG_POSITION_NOT_FOUND: 'Không tìm thấy chức vụ.',
+  CATALOG_POSITION_NAME_REQUIRED: 'Thiếu tên chức vụ.',
+  CATALOG_POSITION_NAME_EXISTS: 'Tên chức vụ đã tồn tại.',
   CATALOG_MAJOR_NOT_FOUND: 'Không tìm thấy ngành học.',
   CATALOG_MAJOR_NAME_REQUIRED: 'Thiếu tên ngành học.',
   CATALOG_MAJOR_FACULTY_REQUIRED: 'Thiếu tên khoa viện (cột FacultyId không được để trống).',

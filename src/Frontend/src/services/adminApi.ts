@@ -55,6 +55,8 @@ export const adminApi = {
     ),
   permissions: () => apiRequest<PermissionDto[]>('/api/admin/permissions'),
   rolePermissions: () => apiRequest<RolePermissionMatrix[]>('/api/admin/role-permissions'),
+  rolePermissionsByRoleId: (roleId: string) =>
+    apiRequest<RolePermissionMatrix>(`/api/admin/roles/${roleId}/permissions`),
   updateRolePermissions: (roleId: string, grants: RolePermissionGrantDto[]) =>
     csrfRequest<void>(`/api/admin/roles/${roleId}/permissions`, 'PUT', { grants }),
 };

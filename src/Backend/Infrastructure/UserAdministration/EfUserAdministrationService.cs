@@ -354,34 +354,103 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
         CancellationToken cancellationToken = default)
     {
         (page, pageSize) = NormalizePaging(page, pageSize);
-        var query = db.AuthAuditLogs.AsNoTracking();
+        var authQuery = db.AuthAuditLogs.AsNoTracking();
+        var changeQuery = db.ChangeAuditLogs.AsNoTracking();
         if (userId is not null)
         {
-            query = query.Where(x => x.UserId == userId);
+            authQuery = authQuery.Where(x => x.UserId == userId);
+            changeQuery = changeQuery.Where(x => x.ChangedBy == userId);
         }
 
-        var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
+        var authCount = await authQuery.CountAsync(cancellationToken);
+        var changeCount = await changeQuery.CountAsync(cancellationToken);
+        var totalCount = authCount + changeCount;
+        var offset = (long)(page - 1) * pageSize;
+        if (offset >= totalCount)
+        {
+            return new AdminPage<AdminAuditLogDto>([], page, pageSize, totalCount);
+        }
+
+        // Lấy đủ phần đầu của mỗi nguồn để hợp nhất chính xác tới trang cần trả.
+        // Một bản ghi nằm ngoài giới hạn này ở từng nguồn không thể lọt vào trang hiện tại.
+        var fetchCount = (int)Math.Min(totalCount, offset + pageSize);
+        var authItems = await authQuery
             .OrderByDescending(x => x.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .ThenByDescending(x => x.Id)
+            .Take(fetchCount)
             .Select(x => new AdminAuditLogDto(
                 x.Id,
+                "AUTH",
                 x.UserId,
                 x.ProfileId,
                 x.Email,
                 x.Event,
+                null,
+                null,
                 x.Metadata,
+                null,
+                null,
                 x.CreatedAt))
             .ToListAsync(cancellationToken);
+        var changeItems = await changeQuery
+            .OrderByDescending(x => x.ChangedAt)
+            .ThenByDescending(x => x.Id)
+            .Take(fetchCount)
+            .Select(x => new AdminAuditLogDto(
+                x.Id,
+                "CHANGE",
+                x.ChangedBy,
+                null,
+                x.ChangedByEmail,
+                x.Action,
+                x.TableName,
+                x.RecordId,
+                null,
+                x.OldValues,
+                x.NewValues,
+                x.ChangedAt))
+            .ToListAsync(cancellationToken);
+        var items = authItems
+            .Concat(changeItems)
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .Skip((int)offset)
+            .Take(pageSize)
+            .ToList();
         return new AdminPage<AdminAuditLogDto>(items, page, pageSize, totalCount);
     }
+
+    private static readonly Dictionary<string, int> CategoryOrderMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Tổng quan"] = 1,
+        ["Báo cáo"] = 2,
+        ["Danh mục đào tạo"] = 3,
+        ["Khảo sát học phần"] = 4,
+        ["Khảo sát chương trình"] = 5,
+        ["Quản trị hệ thống"] = 6
+    };
+
+    private static int GetCategoryOrder(string category) =>
+        CategoryOrderMap.TryGetValue(category, out var order) ? order : 99;
+
+    private static readonly Dictionary<string, int> PermissionOrderMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["FACULTIES_ACCESS"] = 1,
+        ["DEPARTMENTS_ACCESS"] = 2,
+        ["LECTURERS_ACCESS"] = 3,
+        ["MAJORS_ACCESS"] = 4,
+        ["COURSES_ACCESS"] = 5,
+        ["COURSE_SECTIONS_ACCESS"] = 6
+    };
+
+    private static int GetPermissionOrder(string code) =>
+        PermissionOrderMap.TryGetValue(code, out var order) ? order : 99;
 
     public async Task<IReadOnlyList<PermissionDto>> GetPermissionsAsync(CancellationToken cancellationToken = default) =>
         await db.Permissions
             .AsNoTracking()
             .OrderBy(x => x.Code)
-            .Select(x => new PermissionDto(x.Id, x.Code, x.Name, x.Description))
+            .Select(x => new PermissionDto(x.Id, x.Code, x.Name, x.Description, x.Category))
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<RolePermissionMatrixDto>> GetRolePermissionMatrixAsync(CancellationToken cancellationToken = default)
@@ -391,10 +460,13 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
             .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken);
 
-        var allPermissions = await db.Permissions
+        var allPermissions = (await db.Permissions
             .AsNoTracking()
-            .OrderBy(x => x.Code)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken))
+            .OrderBy(x => GetCategoryOrder(x.Category))
+            .ThenBy(x => GetPermissionOrder(x.Code))
+            .ThenBy(x => x.Name)
+            .ToList();
 
         var grantedPairs = await db.RolePermissions
             .AsNoTracking()
@@ -414,9 +486,46 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
                 permission.Id,
                 permission.Code,
                 permission.Name,
+                permission.Category,
                 grantedSet.Contains((role.Id, permission.Id))
             )).ToList()
         )).ToList();
+    }
+
+    public async Task<RolePermissionMatrixDto?> GetRolePermissionsAsync(
+        Guid roleId,
+        CancellationToken cancellationToken = default)
+    {
+        var role = await db.Roles
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == roleId, cancellationToken);
+
+        if (role is null) return null;
+
+        var allPermissions = (await db.Permissions
+            .AsNoTracking()
+            .ToListAsync(cancellationToken))
+            .OrderBy(x => GetCategoryOrder(x.Category))
+            .ThenBy(x => GetPermissionOrder(x.Code))
+            .ThenBy(x => x.Name)
+            .ToList();
+
+        var grantedIds = await db.RolePermissions
+            .AsNoTracking()
+            .Where(x => x.RoleId == roleId && x.IsGranted)
+            .Select(x => x.PermissionId)
+            .ToHashSetAsync(cancellationToken);
+
+        return new RolePermissionMatrixDto(
+            role.Id,
+            role.Code,
+            role.Name,
+            allPermissions
+                .Select(p => new RolePermissionStatusDto(
+                    p.Id, p.Code, p.Name, p.Category,
+                    grantedIds.Contains(p.Id)))
+                .ToList()
+        );
     }
 
     public async Task UpdateRolePermissionsAsync(

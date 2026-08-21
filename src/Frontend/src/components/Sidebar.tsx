@@ -6,6 +6,7 @@ import {
   ChartColumn,
   ClipboardCheck,
   FileCheck2,
+  Gauge,
   GraduationCap,
   LayoutDashboard,
   ListChecks,
@@ -13,18 +14,21 @@ import {
   PanelLeftOpen,
   Presentation,
   School,
-  ShieldCheck,
+  Sigma,
+  Table2,
   UserCog,
   UsersRound,
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { canAccessModule } from '../auth/modulePermissions';
+import { HeaderSemesterPicker } from './HeaderSemesterPicker';
 
 interface SidebarProps {
   currentTab: string;
   onSelectTab: (tab: string) => void;
   activeCampaignsCount: number;
-  canManageUsers: boolean;
+  permissions: readonly string[];
 }
 
 interface SidebarItem {
@@ -43,7 +47,7 @@ export function Sidebar({
   currentTab,
   onSelectTab,
   activeCampaignsCount,
-  canManageUsers,
+  permissions,
 }: SidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -63,8 +67,11 @@ export function Sidebar({
       section: 'TỔNG QUAN',
       items: [
         { id: 'overview', label: 'Bảng điều khiển', icon: LayoutDashboard },
+        { id: 'survey-dashboard', label: 'Tổng quan khảo sát', icon: Gauge },
         { id: 'progress', label: 'Tiến độ thu phiếu', icon: ChartColumn },
         { id: 'reports', label: 'Thống kê & Báo cáo', icon: BarChart3 },
+        { id: 'survey-statistics', label: 'Bảng dữ liệu khảo sát', icon: Table2 },
+        { id: 'survey-analysis', label: 'Phân tích chuyên sâu', icon: Sigma },
       ],
     },
     {
@@ -97,15 +104,18 @@ export function Sidebar({
         { id: 'program-criteria', label: 'Tiêu chí CTĐT', icon: FileCheck2 },
       ],
     },
-    ...(canManageUsers
-      ? [{
-          section: 'QUẢN TRỊ',
-          items: [
-            { id: 'users-admin', label: 'Người dùng & phân quyền', icon: UserCog },
-          ],
-        } satisfies SidebarGroup]
-      : []),
-  ];
+    {
+      section: 'QUẢN TRỊ',
+      items: [
+        { id: 'users-admin', label: 'Người dùng & phân quyền', icon: UserCog },
+      ],
+    },
+  ]
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => canAccessModule(permissions, item.id)),
+    }))
+    .filter((group) => group.items.length > 0);
 
   const handleSelect = (tab: string) => {
     onSelectTab(tab);
@@ -186,17 +196,7 @@ export function Sidebar({
         </nav>
 
         <div className="sidebar-footer">
-          <div className="sidebar-footer-icon" aria-hidden="true">
-            <ShieldCheck />
-          </div>
-          <div className="sidebar-footer-copy">
-            <strong>Hệ thống nội bộ</strong>
-            <span>Phiên bản 2.5 · 2026</span>
-          </div>
-          <span className="sidebar-status" title="Hệ thống đang kết nối">
-            <span aria-hidden="true" />
-            Kết nối
-          </span>
+          <HeaderSemesterPicker />
         </div>
       </aside>
     </>

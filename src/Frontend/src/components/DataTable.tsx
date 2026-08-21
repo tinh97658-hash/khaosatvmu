@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Inbox, Plus, Search } from 'lucide-react';
+import { ColumnFilterMenu } from './ColumnFilterMenu';
 import '../styles/catalogs.css';
 
 export interface Column<T> {
@@ -7,6 +8,14 @@ export interface Column<T> {
   header: string;
   render?: (item: T) => ReactNode;
   sortValue?: (item: T) => string | number | null | undefined;
+  /**
+   * Giá trị dùng cho menu lọc kiểu Excel. Cột nào không khai báo thì không có
+   * nút lọc — dùng cho cột thao tác, hoặc cột mà mỗi dòng một giá trị riêng
+   * nên lọc không gom nhóm được gì.
+   */
+  filterValue?: (item: T) => string;
+  /** Đặt true cho cột số để sắp xếp danh sách giá trị theo trị số. */
+  numeric?: boolean;
   width?: string;
 }
 
@@ -52,18 +61,70 @@ export function DataTable<T>({
   sortDirection = 'asc',
   onSortChange,
 }: DataTableProps<T>) {
-  const hasQuery = Boolean(searchValue.trim() || currentFilter);
   const resolvedAddLabel = addNewLabel.replace(/^\+\s*/, '');
 
   const [page, setPage] = useState(1);
+  /** Không có khóa nghĩa là cột đó chưa lọc. */
+  const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
+  /**
+   * Sắp xếp nội bộ, dùng khi trang không truyền onSortChange. Các trang danh mục
+   * đều không truyền, nếu chỉ dựa vào prop thì nút sắp xếp trong menu lọc sẽ chết.
+   */
+  const [innerSort, setInnerSort] = useState<{
+    key: string;
+    direction: DataTableSortDirection;
+  } | null>(null);
+
+  const isControlledSort = Boolean(onSortChange);
+  const activeSortKey = isControlledSort ? sortKey : innerSort?.key;
+  const activeSortDirection = isControlledSort ? sortDirection : (innerSort?.direction ?? 'asc');
+
+  const changeSortTo = (key: string | undefined, direction?: DataTableSortDirection) => {
+    if (isControlledSort) {
+      onSortChange?.(key, direction);
+      return;
+    }
+    setInnerSort(key ? { key, direction: direction ?? 'asc' } : null);
+  };
+
+  const filterableColumns = useMemo(
+    () => columns.filter((column) => column.filterValue),
+    [columns]
+  );
+
+  /** Dòng có qua bộ lọc không, bỏ qua cột `except` để dựng danh sách cho chính cột đó. */
+  const passesFilters = (item: T, except?: string) =>
+    filterableColumns.every((column) => {
+      if (column.key === except) return true;
+      const allowed = columnFilters[column.key];
+      return !allowed || allowed.includes(column.filterValue!(item));
+    });
+
+  const filteredData = useMemo(
+    () => data.filter((item) => passesFilters(item)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, filterableColumns, columnFilters]
+  );
+
+  const hasQuery = Boolean(
+    searchValue.trim() || currentFilter || Object.keys(columnFilters).length > 0
+  );
+
   const sortedData = useMemo(() => {
-    if (!sortKey) return data;
-    const column = columns.find((item) => item.key === sortKey && item.sortValue);
-    if (!column?.sortValue) return data;
-    const direction = sortDirection === 'asc' ? 1 : -1;
-    return [...data].sort((leftItem, rightItem) => {
-      const left = column.sortValue?.(leftItem);
-      const right = column.sortValue?.(rightItem);
+    if (!activeSortKey) return filteredData;
+    const column = columns.find(
+      (item) => item.key === activeSortKey && (item.sortValue || item.filterValue)
+    );
+    if (!column) return filteredData;
+    // Cột chỉ khai báo filterValue vẫn sắp xếp được: dùng luôn giá trị đó, đổi
+    // sang số khi cột đánh dấu numeric.
+    const valueOf = column.sortValue
+      ? column.sortValue
+      : (item: T) => (column.numeric ? Number(column.filterValue!(item)) : column.filterValue!(item));
+    const direction = activeSortDirection === 'asc' ? 1 : -1;
+    return [...filteredData].sort((leftItem, rightItem) => {
+      const left = valueOf(leftItem);
+      const right = valueOf(rightItem);
       if (left === right) return 0;
       if (left === null || left === undefined) return 1;
       if (right === null || right === undefined) return -1;
@@ -72,7 +133,7 @@ export function DataTable<T>({
         : String(left).localeCompare(String(right), 'vi', { numeric: true, sensitivity: 'base' });
       return result * direction;
     });
-  }, [columns, data, sortDirection, sortKey]);
+  }, [columns, filteredData, activeSortDirection, activeSortKey]);
 
   const totalPages = pageSize ? Math.max(1, Math.ceil(sortedData.length / pageSize)) : 1;
 
@@ -83,25 +144,43 @@ export function DataTable<T>({
 
   useEffect(() => {
     setPage(1);
-  }, [sortDirection, sortKey]);
+  }, [activeSortDirection, activeSortKey]);
 
   const firstIndex = pageSize ? (page - 1) * pageSize : 0;
   const visibleRows = pageSize ? sortedData.slice(firstIndex, firstIndex + pageSize) : sortedData;
 
   const changeSort = (column: Column<T>) => {
-    if (!column.sortValue || !onSortChange) return;
-    if (sortKey !== column.key) {
-      onSortChange(column.key, 'asc');
-    } else if (sortDirection === 'asc') {
-      onSortChange(column.key, 'desc');
+    if (!column.sortValue) return;
+    if (activeSortKey !== column.key) {
+      changeSortTo(column.key, 'asc');
+    } else if (activeSortDirection === 'asc') {
+      changeSortTo(column.key, 'desc');
     } else {
-      onSortChange(undefined, undefined);
+      changeSortTo(undefined, undefined);
     }
   };
 
   const nextSortAction = (column: Column<T>): string => {
-    if (sortKey !== column.key) return 'tăng dần';
-    return sortDirection === 'asc' ? 'giảm dần' : 'bỏ sắp xếp';
+    if (activeSortKey !== column.key) return 'tăng dần';
+    return activeSortDirection === 'asc' ? 'giảm dần' : 'bỏ sắp xếp';
+  };
+
+  /** Giá trị cho menu của một cột, đã trừ các dòng bị cột khác lọc mất. */
+  const valuesFor = (column: Column<T>) =>
+    [...new Set(
+      data.filter((item) => passesFilters(item, column.key)).map((item) => column.filterValue!(item))
+    )].sort((left, right) =>
+      column.numeric ? Number(left) - Number(right) : left.localeCompare(right, 'vi')
+    );
+
+  const applyColumnFilter = (key: string, selected: string[] | null) => {
+    setPage(1);
+    setColumnFilters((prev) => {
+      const next = { ...prev };
+      if (selected === null) delete next[key];
+      else next[key] = selected;
+      return next;
+    });
   };
 
   return (
@@ -121,7 +200,7 @@ export function DataTable<T>({
             </label>
           )}
           <span className="catalog-result-count" aria-live="polite">
-            {data.length} kết quả
+            {sortedData.length} kết quả
           </span>
         </div>
 
@@ -161,21 +240,37 @@ export function DataTable<T>({
               <th className="catalog-table__index" scope="col">STT</th>
               {columns.map((column) => (
                 <th key={column.key} scope="col" style={{ width: column.width }}>
-                  {column.sortValue && onSortChange ? (
-                    <button
-                      type="button"
-                      className="catalog-sort-button"
-                      onClick={() => changeSort(column)}
-                      aria-label={`Sắp xếp ${column.header}: ${nextSortAction(column)}`}
-                    >
-                      {column.header}
-                      {sortKey !== column.key
-                        ? <ArrowUpDown aria-hidden="true" />
-                        : sortDirection === 'asc'
-                          ? <ArrowUp aria-hidden="true" />
-                          : <ArrowDown aria-hidden="true" />}
-                    </button>
-                  ) : column.header}
+                  <span className={column.filterValue ? 'catalog-th-filterable' : undefined}>
+                    {column.sortValue ? (
+                      <button
+                        type="button"
+                        className="catalog-sort-button catalog-th-label"
+                        onClick={() => changeSort(column)}
+                        aria-label={`Sắp xếp ${column.header}: ${nextSortAction(column)}`}
+                      >
+                        {column.header}
+                        {activeSortKey !== column.key
+                          ? <ArrowUpDown aria-hidden="true" />
+                          : activeSortDirection === 'asc'
+                            ? <ArrowUp aria-hidden="true" />
+                            : <ArrowDown aria-hidden="true" />}
+                      </button>
+                    ) : (
+                      <span className="catalog-th-label">{column.header}</span>
+                    )}
+                    {column.filterValue && (
+                      <ColumnFilterMenu
+                        label={column.header}
+                        values={valuesFor(column)}
+                        selected={columnFilters[column.key] ?? null}
+                        // Sắp xếp vẫn đi qua một đường duy nhất của bảng, dù là
+                        // sắp xếp nội bộ hay do trang điều khiển.
+                        sortDirection={activeSortKey === column.key ? activeSortDirection : null}
+                        onSort={(direction) => changeSortTo(column.key, direction)}
+                        onApply={(selected) => applyColumnFilter(column.key, selected)}
+                      />
+                    )}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -209,15 +304,15 @@ export function DataTable<T>({
 
       <footer className="catalog-pagination">
         <span>
-          {pageSize && data.length > 0 ? (
+          {pageSize && sortedData.length > 0 ? (
             <>
               Hiển thị <strong>{firstIndex + 1}</strong>–
-              <strong>{Math.min(firstIndex + pageSize, data.length)}</strong> trên{' '}
-              <strong>{data.length}</strong> kết quả
+              <strong>{Math.min(firstIndex + pageSize, sortedData.length)}</strong> trên{' '}
+              <strong>{sortedData.length}</strong> kết quả
             </>
           ) : (
             <>
-              Hiển thị <strong>{data.length}</strong> kết quả
+              Hiển thị <strong>{sortedData.length}</strong> kết quả
             </>
           )}
         </span>
