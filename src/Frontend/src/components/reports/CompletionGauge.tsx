@@ -25,11 +25,12 @@ export const CompletionGauge: React.FC<CompletionGaugeProps> = ({
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const clamped = Math.min(100, Math.max(0, value));
+  const displayValue = clamped > 0 && clamped < 1 ? clamped.toFixed(1) : clamped.toFixed(0);
   const offset = circumference - (clamped / 100) * circumference;
   const color = completionColor(clamped);
 
   return (
-    <div className="reports-gauge" style={{ width: size, height: size }} role="img" aria-label={`Tỷ lệ hoàn thành ${clamped.toFixed(0)}%`}>
+    <div className="reports-gauge" style={{ width: size, height: size }} role="img" aria-label={`Tỷ lệ hoàn thành ${displayValue}%`}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <circle
           cx={size / 2}
@@ -53,7 +54,7 @@ export const CompletionGauge: React.FC<CompletionGaugeProps> = ({
         />
       </svg>
       <div className="reports-gauge-center">
-        <strong style={{ color }}>{clamped.toFixed(0)}%</strong>
+        <strong style={{ color }}>{displayValue}%</strong>
         <span>hoàn thành</span>
         <small className="reports-gauge-sub">
           {formatNumber(collected)} / {formatNumber(target)}

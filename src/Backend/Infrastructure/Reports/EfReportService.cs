@@ -1090,7 +1090,12 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         decimal currentAvg,
         CancellationToken cancellationToken)
     {
-        if (comparisonSemesterId == semesterId) return null;
+        // Không công bố xu hướng khi kỳ hiện tại chưa có phản hồi: chênh lệch
+        // điểm khi đó chỉ là phép trừ với 0 và không có ý nghĩa điều hành.
+        if (comparisonSemesterId == semesterId || currentResponses <= 0 || currentTarget <= 0)
+        {
+            return null;
+        }
 
         var comparisonSemesterQuery = db.Semesters.AsNoTracking();
         var comparisonSemester = comparisonSemesterId.HasValue
@@ -1109,6 +1114,13 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         var (comparisonTarget, comparisonResponses, comparisonAvg) = await ComputeSemesterCoreStatsAsync(
             comparisonSemester.SemesterId,
             cancellationToken);
+        // Một kỳ không có chỉ tiêu hoặc không có phiếu không phải đường cơ sở
+        // hợp lệ. Trả null để UI không hiển thị biến động dương giả tạo.
+        if (comparisonTarget <= 0 || comparisonResponses <= 0)
+        {
+            return null;
+        }
+
         decimal comparisonCompletion = comparisonTarget > 0
             ? Math.Round((decimal)comparisonResponses / comparisonTarget * 100, 2)
             : 0;
