@@ -992,6 +992,11 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
                     db.Lecturers.Add(lecturer);
                     await db.SaveChangesAsync(cancellationToken);
 
+                    // Import lớp học phần cũng sinh giảng viên, nên cũng phải sinh
+                    // tài khoản đi kèm — một luật duy nhất, không có ngoại lệ.
+                    await EnsureUserForLecturerAsync(lecturer, cancellationToken);
+                    await db.SaveChangesAsync(cancellationToken);
+
                     lecturerId = lecturer.LecturerId;
                     lecturerIdByEmail[emailKey] = lecturer.LecturerId;
                     createdLecturerCount++;
@@ -1099,13 +1104,18 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
         var lecturer = new Lecturer
         {
             FullName = command.FullName.Trim(),
-            Email = NullIfBlank(command.Email),
+            // Validate ở trên đã chặn email rỗng nên chỗ này chắc chắn có giá trị.
+            Email = command.Email!.Trim(),
             PhoneNumber = NullIfBlank(command.PhoneNumber),
             DepartmentId = command.DepartmentId,
             FacultyId = command.FacultyId,
             PositionId = command.PositionId
         };
         db.Lecturers.Add(lecturer);
+        await db.SaveChangesAsync(cancellationToken);
+
+        // Lưu xong mới có LecturerId thật để gắn vào tài khoản.
+        await EnsureUserForLecturerAsync(lecturer, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         return Succeeded(ToDto(lecturer));
@@ -1129,11 +1139,15 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
         }
 
         lecturer.FullName = command.FullName.Trim();
-        lecturer.Email = NullIfBlank(command.Email);
+        lecturer.Email = command.Email!.Trim();
         lecturer.PhoneNumber = NullIfBlank(command.PhoneNumber);
         lecturer.DepartmentId = command.DepartmentId;
         lecturer.FacultyId = command.FacultyId;
         lecturer.PositionId = command.PositionId;
+
+        // Bắt cả hai ca: giảng viên cũ chưa có tài khoản thì tạo bù, và đổi email
+        // thì tài khoản chưa đăng nhập lần nào cũng đổi theo.
+        await EnsureUserForLecturerAsync(lecturer, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         return Succeeded(ToDto(lecturer));
@@ -1152,6 +1166,24 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
         if (await db.CourseSections.AnyAsync(x => x.LecturerId == lecturerId, cancellationToken))
         {
             return Failed<bool>(CatalogErrorCodes.LecturerInUse);
+        }
+
+        // Thứ tự ở đây có ý nghĩa. Phải khoá tài khoản, lưu, rồi GỠ nó khỏi change
+        // tracker trước khi đánh dấu xoá giảng viên. Nếu bản ghi User còn nằm trong
+        // tracker lúc Lecturer chuyển sang trạng thái xoá, EF sẽ tự set
+        // Users.LecturerId = NULL và làm đứt liên kết vĩnh viễn — khôi phục giảng
+        // viên xong sẽ còn lại một tài khoản mồ côi.
+        var account = await db.Users
+            .FirstOrDefaultAsync(x => x.LecturerId == lecturerId, cancellationToken);
+        if (account is not null)
+        {
+            if (account.IsActive)
+            {
+                account.IsActive = false;
+                account.UpdatedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            db.Entry(account).State = EntityState.Detached;
         }
 
         db.Lecturers.Remove(lecturer);
@@ -1192,20 +1224,24 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
                 continue;
             }
 
-            // Email bỏ trống thì lưu NULL, chỉ dòng có email mới kiểm tra trùng.
-            if (email.Length > 0)
+            // Email là bắt buộc, cùng luật với thêm tay: không có email thì không
+            // tạo được giảng viên, và cũng không có gì để tạo tài khoản đăng nhập.
+            if (email.Length == 0)
             {
-                var emailKey = NormalizeKey(email);
-                if (existingEmails.Contains(emailKey))
-                {
-                    items.Add(new CatalogImportItemDto(row.RowNumber, fullName, facultyName, false, CatalogErrorCodes.LecturerEmailExists));
-                    continue;
-                }
-                if (!seenInFile.Add(emailKey))
-                {
-                    items.Add(new CatalogImportItemDto(row.RowNumber, fullName, facultyName, false, CatalogErrorCodes.LecturerEmailDuplicateInFile));
-                    continue;
-                }
+                items.Add(new CatalogImportItemDto(row.RowNumber, fullName, facultyName, false, CatalogErrorCodes.LecturerEmailRequired));
+                continue;
+            }
+
+            var emailKey = NormalizeKey(email);
+            if (existingEmails.Contains(emailKey))
+            {
+                items.Add(new CatalogImportItemDto(row.RowNumber, fullName, facultyName, false, CatalogErrorCodes.LecturerEmailExists));
+                continue;
+            }
+            if (!seenInFile.Add(emailKey))
+            {
+                items.Add(new CatalogImportItemDto(row.RowNumber, fullName, facultyName, false, CatalogErrorCodes.LecturerEmailDuplicateInFile));
+                continue;
             }
 
             int? facultyId = null;
@@ -1246,7 +1282,7 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
             created.Add(new Lecturer
             {
                 FullName = fullName,
-                Email = NullIfBlank(email),
+                Email = email,
                 PhoneNumber = NullIfBlank(row.PhoneNumber),
                 DepartmentId = departmentId,
                 FacultyId = facultyId,
@@ -1258,6 +1294,13 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
         if (created.Count > 0)
         {
             db.Lecturers.AddRange(created);
+            await db.SaveChangesAsync(cancellationToken);
+
+            // Lưu xong cả mẻ mới có LecturerId thật, giờ mới tạo tài khoản đi kèm.
+            foreach (var lecturer in created)
+            {
+                await EnsureUserForLecturerAsync(lecturer, cancellationToken);
+            }
             await db.SaveChangesAsync(cancellationToken);
         }
 
@@ -1490,6 +1533,93 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
 
     private static string NormalizeKey(string value) => value.Trim().ToLowerInvariant();
 
+    /// <summary>
+    /// Bảo đảm mỗi giảng viên có đúng một tài khoản đăng nhập gắn kèm qua
+    /// <c>Users.LecturerId</c>. Gọi SAU khi giảng viên đã được lưu, vì trước đó
+    /// <c>LecturerId</c> vẫn là 0.
+    /// <para>
+    /// Cố ý KHÔNG tạo <c>UserProfiles</c>. Không có profile thì đăng nhập vẫn bị từ
+    /// chối, nên thêm giảng viên không cấp quyền cho ai — cấp quyền vẫn là việc
+    /// admin làm tay. Xem mục G1-b của congviec2.md.
+    /// </para>
+    /// </summary>
+    private async Task EnsureUserForLecturerAsync(
+        Lecturer lecturer,
+        CancellationToken cancellationToken)
+    {
+        var email = lecturer.Email?.Trim() ?? string.Empty;
+        // Phòng thủ: validate ở trên đã bắt buộc có email, nhưng dữ liệu cũ có thể
+        // còn bản ghi rỗng. Không có email thì không có gì để tạo tài khoản.
+        if (email.Length == 0) return;
+
+        var normalizedEmail = email.ToLowerInvariant();
+        var linked = await db.Users
+            .FirstOrDefaultAsync(x => x.LecturerId == lecturer.LecturerId, cancellationToken);
+
+        if (linked is not null)
+        {
+            // Đổi email giảng viên thì tài khoản phải đổi theo, nhưng CHỈ khi người
+            // đó chưa từng đăng nhập. Đăng nhập rồi thì email là danh tính thật của
+            // họ, sửa vào là khoá cửa của người ta. Bỏ qua nếu email mới đã thuộc về
+            // tài khoản khác, để không vỡ UNIQUE index.
+            if (linked.GoogleSubject is null
+                && !string.Equals(linked.Email, email, StringComparison.OrdinalIgnoreCase)
+                && !await db.Users.AnyAsync(
+                    x => x.Id != linked.Id && x.Email.ToLower() == normalizedEmail,
+                    cancellationToken))
+            {
+                linked.Email = email;
+                linked.UpdatedAt = DateTime.UtcNow;
+            }
+            return;
+        }
+
+        var existing = await db.Users
+            .FirstOrDefaultAsync(x => x.Email.ToLower() == normalizedEmail, cancellationToken);
+        if (existing is not null)
+        {
+            // Đã có tài khoản trùng email, thường là admin tự tạo trước. Nối vào,
+            // nhưng chỉ khi nó chưa thuộc về giảng viên nào — không kéo tài khoản
+            // của người khác về.
+            if (existing.LecturerId is null)
+            {
+                existing.LecturerId = lecturer.LecturerId;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        db.Users.Add(new User
+        {
+            Id = Guid.NewGuid(),
+            Email = email,
+            DisplayName = lecturer.FullName,
+            GoogleSubject = null,
+            IsActive = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+            LecturerId = lecturer.LecturerId
+        });
+    }
+
+    /// <summary>
+    /// Khoá hoặc mở lại tài khoản theo trạng thái của giảng viên. Xoá giảng viên là
+    /// xoá mềm nên tài khoản cũng chỉ tắt <c>IsActive</c> chứ không xoá đi.
+    /// </summary>
+    private async Task SetLecturerAccountActiveAsync(
+        int lecturerId,
+        bool isActive,
+        CancellationToken cancellationToken)
+    {
+        var linked = await db.Users
+            .FirstOrDefaultAsync(x => x.LecturerId == lecturerId, cancellationToken);
+        if (linked is null || linked.IsActive == isActive) return;
+
+        linked.IsActive = isActive;
+        linked.UpdatedAt = DateTime.UtcNow;
+    }
+
     private static SemesterDto ToDto(Semester semester) =>
         new(semester.SemesterId, semester.SemesterName, semester.AcademicYearId);
 
@@ -1593,17 +1723,18 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
 
         if (fullName.Length == 0) return CatalogErrorCodes.LecturerNameRequired;
 
-        // Email để trống thì lưu NULL; UNIQUE chỉ áp cho email có giá trị.
-        if (email.Length > 0)
+        // Email là bắt buộc. Cột "Lecturers"."Email" vừa NOT NULL vừa UNIQUE nên bỏ
+        // trống là không lưu được: NULL vướng NOT NULL, còn chuỗi rỗng thì người thứ
+        // hai đụng UNIQUE. Đây cũng là điều kiện để tạo tài khoản đăng nhập đi kèm.
+        if (email.Length == 0) return CatalogErrorCodes.LecturerEmailRequired;
+
+        var normalizedEmail = NormalizeKey(email);
+        var exists = await db.Lecturers
+            .Where(x => lecturerId == null || x.LecturerId != lecturerId)
+            .AnyAsync(x => x.Email.Trim().ToLower() == normalizedEmail, cancellationToken);
+        if (exists)
         {
-            var normalizedEmail = NormalizeKey(email);
-            var exists = await db.Lecturers
-                .Where(x => lecturerId == null || x.LecturerId != lecturerId)
-                .AnyAsync(x => x.Email != null && x.Email.Trim().ToLower() == normalizedEmail, cancellationToken);
-            if (exists)
-            {
-                return CatalogErrorCodes.LecturerEmailExists;
-            }
+            return CatalogErrorCodes.LecturerEmailExists;
         }
 
         if (command.FacultyId is { } facultyId && !await FacultyExistsAsync(facultyId, cancellationToken))
@@ -1817,6 +1948,9 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
         if (lecturer is null) return Failed<LecturerDto>(CatalogErrorCodes.LecturerNotFound);
         lecturer.IsDeleted = false;
         lecturer.DeletedAt = null;
+        // Khôi phục giảng viên thì mở lại tài khoản, và tạo bù nếu chưa từng có.
+        await SetLecturerAccountActiveAsync(lecturerId, isActive: true, cancellationToken);
+        await EnsureUserForLecturerAsync(lecturer, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return Succeeded(ToDto(lecturer));
     }

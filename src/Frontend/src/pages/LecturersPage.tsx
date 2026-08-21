@@ -192,6 +192,13 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
       return;
     }
 
+    // Email là bắt buộc: nó vừa là khoá định danh giảng viên, vừa là thứ dùng để
+    // tạo tài khoản đăng nhập đi kèm.
+    if (!email) {
+      setValidationError('Vui lòng nhập email. Giảng viên không có email thì không tạo được tài khoản đăng nhập.');
+      return;
+    }
+
     setSaving(true);
     const errorCode = await onSaveLecturer(editing?.lecturerId ?? null, {
       fullName,
@@ -430,11 +437,12 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
           </div>
           <div className="catalog-form-grid catalog-form-grid--2">
             <div className="form-group">
-              <label htmlFor="lecturer-email">Email</label>
+              <label htmlFor="lecturer-email">Email *</label>
               <input
                 id="lecturer-email"
                 type="email"
-                placeholder="Để trống nếu chưa có"
+                required
+                placeholder="vidu@vimaru.edu.vn"
                 value={form.email}
                 onChange={(event) => updateForm({ email: event.target.value })}
               />

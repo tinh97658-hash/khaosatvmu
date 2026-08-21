@@ -232,6 +232,8 @@ export const catalogErrorMessages: Record<string, string> = {
     'Có nhiều giảng viên trùng tên. Hãy ghi thêm email, bộ môn hoặc khoa viện.',
   CATALOG_LECTURER_NOT_FOUND: 'Không tìm thấy giảng viên.',
   CATALOG_LECTURER_NAME_REQUIRED: 'Thiếu họ và tên giảng viên.',
+  CATALOG_LECTURER_EMAIL_REQUIRED:
+    'Thiếu email giảng viên. Không có email thì không tạo được tài khoản đăng nhập.',
   CATALOG_LECTURER_EMAIL_EXISTS: 'Email đã tồn tại trong danh mục.',
   CATALOG_LECTURER_EMAIL_DUPLICATE_IN_FILE: 'Email bị lặp trong tệp.',
   CATALOG_LECTURER_IN_USE: 'Giảng viên đang được lớp học phần tham chiếu.',

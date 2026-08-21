@@ -61,6 +61,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.AvatarUrl).HasMaxLength(2048);
             entity.HasIndex(x => x.Email).IsUnique();
             entity.HasIndex(x => x.GoogleSubject).IsUnique();
+            // Một giảng viên chỉ được gắn với đúng một tài khoản. PostgreSQL cho
+            // phép nhiều NULL trong UNIQUE index nên các tài khoản quản trị thuần
+            // vẫn cùng tồn tại được.
+            entity.HasIndex(x => x.LecturerId).IsUnique();
+            entity.HasOne<Lecturer>()
+                .WithMany()
+                .HasForeignKey(x => x.LecturerId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<UserProfile>(entity =>

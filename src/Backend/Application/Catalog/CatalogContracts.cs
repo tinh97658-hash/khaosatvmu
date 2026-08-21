@@ -421,6 +421,7 @@ public static class CatalogErrorCodes
 
     public const string LecturerNotFound = "CATALOG_LECTURER_NOT_FOUND";
     public const string LecturerNameRequired = "CATALOG_LECTURER_NAME_REQUIRED";
+    public const string LecturerEmailRequired = "CATALOG_LECTURER_EMAIL_REQUIRED";
     public const string LecturerEmailExists = "CATALOG_LECTURER_EMAIL_EXISTS";
     public const string LecturerEmailDuplicateInFile = "CATALOG_LECTURER_EMAIL_DUPLICATE_IN_FILE";
     public const string LecturerInUse = "CATALOG_LECTURER_IN_USE";

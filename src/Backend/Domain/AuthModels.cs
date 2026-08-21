@@ -12,6 +12,15 @@ public sealed class User
     public DateTime? LastLoginAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>
+    /// Nullable, UNIQUE khi có giá trị, ON DELETE RESTRICT. Tài khoản của một giảng
+    /// viên thì trỏ về hồ sơ giảng viên đó; NULL là tài khoản quản trị thuần không
+    /// gắn với ai. Đây là nguồn duy nhất để suy ra phạm vi dữ liệu của người đăng
+    /// nhập, thay cho việc so email giữa hai bảng.
+    /// </summary>
+    public int? LecturerId { get; set; }
+
     public List<UserProfile> Profiles { get; set; } = [];
 }
 
