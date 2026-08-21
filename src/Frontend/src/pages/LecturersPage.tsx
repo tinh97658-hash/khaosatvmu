@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { BriefcaseBusiness, FileSpreadsheet, LoaderCircle, Pencil, Save, Trash2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { BookOpen, BriefcaseBusiness, FileSpreadsheet, LoaderCircle, Pencil, Save, Trash2, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
@@ -13,7 +13,8 @@ import {
   type SaveLecturerPayload,
 } from '../services/catalogApi';
 import type { ImportLecturerRow } from '../utils/lecturerImportExcel';
-import type { Department, Faculty, Lecturer, Position } from '../types';
+import type { Department, Faculty, Lecturer, LecturerRecentCourseSection, Position } from '../types';
+import { useSemester } from '../context/semesterContext';
 
 interface LecturersPageProps {
   lecturers: Lecturer[];
@@ -71,6 +72,12 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
   const [toDelete, setToDelete] = useState<Lecturer | null>(null);
   const [validationError, setValidationError] = useState('');
   const [form, setForm] = useState<LecturerForm>(emptyForm);
+  const { activeSemesterId, activeSemesterLabel } = useSemester();
+  const [recentClassesLecturer, setRecentClassesLecturer] = useState<Lecturer | null>(null);
+  const [recentClasses, setRecentClasses] = useState<LecturerRecentCourseSection[]>([]);
+  const [recentClassesLoading, setRecentClassesLoading] = useState(false);
+  const [recentClassesError, setRecentClassesError] = useState<string | null>(null);
+  const recentClassesRequestId = useRef(0);
 
   // ----------------------------------------------------------- Chức vụ
   const [positions, setPositions] = useState<Position[]>([]);
@@ -239,6 +246,36 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
     setToDelete(null);
   };
 
+  const openRecentClasses = async (lecturer: Lecturer) => {
+    const requestId = ++recentClassesRequestId.current;
+    setRecentClassesLecturer(lecturer);
+    setRecentClasses([]);
+    setRecentClassesError(null);
+
+    if (activeSemesterId === null) {
+      setRecentClassesError('Chưa chọn học kỳ hiện tại trên thanh điều hướng.');
+      return;
+    }
+
+    setRecentClassesLoading(true);
+    try {
+      const next = await catalogApi.lecturerRecentCourseSections(lecturer.lecturerId, activeSemesterId);
+      if (recentClassesRequestId.current === requestId) setRecentClasses(next);
+    } catch (error) {
+      if (recentClassesRequestId.current === requestId) setRecentClassesError(messageFrom(error));
+    } finally {
+      if (recentClassesRequestId.current === requestId) setRecentClassesLoading(false);
+    }
+  };
+
+  const closeRecentClasses = () => {
+    recentClassesRequestId.current += 1;
+    setRecentClassesLecturer(null);
+    setRecentClasses([]);
+    setRecentClassesError(null);
+    setRecentClassesLoading(false);
+  };
+
   const availableDepartments = form.facultyId
     ? departments.filter((department) => String(department.facultyId) === form.facultyId)
     : departments;
@@ -251,14 +288,34 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
       (lecturer.email ?? '').toLowerCase().includes(normalized);
     const matchesFaculty = !facultyFilter || String(lecturer.facultyId) === facultyFilter;
     return matchesSearch && matchesFaculty;
+  }).sort((left, right) => {
+    const missingEmailResult = Number(Boolean(left.email?.trim())) - Number(Boolean(right.email?.trim()));
+    if (missingEmailResult !== 0) return missingEmailResult;
+    const nameResult = left.fullName.localeCompare(right.fullName, 'vi', { sensitivity: 'base' });
+    return nameResult !== 0 ? nameResult : left.lecturerId - right.lecturerId;
   });
+  const missingEmailCount = lecturers.filter((lecturer) => !lecturer.email?.trim()).length;
 
   const columns: Column<Lecturer>[] = [
     {
       key: 'fullName',
       header: 'Họ và tên',
       filterValue: (row) => row.fullName,
-      render: (row) => <span className="catalog-cell-primary">{row.fullName}</span>,
+      render: (row) => {
+        const missingEmail = !row.email?.trim();
+        return (
+          <div className={missingEmail ? 'catalog-cell-unidentified' : undefined}>
+            <div className="catalog-cell-primary">
+              {missingEmail && <TriangleAlert aria-hidden="true" size={14} />}
+              {row.fullName}
+            </div>
+            <div className="catalog-cell-meta">
+              Mã nội bộ GV-{String(row.lecturerId).padStart(6, '0')}
+              {missingEmail ? ' · cần bổ sung email' : ''}
+            </div>
+          </div>
+        );
+      },
     },
     {
       key: 'departmentId',
@@ -285,7 +342,12 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
       key: 'email',
       header: 'Email',
       width: '230px',
-      render: (row) => row.email ?? '—',
+      render: (row) => row.email?.trim() || (
+        <span className="lecturer-email-warning">
+          <TriangleAlert aria-hidden="true" size={14} />
+          Chưa có email
+        </span>
+      ),
     },
     {
       key: 'phoneNumber',
@@ -296,9 +358,19 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
     {
       key: 'actions',
       header: 'Thao tác',
-      width: '92px',
+      width: '205px',
       render: (row) => (
         <div className="catalog-actions">
+          <button
+            type="button"
+            className="lecturer-recent-classes-button"
+            onClick={() => void openRecentClasses(row)}
+            aria-label={`Xem lớp đã dạy của ${row.fullName} trong học kỳ hiện tại`}
+            title="Xem tối đa 3 lớp trong học kỳ hiện tại"
+          >
+            <BookOpen aria-hidden="true" size={14} />
+            <span>Lớp đã dạy</span>
+          </button>
           <button
             type="button"
             className="catalog-icon-button"
@@ -331,9 +403,20 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
         </div>
       </header>
 
+      {missingEmailCount > 0 && (
+        <div className="lecturer-missing-email-summary" role="status">
+          <TriangleAlert aria-hidden="true" size={18} />
+          <div>
+            <strong>{missingEmailCount} giảng viên chưa có email</strong>
+            <span>Các giảng viên này được ưu tiên hiển thị ở đầu danh sách để bổ sung thông tin.</span>
+          </div>
+        </div>
+      )}
+
       <DataTable
         columns={columns}
         data={filtered}
+        rowPriority={(lecturer) => lecturer.email?.trim() ? 1 : 0}
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm họ tên hoặc email..."
@@ -375,6 +458,67 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
         keyExtractor={(item) => String(item.lecturerId)}
         pageSize={20}
       />
+
+      <Modal
+        isOpen={recentClassesLecturer !== null}
+        onClose={closeRecentClasses}
+        title={`Lớp đã dạy — ${recentClassesLecturer?.fullName ?? ''}`}
+      >
+        <div className="lecturer-recent-classes">
+          <div className="catalog-context-band">
+            Học kỳ đang xem: <strong>{activeSemesterLabel}</strong>
+          </div>
+          <p className="lecturer-recent-classes__hint">
+            Hiển thị tối đa 3 lớp được thêm gần nhất trong học kỳ này.
+          </p>
+
+          {recentClassesLoading && (
+            <div className="admin-import-state" role="status">
+              <LoaderCircle className="auth-spin" aria-hidden="true" />
+              Đang tải danh sách lớp...
+            </div>
+          )}
+
+          {recentClassesError && (
+            <div className="catalog-validation-error" role="alert">{recentClassesError}</div>
+          )}
+
+          {!recentClassesLoading && !recentClassesError && recentClasses.length === 0 && (
+            <div className="lecturer-recent-classes__empty">
+              Giảng viên này chưa được phân công lớp nào trong học kỳ đang chọn.
+            </div>
+          )}
+
+          {recentClasses.length > 0 && (
+            <div className="admin-import-table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Mã học phần</th>
+                    <th>Học phần</th>
+                    <th>Nhóm lớp</th>
+                    <th>Sĩ số</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentClasses.map((section) => (
+                    <tr key={section.courseSectionId}>
+                      <td><strong>{section.courseCode}</strong></td>
+                      <td>{section.courseName}</td>
+                      <td>{section.sectionName}</td>
+                      <td>{section.classSize}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="modal-footer catalog-form-actions">
+            <button type="button" className="btn btn-primary" onClick={closeRecentClasses}>Đóng</button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}

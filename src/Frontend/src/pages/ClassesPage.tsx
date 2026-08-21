@@ -515,7 +515,12 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
         return (
           <div>
             <div className="catalog-cell-primary">{lecturer?.fullName ?? '—'}</div>
-            <div className="catalog-cell-meta">{lecturer?.email ?? '—'}</div>
+            <div className="catalog-cell-meta">
+              {lecturer?.email
+                ?? (lecturer
+                  ? `GV-${String(lecturer.lecturerId).padStart(6, '0')} · thiếu email`
+                  : '—')}
+            </div>
           </div>
         );
       },
@@ -924,7 +929,9 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
               {lecturers.map((lecturer) => (
                 <option key={lecturer.lecturerId} value={String(lecturer.lecturerId)}>
                   {lecturer.fullName}
-                  {lecturer.email ? ` · ${lecturer.email}` : ''}
+                  {lecturer.email
+                    ? ` · ${lecturer.email}`
+                    : ` · GV-${String(lecturer.lecturerId).padStart(6, '0')} · thiếu email`}
                 </option>
               ))}
             </select>
@@ -989,6 +996,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
       <CourseSectionImportDialog
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
+        lecturers={lecturers}
         semesterLabel={`${selectedSemester?.semesterName ?? ''} · ${
           selectedYear?.academicYearName ?? ''
         }`}

@@ -1037,7 +1037,7 @@ export const ReportsOverviewPage: React.FC = () => {
                   <option value="">Tất cả Giảng viên</option>
                   {lecturerOptions.map((lec) => (
                     <option key={lec.lecturerId} value={lec.lecturerId}>
-                      {lec.fullName}
+                      {lec.fullName} · GV-{String(lec.lecturerId).padStart(6, '0')}
                     </option>
                   ))}
                 </select>

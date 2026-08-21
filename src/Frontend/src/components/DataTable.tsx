@@ -40,6 +40,8 @@ interface DataTableProps<T> {
   sortKey?: string;
   sortDirection?: DataTableSortDirection;
   onSortChange?: (key?: string, direction?: DataTableSortDirection) => void;
+  /** Giá trị nhỏ hơn luôn được ghim lên trước, kể cả khi người dùng sắp xếp cột. */
+  rowPriority?: (item: T) => number;
 }
 
 export function DataTable<T>({
@@ -60,6 +62,7 @@ export function DataTable<T>({
   sortKey,
   sortDirection = 'asc',
   onSortChange,
+  rowPriority,
 }: DataTableProps<T>) {
   const resolvedAddLabel = addNewLabel.replace(/^\+\s*/, '');
 
@@ -111,7 +114,12 @@ export function DataTable<T>({
   );
 
   const sortedData = useMemo(() => {
-    if (!activeSortKey) return filteredData;
+    const priorityOf = rowPriority ?? (() => 0);
+    if (!activeSortKey) {
+      return rowPriority
+        ? [...filteredData].sort((left, right) => priorityOf(left) - priorityOf(right))
+        : filteredData;
+    }
     const column = columns.find(
       (item) => item.key === activeSortKey && (item.sortValue || item.filterValue)
     );
@@ -123,6 +131,8 @@ export function DataTable<T>({
       : (item: T) => (column.numeric ? Number(column.filterValue!(item)) : column.filterValue!(item));
     const direction = activeSortDirection === 'asc' ? 1 : -1;
     return [...filteredData].sort((leftItem, rightItem) => {
+      const priorityResult = priorityOf(leftItem) - priorityOf(rightItem);
+      if (priorityResult !== 0) return priorityResult;
       const left = valueOf(leftItem);
       const right = valueOf(rightItem);
       if (left === right) return 0;
@@ -133,7 +143,7 @@ export function DataTable<T>({
         : String(left).localeCompare(String(right), 'vi', { numeric: true, sensitivity: 'base' });
       return result * direction;
     });
-  }, [columns, filteredData, activeSortDirection, activeSortKey]);
+  }, [columns, filteredData, activeSortDirection, activeSortKey, rowPriority]);
 
   const totalPages = pageSize ? Math.max(1, Math.ceil(sortedData.length / pageSize)) : 1;
 

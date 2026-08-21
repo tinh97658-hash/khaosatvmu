@@ -113,7 +113,7 @@ export function UserImportDialog({ isOpen, onClose, onImported }: UserImportDial
   const failedItems = result?.items.filter((item) => !item.succeeded) ?? [];
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Import người dùng từ Excel">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Import người dùng từ Excel" size="fullscreen">
       <div className="admin-import-dialog" aria-busy={parsing || importing}>
         <div className="admin-form-intro">
           <FileSpreadsheet aria-hidden="true" />

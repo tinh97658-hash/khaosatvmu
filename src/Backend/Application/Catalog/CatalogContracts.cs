@@ -19,8 +19,9 @@ public sealed record AcademicYearDto(
 public sealed record SemesterDto(int SemesterId, string SemesterName, int AcademicYearId);
 
 /// <summary>
-/// LecturerId và UnidentifiedLecturerName loại trừ nhau: lớp nào chưa xác định được
-/// giảng viên thì LecturerId null và tên đọc từ tệp nằm ở UnidentifiedLecturerName.
+/// LecturerId và UnidentifiedLecturerName loại trừ nhau. Import mới luôn tạo/gắn LecturerId
+/// cho giảng viên có tên, kể cả khi chưa có email; UnidentifiedLecturerName chỉ giữ tương thích
+/// với dữ liệu cũ hoặc lớp thực sự chưa thể gắn giảng viên.
 /// </summary>
 public sealed record CourseSectionDto(
     int CourseSectionId,
@@ -68,12 +69,16 @@ public sealed record ImportCourseSectionRowCommand(
     string? FacultyName,
     /// <summary>Cột "Giảng viên".</summary>
     string? LecturerFullName,
-    /// <summary>Cột "Email". Bỏ trống thì lớp được tạo với giảng viên chưa xác định.</summary>
-    string? LecturerEmail);
+    /// <summary>Cột "Email". Bỏ trống thì tạo hoặc tái sử dụng một giảng viên tạm.</summary>
+    string? LecturerEmail,
+    /// <summary>Do màn hình xác nhận gán, không phải cột trong tệp Excel.</summary>
+    int? ResolvedLecturerId,
+    /// <summary>Khóa nhóm tạm do màn hình xác nhận sinh, không phải cột trong tệp Excel.</summary>
+    string? ProvisionalLecturerKey);
 
 /// <summary>
-/// Một giảng viên đọc được trong tệp nhưng thiếu email nên không gắn được vào
-/// bảng "Lecturers". Frontend gom theo bộ môn rồi xuất tệp Excel cho quản trị.
+/// Một giảng viên đọc được trong tệp nhưng còn thiếu email. Giảng viên vẫn được tạo/gắn
+/// LecturerId; frontend gom danh sách này theo bộ môn để quản trị bổ sung email sau.
 /// </summary>
 public sealed record UnidentifiedLecturerDto(
     int RowNumber,
@@ -92,7 +97,7 @@ public sealed record CourseSectionImportDto(
     IReadOnlyList<CatalogImportItemDto> Items,
     /// <summary>Số học phần được tạo tự động vì chưa có trong danh mục.</summary>
     int CreatedCourseCount,
-    /// <summary>Số giảng viên được tạo tự động từ email trong tệp.</summary>
+    /// <summary>Số giảng viên được tạo tự động, gồm cả giảng viên tạm thiếu email.</summary>
     int CreatedLecturerCount,
     /// <summary>Số lớp đã có sẵn và được cập nhật lại mã giảng viên.</summary>
     int UpdatedSectionCount,
@@ -106,6 +111,14 @@ public sealed record LecturerDto(
     string? Email,
     string? PhoneNumber,
     int? PositionId);
+
+/// <summary>Một lớp gần đây của giảng viên trong đúng học kỳ được yêu cầu.</summary>
+public sealed record LecturerRecentCourseSectionDto(
+    int CourseSectionId,
+    string CourseCode,
+    string CourseName,
+    string SectionName,
+    int ClassSize);
 
 /// <summary>CourseType null nghĩa là chưa xác định bắt buộc hay tự chọn.</summary>
 public sealed record CourseDto(
@@ -323,6 +336,12 @@ public interface ICatalogService
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<LecturerDto>> GetLecturersAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Lấy tối đa 3 lớp được thêm gần nhất của giảng viên trong một học kỳ.</summary>
+    Task<IReadOnlyList<LecturerRecentCourseSectionDto>> GetLecturerRecentCourseSectionsAsync(
+        int lecturerId,
+        int semesterId,
+        CancellationToken cancellationToken = default);
 
     Task<CatalogOperationResult<LecturerDto>> CreateLecturerAsync(
         SaveLecturerCommand command,

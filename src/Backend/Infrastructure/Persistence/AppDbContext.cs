@@ -230,7 +230,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.ToTable("Lecturers");
             entity.HasKey(x => x.LecturerId);
             entity.Property(x => x.FullName).IsRequired();
-            entity.Property(x => x.Email).IsRequired();
+            entity.Property(x => x.Email);
             entity.HasIndex(x => x.Email).IsUnique();
             entity.HasIndex(x => x.DepartmentId);
             entity.HasIndex(x => x.FacultyId);

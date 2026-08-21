@@ -333,7 +333,9 @@ public static class CatalogEndpoints
                     x.DepartmentCode,
                     x.FacultyName,
                     x.LecturerFullName,
-                    x.LecturerEmail))
+                    x.LecturerEmail,
+                    x.ResolvedLecturerId,
+                    x.ProvisionalLecturerKey))
                 .ToList() ?? [];
             return ToResult(await service.ImportCourseSectionsAsync(
                 request.SemesterId,
@@ -347,6 +349,16 @@ public static class CatalogEndpoints
             ICatalogService service,
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetLecturersAsync(cancellationToken)));
+
+        lecturers.MapGet("/{lecturerId:int}/recent-course-sections", async (
+            int lecturerId,
+            int semesterId,
+            ICatalogService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetLecturerRecentCourseSectionsAsync(
+                lecturerId,
+                semesterId,
+                cancellationToken)));
 
         lecturers.MapPost("", async (
             SaveLecturerRequest request,
@@ -592,7 +604,9 @@ public static class CatalogEndpoints
         string? DepartmentCode,
         string? FacultyName,
         string? LecturerFullName,
-        string? LecturerEmail);
+        string? LecturerEmail,
+        int? ResolvedLecturerId,
+        string? ProvisionalLecturerKey);
 
     public sealed record SaveLecturerRequest(
         string FullName,

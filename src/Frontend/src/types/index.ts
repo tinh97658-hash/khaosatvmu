@@ -27,6 +27,15 @@ export interface Lecturer {
   positionId: number | null;
 }
 
+/** Một trong tối đa 3 lớp gần nhất của giảng viên trong học kỳ đang chọn. */
+export interface LecturerRecentCourseSection {
+  courseSectionId: number;
+  courseCode: string;
+  courseName: string;
+  sectionName: string;
+  classSize: number;
+}
+
 /** Bảng "Positions". Chức vụ của giảng viên. */
 export interface Position {
   positionId: number;

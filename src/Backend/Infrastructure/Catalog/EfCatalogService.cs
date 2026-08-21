@@ -810,6 +810,19 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
             return Failed<CourseSectionImportDto>(CatalogErrorCodes.SemesterNotFound);
         }
 
+        // Bẫy an toàn ở backend: client cũ hoặc lời gọi API trực tiếp cũng không được âm thầm
+        // gộp nhiều dòng thiếu email có cùng tên + đơn vị. UI mới phải gửi lựa chọn theo từng dòng.
+        var unresolvedCollisionRows = rows
+            .Where(x => string.IsNullOrWhiteSpace(x.LecturerEmail)
+                && !string.IsNullOrWhiteSpace(x.LecturerFullName))
+            .GroupBy(CourseSectionImportLecturerSourceKey)
+            .Where(group => group.Count() > 1)
+            .SelectMany(group => group
+                .Where(row => row.ResolvedLecturerId is null
+                    && string.IsNullOrWhiteSpace(row.ProvisionalLecturerKey))
+                .Select(row => row.RowNumber))
+            .ToHashSet();
+
         // Các map tra ngược. Học phần và giảng viên được tạo giữa chừng cũng ghi
         // vào đây để dòng sau dùng lại, tránh tạo trùng trong cùng một tệp.
         var courseIdByCode = new Dictionary<string, int>();
@@ -823,12 +836,28 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
         var departmentIdByName = await LoadDepartmentIdByNameAsync(cancellationToken);
         var facultyIdByName = await LoadFacultyIdByNameAsync(cancellationToken);
 
+        var lecturers = await db.Lecturers.ToListAsync(cancellationToken);
         var lecturerIdByEmail = new Dictionary<string, int>();
-        foreach (var lecturer in await db.Lecturers.Select(x => new { x.LecturerId, x.Email }).ToListAsync(cancellationToken))
+        var lecturerIdsByIdentity = new Dictionary<string, List<int>>();
+        var provisionalLecturerIdsByIdentity = new Dictionary<string, List<int>>();
+        var lecturerIdByResolutionKey = new Dictionary<string, int>();
+        foreach (var lecturer in lecturers)
         {
+            var identityKey = LecturerIdentityKey(
+                lecturer.FullName,
+                lecturer.DepartmentId,
+                lecturer.FacultyId);
+            AddLecturerIdentity(lecturerIdsByIdentity, identityKey, lecturer.LecturerId);
             if (!string.IsNullOrWhiteSpace(lecturer.Email))
             {
                 lecturerIdByEmail[NormalizeKey(lecturer.Email)] = lecturer.LecturerId;
+            }
+            else
+            {
+                AddLecturerIdentity(
+                    provisionalLecturerIdsByIdentity,
+                    identityKey,
+                    lecturer.LecturerId);
             }
         }
 
@@ -869,6 +898,16 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
             if (sectionName.Length == 0)
             {
                 items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseSectionNameRequired));
+                continue;
+            }
+            if (unresolvedCollisionRows.Contains(row.RowNumber))
+            {
+                items.Add(new CatalogImportItemDto(
+                    row.RowNumber,
+                    sectionName,
+                    courseCode,
+                    false,
+                    CatalogErrorCodes.LecturerAmbiguous));
                 continue;
             }
 
@@ -959,12 +998,12 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
                 createdCourseCount++;
             }
 
-            // Giảng viên. Email là khoá định danh (NOT NULL UNIQUE) nên chỉ dòng
-            // có email mới gắn được vào bảng "Lecturers".
+            // Email giúp nhận diện chính xác khi có. Khi thiếu email, LecturerId tự tăng mới là
+            // khoá nội bộ: tái sử dụng một bản ghi tạm duy nhất theo tên + đơn vị, hoặc tạo mới.
             int? lecturerId = null;
-            string? unidentifiedLecturerName = null;
             var lecturerFullName = row.LecturerFullName?.Trim() ?? string.Empty;
             var lecturerEmail = row.LecturerEmail?.Trim() ?? string.Empty;
+            var resolvedProvisionalLecturer = false;
 
             if (lecturerEmail.Length > 0)
             {
@@ -981,10 +1020,94 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
                         continue;
                     }
 
+                    // Nếu trước đó đã import đúng một giảng viên tạm cùng tên và đơn vị thì bổ
+                    // sung email ngay trên bản ghi ấy. Các lớp đã gắn LecturerId không phải sửa lại.
+                    var identityKey = LecturerIdentityKey(lecturerFullName, departmentId, facultyId);
+                    var provisionalIds = provisionalLecturerIdsByIdentity.GetValueOrDefault(identityKey);
+                    var provisionalLecturer = provisionalIds?.Count == 1
+                        ? lecturers.First(x => x.LecturerId == provisionalIds[0])
+                        : null;
+
+                    if (provisionalLecturer is not null)
+                    {
+                        provisionalLecturer.Email = lecturerEmail;
+                        lecturerId = provisionalLecturer.LecturerId;
+                        lecturerIdByEmail[emailKey] = provisionalLecturer.LecturerId;
+                        provisionalLecturerIdsByIdentity.Remove(identityKey);
+                        resolvedProvisionalLecturer = true;
+                    }
+                    else
+                    {
+                        var lecturer = new Lecturer
+                        {
+                            FullName = lecturerFullName,
+                            Email = lecturerEmail,
+                            DepartmentId = departmentId,
+                            FacultyId = facultyId,
+                            PositionId = defaultPositionId
+                        };
+                        db.Lecturers.Add(lecturer);
+                        await db.SaveChangesAsync(cancellationToken);
+
+                        lecturers.Add(lecturer);
+                        lecturerId = lecturer.LecturerId;
+                        lecturerIdByEmail[emailKey] = lecturer.LecturerId;
+                        AddLecturerIdentity(lecturerIdsByIdentity, identityKey, lecturer.LecturerId);
+                        createdLecturerCount++;
+                    }
+                }
+            }
+            else if (lecturerFullName.Length > 0)
+            {
+                var identityKey = LecturerIdentityKey(lecturerFullName, departmentId, facultyId);
+                var matchingLecturerIds = lecturerIdsByIdentity.GetValueOrDefault(identityKey);
+                var resolutionKey = row.ProvisionalLecturerKey?.Trim() ?? string.Empty;
+
+                if (row.ResolvedLecturerId is { } resolvedLecturerId)
+                {
+                    var resolvedLecturer = lecturers.FirstOrDefault(x => x.LecturerId == resolvedLecturerId);
+                    if (resolvedLecturer is null)
+                    {
+                        items.Add(new CatalogImportItemDto(
+                            row.RowNumber,
+                            sectionName,
+                            courseCode,
+                            false,
+                            CatalogErrorCodes.LecturerNotFound));
+                        continue;
+                    }
+
+                    // Không cho client/API gắn tùy ý một mã GV không khớp với tên + đơn vị của dòng import.
+                    // Frontend chỉ hiển thị ứng viên phù hợp, nhưng backend vẫn phải tự bảo vệ dữ liệu.
+                    var resolvedIdentityKey = LecturerIdentityKey(
+                        resolvedLecturer.FullName,
+                        resolvedLecturer.DepartmentId,
+                        resolvedLecturer.FacultyId);
+                    if (!string.Equals(resolvedIdentityKey, identityKey, StringComparison.Ordinal))
+                    {
+                        items.Add(new CatalogImportItemDto(
+                            row.RowNumber,
+                            sectionName,
+                            courseCode,
+                            false,
+                            CatalogErrorCodes.LecturerAmbiguous));
+                        continue;
+                    }
+                    lecturerId = resolvedLecturerId;
+                }
+                else if (resolutionKey.Length > 0
+                    && lecturerIdByResolutionKey.TryGetValue(resolutionKey, out var resolvedGroupLecturerId))
+                {
+                    lecturerId = resolvedGroupLecturerId;
+                }
+                else if (resolutionKey.Length > 0
+                    || matchingLecturerIds is null
+                    || matchingLecturerIds.Count == 0)
+                {
                     var lecturer = new Lecturer
                     {
                         FullName = lecturerFullName,
-                        Email = lecturerEmail,
+                        Email = null,
                         DepartmentId = departmentId,
                         FacultyId = facultyId,
                         PositionId = defaultPositionId
@@ -992,16 +1115,31 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
                     db.Lecturers.Add(lecturer);
                     await db.SaveChangesAsync(cancellationToken);
 
+                    lecturers.Add(lecturer);
                     lecturerId = lecturer.LecturerId;
-                    lecturerIdByEmail[emailKey] = lecturer.LecturerId;
+                    AddLecturerIdentity(lecturerIdsByIdentity, identityKey, lecturer.LecturerId);
+                    AddLecturerIdentity(provisionalLecturerIdsByIdentity, identityKey, lecturer.LecturerId);
+                    if (resolutionKey.Length > 0)
+                    {
+                        lecturerIdByResolutionKey[resolutionKey] = lecturer.LecturerId;
+                    }
                     createdLecturerCount++;
                 }
-            }
-            else if (lecturerFullName.Length > 0)
-            {
-                // Thiếu email: vẫn tạo lớp học phần nhưng để trống mã giảng viên,
-                // tên đưa vào cột chưa xác định và gom lại để xuất tệp báo lỗi.
-                unidentifiedLecturerName = lecturerFullName;
+                else
+                {
+                    // Chỉ tên + đơn vị, không email/mã GV, không đủ để kết luận là người cũ.
+                    // Kể cả chỉ có đúng một hồ sơ khớp, vẫn bắt quản trị xác nhận dùng hồ sơ đó
+                    // hay chủ động tạo hồ sơ mới để tránh gộp nhầm người qua các học kỳ.
+                    items.Add(new CatalogImportItemDto(
+                        row.RowNumber,
+                        sectionName,
+                        courseCode,
+                        false,
+                        CatalogErrorCodes.LecturerAmbiguous));
+                    continue;
+                }
+
+                // Vẫn trả danh sách thiếu email để quản trị có thể tải tệp và bổ sung sau.
                 unidentifiedLecturers.Add(new UnidentifiedLecturerDto(
                     row.RowNumber,
                     lecturerFullName,
@@ -1021,10 +1159,21 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
             // trưởng bộ môn bổ sung email rồi import lần nữa.
             if (sectionByKey.TryGetValue(key, out var existingSection))
             {
-                if (existingSection.LecturerId is null && lecturerId is not null)
+                var existingLecturerIsProvisional = existingSection.LecturerId is { } existingLecturerId
+                    && lecturers.Any(x => x.LecturerId == existingLecturerId && string.IsNullOrWhiteSpace(x.Email));
+                if (lecturerId is not null
+                    && (existingSection.LecturerId is null
+                        || (lecturerEmail.Length > 0
+                            && existingLecturerIsProvisional
+                            && existingSection.LecturerId != lecturerId)))
                 {
                     existingSection.LecturerId = lecturerId;
                     existingSection.UnidentifiedLecturerName = null;
+                    updatedSectionCount++;
+                    items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, true, null));
+                }
+                else if (resolvedProvisionalLecturer && existingSection.LecturerId == lecturerId)
+                {
                     updatedSectionCount++;
                     items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, true, null));
                 }
@@ -1045,7 +1194,7 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
                 CourseId = courseId,
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
-                UnidentifiedLecturerName = unidentifiedLecturerName,
+                UnidentifiedLecturerName = lecturerId is null ? NullIfBlank(lecturerFullName) : null,
                 SectionName = sectionName,
                 ClassSize = classSize
             });
@@ -1084,6 +1233,24 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
                 x.Email,
                 x.PhoneNumber,
                 x.PositionId))
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<LecturerRecentCourseSectionDto>> GetLecturerRecentCourseSectionsAsync(
+        int lecturerId,
+        int semesterId,
+        CancellationToken cancellationToken = default) =>
+        await (
+            from section in db.CourseSections
+            join course in db.Courses on section.CourseId equals course.CourseId
+            where section.LecturerId == lecturerId && section.SemesterId == semesterId
+            orderby section.CourseSectionId descending
+            select new LecturerRecentCourseSectionDto(
+                section.CourseSectionId,
+                course.CourseCode,
+                course.CourseName,
+                section.SectionName,
+                section.ClassSize))
+            .Take(3)
             .ToListAsync(cancellationToken);
 
     public async Task<CatalogOperationResult<LecturerDto>> CreateLecturerAsync(
@@ -1490,6 +1657,45 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
 
     private static string NormalizeKey(string value) => value.Trim().ToLowerInvariant();
 
+    /// <summary>
+    /// Khóa dò giảng viên tạm. Bộ môn được ưu tiên; nếu chưa có bộ môn mới dùng khoa.
+    /// Khóa này chỉ hỗ trợ tái sử dụng khi có đúng một ứng viên, không phải ràng buộc duy nhất.
+    /// </summary>
+    private static string LecturerIdentityKey(
+        string fullName,
+        int? departmentId,
+        int? facultyId)
+    {
+        var unitKey = departmentId is { } deptId
+            ? $"D:{deptId}"
+            : facultyId is { } facId
+                ? $"F:{facId}"
+                : "U:";
+        return $"{NormalizeKey(fullName)}|{unitKey}";
+    }
+
+    private static string CourseSectionImportLecturerSourceKey(ImportCourseSectionRowCommand row)
+    {
+        var departmentCode = row.DepartmentCode?.Trim() ?? string.Empty;
+        var unitKey = departmentCode.Length > 0
+            ? $"D:{NormalizeKey(departmentCode)}"
+            : $"N:{NormalizeKey(row.DepartmentName ?? string.Empty)}|F:{NormalizeKey(row.FacultyName ?? string.Empty)}";
+        return $"{NormalizeKey(row.LecturerFullName ?? string.Empty)}|{unitKey}";
+    }
+
+    private static void AddLecturerIdentity(
+        Dictionary<string, List<int>> lecturerIdsByIdentity,
+        string identityKey,
+        int lecturerId)
+    {
+        if (!lecturerIdsByIdentity.TryGetValue(identityKey, out var lecturerIds))
+        {
+            lecturerIds = [];
+            lecturerIdsByIdentity[identityKey] = lecturerIds;
+        }
+        lecturerIds.Add(lecturerId);
+    }
+
     private static SemesterDto ToDto(Semester semester) =>
         new(semester.SemesterId, semester.SemesterName, semester.AcademicYearId);
 
@@ -1555,7 +1761,8 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
         {
             return CatalogErrorCodes.SemesterNotFound;
         }
-        if (!await db.Lecturers.AnyAsync(x => x.LecturerId == command.LecturerId, cancellationToken))
+        if (command.LecturerId is { } lecturerId
+            && !await db.Lecturers.AnyAsync(x => x.LecturerId == lecturerId, cancellationToken))
         {
             return CatalogErrorCodes.LecturerNotFound;
         }

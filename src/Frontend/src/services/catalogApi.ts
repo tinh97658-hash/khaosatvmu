@@ -6,6 +6,7 @@ import type {
   Department,
   Faculty,
   Lecturer,
+  LecturerRecentCourseSection,
   Major,
   Position,
   Semester,
@@ -41,7 +42,7 @@ export interface CatalogImportResponse {
 export interface CourseSectionImportResponse extends CatalogImportResponse {
   /** Số học phần được tạo tự động vì chưa có trong danh mục. */
   createdCourseCount: number;
-  /** Số giảng viên được tạo tự động từ email trong tệp. */
+  /** Số giảng viên được tạo tự động, gồm cả giảng viên tạm chưa có email. */
   createdLecturerCount: number;
   /** Số lớp đã có sẵn và được cập nhật lại mã giảng viên. */
   updatedSectionCount: number;
@@ -133,6 +134,10 @@ export const catalogApi = {
     }),
 
   lecturers: () => apiRequest<Lecturer[]>('/api/catalog/lecturers'),
+  lecturerRecentCourseSections: (lecturerId: number, semesterId: number) =>
+    apiRequest<LecturerRecentCourseSection[]>(
+      `/api/catalog/lecturers/${lecturerId}/recent-course-sections?semesterId=${semesterId}`,
+    ),
   createLecturer: (lecturer: SaveLecturerPayload) =>
     csrfRequest<Lecturer>('/api/catalog/lecturers', 'POST', lecturer),
   updateLecturer: (lecturerId: number, lecturer: SaveLecturerPayload) =>
@@ -163,7 +168,7 @@ export interface SaveAcademicYearPayload {
 export interface SaveCourseSectionPayload {
   courseId: number;
   semesterId: number;
-  /** Null khi lớp chưa xác định được giảng viên. */
+  /** Null khi lớp chưa phân công hoặc dữ liệu trùng tên chưa được quản trị xử lý. */
   lecturerId: number | null;
   sectionName: string;
   classSize: number;
@@ -229,7 +234,7 @@ export const catalogErrorMessages: Record<string, string> = {
   CATALOG_COURSE_SECTION_DUPLICATE_IN_FILE: 'Lớp bị lặp trong tệp.',
   CATALOG_SECTION_LECTURER_REQUIRED: 'Thiếu giảng viên (cần email hoặc họ tên).',
   CATALOG_LECTURER_AMBIGUOUS:
-    'Có nhiều giảng viên trùng tên. Hãy ghi thêm email, bộ môn hoặc khoa viện.',
+    'Giảng viên không có email đang trùng tên với dữ liệu hiện có hoặc với dòng khác trong file. Hãy xác nhận dùng hồ sơ cũ hay tạo hồ sơ mới.',
   CATALOG_LECTURER_NOT_FOUND: 'Không tìm thấy giảng viên.',
   CATALOG_LECTURER_NAME_REQUIRED: 'Thiếu họ và tên giảng viên.',
   CATALOG_LECTURER_EMAIL_EXISTS: 'Email đã tồn tại trong danh mục.',

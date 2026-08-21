@@ -114,7 +114,7 @@ export function CourseImportDialog({ isOpen, onClose, onImport }: CourseImportDi
   const failedItems = result?.items.filter((item) => !item.succeeded) ?? [];
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Import học phần từ Excel">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Import học phần từ Excel" size="fullscreen">
       <div className="admin-import-dialog" aria-busy={parsing}>
         <div className="admin-form-intro">
           <FileSpreadsheet aria-hidden="true" />

@@ -88,6 +88,10 @@ export interface ImportCourseSectionRow {
   lecturerFullName: string;
   /** Cột "Email". Bỏ trống thì lớp được tạo với giảng viên chưa xác định. */
   lecturerEmail: string;
+  /** Gán từ màn hình xử lý trùng tên, không đọc từ cột Excel. */
+  resolvedLecturerId?: number;
+  /** Khóa gom các dòng vào cùng một giảng viên tạm, không đọc từ cột Excel. */
+  provisionalLecturerKey?: string;
 }
 
 /** Một giảng viên thiếu email do backend trả về sau khi import. */
