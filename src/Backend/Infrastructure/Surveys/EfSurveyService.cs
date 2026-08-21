@@ -1,3 +1,4 @@
+using Application.Auth;
 using Application.Surveys;
 using Domain;
 using Infrastructure.Persistence;
@@ -6,7 +7,10 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace Infrastructure.Surveys;
 
-public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurveyService
+public sealed class EfSurveyService(
+    AppDbContext db,
+    IMemoryCache cache,
+    IUserScopeResolver userScope) : ISurveyService
 {
     private const int MaximumScaleOptions = 5;
     private const int MaximumCommentLength = 1000;
@@ -488,9 +492,23 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         int semesterSurveyId,
         CancellationToken cancellationToken = default)
     {
-        var sectionSurveys = await db.CourseSectionSurveys
-            .Where(x => x.SemesterSurveyId == semesterSurveyId)
-            .ToListAsync(cancellationToken);
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (scope.SeesNothing) return [];
+
+        var query = db.CourseSectionSurveys
+            .Where(x => x.SemesterSurveyId == semesterSurveyId);
+
+        // Bài khảo sát đi theo lớp, mà lớp thuộc bộ môn nào là theo học phần sở hữu.
+        if (!scope.SeesEverything)
+        {
+            query = query.Where(x => db.CourseSections
+                .Any(section => section.CourseSectionId == x.CourseSectionId
+                                && db.Courses.Any(course =>
+                                    course.CourseId == section.CourseId
+                                    && course.DepartmentId == scope.DepartmentId)));
+        }
+
+        var sectionSurveys = await query.ToListAsync(cancellationToken);
         if (sectionSurveys.Count == 0)
         {
             return [];

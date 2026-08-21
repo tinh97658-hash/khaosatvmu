@@ -706,10 +706,23 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         int? semesterId,
         CancellationToken cancellationToken = default)
     {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (scope.SeesNothing) return [];
+
         var query = db.CourseSections.AsQueryable();
         if (semesterId is { } id)
         {
             query = query.Where(x => x.SemesterId == id);
+        }
+
+        // Lớp thuộc bộ môn nào là theo học phần sở hữu, không theo giảng viên dạy —
+        // câu D-b đã chốt. Giảng viên bộ môn A dạy học phần của bộ môn B thì lớp đó
+        // thuộc phạm vi của trưởng bộ môn B.
+        if (!scope.SeesEverything)
+        {
+            query = query.Where(x => db.Courses
+                .Any(course => course.CourseId == x.CourseId
+                               && course.DepartmentId == scope.DepartmentId));
         }
 
         var sections = await query.OrderBy(x => x.SectionName).ToListAsync(cancellationToken);
@@ -1175,8 +1188,18 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             lecturers);
     }
 
-    public async Task<IReadOnlyList<LecturerDto>> GetLecturersAsync(CancellationToken cancellationToken = default) =>
-        await db.Lecturers
+    public async Task<IReadOnlyList<LecturerDto>> GetLecturersAsync(CancellationToken cancellationToken = default)
+    {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (scope.SeesNothing) return [];
+
+        var query = db.Lecturers.AsQueryable();
+        if (!scope.SeesEverything)
+        {
+            query = query.Where(x => x.DepartmentId == scope.DepartmentId);
+        }
+
+        return await query
             .OrderBy(x => x.FullName)
             .Select(x => new LecturerDto(
                 x.LecturerId,
@@ -1187,6 +1210,7 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
                 x.PhoneNumber,
                 x.PositionId))
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<CatalogOperationResult<LecturerDto>> CreateLecturerAsync(
         SaveLecturerCommand command,
@@ -1406,8 +1430,18 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
 
     // ------------------------------------------------------------------ Courses
 
-    public async Task<IReadOnlyList<CourseDto>> GetCoursesAsync(CancellationToken cancellationToken = default) =>
-        await db.Courses
+    public async Task<IReadOnlyList<CourseDto>> GetCoursesAsync(CancellationToken cancellationToken = default)
+    {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (scope.SeesNothing) return [];
+
+        var query = db.Courses.AsQueryable();
+        if (!scope.SeesEverything)
+        {
+            query = query.Where(x => x.DepartmentId == scope.DepartmentId);
+        }
+
+        return await query
             .OrderBy(x => x.CourseCode)
             .Select(x => new CourseDto(
                 x.CourseId,
@@ -1419,6 +1453,7 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
                 x.FacultyId,
                 x.PrerequisiteCourseId))
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<CatalogOperationResult<CourseDto>> CreateCourseAsync(
         SaveCourseCommand command,
