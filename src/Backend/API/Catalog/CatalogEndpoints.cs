@@ -291,6 +291,15 @@ public static class CatalogEndpoints
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetCourseSectionsAsync(semesterId, cancellationToken)));
 
+        // Danh sách lớp chưa gắn được giảng viên, đã lọc sẵn theo phạm vi người đang
+        // đăng nhập. Nuôi cả băng cảnh báo ở trang Lớp học phần lẫn dòng thông báo
+        // trên bảng điều khiển của trưởng bộ môn.
+        courseSections.MapGet("/unidentified-lecturers", async (
+            int? semesterId,
+            ICatalogService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetUnidentifiedLecturersAsync(semesterId, cancellationToken)));
+
         courseSections.MapPost("", async (
             SaveCourseSectionRequest request,
             ICatalogService service,

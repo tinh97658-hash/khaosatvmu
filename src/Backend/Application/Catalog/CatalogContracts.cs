@@ -84,6 +84,40 @@ public sealed record UnidentifiedLecturerDto(
     string CourseCode,
     string SectionName);
 
+/// <summary>Một lớp chưa gắn được giảng viên, dựng lại từ dữ liệu chứ không từ tệp import.</summary>
+public sealed record UnidentifiedSectionDto(
+    int CourseSectionId,
+    /// <summary>Tên đọc từ tệp import, nằm ở cột UnidentifiedLecturerName.</summary>
+    string LecturerName,
+    string CourseCode,
+    string CourseName,
+    string SectionName,
+    int ClassSize,
+    int? DepartmentId,
+    string? DepartmentName,
+    string? FacultyName);
+
+/// <summary>
+/// Gom các lớp trên theo tên giảng viên. Đây mới là danh sách cầm đi xin email:
+/// một bộ môn có thể thiếu 36 lớp nhưng chỉ do 6 người dạy.
+/// </summary>
+public sealed record UnidentifiedLecturerGroupDto(
+    string LecturerName,
+    string? DepartmentName,
+    int SectionCount,
+    /// <summary>Nhãn lớp dạng "13150 / N01", để đối chiếu khi hỏi bộ môn.</summary>
+    IReadOnlyList<string> SectionLabels);
+
+/// <summary>
+/// Toàn bộ số liệu cho băng cảnh báo ở trang Lớp học phần và dòng thông báo trên
+/// bảng điều khiển của trưởng bộ môn. Đã lọc sẵn theo phạm vi người đang đăng nhập.
+/// </summary>
+public sealed record UnidentifiedLecturerReportDto(
+    int SectionCount,
+    int LecturerCount,
+    IReadOnlyList<UnidentifiedSectionDto> Sections,
+    IReadOnlyList<UnidentifiedLecturerGroupDto> Lecturers);
+
 /// <summary>Kết quả import lớp học phần, rộng hơn <see cref="CatalogImportDto"/>.</summary>
 public sealed record CourseSectionImportDto(
     int TotalCount,
@@ -323,6 +357,15 @@ public interface ICatalogService
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<LecturerDto>> GetLecturersAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Các lớp chưa gắn được giảng viên, đã lọc theo phạm vi người đang đăng nhập.
+    /// Trưởng bộ môn gọi thì ra bộ môn mình, quản trị gọi thì ra tất cả.
+    /// </summary>
+    /// <param name="semesterId">Bỏ trống thì lấy mọi học kỳ.</param>
+    Task<UnidentifiedLecturerReportDto> GetUnidentifiedLecturersAsync(
+        int? semesterId,
+        CancellationToken cancellationToken = default);
 
     Task<CatalogOperationResult<LecturerDto>> CreateLecturerAsync(
         SaveLecturerCommand command,

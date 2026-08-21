@@ -1,3 +1,4 @@
+using Application.Auth;
 using Application.Catalog;
 using Domain;
 using Infrastructure.Persistence;
@@ -5,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Catalog;
 
-public sealed class EfCatalogService(AppDbContext db) : ICatalogService
+public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userScope) : ICatalogService
 {
     private const int MaximumImportRows = 500;
 
@@ -1077,6 +1078,102 @@ public sealed class EfCatalogService(AppDbContext db) : ICatalogService
     }
 
     // ---------------------------------------------------------------- Lecturers
+
+    /// <summary>
+    /// Dựng lại danh sách giảng viên thiếu email từ chính dữ liệu, không phụ thuộc
+    /// vào lần import nào. Trước đây danh sách này chỉ tồn tại trong trình duyệt của
+    /// người import, đóng hộp thoại là mất — mà người đi xin email lại là trưởng bộ
+    /// môn. Xem congviec2.md mục E2.
+    /// </summary>
+    public async Task<UnidentifiedLecturerReportDto> GetUnidentifiedLecturersAsync(
+        int? semesterId,
+        CancellationToken cancellationToken = default)
+    {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        // Bị giới hạn theo bộ môn mà không biết bộ môn nào thì trả rỗng. Tuyệt đối
+        // không rơi xuống nhánh không lọc bên dưới.
+        if (scope.SeesNothing)
+        {
+            return new UnidentifiedLecturerReportDto(0, 0, [], []);
+        }
+
+        var query =
+            from section in db.CourseSections.AsNoTracking()
+            join course in db.Courses.AsNoTracking() on section.CourseId equals course.CourseId
+            where section.LecturerId == null
+                  && section.UnidentifiedLecturerName != null
+                  && section.UnidentifiedLecturerName != string.Empty
+            select new
+            {
+                section.CourseSectionId,
+                section.SemesterId,
+                section.SectionName,
+                section.ClassSize,
+                LecturerName = section.UnidentifiedLecturerName!,
+                course.CourseCode,
+                course.CourseName,
+                course.DepartmentId,
+                course.FacultyId,
+            };
+
+        if (semesterId is { } filteredSemesterId)
+        {
+            query = query.Where(x => x.SemesterId == filteredSemesterId);
+        }
+
+        // Đơn vị của lớp đi theo học phần sở hữu, đúng như câu D-b đã chốt.
+        if (!scope.SeesEverything)
+        {
+            query = query.Where(x => x.DepartmentId == scope.DepartmentId);
+        }
+
+        var rows = await query
+            .OrderBy(x => x.CourseCode)
+            .ThenBy(x => x.SectionName)
+            .ToListAsync(cancellationToken);
+
+        var departmentNames = await db.Departments.AsNoTracking()
+            .ToDictionaryAsync(x => x.DepartmentId, x => x.DepartmentName, cancellationToken);
+        var facultyNames = await db.Faculties.AsNoTracking()
+            .ToDictionaryAsync(x => x.FacultyId, x => x.FacultyName, cancellationToken);
+
+        string? DepartmentNameOf(int? id) =>
+            id is { } value && departmentNames.TryGetValue(value, out var name) ? name : null;
+        string? FacultyNameOf(int? id) =>
+            id is { } value && facultyNames.TryGetValue(value, out var name) ? name : null;
+
+        var sections = rows
+            .Select(x => new UnidentifiedSectionDto(
+                x.CourseSectionId,
+                x.LecturerName.Trim(),
+                x.CourseCode,
+                x.CourseName,
+                x.SectionName,
+                x.ClassSize,
+                x.DepartmentId,
+                DepartmentNameOf(x.DepartmentId),
+                FacultyNameOf(x.FacultyId)))
+            .ToList();
+
+        // Gom theo tên đã chuẩn hoá cộng bộ môn. Hai người trùng tên khác bộ môn thì
+        // vẫn tách ra; trùng tên cùng bộ môn thì đành gộp, vì không có gì để phân biệt.
+        var lecturers = sections
+            .GroupBy(x => new { Key = NormalizeKey(x.LecturerName), x.DepartmentId })
+            .Select(group => new UnidentifiedLecturerGroupDto(
+                group.First().LecturerName,
+                group.First().DepartmentName,
+                group.Count(),
+                group.Select(x => $"{x.CourseCode} / {x.SectionName}").ToList()))
+            .OrderByDescending(x => x.SectionCount)
+            .ThenBy(x => x.LecturerName)
+            .ToList();
+
+        return new UnidentifiedLecturerReportDto(
+            sections.Count,
+            lecturers.Count,
+            sections,
+            lecturers);
+    }
 
     public async Task<IReadOnlyList<LecturerDto>> GetLecturersAsync(CancellationToken cancellationToken = default) =>
         await db.Lecturers

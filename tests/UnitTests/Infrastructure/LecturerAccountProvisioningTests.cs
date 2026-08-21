@@ -1,5 +1,6 @@
 namespace UnitTests.InfrastructureTests;
 
+using Application.Auth;
 using Application.Catalog;
 using FluentAssertions;
 using global::Infrastructure.Catalog;
@@ -21,6 +22,12 @@ using Xunit;
 /// </summary>
 public class LecturerAccountProvisioningTests
 {
+    private sealed class UnrestrictedScopeResolver : IUserScopeResolver
+    {
+        public Task<UserScope> ResolveAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(UserScope.Unrestricted(RoleCodes.Admin));
+    }
+
     private static string? ConnectionString =>
         Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
 
@@ -46,7 +53,9 @@ public class LecturerAccountProvisioningTests
         await using var provider = BuildProvider(connectionString);
         await using var scope = provider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var service = new EfCatalogService(db);
+        // Các test ở đây chỉ quan tâm luồng tạo tài khoản chứ không quan tâm phạm vi
+        // dữ liệu, nên đưa vào phạm vi quản trị cho gọn.
+        var service = new EfCatalogService(db, new UnrestrictedScopeResolver());
 
         await using var transaction = await db.Database.BeginTransactionAsync();
         try
