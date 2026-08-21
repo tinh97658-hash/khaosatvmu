@@ -1048,6 +1048,10 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
 
         var calculatedAt = DateTime.UtcNow;
 
+        // Cả ba câu phải cùng ăn hoặc cùng bỏ: điểm tổng hợp của lớp và điểm từng
+        // câu là hai mặt của cùng một lần chốt, lệch nhau thì bảng đọc ra số vô lý.
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
         // Một câu UPDATE ... FROM chạy trọn trong Postgres: dù đợt có bao nhiêu
         // nghìn phiếu cũng không kéo dòng nào về bộ nhớ ứng dụng.
         // LEFT JOIN để lớp chưa có phiếu nào cũng được ghi về 0 thay vì giữ số cũ.
@@ -1072,6 +1076,40 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             ) AS agg
             WHERE css."CourseSectionSurveyId" = agg.id
             """, cancellationToken);
+
+        // Xoá trắng rồi ghi lại thay vì UPSERT: câu bị gỡ khỏi bộ câu hỏi, hoặc
+        // lớp bị xoá hết phiếu, thì dòng cũ phải biến mất chứ không được đứng lại.
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            DELETE FROM "CourseSectionSurveyQuestionScores" AS q
+            USING "CourseSectionSurveys" AS c
+            WHERE q."CourseSectionSurveyId" = c."CourseSectionSurveyId"
+              AND c."SemesterSurveyId" = {semesterSurveyId}
+            """, cancellationToken);
+
+        // Gộp điểm từng câu ngay trong Postgres. Cùng bộ điều kiện với điểm phiếu:
+        // chỉ phiếu hợp lệ, bỏ câu bẫy và câu tự nhập chữ. Câu chưa ai trả lời thì
+        // không sinh dòng — bảng hiển thị sẽ đọc ra "chưa có số".
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "CourseSectionSurveyQuestionScores"
+                ("CourseSectionSurveyId", "QuestionId", "AverageScore", "AnswerCount")
+            SELECT r."CourseSectionSurveyId",
+                   a."QuestionId",
+                   round(avg(a."AnswerValue"::numeric), 2),
+                   count(*)
+            FROM "SurveyResponses" AS r
+            JOIN "SurveyResponseAnswers" AS a ON a."ResponseId" = r."ResponseId"
+            JOIN "CourseSectionSurveys" AS c ON c."CourseSectionSurveyId" = r."CourseSectionSurveyId"
+            JOIN "SurveyQuestions" AS q ON q."QuestionId" = a."QuestionId"
+            JOIN "AnswerScales" AS s ON s."AnswerScaleId" = q."AnswerScaleId"
+            WHERE c."SemesterSurveyId" = {semesterSurveyId}
+              AND NOT c."IsDeleted"
+              AND r."IsValid"
+              AND q."AttentionCheckValue" IS NULL
+              AND s."ScaleKind" = {AnswerScaleKinds.Options}
+            GROUP BY r."CourseSectionSurveyId", a."QuestionId"
+            """, cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
 
         return Succeeded(new RecalculateScoresDto(semesterSurveyId, updated, calculatedAt));
     }
@@ -1139,27 +1177,36 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         var lecturers = await db.Lecturers.AsNoTracking().ToDictionaryAsync(x => x.LecturerId, x => x, cancellationToken);
         var departments = await db.Departments.AsNoTracking().ToDictionaryAsync(x => x.DepartmentId, x => x.DepartmentName, cancellationToken);
 
-        // Điểm từng câu của từng lớp, gộp ngay trong SQL. Chỉ phiếu hợp lệ.
+        // Điểm từng câu: đọc bảng đã gộp sẵn, KHÔNG gộp lại từ phiếu. Đây là lý do
+        // mở trang không còn phải đụng tới "SurveyResponseAnswers" — bảng nặng nhất
+        // hệ thống. Lớp nào chưa được chốt điểm thì đơn giản là chưa có dòng nào.
         var questionScores = cssIds.Count == 0 || scoredQuestionIds.Count == 0
             ? []
-            : await (from r in db.SurveyResponses.AsNoTracking()
-                     join a in db.SurveyResponseAnswers.AsNoTracking() on r.ResponseId equals a.ResponseId
-                     where cssIds.Contains(r.CourseSectionSurveyId)
-                       && r.IsValid
-                       && scoredQuestionIds.Contains(a.QuestionId)
-                     group a by new { r.CourseSectionSurveyId, a.QuestionId } into g
-                     select new
-                     {
-                         g.Key.CourseSectionSurveyId,
-                         g.Key.QuestionId,
-                         AnswerCount = g.Count(),
-                         Total = g.Sum(x => Convert.ToDecimal(x.AnswerValue))
-                     })
+            : await db.CourseSectionSurveyQuestionScores.AsNoTracking()
+                .Where(x => cssIds.Contains(x.CourseSectionSurveyId)
+                    && scoredQuestionIds.Contains(x.QuestionId))
                 .ToListAsync(cancellationToken);
 
         var scoresBySection = questionScores
             .GroupBy(x => x.CourseSectionSurveyId)
             .ToDictionary(g => g.Key, g => g.ToDictionary(x => x.QuestionId, x => x));
+
+        // Số phiếu thu và số phiếu bị lọc: đếm thẳng từ "SurveyResponses" mỗi lần
+        // mở trang. Đây là số liệu tiến độ nên phải đúng ngay cả khi đợt chưa chốt
+        // điểm, và chỉ là COUNT trên một bảng đã có chỉ mục (CourseSectionSurveyId,
+        // IsValid) nên rẻ — khác hẳn việc gộp điểm từng câu.
+        var responseTallies = cssIds.Count == 0
+            ? []
+            : await db.SurveyResponses.AsNoTracking()
+                .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
+                .GroupBy(x => x.CourseSectionSurveyId)
+                .Select(g => new
+                {
+                    CourseSectionSurveyId = g.Key,
+                    Total = g.Count(),
+                    Valid = g.Count(x => x.IsValid),
+                })
+                .ToDictionaryAsync(x => x.CourseSectionSurveyId, x => x, cancellationToken);
 
         // Số phiếu có điền ô "Ý kiến khác" — chỉ đếm ô cuối bài, không đếm câu
         // thuộc thang tự nhập chữ.
@@ -1195,6 +1242,8 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
             var lecturer = section?.LecturerId is { } lecId && lecturers.TryGetValue(lecId, out var l) ? l : null;
             var departmentId = course?.DepartmentId ?? lecturer?.DepartmentId;
 
+            // Câu chưa được chốt điểm trả về AnswerCount = 0; giao diện đọc đúng
+            // dấu hiệu đó để hiện gạch ngang thay vì số 0 gây hiểu nhầm là điểm kém.
             var perQuestion = scoresBySection.GetValueOrDefault(css.CourseSectionSurveyId);
             var columnScores = questionColumns
                 .Select(column =>
@@ -1202,9 +1251,7 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
                     var stat = perQuestion?.GetValueOrDefault(column.QuestionId);
                     return new SectionQuestionScoreDto(
                         column.QuestionId,
-                        stat is null || stat.AnswerCount == 0
-                            ? 0m
-                            : Math.Round(stat.Total / stat.AnswerCount, 2),
+                        stat?.AverageScore ?? 0m,
                         stat?.AnswerCount ?? 0);
                 })
                 .ToList();
@@ -1213,6 +1260,10 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
                 .Where(x => x.AnswerCount > 0)
                 .OrderBy(x => x.AverageScore)
                 .FirstOrDefault();
+
+            var tally = responseTallies.GetValueOrDefault(css.CourseSectionSurveyId);
+            var totalResponses = tally?.Total ?? 0;
+            var validResponses = tally?.Valid ?? 0;
 
             var classSize = section?.ClassSize ?? 0;
             rows.Add(new SectionStatisticsRowDto(
@@ -1225,11 +1276,11 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
                 // Lớp import thiếu email giảng viên thì hiện tên đọc được từ tệp.
                 lecturer?.FullName ?? section?.UnidentifiedLecturerName ?? "Chưa phân công",
                 classSize,
-                css.TotalResponseCount,
-                css.ValidResponseCount,
-                css.InvalidResponseCount,
+                totalResponses,
+                validResponses,
+                totalResponses - validResponses,
                 // Tỷ lệ phản hồi là số liệu tiến độ nên chia trên tổng lượt nộp.
-                classSize > 0 ? Math.Round((decimal)css.TotalResponseCount / classSize * 100, 1) : 0m,
+                classSize > 0 ? Math.Round((decimal)totalResponses / classSize * 100, 1) : 0m,
                 css.AverageScore,
                 css.ScoreCalculatedAt,
                 commentCounts.GetValueOrDefault(css.CourseSectionSurveyId),

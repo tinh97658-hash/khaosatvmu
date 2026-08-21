@@ -27,6 +27,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<SurveyQuestion> SurveyQuestions => Set<SurveyQuestion>();
     public DbSet<SemesterSurvey> SemesterSurveys => Set<SemesterSurvey>();
     public DbSet<CourseSectionSurvey> CourseSectionSurveys => Set<CourseSectionSurvey>();
+    public DbSet<CourseSectionSurveyQuestionScore> CourseSectionSurveyQuestionScores =>
+        Set<CourseSectionSurveyQuestionScore>();
     public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
     public DbSet<SurveyResponseAnswer> SurveyResponseAnswers => Set<SurveyResponseAnswer>();
     public DbSet<ChangeAuditLog> ChangeAuditLogs => Set<ChangeAuditLog>();
@@ -366,6 +368,23 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasOne<CourseSection>()
                 .WithMany()
                 .HasForeignKey(x => x.CourseSectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Điểm từng câu đã gộp sẵn của mỗi lớp. Ghi lại trọn vẹn mỗi lần bấm tính
+        // điểm; giữa hai lần bấm thì không ai đụng vào.
+        modelBuilder.Entity<CourseSectionSurveyQuestionScore>(entity =>
+        {
+            entity.ToTable("CourseSectionSurveyQuestionScores");
+            entity.HasKey(x => new { x.CourseSectionSurveyId, x.QuestionId });
+            entity.Property(x => x.AverageScore).HasColumnType("numeric(4,2)");
+            entity.HasOne<CourseSectionSurvey>()
+                .WithMany()
+                .HasForeignKey(x => x.CourseSectionSurveyId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<SurveyQuestion>()
+                .WithMany()
+                .HasForeignKey(x => x.QuestionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

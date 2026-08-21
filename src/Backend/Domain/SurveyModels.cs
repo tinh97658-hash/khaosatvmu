@@ -154,6 +154,34 @@ public sealed class CourseSectionSurvey : ISoftDeletable
     public DateTime? DeletedAt { get; set; }
 }
 
+/// <summary>
+/// Bảng "CourseSectionSurveyQuestionScores". Điểm từng câu của từng lớp — chính
+/// là các cột C1, C2… của bảng dữ liệu khảo sát. Cũng là ảnh chụp của lần bấm
+/// tính gần nhất, cùng thời điểm với <see cref="CourseSectionSurvey.AverageScore"/>.
+///
+/// Có bảng riêng vì nếu gộp thẳng từ phiếu mỗi lần mở trang thì phải quét toàn bộ
+/// "SurveyResponseAnswers" của cả đợt: một kỳ hơn 2000 lớp là vài triệu dòng cho
+/// mỗi lượt xem. Gộp sẵn một lần khi chốt đợt thì trang chỉ còn đọc đúng số dòng
+/// mà nó hiển thị.
+/// </summary>
+public sealed class CourseSectionSurveyQuestionScore
+{
+    /// <summary>NOT NULL, ON DELETE CASCADE. Khoá chính ghép với <see cref="QuestionId"/>.</summary>
+    public int CourseSectionSurveyId { get; set; }
+
+    /// <summary>NOT NULL, ON DELETE CASCADE.</summary>
+    public int QuestionId { get; set; }
+
+    /// <summary>numeric(4,2): trung bình câu này trên các phiếu hợp lệ có trả lời.</summary>
+    public decimal AverageScore { get; set; }
+
+    /// <summary>
+    /// Số phiếu hợp lệ đã trả lời câu này, chính là mẫu số của <see cref="AverageScore"/>.
+    /// Không có dòng nào cho câu mà cả lớp chưa ai trả lời, nên giá trị này luôn > 0.
+    /// </summary>
+    public int AnswerCount { get; set; }
+}
+
 /// <summary>Bảng "SurveyResponses". Phiếu trả lời ẩn danh của sinh viên.</summary>
 public sealed class SurveyResponse
 {

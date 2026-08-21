@@ -294,6 +294,7 @@ public sealed record SectionStatisticsRowDto(
     string DepartmentName,
     string LecturerName,
     int ClassSize,
+    /// <summary>Đếm trực tiếp từ phiếu, đúng tại thời điểm xem.</summary>
     int TotalResponseCount,
     int ValidResponseCount,
     int InvalidResponseCount,
@@ -303,10 +304,13 @@ public sealed record SectionStatisticsRowDto(
     DateTime? ScoreCalculatedAt,
     /// <summary>Số phiếu có điền ô "Ý kiến khác" ở cuối bài.</summary>
     int OpenCommentCount,
-    /// <summary>Câu có điểm thấp nhất của lớp; null khi lớp chưa có phiếu hợp lệ.</summary>
+    /// <summary>Câu có điểm thấp nhất của lớp; null khi lớp chưa được chốt điểm.</summary>
     int? WeakestQuestionId,
     decimal? WeakestQuestionScore,
-    /// <summary>Điểm từng câu, theo đúng thứ tự cột C của bảng.</summary>
+    /// <summary>
+    /// Điểm từng câu, theo đúng thứ tự cột C của bảng. Cũng là ảnh chụp của lần
+    /// bấm tính gần nhất: câu chưa được chốt có <c>AnswerCount = 0</c>.
+    /// </summary>
     IReadOnlyList<SectionQuestionScoreDto> QuestionScores);
 
 /// <summary>Một cột C của bảng thống kê, sinh theo bộ câu hỏi của đợt.</summary>

@@ -254,10 +254,15 @@ export const SurveyStatisticsPage: React.FC = () => {
         </div>
       )}
 
+      {/* Các cột đếm phiếu luôn có số; riêng cột điểm phải bấm nút mới tính, nên
+          nói rõ để khỏi bị hiểu là bảng lỗi. */}
       {statistics && statistics.lastCalculatedAt === null && (
         <div className="admin-alert" role="status">
           <CircleAlert aria-hidden="true" />
-          <span>Đợt này chưa tính điểm lần nào. Bấm <strong>Tính lại điểm</strong> để có số liệu.</span>
+          <span>
+            Đợt này chưa chốt điểm lần nào, nên các cột điểm (C1, C2…, Điểm tổng hợp, Câu yếu
+            nhất) đang để trống. Bấm <strong>Tính lại điểm</strong> để tính.
+          </span>
         </div>
       )}
 
