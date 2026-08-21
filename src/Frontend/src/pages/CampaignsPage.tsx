@@ -23,7 +23,9 @@ import {
 import { toast } from 'sonner';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { InlineTreeWizard } from '../components/InlineTreeWizard';
+import { TablePagination } from '../components/TablePagination';
 import { useSemester } from '../context/semesterContext';
+import { usePaginatedItems } from '../hooks/usePaginatedItems';
 import type {
   SurveyCampaign,
   Major,
@@ -174,22 +176,23 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   };
 
   // Filter Campaigns Data by Tab, Search, Semester & Academic Year
-  const filteredCampaigns = campaigns.filter((cmp) => {
-    const matchesTab = cmp.type === activeTab;
-    const matchesSearch =
-      cmp.title.toLowerCase().includes(search.toLowerCase()) ||
-      (cmp.classCode && cmp.classCode.toLowerCase().includes(search.toLowerCase())) ||
-      (cmp.courseName && cmp.courseName.toLowerCase().includes(search.toLowerCase())) ||
-      (cmp.majorName && cmp.majorName.toLowerCase().includes(search.toLowerCase()));
+  const filteredCampaigns = React.useMemo(() => campaigns.filter((cmp) => {
+      const matchesTab = cmp.type === activeTab;
+      const matchesSearch =
+        cmp.title.toLowerCase().includes(search.toLowerCase()) ||
+        (cmp.classCode && cmp.classCode.toLowerCase().includes(search.toLowerCase())) ||
+        (cmp.courseName && cmp.courseName.toLowerCase().includes(search.toLowerCase())) ||
+        (cmp.majorName && cmp.majorName.toLowerCase().includes(search.toLowerCase()));
 
-    const matchesSemester = semesterFilter ? cmp.semester === semesterFilter : true;
-    const matchesAcademicYear = academicYearFilter ? cmp.academicYear === academicYearFilter : true;
+      const matchesSemester = semesterFilter ? cmp.semester === semesterFilter : true;
+      const matchesAcademicYear = academicYearFilter ? cmp.academicYear === academicYearFilter : true;
 
-    return matchesTab && matchesSearch && matchesSemester && matchesAcademicYear;
-  });
+      return matchesTab && matchesSearch && matchesSemester && matchesAcademicYear;
+    }), [campaigns, activeTab, search, semesterFilter, academicYearFilter]);
+  const campaignPagination = usePaginatedItems(filteredCampaigns, 20);
 
   // Group Campaigns by Academic Year -> Semester for Tree View
-  const treeData = filteredCampaigns.reduce((acc, cmp) => {
+  const treeData = campaignPagination.visibleItems.reduce((acc, cmp) => {
     const year = cmp.academicYear || '2025-2026';
     const sem = cmp.semester || 'Học kỳ II';
 
@@ -492,6 +495,14 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
           ))
         )}
       </section>
+
+      <TablePagination
+        page={campaignPagination.page}
+        pageSize={20}
+        totalItems={filteredCampaigns.length}
+        itemLabel="bài khảo sát"
+        onPageChange={campaignPagination.setPage}
+      />
 
       {/* Edit QR Scanning Validity Period Modal */}
       {editingCampaign && (

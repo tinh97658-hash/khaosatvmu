@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Calculator, CircleAlert, LoaderCircle, RefreshCw, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSemester } from '../context/semesterContext';
+import { TablePagination } from '../components/TablePagination';
 import { ApiError } from '../services/apiClient';
 import { surveyApi, surveyErrorMessage } from '../services/surveyApi';
 import type { SemesterSurvey } from '../types';
@@ -21,6 +22,7 @@ function formatDateTime(value: string | null): string {
 
 /** Điểm dưới ngưỡng này thì tô đậm để dễ nhặt ra lớp cần để ý. */
 const weakScoreThreshold = 3.5;
+const statisticsPageSize = 20;
 
 export const SurveyStatisticsPage: React.FC = () => {
   const { academicYears, activeSemesterId } = useSemester();
@@ -39,6 +41,7 @@ export const SurveyStatisticsPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [recalculating, setRecalculating] = useState(false);
+  const [page, setPage] = useState(1);
 
   // Đổi học kỳ thì nạp lại danh sách đợt khảo sát của kỳ đó.
   useEffect(() => {
@@ -118,6 +121,19 @@ export const SurveyStatisticsPage: React.FC = () => {
   // tham chiếu mới mỗi lần render nên useMemo sẽ chạy lại vô ích.
   const columns = useMemo(() => statistics?.questionColumns ?? [], [statistics]);
   const rows = useMemo(() => statistics?.rows ?? [], [statistics]);
+  const pageCount = Math.max(1, Math.ceil(rows.length / statisticsPageSize));
+  const visibleRows = useMemo(
+    () => rows.slice((page - 1) * statisticsPageSize, page * statisticsPageSize),
+    [page, rows]
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [semesterSurveyId]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, pageCount));
+  }, [pageCount]);
   const rowsWithResponses = rows.filter((row) => row.totalResponseCount > 0);
   const questionTextById = useMemo(
     () => new Map(columns.map((column) => [column.questionId, column])),
@@ -303,7 +319,7 @@ export const SurveyStatisticsPage: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => {
+              {visibleRows.map((row) => {
                 const weakest = row.weakestQuestionId === null
                   ? null
                   : questionTextById.get(row.weakestQuestionId);
@@ -403,6 +419,13 @@ export const SurveyStatisticsPage: React.FC = () => {
               </tr>
             </tfoot>
           </table>
+          <TablePagination
+            page={page}
+            pageSize={statisticsPageSize}
+            totalItems={rows.length}
+            itemLabel="lớp"
+            onPageChange={setPage}
+          />
         </div>
       )}
     </div>

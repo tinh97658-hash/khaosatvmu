@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CircleAlert, LoaderCircle, RefreshCw, Search } from 'lucide-react';
 import { useSemester } from '../context/semesterContext';
+import { TablePagination } from '../components/TablePagination';
+import { usePaginatedItems } from '../hooks/usePaginatedItems';
 import { ApiError } from '../services/apiClient';
 import {
   courseDiagnosisLabels,
@@ -25,6 +27,7 @@ function messageFrom(error: unknown): string {
 
 /** Dưới mức này thì lớp bị coi là cần cảnh báo — khớp ReportThresholds.LowScore. */
 const lowScore = 3.2;
+const analysisPageSize = 20;
 
 type TabId = 'normalization' | 'departments' | 'courses' | 'lecturer';
 
@@ -278,6 +281,11 @@ const NormalizationTab: React.FC<{
   data: SemesterSurveyNormalization | null;
   flipCount: number;
 }> = ({ data, flipCount }) => {
+  const groups = useMemo(() => data?.groups ?? [], [data]);
+  const sections = useMemo(() => data?.sections ?? [], [data]);
+  const groupPagination = usePaginatedItems(groups, analysisPageSize);
+  const sectionPagination = usePaginatedItems(sections, analysisPageSize);
+
   if (!data || data.sections.length === 0) {
     return (
       <div className="operations-empty">
@@ -322,7 +330,7 @@ const NormalizationTab: React.FC<{
             </tr>
           </thead>
           <tbody>
-            {data.groups.map((group) => (
+            {groupPagination.visibleItems.map((group) => (
               <tr key={group.facultyName}>
                 <td>{group.facultyName}</td>
                 <td className="num">{group.sectionCount}</td>
@@ -352,6 +360,13 @@ const NormalizationTab: React.FC<{
             </tr>
           </tbody>
         </table>
+        <TablePagination
+          page={groupPagination.page}
+          pageSize={analysisPageSize}
+          totalItems={data.groups.length}
+          itemLabel="khoa/viện"
+          onPageChange={groupPagination.setPage}
+        />
       </div>
 
       <div className="statistics-table-scroll" tabIndex={0} aria-label="Chi tiết chuẩn hoá từng lớp">
@@ -372,7 +387,7 @@ const NormalizationTab: React.FC<{
             </tr>
           </thead>
           <tbody>
-            {data.sections.map((section) => (
+            {sectionPagination.visibleItems.map((section) => (
               <tr key={section.courseSectionSurveyId}>
                 <td className="col-left col-left-1">
                   <span className="operations-code">{section.courseCode}</span>
@@ -407,6 +422,13 @@ const NormalizationTab: React.FC<{
             ))}
           </tbody>
         </table>
+        <TablePagination
+          page={sectionPagination.page}
+          pageSize={analysisPageSize}
+          totalItems={data.sections.length}
+          itemLabel="lớp"
+          onPageChange={sectionPagination.setPage}
+        />
       </div>
     </>
   );
@@ -415,6 +437,9 @@ const NormalizationTab: React.FC<{
 // -------------------------------------------- Tab 2: tổng hợp theo bộ môn
 
 const DepartmentTab: React.FC<{ data: SemesterSurveyDepartmentSummary | null }> = ({ data }) => {
+  const rows = useMemo(() => data?.rows ?? [], [data]);
+  const pagination = usePaginatedItems(rows, analysisPageSize);
+
   if (!data || data.rows.length === 0) {
     return (
       <div className="operations-empty">
@@ -465,7 +490,7 @@ const DepartmentTab: React.FC<{ data: SemesterSurveyDepartmentSummary | null }> 
             </tr>
           </thead>
           <tbody>
-            {data.rows.map((row) => (
+            {pagination.visibleItems.map((row) => (
               <tr key={`${row.facultyName}-${row.departmentName}`}>
                 <td className="col-left col-dept-1" title={row.facultyName}>
                   {row.facultyName}
@@ -514,6 +539,13 @@ const DepartmentTab: React.FC<{ data: SemesterSurveyDepartmentSummary | null }> 
             </tr>
           </tfoot>
         </table>
+        <TablePagination
+          page={pagination.page}
+          pageSize={analysisPageSize}
+          totalItems={data.rows.length}
+          itemLabel="bộ môn"
+          onPageChange={pagination.setPage}
+        />
       </div>
     </>
   );
@@ -527,6 +559,9 @@ function spreadClass(spread: number): string {
 }
 
 const CourseDiagnosisTab: React.FC<{ data: SemesterSurveyCourseDiagnosis | null }> = ({ data }) => {
+  const rows = useMemo(() => data?.rows ?? [], [data]);
+  const pagination = usePaginatedItems(rows, analysisPageSize);
+
   if (!data || data.rows.length === 0) {
     return (
       <div className="operations-empty">
@@ -580,7 +615,7 @@ const CourseDiagnosisTab: React.FC<{ data: SemesterSurveyCourseDiagnosis | null 
             </tr>
           </thead>
           <tbody>
-            {data.rows.map((row) => (
+            {pagination.visibleItems.map((row) => (
               <tr key={row.courseId}>
                 <td className="col-left col-course-1">
                   <span className="operations-code">{row.courseCode}</span>
@@ -610,6 +645,13 @@ const CourseDiagnosisTab: React.FC<{ data: SemesterSurveyCourseDiagnosis | null 
             ))}
           </tbody>
         </table>
+        <TablePagination
+          page={pagination.page}
+          pageSize={analysisPageSize}
+          totalItems={data.rows.length}
+          itemLabel="học phần"
+          onPageChange={pagination.setPage}
+        />
       </div>
     </>
   );

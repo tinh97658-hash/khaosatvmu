@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Inbox, Plus, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Inbox, Plus, Search } from 'lucide-react';
 import { ColumnFilterMenu } from './ColumnFilterMenu';
+import { TablePagination } from './TablePagination';
 import '../styles/catalogs.css';
 
 export interface Column<T> {
@@ -35,7 +36,7 @@ interface DataTableProps<T> {
   toolbarActions?: ReactNode;
   emptyMessage?: string;
   keyExtractor: (item: T) => string;
-  /** Số dòng mỗi trang. Bỏ trống thì hiển thị toàn bộ, không phân trang. */
+  /** Số dòng mỗi trang. Mặc định 20 để các trang mới không vô tình hiển thị toàn bộ dữ liệu. */
   pageSize?: number;
   sortKey?: string;
   sortDirection?: DataTableSortDirection;
@@ -58,7 +59,7 @@ export function DataTable<T>({
   toolbarActions,
   emptyMessage = 'Chưa có dữ liệu trong danh mục này.',
   keyExtractor,
-  pageSize,
+  pageSize = 20,
   sortKey,
   sortDirection = 'asc',
   onSortChange,
@@ -145,7 +146,7 @@ export function DataTable<T>({
     });
   }, [columns, filteredData, activeSortDirection, activeSortKey, rowPriority]);
 
-  const totalPages = pageSize ? Math.max(1, Math.ceil(sortedData.length / pageSize)) : 1;
+  const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize));
 
   // Lọc hoặc xóa bớt dòng có thể làm trang hiện tại vượt quá số trang còn lại.
   useEffect(() => {
@@ -156,8 +157,12 @@ export function DataTable<T>({
     setPage(1);
   }, [activeSortDirection, activeSortKey]);
 
-  const firstIndex = pageSize ? (page - 1) * pageSize : 0;
-  const visibleRows = pageSize ? sortedData.slice(firstIndex, firstIndex + pageSize) : sortedData;
+  useEffect(() => {
+    setPage(1);
+  }, [currentFilter, searchValue]);
+
+  const firstIndex = (page - 1) * pageSize;
+  const visibleRows = sortedData.slice(firstIndex, firstIndex + pageSize);
 
   const changeSort = (column: Column<T>) => {
     if (!column.sortValue) return;
@@ -312,47 +317,12 @@ export function DataTable<T>({
         </table>
       </div>
 
-      <footer className="catalog-pagination">
-        <span>
-          {pageSize && sortedData.length > 0 ? (
-            <>
-              Hiển thị <strong>{firstIndex + 1}</strong>–
-              <strong>{Math.min(firstIndex + pageSize, sortedData.length)}</strong> trên{' '}
-              <strong>{sortedData.length}</strong> kết quả
-            </>
-          ) : (
-            <>
-              Hiển thị <strong>{sortedData.length}</strong> kết quả
-            </>
-          )}
-        </span>
-        <div className="catalog-pagination__controls" aria-label="Phân trang">
-          <button
-            type="button"
-            className="catalog-page-button"
-            disabled={page <= 1}
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
-            aria-label="Trang trước"
-            title="Trang trước"
-          >
-            <ChevronLeft aria-hidden="true" size={16} />
-          </button>
-          <span className="catalog-page-number" aria-current="page">{page}</span>
-          {pageSize && totalPages > 1 && (
-            <span className="catalog-page-total">/ {totalPages}</span>
-          )}
-          <button
-            type="button"
-            className="catalog-page-button"
-            disabled={page >= totalPages}
-            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-            aria-label="Trang sau"
-            title="Trang sau"
-          >
-            <ChevronRight aria-hidden="true" size={16} />
-          </button>
-        </div>
-      </footer>
+      <TablePagination
+        page={page}
+        pageSize={pageSize}
+        totalItems={sortedData.length}
+        onPageChange={setPage}
+      />
     </section>
   );
 }
