@@ -17,4 +17,13 @@ internal sealed class HttpContextCurrentUserAccessor(IHttpContextAccessor httpCo
 
     public string? UserEmail =>
         httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.Email)?.Value;
+
+    public Guid? ProfileId
+    {
+        get
+        {
+            var value = httpContextAccessor.HttpContext?.User?.FindFirst("active_profile_id")?.Value;
+            return value != null && Guid.TryParse(value, out var id) ? id : null;
+        }
+    }
 }

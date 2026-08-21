@@ -17,6 +17,7 @@ public static class PersistenceServiceExtensions
         }
 
         services.AddScoped<ICurrentUserAccessor, Auth.HttpContextCurrentUserAccessor>();
+        services.AddScoped<Application.Auth.IUserScopeResolver, Auth.EfUserScopeResolver>();
         services.AddScoped<AuditInterceptor>();
         services.AddDbContext<AppDbContext>((sp, options) =>
             options.UseNpgsql(connectionString)
