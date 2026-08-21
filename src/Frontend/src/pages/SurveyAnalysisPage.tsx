@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CircleAlert, LoaderCircle, RefreshCw, Search } from 'lucide-react';
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { ChevronDown, CircleAlert, LoaderCircle, RefreshCw, Search } from 'lucide-react';
 import { useSemester } from '../context/semesterContext';
 import { TablePagination } from '../components/TablePagination';
 import { usePaginatedItems } from '../hooks/usePaginatedItems';
@@ -663,9 +663,11 @@ const LecturerTab: React.FC<{
   semesterSurveyId: number | null;
   lecturers: LecturerOption[];
 }> = ({ semesterSurveyId, lecturers }) => {
+  const lecturerListId = useId();
   const [faculty, setFaculty] = useState<string>('');
-  const [department, setDepartment] = useState<string>('');
-  const [selected, setSelected] = useState<string>('');
+  const [query, setQuery] = useState<string>('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
   const [report, setReport] = useState<LecturerReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -673,8 +675,7 @@ const LecturerTab: React.FC<{
   // Đổi đợt thì kết quả cũ không còn đúng nữa, xoá đi để không hiểu nhầm.
   useEffect(() => {
     setFaculty('');
-    setDepartment('');
-    setSelected('');
+    setQuery('');
     setReport(null);
     setError(null);
   }, [semesterSurveyId]);
@@ -684,40 +685,80 @@ const LecturerTab: React.FC<{
     [lecturers]
   );
 
-  // Ba ô lọc nối tầng: chọn khoa thì danh sách bộ môn co lại, chọn bộ môn thì
-  // danh sách giảng viên co theo.
-  const departments = useMemo(
-    () =>
-      [
-        ...new Set(
-          lecturers.filter((x) => !faculty || x.facultyName === faculty).map((x) => x.departmentName)
-        ),
-      ].sort((a, b) => a.localeCompare(b, 'vi')),
+  // Hai ô lọc nối tầng: chọn khoa thì danh sách giảng viên co theo.
+  const visibleLecturers = useMemo(
+    () => lecturers.filter((x) => !faculty || x.facultyName === faculty),
     [lecturers, faculty]
   );
 
-  const visibleLecturers = useMemo(
-    () =>
-      lecturers.filter(
-        (x) =>
-          (!faculty || x.facultyName === faculty) && (!department || x.departmentName === department)
-      ),
-    [lecturers, faculty, department]
+  // Ô giảng viên gõ được nên nhãn phải phân biệt được từng người: trùng tên thì
+  // ghi kèm bộ môn, vẫn trùng nữa thì kèm mã để không bao giờ có hai nhãn giống nhau.
+  const lecturerChoices = useMemo(() => {
+    const nameCount = new Map<string, number>();
+    for (const item of visibleLecturers) {
+      nameCount.set(item.fullName, (nameCount.get(item.fullName) ?? 0) + 1);
+    }
+    const usedLabels = new Set<string>();
+    return visibleLecturers.map((item) => {
+      let label = (nameCount.get(item.fullName) ?? 0) > 1
+        ? `${item.fullName} · ${item.departmentName}`
+        : item.fullName;
+      if (usedLabels.has(label)) label = `${label} · #${item.lecturerId}`;
+      usedLabels.add(label);
+      return { ...item, label };
+    });
+  }, [visibleLecturers]);
+
+  // Gõ khớp đúng một nhãn thì mới coi là đã chọn; gõ dở dang thì nút Tìm khoá lại.
+  const activeLecturer = useMemo(
+    () => lecturerChoices.find((x) => x.label === query.trim()) ?? null,
+    [lecturerChoices, query]
   );
 
-  // Người đang chọn có thể rơi ra ngoài bộ lọc vừa đổi; bỏ chọn để không gửi đi
-  // một giảng viên không còn nằm trong danh sách trước mắt.
+  // Đang gõ thì lọc theo những gì đã gõ; vừa chọn xong thì ô chứa đúng nhãn của
+  // người đó, lúc ấy vẫn hiện cả danh sách để còn đổi sang người khác.
+  const menuChoices = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase('vi');
+    if (!needle || activeLecturer) return lecturerChoices;
+    return lecturerChoices.filter((x) => x.label.toLocaleLowerCase('vi').includes(needle));
+  }, [lecturerChoices, query, activeLecturer]);
+
   useEffect(() => {
-    if (selected && !visibleLecturers.some((x) => String(x.lecturerId) === selected)) {
-      setSelected('');
+    setHighlight(0);
+  }, [menuChoices]);
+
+  const pick = (label: string) => {
+    setQuery(label);
+    setMenuOpen(false);
+  };
+
+  const onPickerKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      setMenuOpen(false);
+      return;
     }
-  }, [visibleLecturers, selected]);
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!menuOpen) {
+        setMenuOpen(true);
+        return;
+      }
+      if (menuChoices.length === 0) return;
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      setHighlight((current) => (current + step + menuChoices.length) % menuChoices.length);
+      return;
+    }
+    if (event.key === 'Enter' && menuOpen && menuChoices[highlight]) {
+      event.preventDefault();
+      pick(menuChoices[highlight].label);
+    }
+  };
 
   const search = async () => {
-    if (!semesterSurveyId || !selected) return;
+    if (!semesterSurveyId || !activeLecturer) return;
     setLoading(true);
     try {
-      setReport(await surveyApi.lecturerReport(semesterSurveyId, Number(selected)));
+      setReport(await surveyApi.lecturerReport(semesterSurveyId, activeLecturer.lecturerId));
       setError(null);
     } catch (loadError) {
       setError(messageFrom(loadError));
@@ -744,7 +785,7 @@ const LecturerTab: React.FC<{
             value={faculty}
             onChange={(event) => {
               setFaculty(event.target.value);
-              setDepartment('');
+              setQuery('');
             }}
           >
             <option value="">Tất cả khoa / viện</option>
@@ -756,36 +797,75 @@ const LecturerTab: React.FC<{
           </select>
         </label>
 
-        <label className="form-group">
-          <span>Bộ môn</span>
-          <select value={department} onChange={(event) => setDepartment(event.target.value)}>
-            <option value="">Tất cả bộ môn</option>
-            {departments.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div
+          className="form-group analysis-combobox"
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false);
+          }}
+        >
+          <span>
+            Giảng viên ({visibleLecturers.length})
+            {activeLecturer && ` · ${activeLecturer.sectionCount} lớp`}
+          </span>
+          <div className="analysis-combobox__control">
+            <input
+              type="text"
+              role="combobox"
+              aria-expanded={menuOpen}
+              aria-controls={lecturerListId}
+              aria-autocomplete="list"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setMenuOpen(true);
+              }}
+              onFocus={() => setMenuOpen(true)}
+              // Chọn xong menu đóng nhưng ô vẫn giữ focus, nên bấm lại phải mở
+              // lại được bằng onClick — onFocus lúc đó không bắn nữa.
+              onClick={() => setMenuOpen(true)}
+              onKeyDown={onPickerKeyDown}
+              placeholder="Gõ tên hoặc chọn trong danh sách..."
+              autoComplete="off"
+            />
+            <ChevronDown className="analysis-combobox__caret" aria-hidden="true" size={16} />
+          </div>
 
-        <label className="form-group">
-          <span>Giảng viên ({visibleLecturers.length})</span>
-          <select value={selected} onChange={(event) => setSelected(event.target.value)}>
-            <option value="">Chọn giảng viên</option>
-            {visibleLecturers.map((lecturer) => (
-              <option key={lecturer.lecturerId} value={String(lecturer.lecturerId)}>
-                {lecturer.fullName} · {lecturer.sectionCount} lớp
-              </option>
-            ))}
-          </select>
-        </label>
+          {menuOpen && (
+            /* Giữ chuột trên danh sách không được làm ô nhập mất focus, nếu không
+               onBlur đóng menu trước khi kịp nhận cú bấm chọn. */
+            <ul
+              className="analysis-combobox__menu"
+              id={lecturerListId}
+              role="listbox"
+              onMouseDown={(event) => event.preventDefault()}
+            >
+              {menuChoices.length === 0 ? (
+                <li className="analysis-combobox__empty">Không có giảng viên nào khớp.</li>
+              ) : (
+                menuChoices.map((lecturer, index) => (
+                  <li
+                    key={lecturer.lecturerId}
+                    className="analysis-combobox__option"
+                    role="option"
+                    aria-selected={index === highlight}
+                    onMouseEnter={() => setHighlight(index)}
+                    onClick={() => pick(lecturer.label)}
+                  >
+                    <span>{lecturer.label}</span>
+                    <small>{lecturer.sectionCount} lớp</small>
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+        </div>
 
         <div className="statistics-toolbar-actions">
           <button
             type="button"
             className="btn btn-primary btn-sm"
             onClick={() => void search()}
-            disabled={!selected || loading}
+            disabled={!activeLecturer || loading}
           >
             <Search aria-hidden="true" size={16} />
             Tìm

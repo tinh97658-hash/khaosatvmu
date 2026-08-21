@@ -445,15 +445,20 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
   // ----- Bảng lớp học phần --------------------------------------------------
 
   const normalized = search.trim().toLowerCase();
-  const filteredSections = sections.filter((section) => {
-    if (!normalized) return true;
-    const course = courseOf(section.courseId);
-    return (
-      section.sectionName.toLowerCase().includes(normalized) ||
-      (course?.courseName ?? '').toLowerCase().includes(normalized) ||
-      (course?.courseCode ?? '').toLowerCase().includes(normalized)
-    );
-  });
+  const filteredSections = sections
+    .filter((section) => {
+      if (!normalized) return true;
+      const course = courseOf(section.courseId);
+      return (
+        section.sectionName.toLowerCase().includes(normalized) ||
+        (course?.courseName ?? '').toLowerCase().includes(normalized) ||
+        (course?.courseCode ?? '').toLowerCase().includes(normalized)
+      );
+    })
+    // Lớp chưa xác định giảng viên nằm đầu danh sách để dễ nhặt ra mà bổ sung
+    // email. Sort ổn định nên các lớp còn lại giữ nguyên thứ tự cũ.
+    .sort((left, right) =>
+      Number(left.lecturerId !== null) - Number(right.lecturerId !== null));
 
   const columns: Column<CourseSection>[] = [
     {

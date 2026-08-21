@@ -302,6 +302,76 @@
   max-width: 320px;
 }
 
+/* Ô chọn giảng viên: giữ đúng dáng ô chọn của thanh công cụ nhưng gõ được. Không
+   dùng <datalist> vì popup của nó do trình duyệt vẽ, CSS không với tới và mỗi
+   trình duyệt một kiểu — nên danh sách ở đây tự dựng. */
+.analysis-combobox {
+  position: relative;
+}
+
+.analysis-combobox__control {
+  position: relative;
+  display: flex;
+}
+
+/* Chừa chỗ cho mũi tên, không để chữ chạy đè lên. */
+.analysis-combobox__control input {
+  padding-right: 30px;
+}
+
+.analysis-combobox__caret {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  transform: translateY(-50%);
+  color: #6b7a85;
+  pointer-events: none;
+}
+
+.analysis-combobox__menu {
+  position: absolute;
+  z-index: 30;
+  top: 100%;
+  right: 0;
+  left: 0;
+  max-height: 264px;
+  margin: 2px 0 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  border: 1px solid #cfd7dc;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(32, 38, 44, 0.16);
+  list-style: none;
+}
+
+.analysis-combobox__option {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 10px;
+  color: #20262c;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* Bàn phím và chuột dùng chung một vệt sáng để không bao giờ có hai dòng cùng sáng. */
+.analysis-combobox__option[aria-selected='true'] {
+  background: #eaf4f8;
+}
+
+.analysis-combobox__option small {
+  color: #6b7a85;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.analysis-combobox__empty {
+  padding: 8px 10px;
+  color: #6b7a85;
+  font-size: 12px;
+}
+
 /* Tên giảng viên nổi hơn phần còn lại của băng tóm tắt, nhưng vẫn nằm trong
    băng `statistics-summary` chung để không đẻ thêm một kiểu thẻ riêng. */
 .statistics-summary .summary-title {

@@ -1315,6 +1315,8 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         string SectionName,
         string LecturerName,
         int? LecturerId,
+        /// <summary>Tên đọc từ tệp import khi lớp chưa gắn được mã giảng viên.</summary>
+        string? UnidentifiedLecturerName,
         int ClassSize,
         int ResponseCount,
         decimal AverageScore,
@@ -1322,6 +1324,23 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         string FacultyName,
         int? DepartmentId,
         string DepartmentName);
+
+    /// <summary>
+    /// Đếm giảng viên của một nhóm lớp. Lớp chưa gắn được mã vẫn tính nếu đọc
+    /// được tên từ tệp import, vì đó vẫn là một người dạy thật; chỉ lớp không có
+    /// cả mã lẫn tên mới bị bỏ qua. Nhóm theo tên nên hai người trùng tên chưa
+    /// xác định bị đếm gộp làm một — không tránh được khi thiếu email.
+    /// </summary>
+    private static int CountLecturers(IEnumerable<AnalysedSection> sections) =>
+        sections
+            .Select(x => x.LecturerId is { } lecturerId
+                ? $"id:{lecturerId}"
+                : string.IsNullOrWhiteSpace(x.UnidentifiedLecturerName)
+                    ? null
+                    : $"name:{x.UnidentifiedLecturerName.Trim().ToLowerInvariant()}")
+            .Where(x => x is not null)
+            .Distinct()
+            .Count();
 
     /// <summary>
     /// Nạp các lớp của một đợt kèm điểm tính TRỰC TIẾP từ phiếu hợp lệ. Cố ý
@@ -1397,6 +1416,7 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
                 section?.SectionName ?? string.Empty,
                 lecturer?.FullName ?? section?.UnidentifiedLecturerName ?? "Chưa phân công",
                 section?.LecturerId,
+                section?.UnidentifiedLecturerName,
                 section?.ClassSize ?? 0,
                 tally.TotalCount,
                 Math.Round(tally.ValidTotal / tally.ValidCount, 2),
@@ -1629,8 +1649,7 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
                     g.Key.DepartmentId,
                     g.Key.DepartmentName,
                     g.Count(),
-                    // Lớp chưa gắn được giảng viên không tính vào số giảng viên.
-                    g.Select(x => x.LecturerId).Where(x => x is not null).Distinct().Count(),
+                    CountLecturers(g),
                     totalResponses,
                     withClassSize.Count == 0
                         ? 0m
@@ -1735,7 +1754,7 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
                     first.CourseName,
                     first.FacultyName,
                     g.Count(),
-                    g.Select(x => x.LecturerId).Where(x => x is not null).Distinct().Count(),
+                    CountLecturers(g),
                     Math.Round(scores.Average(), 2),
                     min,
                     max,
@@ -1857,14 +1876,19 @@ public sealed class EfSurveyService(AppDbContext db, IMemoryCache cache) : ISurv
         var sections = await LoadAnalysedSectionsAsync(semesterSurveyId, cancellationToken);
 
         // Lớp chưa gắn được giảng viên thì không có ai để làm báo cáo cá nhân.
+        // Gom theo mã giảng viên và chỉ theo mã. Bộ môn/khoa của một lớp suy từ
+        // đơn vị sở hữu học phần chứ không từ hồ sơ giảng viên, nên người dạy học
+        // phần của nhiều đơn vị có nhiều giá trị khác nhau; đưa chúng vào khóa gom
+        // thì cùng một người bị tách thành nhiều dòng trùng mã và số lớp bị chia
+        // nhỏ. Đơn vị lấy theo lớp đầu tiên, chỉ dùng để hiển thị và lọc.
         var options = sections
             .Where(x => x.LecturerId is not null)
-            .GroupBy(x => new { LecturerId = x.LecturerId!.Value, x.LecturerName, x.DepartmentName, x.FacultyName })
+            .GroupBy(x => x.LecturerId!.Value)
             .Select(g => new LecturerOptionDto(
-                g.Key.LecturerId,
-                g.Key.LecturerName,
-                g.Key.DepartmentName,
-                g.Key.FacultyName,
+                g.Key,
+                g.First().LecturerName,
+                g.First().DepartmentName,
+                g.First().FacultyName,
                 g.Count()))
             .OrderBy(x => x.FacultyName)
             .ThenBy(x => x.DepartmentName)
