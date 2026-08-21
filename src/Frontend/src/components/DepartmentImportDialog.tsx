@@ -119,7 +119,7 @@ export function DepartmentImportDialog({
   const failedItems = result?.items.filter((item) => !item.succeeded) ?? [];
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Import bộ môn từ Excel" size="fullscreen">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Import bộ môn từ Excel">
       <div className="admin-import-dialog" aria-busy={parsing}>
         <div className="admin-form-intro">
           <FileSpreadsheet aria-hidden="true" />

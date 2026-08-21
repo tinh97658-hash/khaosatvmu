@@ -83,14 +83,14 @@ public sealed class CourseSection : ISoftDeletable
     public int SemesterId { get; set; }
 
     /// <summary>
-    /// Nullable, ON DELETE RESTRICT. Import mới tạo giảng viên tạm khi thiếu email nên vẫn
-    /// có LecturerId; NULL chỉ dùng cho lớp chưa phân công hoặc dữ liệu mơ hồ chưa được xử lý.
+    /// Nullable, ON DELETE RESTRICT. NULL khi tệp import không có email để xác định
+    /// giảng viên; khi đó tên đọc được ghi vào <see cref="UnidentifiedLecturerName"/>.
     /// </summary>
     public int? LecturerId { get; set; }
 
     /// <summary>
-    /// Tên giảng viên đọc từ dữ liệu cũ nhưng chưa gắn được vào bảng "Lecturers".
-    /// Chỉ một trong hai cột này và <see cref="LecturerId"/> được điền;
+    /// Tên giảng viên đọc từ tệp import nhưng chưa gắn được vào bảng "Lecturers"
+    /// vì thiếu email. Chỉ một trong hai cột này và <see cref="LecturerId"/> được điền;
     /// ràng buộc kiểm tra ở tầng service, không đặt CHECK dưới CSDL.
     /// </summary>
     public string? UnidentifiedLecturerName { get; set; }
@@ -113,11 +113,8 @@ public sealed class Lecturer : ISoftDeletable
     /// <summary>Nullable, ON DELETE RESTRICT.</summary>
     public int? FacultyId { get; set; }
 
-    /// <summary>
-    /// Nullable, UNIQUE khi có giá trị. Giảng viên chưa có email vẫn được nhận diện bằng
-    /// <see cref="LecturerId"/> và có thể được bổ sung email sau.
-    /// </summary>
-    public string? Email { get; set; }
+    /// <summary>NOT NULL, UNIQUE.</summary>
+    public string Email { get; set; } = string.Empty;
 
     /// <summary>Nullable, ON DELETE RESTRICT. Chức vụ trong bảng "Positions".</summary>
     public int? PositionId { get; set; }

@@ -500,6 +500,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("Email")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int?>("FacultyId")

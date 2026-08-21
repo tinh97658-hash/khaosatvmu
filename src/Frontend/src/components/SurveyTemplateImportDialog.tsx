@@ -128,7 +128,7 @@ export function SurveyTemplateImportDialog({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Tạo bộ câu hỏi từ Excel" size="fullscreen">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Tạo bộ câu hỏi từ Excel">
       <div className="admin-import-dialog" aria-busy={parsing || saving}>
         <div className="admin-form-intro">
           <FileSpreadsheet aria-hidden="true" />

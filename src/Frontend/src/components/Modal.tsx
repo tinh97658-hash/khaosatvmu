@@ -8,8 +8,6 @@ interface ModalProps {
   children: React.ReactNode;
   onSubmit?: () => void;
   submitText?: string;
-  /** Import/bảng dữ liệu dùng fullscreen; hộp xác nhận dùng compact. */
-  size?: 'standard' | 'fullscreen' | 'compact';
 }
 
 interface ConfirmDialogProps {
@@ -37,7 +35,6 @@ export const Modal: React.FC<ModalProps> = ({
   children,
   onSubmit,
   submitText = 'Lưu thay đổi',
-  size = 'standard',
 }) => {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -108,7 +105,7 @@ export const Modal: React.FC<ModalProps> = ({
     >
       <div
         ref={dialogRef}
-        className={`modal-card catalog-modal-card catalog-modal-card--${size}`}
+        className="modal-card catalog-modal-card"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -155,7 +152,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   message,
   confirmVariant = 'danger',
 }) => (
-  <Modal isOpen={isOpen} onClose={onClose} title={title} size="compact">
+  <Modal isOpen={isOpen} onClose={onClose} title={title}>
     <div className="catalog-confirm">
       <AlertTriangle aria-hidden="true" size={20} />
       <div>

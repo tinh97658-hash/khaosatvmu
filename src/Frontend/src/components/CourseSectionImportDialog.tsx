@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import {
   CheckCircle2,
   CircleAlert,
@@ -17,14 +17,12 @@ import {
   type ImportCourseSectionRow,
 } from '../utils/courseSectionImportExcel';
 import { ApiError } from '../services/apiClient';
-import { catalogApi, catalogErrorMessage, type CourseSectionImportResponse } from '../services/catalogApi';
-import type { Department, Lecturer } from '../types';
+import { catalogErrorMessage, type CourseSectionImportResponse } from '../services/catalogApi';
 import { Modal } from './Modal';
 
 interface CourseSectionImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  lecturers: Lecturer[];
   /** Học kỳ đang chọn, hiển thị để người dùng biết import vào đâu. */
   semesterLabel: string;
   onImport: (rows: ImportCourseSectionRow[]) => Promise<CourseSectionImportResponse>;
@@ -44,7 +42,6 @@ const fileErrorMessages: Record<CourseSectionImportFileErrorCode, string> = {
 export function CourseSectionImportDialog({
   isOpen,
   onClose,
-  lecturers,
   semesterLabel,
   onImport,
 }: CourseSectionImportDialogProps) {
@@ -61,9 +58,6 @@ export function CourseSectionImportDialog({
   const [templateError, setTemplateError] = useState<string | null>(null);
   const [downloadingUnidentified, setDownloadingUnidentified] = useState(false);
   const [unidentifiedError, setUnidentifiedError] = useState<string | null>(null);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [lecturerResolutionByRow, setLecturerResolutionByRow] = useState<Record<number, string>>({});
-  const [, setCollisionModeByKey] = useState<Record<string, 'single' | 'advanced'>>({});
 
   const reset = () => {
     if (inputRef.current) inputRef.current.value = '';
@@ -73,9 +67,6 @@ export function CourseSectionImportDialog({
     setRequestError(null);
     setResult(null);
     setUnidentifiedError(null);
-    setDepartments([]);
-    setLecturerResolutionByRow({});
-    setCollisionModeByKey({});
   };
 
   const handleClose = () => {
@@ -91,14 +82,7 @@ export function CourseSectionImportDialog({
     setFileName(file.name);
     setParsing(true);
     try {
-      const parsedRows = await parseCourseSectionImportFile(file);
-      setRows(parsedRows);
-      try {
-        setDepartments(await catalogApi.departments());
-      } catch {
-        // Vẫn cho xử lý nhóm người mới; danh sách ứng viên hiện có sẽ để trống.
-        setDepartments([]);
-      }
+      setRows(await parseCourseSectionImportFile(file));
     } catch (error) {
       setParseError(
         error instanceof CourseSectionImportFileError
@@ -111,33 +95,11 @@ export function CourseSectionImportDialog({
   };
 
   const handleImport = async () => {
-    if (rows.length === 0 || unresolvedCollisionRowCount > 0) return;
+    if (rows.length === 0) return;
     setImporting(true);
     setRequestError(null);
     try {
-      const resolvedDecisionByRow = new Map<
-        number,
-        { resolvedLecturerId?: number; provisionalLecturerKey?: string }
-      >();
-      const resolvedRows = rows.map((row) => {
-        const resolution = lecturerResolutionByRow[row.rowNumber];
-        if (!resolution) return row;
-        if (resolution.startsWith('existing:')) {
-          const decision = {
-            resolvedLecturerId: Number(resolution.slice('existing:'.length)),
-          };
-          resolvedDecisionByRow.set(row.rowNumber, decision);
-          return { ...row, ...decision };
-        }
-        const anchorRowNumber = Number(resolution.slice('anchor:'.length));
-        const decision = anchorRowNumber === row.rowNumber
-          ? { provisionalLecturerKey: `row-anchor:${row.rowNumber}` }
-          : resolvedDecisionByRow.get(anchorRowNumber);
-        if (!decision) return row;
-        resolvedDecisionByRow.set(row.rowNumber, decision);
-        return { ...row, ...decision };
-      });
-      setResult(await onImport(resolvedRows));
+      setResult(await onImport(rows));
     } catch (error) {
       setRequestError(
         error instanceof ApiError ? catalogErrorMessage(error.errorCode) : catalogErrorMessage(null)
@@ -179,60 +141,16 @@ export function CourseSectionImportDialog({
     unidentifiedLecturers.map((lecturer) => lecturer.departmentName ?? 'Chưa rõ bộ môn')
   ).size;
 
-  const collisionGroups = useMemo(() => {
-    const normalize = (value: string) => value.trim().toLocaleLowerCase('vi').replace(/\s+/g, ' ');
-    const departmentIdOf = (row: ImportCourseSectionRow): number | null => {
-      const code = Number(row.departmentCode);
-      if (row.departmentCode.trim() && Number.isInteger(code) && code > 0) return code;
-      const departmentName = normalize(row.departmentName);
-      return departments.find((item) => normalize(item.departmentName) === departmentName)?.departmentId ?? null;
-    };
-    const groups = new Map<string, ImportCourseSectionRow[]>();
-
-    for (const row of rows) {
-      if (row.lecturerEmail.trim() || !row.lecturerFullName.trim()) continue;
-      const departmentId = departmentIdOf(row);
-      const unitKey = departmentId === null
-        ? `${normalize(row.departmentName)}|${normalize(row.facultyName)}`
-        : String(departmentId);
-      const key = `${normalize(row.lecturerFullName)}|${unitKey}`;
-      groups.set(key, [...(groups.get(key) ?? []), row]);
-    }
-
-    return [...groups.entries()].flatMap(([key, groupRows]) => {
-      const first = groupRows[0];
-      const departmentId = departmentIdOf(first);
-      const candidates = lecturers.filter((lecturer) =>
-        normalize(lecturer.fullName) === normalize(first.lecturerFullName)
-        && (departmentId === null || lecturer.departmentId === departmentId));
-
-      // Một dòng duy nhất vẫn phải xác nhận nếu đã có người cùng tên trong DB:
-      // không email/mã GV thì không thể tự biết đây là người cũ hay người mới.
-      return groupRows.length > 1 || candidates.length > 0
-        ? [{ key, rows: groupRows, candidates }]
-        : [];
-    });
-  }, [departments, lecturers, rows]);
-
-  const collisionRowNumbers = useMemo(
-    () => new Set(collisionGroups.flatMap((group) => group.rows.map((row) => row.rowNumber))),
-    [collisionGroups],
-  );
-  const unresolvedCollisionRowCount = [...collisionRowNumbers]
-    .filter((rowNumber) => !lecturerResolutionByRow[rowNumber])
-    .length;
-
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Import lớp học phần từ Excel" size="fullscreen">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Import lớp học phần từ Excel">
       <div className="admin-import-dialog" aria-busy={parsing}>
         <div className="admin-form-intro">
           <FileSpreadsheet aria-hidden="true" />
           <p>
             Hàng đầu tiên cần có cột <strong>Mã HP</strong> và <strong>Nhóm</strong>. Học phần chưa
             có trong danh mục sẽ được <strong>tạo tự động</strong> từ cột Học phần và TCHT. Giảng
-            viên tra theo <strong>Email</strong>: chưa có thì tạo mới với chức vụ Giảng viên. Nếu bỏ
-            trống email, hệ thống vẫn tạo hoặc tái sử dụng giảng viên tạm có mã nội bộ để lớp được
-            thống kê; email có thể bổ sung sau. Bộ môn tra theo{' '}
+            viên tra theo <strong>Email</strong>: chưa có thì tạo mới với chức vụ Giảng viên, bỏ
+            trống email thì lớp vẫn được tạo nhưng để trống mã giảng viên. Bộ môn tra theo{' '}
             <strong>Mã BM</strong>, trống mới tra theo tên. Tối đa 500 dòng.
           </p>
         </div>
@@ -305,123 +223,6 @@ export function CourseSectionImportDialog({
               </div>
             )}
 
-            {collisionGroups.length > 0 && (
-              <section className="admin-import-preview" aria-label="Xử lý giảng viên trùng tên">
-                <header>
-                  <strong>Bước bắt buộc: xác nhận giảng viên không có email</strong>
-                  <span>
-                    {unresolvedCollisionRowCount > 0
-                      ? `Còn ${unresolvedCollisionRowCount} lớp chưa chọn`
-                      : 'Đã xác nhận đủ, có thể import'}
-                  </span>
-                </header>
-                <div className="lecturer-collision-guide" role="region" aria-label="Hướng dẫn xử lý">
-                  <div className="lecturer-collision-guide__intro">
-                    <CircleAlert aria-hidden="true" />
-                    <div>
-                      <strong>Hệ thống không yêu cầu bạn đoán người này là ai</strong>
-                      <p>
-                        Các dòng dưới đây không có email và đang trùng tên với người trong danh mục,
-                        hoặc trùng tên với dòng khác trong file. Hệ thống không thể tự biết đây là người
-                        cũ hay một người mới chỉ trùng tên. Bạn cần chọn <strong>“Đã có”</strong> nếu đúng
-                        người cũ; nếu không, hãy chọn <strong>“Tạo hồ sơ mới”</strong>.
-                      </p>
-                    </div>
-                  </div>
-                  <ol className="lecturer-collision-steps">
-                    <li>Đọc từng lớp ở cột <strong>Mã HP</strong> và <strong>Nhóm lớp</strong>.</li>
-                    <li>
-                      Ở lớp xuất hiện đầu tiên, chọn <strong>“Tạo hồ sơ mới, lấy lớp này làm mốc”</strong>
-                      nếu người đó chưa có trong danh mục.
-                    </li>
-                    <li>
-                      Với các lớp phía sau: nếu cùng người, chọn <strong>“Cùng giảng viên với lớp…”</strong>;
-                      nếu là người khác chỉ trùng tên, chọn <strong>“Là giảng viên khác…”</strong>.
-                    </li>
-                    <li>
-                      Nếu đúng là người đã có trong hệ thống, chọn mục bắt đầu bằng <strong>“Đã có”</strong>
-                      và kiểm tra mã <strong>GV-xxxxxx</strong>. Hệ thống sẽ không tự chọn thay bạn.
-                    </li>
-                    <li>
-                      Nếu bạn <strong>không biết các lớp có cùng người hay không</strong>, hãy dừng lại
-                      và hỏi bộ môn phụ trách; không chọn ngẫu nhiên vì báo cáo sẽ đếm sai.
-                    </li>
-                  </ol>
-                  <div className="lecturer-collision-example">
-                    <strong>Ví dụ:</strong> tại KT01 chọn “Tạo hồ sơ mới, lấy KT01 làm mốc”. Nếu KT02
-                    cũng do người đó dạy, tại KT02 chọn “Cùng giảng viên với KT01”. Nếu KT03 là một
-                    người khác chỉ trùng tên, tại KT03 chọn “Là giảng viên khác, lấy KT03 làm mốc”.
-                  </div>
-                </div>
-                <div className="admin-import-table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Dòng</th>
-                        <th>Giảng viên</th>
-                        <th>Bộ môn</th>
-                        <th>Mã HP</th>
-                        <th>Học phần</th>
-                        <th>Nhóm lớp</th>
-                        <th>So với các lớp phía trên, đây là giảng viên nào?</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {collisionGroups.flatMap((group) => group.rows.map((row, rowIndex) => (
-                        <tr key={`collision-${row.rowNumber}`}>
-                          <td>{row.rowNumber}</td>
-                          <td><strong>{row.lecturerFullName}</strong></td>
-                          <td>
-                            {row.departmentName
-                              ? `${row.departmentName}${row.departmentCode ? ` (${row.departmentCode})` : ''}`
-                              : row.departmentCode || 'Chưa rõ'}
-                          </td>
-                          <td>{row.courseCode}</td>
-                          <td>{row.courseName || '—'}</td>
-                          <td>{row.sectionName}</td>
-                          <td>
-                            <select
-                              aria-label={`Gán giảng viên cho dòng ${row.rowNumber}`}
-                              value={lecturerResolutionByRow[row.rowNumber] ?? ''}
-                              onChange={(event) => setLecturerResolutionByRow((current) => ({
-                                ...current,
-                                [row.rowNumber]: event.target.value,
-                              }))}
-                            >
-                              <option value="">
-                                {rowIndex === 0
-                                  ? '— Chọn người đã có hoặc tạo hồ sơ làm mốc —'
-                                  : '— Chọn cùng người hay là một người khác —'}
-                              </option>
-                              {group.candidates.map((lecturer) => (
-                                <option
-                                  key={`existing-${lecturer.lecturerId}`}
-                                  value={`existing:${lecturer.lecturerId}`}
-                                >
-                                  Đã có: {lecturer.fullName} · GV-{String(lecturer.lecturerId).padStart(6, '0')}
-                                  {lecturer.email ? ` · ${lecturer.email}` : ' · thiếu email'}
-                                </option>
-                              ))}
-                              {group.rows.slice(0, rowIndex + 1).map((anchorRow) => (
-                                <option
-                                  key={`anchor-${group.key}-${anchorRow.rowNumber}`}
-                                  value={`anchor:${anchorRow.rowNumber}`}
-                                >
-                                  {anchorRow.rowNumber === row.rowNumber
-                                    ? `Là giảng viên khác · tạo hồ sơ mới, lấy ${row.courseCode} / ${row.sectionName} làm mốc`
-                                    : `Cùng giảng viên với dòng ${anchorRow.rowNumber} · ${anchorRow.courseCode} / ${anchorRow.sectionName}`}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                        </tr>
-                      ))) }
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )}
-
             {rows.length > 0 && (
               <section className="admin-import-preview" aria-label="Xem trước dữ liệu import">
                 <header>
@@ -462,7 +263,7 @@ export function CourseSectionImportDialog({
                           <td>{row.lecturerFullName || '—'}</td>
                           <td>
                             {row.lecturerEmail || (
-                              <span className="admin-import-default">Tạo/gắn GV tạm</span>
+                              <span className="admin-import-default">Chưa xác định</span>
                             )}
                           </td>
                         </tr>
@@ -508,10 +309,10 @@ export function CourseSectionImportDialog({
                 <div className="admin-alert admin-alert--warning" role="status">
                   <CircleAlert aria-hidden="true" />
                   <span>
-                    <strong>{unidentifiedLecturers.length} dòng giảng viên thiếu email</strong>, thuộc{' '}
-                    {unidentifiedDepartmentCount} bộ môn. Hệ thống đã tạo hoặc gắn mã nội bộ khi
-                    xác định được duy nhất; nếu có nhiều người trùng cả tên lẫn đơn vị, quản trị cần
-                    chọn đúng người trên màn hình lớp học phần. Có thể tải tệp dưới đây để bổ sung email.
+                    <strong>{unidentifiedLecturers.length} giảng viên thiếu email</strong> nên chưa
+                    gắn được vào hệ thống, thuộc {unidentifiedDepartmentCount} bộ môn. Lớp học phần
+                    vẫn được tạo nhưng để trống mã giảng viên. Tải tệp dưới đây rồi gửi cho trưởng
+                    bộ môn bổ sung email, sau đó import lại tệp lớp học phần.
                   </span>
                 </div>
 
@@ -622,7 +423,7 @@ export function CourseSectionImportDialog({
                 type="button"
                 className="btn btn-primary"
                 onClick={() => void handleImport()}
-                disabled={rows.length === 0 || parsing || importing || unresolvedCollisionRowCount > 0}
+                disabled={rows.length === 0 || parsing || importing}
               >
                 {importing ? (
                   <LoaderCircle className="auth-spin" aria-hidden="true" />
