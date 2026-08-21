@@ -229,8 +229,14 @@ export async function downloadCourseSectionImportTemplate(): Promise<void> {
  * Xuất tệp Excel các giảng viên thiếu email, mỗi bộ môn một sheet.
  * Cột Email để trống sẵn cho trưởng bộ môn điền rồi gửi lại.
  */
+/**
+ * Đủ dữ liệu để xuất tệp. Cố ý không đòi `rowNumber` vì danh sách còn đến từ endpoint
+ * dựng lại theo phạm vi bộ môn, chỗ đó không có số dòng của tệp import nào cả.
+ */
+export type UnidentifiedLecturerRow = Omit<UnidentifiedLecturer, 'rowNumber'>;
+
 export async function downloadUnidentifiedLecturerFile(
-  lecturers: readonly UnidentifiedLecturer[]
+  lecturers: readonly UnidentifiedLecturerRow[]
 ): Promise<void> {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
 
@@ -246,7 +252,7 @@ export async function downloadUnidentifiedLecturerFile(
   ];
 
   // Gom theo bộ môn, giữ nguyên thứ tự xuất hiện trong tệp.
-  const groups = new Map<string, UnidentifiedLecturer[]>();
+  const groups = new Map<string, UnidentifiedLecturerRow[]>();
   for (const lecturer of lecturers) {
     const key = lecturer.departmentName ?? 'Chưa rõ bộ môn';
     const group = groups.get(key);

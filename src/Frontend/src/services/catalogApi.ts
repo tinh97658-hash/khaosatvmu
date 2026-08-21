@@ -48,6 +48,39 @@ export interface CourseSectionImportResponse extends CatalogImportResponse {
   unidentifiedLecturers: UnidentifiedLecturer[];
 }
 
+/** Một lớp chưa gắn được giảng viên, dựng lại từ dữ liệu chứ không từ tệp import. */
+export interface UnidentifiedSection {
+  courseSectionId: number;
+  /** Tên đọc từ tệp import, nằm ở cột UnidentifiedLecturerName. */
+  lecturerName: string;
+  courseCode: string;
+  courseName: string;
+  sectionName: string;
+  classSize: number;
+  departmentId: number | null;
+  departmentName: string | null;
+  facultyName: string | null;
+}
+
+/**
+ * Gom các lớp trên theo tên giảng viên. Đây mới là danh sách cầm đi xin email: một
+ * bộ môn có thể thiếu 36 lớp nhưng chỉ do 6 người dạy.
+ */
+export interface UnidentifiedLecturerGroup {
+  lecturerName: string;
+  departmentName: string | null;
+  sectionCount: number;
+  /** Nhãn lớp dạng "13150 / N01", để đối chiếu khi hỏi bộ môn. */
+  sectionLabels: string[];
+}
+
+export interface UnidentifiedLecturerReport {
+  sectionCount: number;
+  lecturerCount: number;
+  sections: UnidentifiedSection[];
+  lecturers: UnidentifiedLecturerGroup[];
+}
+
 export const catalogApi = {
   faculties: () => apiRequest<Faculty[]>('/api/catalog/faculties'),
   createFaculty: (facultyName: string) =>
@@ -131,6 +164,17 @@ export const catalogApi = {
       semesterId,
       rows,
     }),
+
+  /**
+   * Các lớp chưa gắn được giảng viên, backend đã lọc sẵn theo phạm vi người đang
+   * đăng nhập. Trưởng bộ môn gọi thì ra bộ môn mình, quản trị gọi thì ra tất cả.
+   */
+  unidentifiedLecturers: (semesterId?: number | null) =>
+    apiRequest<UnidentifiedLecturerReport>(
+      semesterId == null
+        ? '/api/catalog/course-sections/unidentified-lecturers'
+        : `/api/catalog/course-sections/unidentified-lecturers?semesterId=${semesterId}`,
+    ),
 
   lecturers: () => apiRequest<Lecturer[]>('/api/catalog/lecturers'),
   createLecturer: (lecturer: SaveLecturerPayload) =>

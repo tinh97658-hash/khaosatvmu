@@ -294,6 +294,63 @@
   font-weight: 600;
 }
 
+/* Băng cảnh báo lớp chưa xác định giảng viên, đặt trên đầu bảng lớp học phần. Dùng
+   đúng bộ màu đỏ của ô cảnh báo trong bảng để hai chỗ đọc ra là một chuyện. */
+.unidentified-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid #fda29b;
+  border-left: 3px solid #d92d20;
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.unidentified-banner > svg {
+  flex: 0 0 auto;
+}
+
+.unidentified-banner__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 240px;
+  flex: 1 1 320px;
+}
+
+.unidentified-banner__text strong {
+  font-size: 13px;
+}
+
+.unidentified-banner__text span {
+  color: #7a271a;
+  font-size: 11px;
+}
+
+.unidentified-banner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Nút lọc đang bật thì phải nhìn ra là đang bật, không thì bấm xong tưởng hỏng. */
+.unidentified-banner__actions .btn[aria-pressed='true'] {
+  border-color: #b42318;
+  background: #b42318;
+  color: #ffffff;
+}
+
+.unidentified-dialog__hint {
+  margin: 0 0 12px;
+  color: #40505a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .catalog-field-warning {
   display: flex;
   align-items: center;

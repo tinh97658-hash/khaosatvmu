@@ -16,11 +16,13 @@ import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { CourseSectionImportDialog } from '../components/CourseSectionImportDialog';
 import type { ImportCourseSectionRow } from '../utils/courseSectionImportExcel';
+import { downloadUnidentifiedLecturerFile } from '../utils/courseSectionImportExcel';
 import { ApiError } from '../services/apiClient';
 import {
   catalogApi,
   catalogErrorMessage,
   type SaveAcademicYearPayload,
+  type UnidentifiedLecturerReport,
 } from '../services/catalogApi';
 import type { AcademicYear, Course, CourseSection, Lecturer, Semester } from '../types';
 import { useSemester } from '../context/semesterContext';
@@ -135,6 +137,56 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
   const courseOf = (courseId: number) => courses.find((course) => course.courseId === courseId);
   const lecturerOf = (lecturerId: number) =>
     lecturers.find((lecturer) => lecturer.lecturerId === lecturerId);
+
+  // ----- Giảng viên chưa xác định -------------------------------------------
+  // Backend đã lọc sẵn theo phạm vi, nên trưởng bộ môn chỉ thấy bộ môn mình mà
+  // trang này không phải biết gì về chuyện phân quyền.
+  const [unidentified, setUnidentified] = useState<UnidentifiedLecturerReport | null>(null);
+  const [showOnlyUnidentified, setShowOnlyUnidentified] = useState(false);
+  const [isUnidentifiedOpen, setIsUnidentifiedOpen] = useState(false);
+  const [downloadingUnidentified, setDownloadingUnidentified] = useState(false);
+
+  useEffect(() => {
+    if (selectedSemesterId === null) {
+      setUnidentified(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const report = await catalogApi.unidentifiedLecturers(selectedSemesterId);
+        if (!cancelled) setUnidentified(report);
+      } catch {
+        // Không chặn cả trang chỉ vì băng cảnh báo không nạp được.
+        if (!cancelled) setUnidentified(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // sections đổi thì gán giảng viên xong con số phải giảm theo.
+  }, [selectedSemesterId, sections]);
+
+  const handleDownloadUnidentified = async () => {
+    if (!unidentified || unidentified.sections.length === 0) return;
+    setDownloadingUnidentified(true);
+    try {
+      await downloadUnidentifiedLecturerFile(
+        unidentified.sections.map((section) => ({
+          fullName: section.lecturerName,
+          departmentId: section.departmentId,
+          departmentName: section.departmentName,
+          facultyName: section.facultyName,
+          courseCode: section.courseCode,
+          sectionName: section.sectionName,
+        })),
+      );
+    } catch {
+      toast.error('Không tạo được tệp giảng viên thiếu email. Hãy thử lại.');
+    } finally {
+      setDownloadingUnidentified(false);
+    }
+  };
 
   // ----- Nạp dữ liệu --------------------------------------------------------
 
@@ -446,6 +498,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
 
   const normalized = search.trim().toLowerCase();
   const filteredSections = sections
+    .filter((section) => !showOnlyUnidentified || section.lecturerId === null)
     .filter((section) => {
       if (!normalized) return true;
       const course = courseOf(section.courseId);
@@ -721,6 +774,48 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
             )}
           </header>
 
+          {selectedSemester && unidentified !== null && unidentified.sectionCount > 0 && (
+            <div className="unidentified-banner" role="status">
+              <TriangleAlert aria-hidden="true" size={18} />
+              <div className="unidentified-banner__text">
+                <strong>
+                  {unidentified.sectionCount} lớp chưa xác định giảng viên
+                  {unidentified.lecturerCount > 0 && `, thuộc ${unidentified.lecturerCount} người`}
+                </strong>
+                <span>
+                  Mở từng lớp rồi chọn đúng giảng viên để gắn mã. Chưa có email thì thêm giảng
+                  viên trước ở trang Giảng viên.
+                </span>
+              </div>
+              <div className="unidentified-banner__actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  aria-pressed={showOnlyUnidentified}
+                  onClick={() => setShowOnlyUnidentified((current) => !current)}
+                >
+                  {showOnlyUnidentified ? 'Hiện tất cả lớp' : 'Chỉ hiện lớp chưa xác định'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setIsUnidentifiedOpen(true)}
+                >
+                  Xem theo giảng viên
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => void handleDownloadUnidentified()}
+                  disabled={downloadingUnidentified}
+                >
+                  <FileSpreadsheet aria-hidden="true" size={16} />
+                  <span>{downloadingUnidentified ? 'Đang tạo tệp...' : 'Tải Excel'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {selectedSemester ? (
             <DataTable
               columns={columns}
@@ -989,6 +1084,64 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Gom theo người thay vì theo lớp. Đây mới là danh sách cầm đi xin email:
+          36 lớp thiếu của một bộ môn có khi chỉ do 6 người dạy. */}
+      <Modal
+        isOpen={isUnidentifiedOpen}
+        onClose={() => setIsUnidentifiedOpen(false)}
+        title="Giảng viên chưa xác định"
+      >
+        <div className="unidentified-dialog">
+          <p className="unidentified-dialog__hint">
+            {unidentified?.lecturerCount ?? 0} người, tổng {unidentified?.sectionCount ?? 0} lớp
+            trong học kỳ <strong>{selectedSemester?.semesterName ?? '—'}</strong>. Xin email của
+            từng người rồi thêm vào trang Giảng viên, sau đó quay lại gán cho lớp.
+          </p>
+
+          <div className="admin-import-table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Họ và tên</th>
+                  <th>Bộ môn</th>
+                  <th>Số lớp</th>
+                  <th>Các lớp</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(unidentified?.lecturers ?? []).map((lecturer) => (
+                  <tr key={`${lecturer.lecturerName}-${lecturer.departmentName ?? ''}`}>
+                    <td><strong>{lecturer.lecturerName}</strong></td>
+                    <td>{lecturer.departmentName ?? '—'}</td>
+                    <td>{lecturer.sectionCount}</td>
+                    <td>{lecturer.sectionLabels.join(', ')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="modal-footer catalog-form-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void handleDownloadUnidentified()}
+              disabled={downloadingUnidentified}
+            >
+              <FileSpreadsheet aria-hidden="true" size={16} />
+              <span>Tải Excel</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setIsUnidentifiedOpen(false)}
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
       </Modal>
 
       <CourseSectionImportDialog
