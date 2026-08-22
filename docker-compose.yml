@@ -28,9 +28,64 @@ services:
       - "-c"
       - "wal_buffers=16MB"
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-khaosatvmu}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./src/Backend
+      dockerfile: API/Dockerfile
+    container_name: khaosatvmu_api
+    restart: on-failure
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=${POSTGRES_DB:-khaosatvmu};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-khaosatvmu@123}
+      Authentication__FrontendBaseUrl: ${FRONTEND_BASE_URL:-http://localhost:8080}
+      Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID:?can-i-please-have-a-google-client-id}
+      Authentication__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:?can-i-please-have-a-google-client-secret}
+      AllowedHosts: ${ALLOWED_HOSTS:-localhost}
+      SurveyTicket__SigningKey: ${SurveyTicket__SigningKey:?can-i-please-have-a-signing-key}
+    expose:
+      - "8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: src/Frontend/Dockerfile
+      args:
+        VITE_SUPPORT_EMAIL: ${VITE_SUPPORT_EMAIL:-kdcldhhh@vimaru.edu.vn}
+    container_name: khaosatvmu_frontend
+    restart: on-failure
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - api
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: khaosatvmu_pgadmin
+    restart: unless-stopped
+    profiles: ["tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.invalid}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-change-me}
+    ports:
+      - "127.0.0.1:5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./deploy/pgadmin/pgadmin-servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      - db
 
 volumes:
   postgres_data:
+  pgadmin_data:
