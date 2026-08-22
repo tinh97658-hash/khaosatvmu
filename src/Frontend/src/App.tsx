@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react
 import { toast } from 'sonner';
 import { useAuth } from './auth/authContext';
 import { canAccessModule } from './auth/modulePermissions';
-import { isUnrestrictedRole } from './auth/roles';
+import { isReadOnlyRole, isUnrestrictedRole } from './auth/roles';
 import { AuthLoading } from './components/AuthLoading';
 import { getHashRoot } from './pages/reportRoute';
 
@@ -14,6 +14,7 @@ import { QRCodeModal } from './components/QRCodeModal';
 // Lazy-loaded Pages (Code Splitting for Production Performance)
 const DashboardOverview = lazy(() => import('./pages/DashboardOverview').then(m => ({ default: m.DashboardOverview })));
 const DepartmentDashboardPage = lazy(() => import('./pages/DepartmentDashboardPage').then(m => ({ default: m.DepartmentDashboardPage })));
+const LecturerDashboardPage = lazy(() => import('./pages/LecturerDashboardPage').then(m => ({ default: m.LecturerDashboardPage })));
 const FacultiesPage = lazy(() => import('./pages/FacultiesPage').then(m => ({ default: m.FacultiesPage })));
 const DepartmentsPage = lazy(() => import('./pages/DepartmentsPage').then(m => ({ default: m.DepartmentsPage })));
 const LecturersPage = lazy(() => import('./pages/LecturersPage').then(m => ({ default: m.LecturersPage })));
@@ -99,8 +100,10 @@ function DashboardApp() {
   const canLoadLecturers = ['departments', 'lecturers', 'classes']
     .some((moduleId) => canAccessModule(permissions, moduleId));
   const canLoadCourseSections = canAccessModule(permissions, 'classes');
-  const canLoadSurveyOperations = ['progress', 'reports', 'course-campaigns']
-    .some((moduleId) => canAccessModule(permissions, moduleId));
+  const canLoadSurveyOperations = [
+    'progress', 'reports', 'survey-dashboard', 'survey-statistics', 'survey-analysis',
+    'course-campaigns',
+  ].some((moduleId) => canAccessModule(permissions, moduleId));
 
   const setCurrentTab = useCallback((tab: string) => {
     setCurrentTabState(tab);
@@ -566,10 +569,11 @@ function DashboardApp() {
         <main className="content-area">
           <Suspense fallback={<PageFallback />}>
             {canAccessModule(permissions, currentTab) && <>
-            {/* Tab `overview` vốn không đòi quyền và đã là tab mặc định, nên trưởng bộ
-                môn tự đáp xuống đúng đây. Chỉ cần chọn component theo vai trò: bookmark
-                cũ vẫn chạy, đường dẫn không đổi, sau này thêm vai trò khác chỉ là thêm
-                một nhánh nữa. Xem congviec2.md mục F1. */}
+            {/* Tab `overview` vốn không đòi quyền và đã là tab mặc định, nên mọi vai
+                trò tự đáp xuống đúng đây. Chỉ cần chọn component theo vai trò: bookmark
+                cũ vẫn chạy, đường dẫn không đổi. Nhánh giảng viên phải đứng TRƯỚC nhánh
+                mặc định, không thì lại rơi vào trang của trưởng bộ môn.
+                Xem congviec2.md mục F1 và congviec3.md mục I1. */}
             {currentTab === 'overview' && (
               isUnrestrictedRole(auth.activeProfile?.roleCode) ? (
                 <DashboardOverview
@@ -579,6 +583,8 @@ function DashboardApp() {
                   permissions={permissions}
                   onNavigateTab={(tab) => setCurrentTab(tab)}
                 />
+              ) : isReadOnlyRole(auth.activeProfile?.roleCode) ? (
+                <LecturerDashboardPage onNavigateTab={(tab) => setCurrentTab(tab)} />
               ) : (
                 <DepartmentDashboardPage onNavigateTab={(tab) => setCurrentTab(tab)} />
               )

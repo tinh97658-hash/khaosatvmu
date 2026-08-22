@@ -62,7 +62,10 @@ public static class DatabaseSeeder
         var definitions = new[]
         {
             (Code: "PROGRESS_ACCESS",             Name: "Tiến độ thu phiếu",                Description: "Truy cập module tiến độ thu phiếu",                    Category: "Tổng quan"),
+            (Code: "SURVEY_DASHBOARD_ACCESS",     Name: "Tổng quan khảo sát",                Description: "Truy cập module tổng quan khảo sát",                    Category: "Báo cáo"),
             (Code: "REPORTS_ACCESS",              Name: "Thống kê và báo cáo",              Description: "Truy cập module thống kê và báo cáo",                  Category: "Báo cáo"),
+            (Code: "SURVEY_STATISTICS_ACCESS",    Name: "Bảng dữ liệu khảo sát",             Description: "Truy cập module bảng dữ liệu khảo sát",                 Category: "Báo cáo"),
+            (Code: "SURVEY_ANALYSIS_ACCESS",      Name: "Phân tích chuyên sâu",              Description: "Truy cập module phân tích chuyên sâu",                  Category: "Báo cáo"),
             (Code: "FACULTIES_ACCESS",            Name: "Khoa / Viện",                       Description: "Truy cập module quản lý khoa và viện",                  Category: "Danh mục đào tạo"),
             (Code: "DEPARTMENTS_ACCESS",          Name: "Bộ môn",                            Description: "Truy cập module quản lý bộ môn",                        Category: "Danh mục đào tạo"),
             (Code: "LECTURERS_ACCESS",            Name: "Giảng viên",                        Description: "Truy cập module quản lý giảng viên và chức vụ",         Category: "Danh mục đào tạo"),
@@ -110,7 +113,10 @@ public static class DatabaseSeeder
         {
             // ADMIN: truy cập toàn bộ module.
             (RoleCode: "ADMIN", PermissionCode: "PROGRESS_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "SURVEY_DASHBOARD_ACCESS"),
             (RoleCode: "ADMIN", PermissionCode: "REPORTS_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "SURVEY_STATISTICS_ACCESS"),
+            (RoleCode: "ADMIN", PermissionCode: "SURVEY_ANALYSIS_ACCESS"),
             (RoleCode: "ADMIN", PermissionCode: "FACULTIES_ACCESS"),
             (RoleCode: "ADMIN", PermissionCode: "DEPARTMENTS_ACCESS"),
             (RoleCode: "ADMIN", PermissionCode: "LECTURERS_ACCESS"),
@@ -125,7 +131,10 @@ public static class DatabaseSeeder
 
             // SURVEY_ADMIN: toàn bộ module nghiệp vụ, không có quản trị người dùng.
             (RoleCode: "SURVEY_ADMIN", PermissionCode: "PROGRESS_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "SURVEY_DASHBOARD_ACCESS"),
             (RoleCode: "SURVEY_ADMIN", PermissionCode: "REPORTS_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "SURVEY_STATISTICS_ACCESS"),
+            (RoleCode: "SURVEY_ADMIN", PermissionCode: "SURVEY_ANALYSIS_ACCESS"),
             (RoleCode: "SURVEY_ADMIN", PermissionCode: "FACULTIES_ACCESS"),
             (RoleCode: "SURVEY_ADMIN", PermissionCode: "DEPARTMENTS_ACCESS"),
             (RoleCode: "SURVEY_ADMIN", PermissionCode: "LECTURERS_ACCESS"),
@@ -139,7 +148,10 @@ public static class DatabaseSeeder
 
             // DEPARTMENT_MANAGER: chỉ tiến độ và báo cáo trong Phase 2.
             (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "PROGRESS_ACCESS"),
+            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "SURVEY_DASHBOARD_ACCESS"),
             (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "REPORTS_ACCESS"),
+            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "SURVEY_STATISTICS_ACCESS"),
+            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "SURVEY_ANALYSIS_ACCESS"),
         };
 
         foreach (var definition in definitions)

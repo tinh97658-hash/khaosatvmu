@@ -126,10 +126,19 @@ builder.Services.AddAuthorization(options =>
     AddPermissionPolicy(AuthPolicies.ProgramCriteriaAccess, "PROGRAM_CRITERIA_ACCESS");
     AddPermissionPolicy(AuthPolicies.ProgressAccess, "PROGRESS_ACCESS");
     AddPermissionPolicy(AuthPolicies.ReportsAccess, "REPORTS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.SurveyDashboardAccess, "SURVEY_DASHBOARD_ACCESS");
+    AddPermissionPolicy(AuthPolicies.SurveyStatisticsAccess, "SURVEY_STATISTICS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.SurveyAnalysisAccess, "SURVEY_ANALYSIS_ACCESS");
+    AddAnyPermissionPolicy(AuthPolicies.ReportingRead,
+        "REPORTS_ACCESS", "SURVEY_DASHBOARD_ACCESS", "SURVEY_STATISTICS_ACCESS",
+        "SURVEY_ANALYSIS_ACCESS");
     options.AddPolicy(AuthPolicies.SurveyOperationalRead, policy =>
         policy.RequireAuthenticatedUser().AddRequirements(new AnyPermissionRequirement(
             "PROGRESS_ACCESS",
             "REPORTS_ACCESS",
+            "SURVEY_DASHBOARD_ACCESS",
+            "SURVEY_STATISTICS_ACCESS",
+            "SURVEY_ANALYSIS_ACCESS",
             "COURSE_CAMPAIGNS_ACCESS")));
     AddAnyPermissionPolicy(AuthPolicies.FacultiesRead,
         "FACULTIES_ACCESS", "DEPARTMENTS_ACCESS", "LECTURERS_ACCESS", "MAJORS_ACCESS",

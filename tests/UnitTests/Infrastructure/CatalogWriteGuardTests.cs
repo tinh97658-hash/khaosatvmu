@@ -64,6 +64,9 @@ public class CatalogWriteGuardTests
     private static UserScope ManagerOf(int departmentId) =>
         new(RoleCodes.DepartmentManager, 1, departmentId, null, SeesEverything: false);
 
+    private static UserScope LecturerOf(int departmentId) =>
+        new(RoleCodes.Lecturer, 1, departmentId, null, SeesEverything: false);
+
     private static UserScope Admin => UserScope.Unrestricted(RoleCodes.Admin);
 
     /// <summary>Hai bộ môn khác nhau, để thử chuyện với tay sang bộ môn của người khác.</summary>
@@ -224,6 +227,72 @@ public class CatalogWriteGuardTests
 
             result.Succeeded.Should().BeFalse("không biết bộ môn nào thì không được ghi gì");
             result.ErrorCode.Should().Be(CatalogErrorCodes.OutOfScope);
+        });
+    }
+
+    // ------------------------------------- Giảng viên chỉ đọc (congviec3.md H3, H4)
+
+    [Fact]
+    public async Task Lecturer_ShouldNotWriteAnything_EvenInsideOwnDepartment()
+    {
+        await RunInRollbackAsync(async (db, serviceFor) =>
+        {
+            // Ca dễ lọt nhất: giảng viên VẪN có DepartmentId, nên nếu chỉ so bộ môn thì
+            // mọi thao tác trong bộ môn của chính họ đều được cho qua.
+            var course = await db.Courses.FirstOrDefaultAsync(x => x.DepartmentId != null);
+            var semesterId = await db.Semesters.Select(x => x.SemesterId).FirstOrDefaultAsync();
+            if (course is null || semesterId == 0) return;
+
+            var section = await db.CourseSections
+                .FirstOrDefaultAsync(x => x.CourseId == course.CourseId);
+            var service = serviceFor(LecturerOf(course.DepartmentId!.Value));
+
+            var created = await service.CreateCourseSectionAsync(new SaveCourseSectionCommand(
+                course.CourseId, semesterId, null, "READONLY01", 10, null));
+            created.ErrorCode.Should().Be(CatalogErrorCodes.OutOfScope);
+
+            var editedCourse = await service.UpdateCourseAsync(
+                course.CourseId,
+                new SaveCourseCommand(course.CourseCode, "Bi Sua Trom", course.Credits,
+                    course.CourseType, course.DepartmentId, course.FacultyId, course.PrerequisiteCourseId));
+            editedCourse.ErrorCode.Should().Be(CatalogErrorCodes.OutOfScope);
+
+            if (section is not null)
+            {
+                var deleted = await service.DeleteCourseSectionAsync(section.CourseSectionId);
+                deleted.ErrorCode.Should().Be(CatalogErrorCodes.OutOfScope);
+            }
+        });
+    }
+
+    [Fact]
+    public async Task AcademicYearsAndSemesters_ShouldBeAdminOnly()
+    {
+        await RunInRollbackAsync(async (db, serviceFor) =>
+        {
+            var departmentId = await db.Departments.Select(x => x.DepartmentId).FirstOrDefaultAsync();
+            var year = await db.AcademicYears.FirstOrDefaultAsync();
+            if (departmentId == 0 || year is null) return;
+
+            // Cả hai vai trò bị giới hạn đều phải bị chặn: năm học là khung dùng chung
+            // cho cả trường, và xoá nó là xoá mềm lây xuống học kỳ rồi lớp học phần.
+            foreach (var scope in new[] { LecturerOf(departmentId), ManagerOf(departmentId) })
+            {
+                var service = serviceFor(scope);
+
+                (await service.CreateAcademicYearAsync(new SaveAcademicYearCommand(
+                    "2099-2100",
+                    new DateOnly(2099, 9, 1),
+                    new DateOnly(2100, 6, 30)))).ErrorCode
+                    .Should().Be(CatalogErrorCodes.OutOfScope);
+
+                (await service.DeleteAcademicYearAsync(year.AcademicYearId)).ErrorCode
+                    .Should().Be(CatalogErrorCodes.OutOfScope);
+
+                (await service.CreateSemesterAsync(
+                    new SaveSemesterCommand("Hoc ky thu nghiem", year.AcademicYearId))).ErrorCode
+                    .Should().Be(CatalogErrorCodes.OutOfScope);
+            }
         });
     }
 }

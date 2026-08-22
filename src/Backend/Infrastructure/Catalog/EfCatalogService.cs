@@ -538,10 +538,20 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             .ToList();
     }
 
+    // Năm học và học kỳ là khung dùng chung cho cả trường, không thuộc bộ môn nào,
+    // và xoá một năm học là xoá mềm lây xuống học kỳ rồi lớp học phần. Nên toàn bộ
+    // nhóm này chỉ dành cho quản trị — trước đây không kiểm gì cả, ai có
+    // COURSE_SECTIONS_ACCESS đều ghi được. Xem congviec3.md mục H4.
     public async Task<CatalogOperationResult<AcademicYearDto>> CreateAcademicYearAsync(
         SaveAcademicYearCommand command,
         CancellationToken cancellationToken = default)
     {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<AcademicYearDto>(adminOnly);
+        }
+
         var validation = await ValidateAcademicYearAsync(null, command, cancellationToken);
         if (validation is not null)
         {
@@ -576,6 +586,12 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         SaveAcademicYearCommand command,
         CancellationToken cancellationToken = default)
     {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<AcademicYearDto>(adminOnly);
+        }
+
         var year = await db.AcademicYears
             .FirstOrDefaultAsync(x => x.AcademicYearId == academicYearId, cancellationToken);
         if (year is null)
@@ -611,6 +627,12 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         int academicYearId,
         CancellationToken cancellationToken = default)
     {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<bool>(adminOnly);
+        }
+
         var year = await db.AcademicYears
             .FirstOrDefaultAsync(x => x.AcademicYearId == academicYearId, cancellationToken);
         if (year is null)
@@ -638,6 +660,12 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         SaveSemesterCommand command,
         CancellationToken cancellationToken = default)
     {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<SemesterDto>(adminOnly);
+        }
+
         var validation = await ValidateSemesterAsync(null, command, cancellationToken);
         if (validation is not null)
         {
@@ -660,6 +688,12 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         SaveSemesterCommand command,
         CancellationToken cancellationToken = default)
     {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<SemesterDto>(adminOnly);
+        }
+
         var semester = await db.Semesters.FirstOrDefaultAsync(x => x.SemesterId == semesterId, cancellationToken);
         if (semester is null)
         {
@@ -683,6 +717,12 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         int semesterId,
         CancellationToken cancellationToken = default)
     {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<bool>(adminOnly);
+        }
+
         var semester = await db.Semesters.FirstOrDefaultAsync(x => x.SemesterId == semesterId, cancellationToken);
         if (semester is null)
         {
@@ -715,10 +755,15 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             query = query.Where(x => x.SemesterId == id);
         }
 
-        // Lớp thuộc bộ môn nào là theo học phần sở hữu, không theo giảng viên dạy —
-        // câu D-b đã chốt. Giảng viên bộ môn A dạy học phần của bộ môn B thì lớp đó
-        // thuộc phạm vi của trưởng bộ môn B.
-        if (!scope.SeesEverything)
+        // Hai mức phạm vi đi theo hai TRỤC khác nhau, không phải cùng một trục xiết
+        // chặt dần. Giảng viên đi theo người dạy; trưởng bộ môn đi theo học phần sở
+        // hữu (câu D-b) nên giảng viên bộ môn A dạy học phần của bộ môn B thì lớp đó
+        // thuộc phạm vi của trưởng bộ môn B. Xem congviec3.md mục H2.
+        if (scope.SeesOnlyOwn)
+        {
+            query = query.Where(x => x.LecturerId == scope.LecturerId);
+        }
+        else if (!scope.SeesEverything)
         {
             query = query.Where(x => db.Courses
                 .Any(course => course.CourseId == x.CourseId
@@ -1149,7 +1194,11 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         var scope = await userScope.ResolveAsync(cancellationToken);
         // Bị giới hạn theo bộ môn mà không biết bộ môn nào thì trả rỗng. Tuyệt đối
         // không rơi xuống nhánh không lọc bên dưới.
-        if (scope.SeesNothing)
+        //
+        // Giảng viên cũng trả rỗng: đây là việc của trưởng bộ môn, không phải việc
+        // của người dạy. Phải chặn riêng ở đây vì hàm này lọc theo BỘ MÔN chứ không
+        // theo người, nên không tự hết như các danh sách khác. Xem congviec3.md H5.
+        if (scope.SeesNothing || scope.SeesOnlyOwn)
         {
             return new UnidentifiedLecturerReportDto(0, 0, [], []);
         }
@@ -1238,7 +1287,15 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         if (scope.SeesNothing) return [];
 
         var query = db.Lecturers.AsQueryable();
-        if (!scope.SeesEverything)
+        // Giảng viên không vào được trang Giảng viên, nhưng vẫn gọi được endpoint này
+        // vì trang Lớp học phần cần nó để đọc tên người dạy. Mọi lớp của họ đều do
+        // chính họ dạy nên chỉ cần đúng một bản ghi — trả cả bộ môn là lộ thừa 14 hồ
+        // sơ kèm email cho một vai trò chỉ đọc.
+        if (scope.SeesOnlyOwn)
+        {
+            query = query.Where(x => x.LecturerId == scope.LecturerId);
+        }
+        else if (!scope.SeesEverything)
         {
             query = query.Where(x => x.DepartmentId == scope.DepartmentId);
         }
@@ -1523,7 +1580,17 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         if (scope.SeesNothing) return [];
 
         var query = db.Courses.AsQueryable();
-        if (!scope.SeesEverything)
+        // Giảng viên đi theo lớp mình dạy chứ không theo bộ môn — câu H-b đã chốt.
+        // Nhờ vậy hai trang Học phần và Lớp học phần luôn khớp nhau: mọi học phần
+        // hiện ở đây đều có ít nhất một lớp của mình ở trang bên cạnh, kể cả lớp dạy
+        // chéo sang học phần của bộ môn khác. Xem congviec3.md mục H2.
+        if (scope.SeesOnlyOwn)
+        {
+            query = query.Where(x => db.CourseSections
+                .Any(section => section.CourseId == x.CourseId
+                                && section.LecturerId == scope.LecturerId));
+        }
+        else if (!scope.SeesEverything)
         {
             query = query.Where(x => x.DepartmentId == scope.DepartmentId);
         }
@@ -1798,12 +1865,24 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
     // vào chuyện nút đã bị ẩn trên giao diện.
 
     /// <summary>
+    /// Vai trò chỉ đọc thì chặn mọi thao tác ghi. Gọi ở ĐẦU mọi hàm ghi, trước cả
+    /// validate: kiểm sau validate thì người ngoài phạm vi dò được dữ liệu qua chính
+    /// mã lỗi trả về. Xem congviec3.md mục H3.
+    /// </summary>
+    private static string? CheckReadOnly(UserScope scope) =>
+        scope.IsReadOnly ? CatalogErrorCodes.OutOfScope : null;
+
+    /// <summary>
     /// Bản ghi thuộc <paramref name="departmentId"/> có nằm trong phạm vi của người
     /// đang đăng nhập không. Trả về mã lỗi nếu không, null nếu được phép.
     /// </summary>
     private static string? CheckDepartmentInScope(UserScope scope, int? departmentId)
     {
         if (scope.SeesEverything) return null;
+        // Chặn vai trò chỉ đọc ngay trong hàm này thay vì rải lời gọi ra từng endpoint:
+        // giảng viên vẫn CÓ DepartmentId, nên thiếu dòng này thì chỉ cần quên một chỗ
+        // là họ sửa được bản ghi của bộ môn mình. Gác một chỗ thì không quên được.
+        if (CheckReadOnly(scope) is { } readOnly) return readOnly;
         if (scope.DepartmentId is not { } allowed) return CatalogErrorCodes.OutOfScope;
         return departmentId == allowed ? null : CatalogErrorCodes.OutOfScope;
     }
@@ -2188,6 +2267,13 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         int academicYearId,
         CancellationToken cancellationToken = default)
     {
+        // Khôi phục đi cùng cặp với xoá: xoá chỉ dành cho quản trị thì khôi phục cũng vậy.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<AcademicYearDto>(adminOnly);
+        }
+
         var year = await db.AcademicYears.IgnoreQueryFilters()
             .FirstOrDefaultAsync(x => x.AcademicYearId == academicYearId && x.IsDeleted, cancellationToken);
         if (year is null) return Failed<AcademicYearDto>(CatalogErrorCodes.AcademicYearNotFound);
@@ -2207,6 +2293,12 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         int semesterId,
         CancellationToken cancellationToken = default)
     {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<SemesterDto>(adminOnly);
+        }
+
         var semester = await db.Semesters.IgnoreQueryFilters()
             .FirstOrDefaultAsync(x => x.SemesterId == semesterId && x.IsDeleted, cancellationToken);
         if (semester is null) return Failed<SemesterDto>(CatalogErrorCodes.SemesterNotFound);
@@ -2223,6 +2315,16 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         var section = await db.CourseSections.IgnoreQueryFilters()
             .FirstOrDefaultAsync(x => x.CourseSectionId == courseSectionId && x.IsDeleted, cancellationToken);
         if (section is null) return Failed<CourseSectionDto>(CatalogErrorCodes.CourseSectionNotFound);
+
+        // Khôi phục đi cùng cặp với xoá, nên dùng đúng luật của DeleteCourseSectionAsync:
+        // lớp phải thuộc bộ môn mình. Giảng viên bị chặn hẳn vì chỉ đọc.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        var departmentId = await DepartmentOfCourseAsync(section.CourseId, cancellationToken);
+        if (CheckDepartmentInScope(scope, departmentId) is { } outOfScope)
+        {
+            return Failed<CourseSectionDto>(outOfScope);
+        }
+
         section.IsDeleted = false;
         section.DeletedAt = null;
         await db.SaveChangesAsync(cancellationToken);
@@ -2256,6 +2358,13 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         int courseId,
         CancellationToken cancellationToken = default)
     {
+        // Khôi phục đi cùng cặp với xoá, mà xoá học phần chỉ dành cho quản trị.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (CheckAdminOnly(scope) is { } adminOnly)
+        {
+            return Failed<CourseDto>(adminOnly);
+        }
+
         var course = await db.Courses.IgnoreQueryFilters()
             .FirstOrDefaultAsync(x => x.CourseId == courseId && x.IsDeleted, cancellationToken);
         if (course is null) return Failed<CourseDto>(CatalogErrorCodes.CourseNotFound);

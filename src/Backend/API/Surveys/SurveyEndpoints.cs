@@ -18,10 +18,22 @@ public static class SurveyEndpoints
         var operationalReadGroup = endpoints
             .MapGroup("/api/surveys")
             .RequireAuthorization(AuthPolicies.SurveyOperationalRead);
-        // Trang thống kê và nút tính điểm theo mẻ dành cho quản trị hệ thống.
-        var statisticsGroup = endpoints
+        // Nhóm Báo cáo tách theo từng trang: mỗi trang một quyền riêng để quản trị
+        // viên bật/tắt độc lập trong màn hình Phân quyền Module.
+        var surveyDashboardGroup = endpoints
             .MapGroup("/api/surveys")
-            .RequireAuthorization(AuthPolicies.ReportsAccess);
+            .RequireAuthorization(AuthPolicies.SurveyDashboardAccess);
+        // Trang bảng dữ liệu khảo sát và nút tính điểm theo mẻ.
+        var surveyStatisticsGroup = endpoints
+            .MapGroup("/api/surveys")
+            .RequireAuthorization(AuthPolicies.SurveyStatisticsAccess);
+        var surveyAnalysisGroup = endpoints
+            .MapGroup("/api/surveys")
+            .RequireAuthorization(AuthPolicies.SurveyAnalysisAccess);
+        // Endpoint dùng chung cho bảng điều khiển, mở cho mọi quyền nhóm Báo cáo.
+        var reportingReadGroup = endpoints
+            .MapGroup("/api/surveys")
+            .RequireAuthorization(AuthPolicies.ReportingRead);
 
         // --------------------------------------------------------- Answer scales
 
@@ -146,19 +158,19 @@ public static class SurveyEndpoints
 
         // ------------------------------------------------------- Thống kê điểm
 
-        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/statistics", async (
+        surveyStatisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/statistics", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSemesterSurveyStatisticsAsync(semesterSurveyId, cancellationToken)));
 
-        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/normalization", async (
+        surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/normalization", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSemesterSurveyNormalizationAsync(semesterSurveyId, cancellationToken)));
 
-        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/department-summary", async (
+        surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/department-summary", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
@@ -166,31 +178,31 @@ public static class SurveyEndpoints
 
         // Dải chỉ số gọn cho bảng điều khiển riêng của trưởng bộ môn. Số của bộ môn
         // kèm số toàn trường để so; mặt bằng vẫn tính trên toàn bộ dữ liệu.
-        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/department-dashboard", async (
+        reportingReadGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/department-dashboard", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetDepartmentDashboardAsync(semesterSurveyId, cancellationToken)));
 
-        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/dashboard", async (
+        surveyDashboardGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/dashboard", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSemesterSurveyDashboardAsync(semesterSurveyId, cancellationToken)));
 
-        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/course-diagnosis", async (
+        surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/course-diagnosis", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSemesterSurveyCourseDiagnosisAsync(semesterSurveyId, cancellationToken)));
 
-        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/lecturers", async (
+        surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/lecturers", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSemesterSurveyLecturersAsync(semesterSurveyId, cancellationToken)));
 
-        statisticsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/lecturers/{lecturerId:int}", async (
+        surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/lecturers/{lecturerId:int}", async (
             int semesterSurveyId,
             int lecturerId,
             ISurveyService service,
@@ -198,7 +210,7 @@ public static class SurveyEndpoints
             ToResult(await service.GetLecturerSurveyReportAsync(semesterSurveyId, lecturerId, cancellationToken)));
 
         // Tính lại theo mẻ, chỉ chạy khi quản trị bấm nút.
-        statisticsGroup.MapPost("/semester-surveys/{semesterSurveyId:int}/recalculate-scores", async (
+        surveyStatisticsGroup.MapPost("/semester-surveys/{semesterSurveyId:int}/recalculate-scores", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
@@ -284,6 +296,7 @@ public static class SurveyEndpoints
 
         var statusCode = result.ErrorCode switch
         {
+            SurveyErrorCodes.OutOfScope => StatusCodes.Status403Forbidden,
             SurveyErrorCodes.AnswerScaleNotFound => StatusCodes.Status404NotFound,
             SurveyErrorCodes.TemplateNotFound => StatusCodes.Status404NotFound,
             SurveyErrorCodes.SemesterNotFound => StatusCodes.Status404NotFound,

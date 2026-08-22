@@ -13,7 +13,7 @@ import {
 import type { ImportCourseRow } from '../utils/courseImportExcel';
 import type { Course, CourseType, Department, Faculty } from '../types';
 import { useAuth } from '../auth/authContext';
-import { isUnrestrictedRole } from '../auth/roles';
+import { isReadOnlyRole, isUnrestrictedRole } from '../auth/roles';
 
 interface CoursesPageProps {
   courses: Course[];
@@ -67,6 +67,8 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
   // Xoá học phần và import chỉ dành cho quản trị; ẩn nút cho gọn, chặn thật ở backend.
   const { activeProfile } = useAuth();
   const canManageAll = isUnrestrictedRole(activeProfile?.roleCode);
+  // Giảng viên chỉ xem các học phần mình có lớp dạy, không sửa gì.
+  const readOnly = isReadOnlyRole(activeProfile?.roleCode);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -233,7 +235,11 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
       render: (item) =>
         item.prerequisiteCourseId === null ? '—' : courseCodeOf(item.prerequisiteCourseId),
     },
-    {
+  ];
+
+  // Bỏ hẳn cả cột cho vai trò chỉ đọc, không để lại một cột trống.
+  if (!readOnly) {
+    columns.push({
       key: 'actions',
       header: 'Thao tác',
       width: '92px',
@@ -261,8 +267,8 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
           )}
         </div>
       ),
-    },
-  ];
+    });
+  }
 
   return (
     <div className="catalog-page catalog-page--wide">
@@ -288,7 +294,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
         ]}
         currentFilter={facultyFilter}
         onFilterChange={setFacultyFilter}
-        onAddNew={openCreate}
+        onAddNew={readOnly ? undefined : openCreate}
         addNewLabel="Thêm học phần"
         toolbarActions={canManageAll ? (
           <button

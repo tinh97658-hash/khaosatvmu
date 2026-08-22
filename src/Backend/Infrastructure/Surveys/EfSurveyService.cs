@@ -397,10 +397,20 @@ public sealed class EfSurveyService(
             .ToList();
     }
 
+    // Đợt khảo sát phát phiếu cho TOÀN BỘ lớp của học kỳ, không thuộc bộ môn nào, và
+    // xoá đợt là xoá lây phiếu đã thu. Nên tạo và xoá đợt chỉ dành cho quản trị —
+    // trước đây không kiểm gì cả, ai có COURSE_CAMPAIGNS_ACCESS đều làm được.
+    // Xem congviec3.md mục H4.
     public async Task<SurveyOperationResult<SemesterSurveyDto>> CreateSemesterSurveyAsync(
         CreateSemesterSurveyCommand command,
         CancellationToken cancellationToken = default)
     {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.SeesEverything)
+        {
+            return Failed<SemesterSurveyDto>(SurveyErrorCodes.OutOfScope);
+        }
+
         var startTime = ToUtc(command.StartTime);
         var endTime = ToUtc(command.EndTime);
         if (endTime <= startTime)
@@ -460,6 +470,12 @@ public sealed class EfSurveyService(
         int semesterSurveyId,
         CancellationToken cancellationToken = default)
     {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.SeesEverything)
+        {
+            return Failed<bool>(SurveyErrorCodes.OutOfScope);
+        }
+
         var survey = await db.SemesterSurveys
             .FirstOrDefaultAsync(x => x.SemesterSurveyId == semesterSurveyId, cancellationToken);
         if (survey is null)
@@ -498,8 +514,16 @@ public sealed class EfSurveyService(
         var query = db.CourseSectionSurveys
             .Where(x => x.SemesterSurveyId == semesterSurveyId);
 
-        // Bài khảo sát đi theo lớp, mà lớp thuộc bộ môn nào là theo học phần sở hữu.
-        if (!scope.SeesEverything)
+        // Bài khảo sát đi theo lớp, nên thừa hưởng đúng phạm vi của lớp: giảng viên
+        // lấy lớp mình dạy, trưởng bộ môn lấy lớp có học phần thuộc bộ môn mình.
+        // Trang Tiến độ thu phiếu cũng ăn theo hàm này nên lọc một chỗ là xong cả hai.
+        if (scope.SeesOnlyOwn)
+        {
+            query = query.Where(x => db.CourseSections
+                .Any(section => section.CourseSectionId == x.CourseSectionId
+                                && section.LecturerId == scope.LecturerId));
+        }
+        else if (!scope.SeesEverything)
         {
             query = query.Where(x => db.CourseSections
                 .Any(section => section.CourseSectionId == x.CourseSectionId
@@ -717,11 +741,40 @@ public sealed class EfSurveyService(
         SaveSurveyScheduleCommand command,
         CancellationToken cancellationToken = default)
     {
+        // Giảng viên bị chặn ngay, trước cả khi tra bản ghi: câu H-c chốt là không.
+        // Trưởng bộ môn vẫn sửa được vì đó là việc vận hành thật của họ, nhưng chỉ
+        // lớp trong bộ môn mình — trước đây hàm này không kiểm phạm vi lần nào.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (scope.IsReadOnly)
+        {
+            return Failed<CourseSectionSurveyDto>(SurveyErrorCodes.OutOfScope);
+        }
+
         var sectionSurvey = await db.CourseSectionSurveys
             .FirstOrDefaultAsync(x => x.CourseSectionSurveyId == courseSectionSurveyId, cancellationToken);
         if (sectionSurvey is null)
         {
             return Failed<CourseSectionSurveyDto>(SurveyErrorCodes.SectionSurveyNotFound);
+        }
+
+        // Kiểm phạm vi TRƯỚC khi validate lịch, không thì dò được lớp của bộ môn khác
+        // qua chính mã lỗi trả về — đúng bài học của congviec2.md mục D4.
+        if (!scope.SeesEverything)
+        {
+            if (scope.DepartmentId is not { } departmentId)
+            {
+                return Failed<CourseSectionSurveyDto>(SurveyErrorCodes.OutOfScope);
+            }
+
+            var inScope = await db.CourseSections.AnyAsync(
+                section => section.CourseSectionId == sectionSurvey.CourseSectionId
+                           && db.Courses.Any(course => course.CourseId == section.CourseId
+                                                       && course.DepartmentId == departmentId),
+                cancellationToken);
+            if (!inScope)
+            {
+                return Failed<CourseSectionSurveyDto>(SurveyErrorCodes.OutOfScope);
+            }
         }
 
         var startTime = ToUtc(command.StartTime);

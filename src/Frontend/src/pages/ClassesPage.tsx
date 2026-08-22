@@ -27,7 +27,7 @@ import {
 import type { AcademicYear, Course, CourseSection, Lecturer, Semester } from '../types';
 import { useSemester } from '../context/semesterContext';
 import { useAuth } from '../auth/authContext';
-import { isUnrestrictedRole } from '../auth/roles';
+import { isReadOnlyRole, isUnrestrictedRole } from '../auth/roles';
 
 interface ClassesPageProps {
   courses: Course[];
@@ -143,6 +143,8 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
   // Import lấy bộ môn từ tệp nên chỉ quản trị mới được dùng; ẩn nút cho gọn.
   const { activeProfile } = useAuth();
   const canManageAll = isUnrestrictedRole(activeProfile?.roleCode);
+  // Giảng viên chỉ theo dõi lớp mình dạy, không sửa gì trên trang này.
+  const readOnly = isReadOnlyRole(activeProfile?.roleCode);
 
   // ----- Giảng viên chưa xác định -------------------------------------------
   // Backend đã lọc sẵn theo phạm vi, nên trưởng bộ môn chỉ thấy bộ môn mình mà
@@ -584,7 +586,11 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
         );
       },
     },
-    {
+  ];
+
+  // Bỏ hẳn cả cột chứ không ẩn từng nút: ẩn hết nút thì còn lại một cột trống 92px.
+  if (!readOnly) {
+    columns.push({
       key: 'actions',
       header: 'Hành động',
       width: '92px',
@@ -610,8 +616,8 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
           </button>
         </div>
       ),
-    },
-  ];
+    });
+  }
 
   const semesterCount = selectedYear?.semesters.length ?? 0;
 
@@ -625,15 +631,19 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
               <CalendarDays aria-hidden="true" size={16} />
               Năm học
             </span>
-            <button
-              type="button"
-              className="term-tree__add"
-              onClick={openCreateYear}
-              aria-label="Thêm năm học"
-              title="Thêm năm học"
-            >
-              <Plus aria-hidden="true" size={16} />
-            </button>
+            {/* Năm học và học kỳ là khung dùng chung cho cả trường, chỉ quản trị mới
+                được sửa — backend cũng từ chối, xem congviec3.md mục H4. */}
+            {canManageAll && (
+              <button
+                type="button"
+                className="term-tree__add"
+                onClick={openCreateYear}
+                aria-label="Thêm năm học"
+                title="Thêm năm học"
+              >
+                <Plus aria-hidden="true" size={16} />
+              </button>
+            )}
           </header>
 
           {loadError && <p className="term-tree__error">{loadError}</p>}
@@ -665,26 +675,28 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
                         <span className="term-tree__year-name">{year.academicYearName}</span>
                         <span className="term-tree__count">{year.semesters.length}</span>
                       </button>
-                      <span className="term-tree__row-actions">
-                        <button
-                          type="button"
-                          className="catalog-icon-button catalog-icon-button--sm"
-                          onClick={() => openEditYear(year)}
-                          aria-label={`Sửa ${year.academicYearName}`}
-                          title="Sửa năm học"
-                        >
-                          <Pencil aria-hidden="true" size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          className="catalog-icon-button catalog-icon-button--sm catalog-icon-button--danger"
-                          onClick={() => setYearToDelete(year)}
-                          aria-label={`Xóa ${year.academicYearName}`}
-                          title="Xóa năm học"
-                        >
-                          <Trash2 aria-hidden="true" size={13} />
-                        </button>
-                      </span>
+                      {canManageAll && (
+                        <span className="term-tree__row-actions">
+                          <button
+                            type="button"
+                            className="catalog-icon-button catalog-icon-button--sm"
+                            onClick={() => openEditYear(year)}
+                            aria-label={`Sửa ${year.academicYearName}`}
+                            title="Sửa năm học"
+                          >
+                            <Pencil aria-hidden="true" size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className="catalog-icon-button catalog-icon-button--sm catalog-icon-button--danger"
+                            onClick={() => setYearToDelete(year)}
+                            aria-label={`Xóa ${year.academicYearName}`}
+                            title="Xóa năm học"
+                          >
+                            <Trash2 aria-hidden="true" size={13} />
+                          </button>
+                        </span>
+                      )}
                     </div>
 
                     {isExpanded && (
@@ -712,26 +724,28 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
                                   <Layers aria-hidden="true" size={13} />
                                   {semester.semesterName}
                                 </button>
-                                <span className="term-tree__row-actions">
-                                  <button
-                                    type="button"
-                                    className="catalog-icon-button catalog-icon-button--sm"
-                                    onClick={() => openEditSemester(semester)}
-                                    aria-label={`Sửa ${semester.semesterName}`}
-                                    title="Sửa học kỳ"
-                                  >
-                                    <Pencil aria-hidden="true" size={12} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="catalog-icon-button catalog-icon-button--sm catalog-icon-button--danger"
-                                    onClick={() => setSemesterToDelete(semester)}
-                                    aria-label={`Xóa ${semester.semesterName}`}
-                                    title="Xóa học kỳ"
-                                  >
-                                    <Trash2 aria-hidden="true" size={12} />
-                                  </button>
-                                </span>
+                                {canManageAll && (
+                                  <span className="term-tree__row-actions">
+                                    <button
+                                      type="button"
+                                      className="catalog-icon-button catalog-icon-button--sm"
+                                      onClick={() => openEditSemester(semester)}
+                                      aria-label={`Sửa ${semester.semesterName}`}
+                                      title="Sửa học kỳ"
+                                    >
+                                      <Pencil aria-hidden="true" size={12} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="catalog-icon-button catalog-icon-button--sm catalog-icon-button--danger"
+                                      onClick={() => setSemesterToDelete(semester)}
+                                      aria-label={`Xóa ${semester.semesterName}`}
+                                      title="Xóa học kỳ"
+                                    >
+                                      <Trash2 aria-hidden="true" size={12} />
+                                    </button>
+                                  </span>
+                                )}
                               </div>
                             </li>
                           ))
@@ -767,7 +781,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
             </span>
 
             {/* Khi đã chọn học kỳ, nút thêm nằm trên thanh công cụ của bảng. */}
-            {!selectedSemester && (
+            {!selectedSemester && canManageAll && (
               <button
                 type="button"
                 className="btn btn-primary btn-sm catalog-add-button"
@@ -829,7 +843,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
               searchValue={search}
               onSearchChange={setSearch}
               searchPlaceholder="Tìm tên lớp hoặc học phần..."
-              onAddNew={openCreateSection}
+              onAddNew={readOnly ? undefined : openCreateSection}
               addNewLabel="Thêm lớp học phần"
               toolbarActions={canManageAll ? (
                 <button

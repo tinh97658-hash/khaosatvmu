@@ -24,6 +24,11 @@ public static class AuthPolicies
     public const string ProgramCriteriaAccess = "PERMISSION_PROGRAM_CRITERIA_ACCESS";
     public const string ProgressAccess = "PERMISSION_PROGRESS_ACCESS";
     public const string ReportsAccess = "PERMISSION_REPORTS_ACCESS";
+    public const string SurveyDashboardAccess = "PERMISSION_SURVEY_DASHBOARD_ACCESS";
+    public const string SurveyStatisticsAccess = "PERMISSION_SURVEY_STATISTICS_ACCESS";
+    public const string SurveyAnalysisAccess = "PERMISSION_SURVEY_ANALYSIS_ACCESS";
+    /// <summary>Bất kỳ quyền nào trong nhóm Báo cáo, cho các endpoint dùng chung.</summary>
+    public const string ReportingRead = "PERMISSION_REPORTING_READ";
     public const string SurveyOperationalRead = "PERMISSION_SURVEY_OPERATIONAL_READ";
 }
 

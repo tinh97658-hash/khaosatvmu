@@ -44,11 +44,29 @@ public sealed record UserScope(
         new(string.Empty, null, null, null, SeesEverything: false);
 
     /// <summary>
-    /// Bị giới hạn theo bộ môn nhưng lại không biết bộ môn nào. Gặp trường hợp này
+    /// Mức phạm vi hẹp nhất: chỉ thấy dữ liệu gắn với CHÍNH MÌNH, không thấy cả bộ
+    /// môn. Lớp học phần đi theo <c>CourseSections.LecturerId</c>, học phần đi theo
+    /// các học phần có ít nhất một lớp mình dạy. Xem congviec3.md mục H2.
+    /// </summary>
+    public bool SeesOnlyOwn => RoleCode == RoleCodes.Lecturer;
+
+    /// <summary>
+    /// Không được ghi bất cứ thứ gì. Giảng viên chỉ đọc, không có ngoại lệ nào phải
+    /// nhớ. Xem congviec3.md mục H3.
+    /// </summary>
+    public bool IsReadOnly => SeesOnlyOwn;
+
+    /// <summary>
+    /// Bị giới hạn phạm vi nhưng lại không biết giới hạn vào đâu. Gặp trường hợp này
     /// thì phải trả về danh sách RỖNG, tuyệt đối không được rơi vào nhánh không lọc —
     /// đó là cách một lỗi phân quyền lọt qua mà nhìn vẫn như chạy đúng.
+    /// <para>
+    /// Mỗi mức phạm vi hỏng theo một kiểu: mức bộ môn thì thiếu <c>DepartmentId</c>,
+    /// mức chính mình thì thiếu <c>LecturerId</c>.
+    /// </para>
     /// </summary>
-    public bool SeesNothing => !SeesEverything && DepartmentId is null;
+    public bool SeesNothing => !SeesEverything
+        && (SeesOnlyOwn ? LecturerId is null : DepartmentId is null);
 }
 
 /// <summary>Dựng <see cref="UserScope"/> cho request hiện tại.</summary>

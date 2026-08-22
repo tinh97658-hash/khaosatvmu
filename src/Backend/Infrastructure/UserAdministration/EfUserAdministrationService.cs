@@ -435,6 +435,11 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
 
     private static readonly Dictionary<string, int> PermissionOrderMap = new(StringComparer.OrdinalIgnoreCase)
     {
+        // Nhóm Báo cáo: xếp theo đúng thứ tự bốn mục trên menu bên trái.
+        ["SURVEY_DASHBOARD_ACCESS"] = 1,
+        ["REPORTS_ACCESS"] = 2,
+        ["SURVEY_STATISTICS_ACCESS"] = 3,
+        ["SURVEY_ANALYSIS_ACCESS"] = 4,
         ["FACULTIES_ACCESS"] = 1,
         ["DEPARTMENTS_ACCESS"] = 2,
         ["LECTURERS_ACCESS"] = 3,

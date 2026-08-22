@@ -643,6 +643,13 @@ public static class SurveyErrorCodes
 {
     public const string InvalidRequest = "SURVEY_INVALID_REQUEST";
 
+    /// <summary>
+    /// Bản ghi đích nằm ngoài phạm vi của người đang đăng nhập, hoặc hành động này
+    /// không dành cho vai trò đó. Endpoint trả 403. Song song với
+    /// <see cref="Application.Catalog.CatalogErrorCodes.OutOfScope"/>.
+    /// </summary>
+    public const string OutOfScope = "SURVEY_OUT_OF_SCOPE";
+
     public const string AnswerScaleNotFound = "SURVEY_ANSWER_SCALE_NOT_FOUND";
     public const string AnswerScaleNameRequired = "SURVEY_ANSWER_SCALE_NAME_REQUIRED";
     public const string AnswerScaleNameExists = "SURVEY_ANSWER_SCALE_NAME_EXISTS";

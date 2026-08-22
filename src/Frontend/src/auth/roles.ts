@@ -16,3 +16,14 @@ export const ROLE_CODES = {
 export function isUnrestrictedRole(roleCode: string | null | undefined): boolean {
   return roleCode === ROLE_CODES.admin || roleCode === ROLE_CODES.surveyAdmin;
 }
+
+/**
+ * Vai trò chỉ đọc: xem được dữ liệu trong phạm vi của mình nhưng không ghi được gì.
+ * Giảng viên chỉ có mỗi việc theo dõi lớp mình dạy và tiến độ thu phiếu.
+ *
+ * Cũng chỉ để ẩn nút. Backend tự từ chối mọi thao tác ghi của vai trò này, xem
+ * congviec3.md mục H3.
+ */
+export function isReadOnlyRole(roleCode: string | null | undefined): boolean {
+  return roleCode === ROLE_CODES.lecturer;
+}

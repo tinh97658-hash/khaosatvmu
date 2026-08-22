@@ -18,6 +18,8 @@ import {
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '../auth/authContext';
+import { isReadOnlyRole } from '../auth/roles';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { QRCodeModal } from '../components/QRCodeModal';
 import { useSemester } from '../context/semesterContext';
@@ -94,6 +96,11 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
     }
   }, [activeSemesterId]);
 
+  // Giảng viên chỉ theo dõi phiếu của lớp mình dạy: không tạo, không xoá, không sửa
+  // lịch. Riêng link và mã QR thì giữ, vì chính họ là người đưa cho sinh viên.
+  const { activeProfile } = useAuth();
+  const readOnly = isReadOnlyRole(activeProfile?.roleCode);
+
   const [templates, setTemplates] = useState<SurveyTemplate[]>([]);
   const [semesterSurveys, setSemesterSurveys] = useState<SemesterSurvey[]>([]);
   const [sectionSurveys, setSectionSurveys] = useState<Record<number, CourseSectionSurvey[]>>({});
@@ -117,8 +124,12 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
   const [deleting, setDeleting] = useState<SemesterSurvey | null>(null);
   const [qrTarget, setQrTarget] = useState<CourseSectionSurvey | null>(null);
 
-  // Nạp danh sách template khảo sát
+  // Nạp danh sách template khảo sát. Bộ câu hỏi thuộc quyền
+  // COURSE_QUESTION_SETS_ACCESS mà vai trò chỉ đọc không có, nên gọi vào là 403 và
+  // trang hiện một dải lỗi đỏ thừa. Template cũng chỉ dùng để tạo đợt, mà vai trò đó
+  // không tạo được — bỏ hẳn lời gọi. Xem congviec3.md mục H6.
   useEffect(() => {
+    if (readOnly) return;
     const load = async () => {
       try {
         const nextTemplates = await surveyApi.templates();
@@ -128,7 +139,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
       }
     };
     void load();
-  }, []);
+  }, [readOnly]);
 
   const loadSections = useCallback(async (semesterSurveyId: number) => {
     try {
@@ -299,22 +310,24 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
             ))}
           </select>
         </div>
-        <div className="operations-tab-actions">
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!semesterId}
-            onClick={() => {
-              setCreateError(null);
-              setCreateTemplateId(templates.length === 1 ? String(templates[0].surveyTemplateId) : '');
-              setCreateSchedule(defaultSchedule());
-              setIsCreateOpen(true);
-            }}
-          >
-            <Plus className="operation-icon" aria-hidden="true" />
-            Tạo bài khảo sát
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="operations-tab-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!semesterId}
+              onClick={() => {
+                setCreateError(null);
+                setCreateTemplateId(templates.length === 1 ? String(templates[0].surveyTemplateId) : '');
+                setCreateSchedule(defaultSchedule());
+                setIsCreateOpen(true);
+              }}
+            >
+              <Plus className="operation-icon" aria-hidden="true" />
+              Tạo bài khảo sát
+            </button>
+          </div>
+        )}
       </section>
 
       {loadError && (
@@ -392,14 +405,16 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
                   {survey.responseCount} lượt trả lời
                 </span>
                 <span>{survey.questionCount} câu hỏi</span>
-                <button
-                  type="button"
-                  className="btn btn-danger btn-sm"
-                  onClick={() => setDeleting(survey)}
-                >
-                  <Trash2 className="operation-icon" aria-hidden="true" />
-                  Xóa đợt
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    onClick={() => setDeleting(survey)}
+                  >
+                    <Trash2 className="operation-icon" aria-hidden="true" />
+                    Xóa đợt
+                  </button>
+                )}
               </div>
             </header>
 
@@ -463,25 +478,36 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
                           </div>
                         </td>
                         <td>
-                          <button
-                            type="button"
-                            className="section-response-link"
-                            onClick={() => openSurveyReport(section.courseSectionSurveyId)}
-                            title="Xem kết quả chi tiết trong Thống kê & Báo cáo"
-                          >
+                          {/* Số lượt trả lời là lối tắt sang trang Thống kê & Báo cáo,
+                              mà vai trò chỉ đọc không có quyền vào đó — câu H-e chốt
+                              giảng viên chỉ xem tiến độ, không xem kết quả. */}
+                          {readOnly ? (
                             <span className="operations-count">{section.responseCount}</span>
-                          </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="section-response-link"
+                              onClick={() => openSurveyReport(section.courseSectionSurveyId)}
+                              title="Xem kết quả chi tiết trong Thống kê & Báo cáo"
+                            >
+                              <span className="operations-count">{section.responseCount}</span>
+                            </button>
+                          )}
                         </td>
                         <td>
                           <div className="campaign-row-actions">
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => openSurveyReport(section.courseSectionSurveyId)}
-                            >
-                              <ClipboardList className="operation-icon" aria-hidden="true" />
-                              Kết quả
-                            </button>
+                            {!readOnly && (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => openSurveyReport(section.courseSectionSurveyId)}
+                              >
+                                <ClipboardList className="operation-icon" aria-hidden="true" />
+                                Kết quả
+                              </button>
+                            )}
+                            {/* Mã QR và đường dẫn thì giữ cho mọi vai trò: giảng viên
+                                chính là người đưa cho sinh viên, câu H-d. */}
                             <button
                               type="button"
                               className="btn btn-secondary btn-sm"
@@ -490,21 +516,23 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
                               <QrCode className="operation-icon" aria-hidden="true" />
                               QR
                             </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => {
-                                setEditingSection(section);
-                                setEditError(null);
-                                setEditSchedule({
-                                  startTime: toLocalInput(section.startTime),
-                                  endTime: toLocalInput(section.endTime),
-                                });
-                              }}
-                            >
-                              <Pencil className="operation-icon" aria-hidden="true" />
-                              Sửa lịch
-                            </button>
+                            {!readOnly && (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => {
+                                  setEditingSection(section);
+                                  setEditError(null);
+                                  setEditSchedule({
+                                    startTime: toLocalInput(section.startTime),
+                                    endTime: toLocalInput(section.endTime),
+                                  });
+                                }}
+                              >
+                                <Pencil className="operation-icon" aria-hidden="true" />
+                                Sửa lịch
+                              </button>
+                            )}
                             <a
                               className="btn btn-secondary btn-sm"
                               href={surveyLinkOf(section.linkToken)}
