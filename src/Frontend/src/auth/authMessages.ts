@@ -2,7 +2,7 @@ const messages: Record<string, string> = {
   AUTH_USER_NOT_REGISTERED: 'Tài khoản chưa được cấp quyền sử dụng hệ thống.',
   AUTH_ACCOUNT_DISABLED: 'Tài khoản đã bị vô hiệu hóa.',
   AUTH_EMAIL_NOT_VERIFIED: 'Địa chỉ email Google chưa được xác minh.',
-  AUTH_NO_PROFILE: 'Tài khoản chưa có hồ sơ làm việc khả dụng.',
+  AUTH_NO_PROFILE: 'Bạn chưa được cấp hồ sơ làm việc hợp lệ.',
   AUTH_PROFILE_DISABLED: 'Hồ sơ làm việc đã bị vô hiệu hóa.',
   AUTH_SESSION_EXPIRED: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
   AUTH_ACCOUNT_LINK_CONFLICT: 'Thông tin liên kết Google không khớp với tài khoản hệ thống.',

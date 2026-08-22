@@ -6,6 +6,8 @@ COPY src/Frontend/package*.json ./
 RUN npm ci
 
 COPY src/Frontend/ ./
+ARG VITE_SUPPORT_EMAIL=kdcldhhh@vimaru.edu.vn
+ENV VITE_SUPPORT_EMAIL=${VITE_SUPPORT_EMAIL}
 RUN npm run build
 
 # Stage 2: Serve static files with Nginx

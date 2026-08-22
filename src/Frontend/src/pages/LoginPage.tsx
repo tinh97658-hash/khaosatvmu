@@ -1,32 +1,48 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Building2,
   CircleAlert,
   FlaskConical,
   GraduationCap,
   LogIn,
+  Mail,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
 } from 'lucide-react';
 import { authMessage } from '../auth/authMessages';
 import { useAuth } from '../auth/authContext';
+import { Modal } from '../components/Modal';
+import { AuthApiError } from '../services/authApi';
 import '../styles/auth-admin.css';
+
+const supportEmail = import.meta.env.VITE_SUPPORT_EMAIL?.trim() || 'kdcldhhh@vimaru.edu.vn';
+const supportMailTo = `mailto:${supportEmail}?subject=${encodeURIComponent(
+  'Yêu cầu cấp hồ sơ làm việc - Hệ thống Khảo sát VMU',
+)}`;
 
 export function LoginPage() {
   const auth = useAuth();
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [isNoProfileDialogOpen, setIsNoProfileDialogOpen] = useState(false);
   const queryError = new URLSearchParams(window.location.search).get('error');
-  const error = authMessage(localError ?? queryError ?? auth.errorCode);
+  const errorCode = localError ?? queryError ?? auth.errorCode;
+  const error = authMessage(errorCode);
+  const hasNoProfile = errorCode === 'AUTH_NO_PROFILE';
   const googleAvailable = auth.configuration?.googleConfigured === true;
+
+  useEffect(() => {
+    if (hasNoProfile) setIsNoProfileDialogOpen(true);
+  }, [hasNoProfile]);
 
   const handleDevLogin = async () => {
     setBusy(true);
     setLocalError(null);
     try {
       await auth.devLogin();
-    } catch {
-      setLocalError('AUTH_REQUEST_FAILED');
+    } catch (requestError) {
+      setLocalError(requestError instanceof AuthApiError ? requestError.errorCode : 'AUTH_REQUEST_FAILED');
     } finally {
       setBusy(false);
     }
@@ -78,9 +94,19 @@ export function LoginPage() {
           </p>
 
           {error && (
-            <div className="auth-alert" role="alert">
+            <div className={`auth-alert${hasNoProfile ? ' auth-alert--no-profile' : ''}`} role="alert">
               <CircleAlert aria-hidden="true" />
-              <span>{error}</span>
+              {hasNoProfile ? (
+                <div>
+                  <strong>Chưa thể truy cập hệ thống</strong>
+                  <span>
+                    {error} Vui lòng liên hệ{' '}
+                    <a href={`mailto:${supportEmail}`}>{supportEmail}</a> để được hỗ trợ.
+                  </span>
+                </div>
+              ) : (
+                <span>{error}</span>
+              )}
             </div>
           )}
 
@@ -136,6 +162,52 @@ export function LoginPage() {
         <span>VMU Survey Operations</span>
         <span>Phiên truy cập được bảo vệ</span>
       </footer>
+
+      <Modal
+        isOpen={isNoProfileDialogOpen}
+        onClose={() => setIsNoProfileDialogOpen(false)}
+        title="Cần cấp hồ sơ làm việc"
+      >
+        <div className="auth-access-dialog">
+          <div className="auth-access-dialog__status" aria-hidden="true">
+            <ShieldAlert />
+          </div>
+          <div className="auth-access-dialog__content">
+            <span className="auth-section-label">QUYỀN TRUY CẬP</span>
+            <h4>Chưa thể vào hệ thống</h4>
+            <p>
+              Tài khoản Google của bạn đã được xác thực, nhưng chưa có hồ sơ làm việc đang hoạt
+              động trên hệ thống.
+            </p>
+            <p>
+              Vui lòng gửi email tới Phòng Khảo thí và Đảm bảo chất lượng, kèm theo họ tên, đơn
+              vị công tác và địa chỉ Google vừa đăng nhập để được kiểm tra và cấp quyền.
+            </p>
+          </div>
+
+          <a className="auth-access-dialog__contact" href={supportMailTo}>
+            <Mail aria-hidden="true" />
+            <span>
+              <small>Email hỗ trợ</small>
+              <strong>{supportEmail}</strong>
+            </span>
+          </a>
+
+          <div className="auth-access-dialog__actions">
+            <button
+              type="button"
+              className="auth-access-dialog__dismiss"
+              onClick={() => setIsNoProfileDialogOpen(false)}
+            >
+              Đóng thông báo
+            </button>
+            <a className="auth-access-dialog__email" href={supportMailTo}>
+              <Mail aria-hidden="true" />
+              Gửi email hỗ trợ
+            </a>
+          </div>
+        </div>
+      </Modal>
     </main>
   );
 }
