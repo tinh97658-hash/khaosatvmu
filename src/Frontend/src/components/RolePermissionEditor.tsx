@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, RefreshCw, Save, Search, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { Modal } from './Modal';
@@ -16,9 +16,9 @@ function messageFromError(error: unknown): string {
 
 export function RolePermissionEditor({ roles }: RolePermissionEditorProps) {
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(roles[0]?.id ?? null);
-  const [roleData, setRoleData] = useState<RolePermissionMatrix | null>(null);
+  const [roleDataById, setRoleDataById] = useState<Record<string, RolePermissionMatrix>>({});
   const [dirtyMap, setDirtyMap] = useState<Record<string, boolean>>({});
-  const [loadingRole, setLoadingRole] = useState(false);
+  const [loadingRole, setLoadingRole] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -26,15 +26,21 @@ export function RolePermissionEditor({ roles }: RolePermissionEditorProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const requestIdRef = useRef(0);
+  const savedRoleDataByIdRef = useRef<Record<string, RolePermissionMatrix>>({});
+  const roleData = selectedRoleId ? roleDataById[selectedRoleId] ?? null : null;
 
-  const fetchRolePermissions = async (roleId: string) => {
+  const fetchRolePermissions = useCallback(async () => {
     const currentReqId = ++requestIdRef.current;
     setLoadingRole(true);
     setFetchError(null);
     try {
-      const data = await adminApi.rolePermissionsByRoleId(roleId);
+      const matrices = await adminApi.rolePermissions();
       if (currentReqId !== requestIdRef.current) return;
-      setRoleData(data);
+      const nextRoleDataById = Object.fromEntries(
+        matrices.map((matrix) => [matrix.roleId, matrix]),
+      );
+      savedRoleDataByIdRef.current = nextRoleDataById;
+      setRoleDataById(nextRoleDataById);
       setDirtyMap({});
     } catch (err: unknown) {
       if (currentReqId !== requestIdRef.current) return;
@@ -42,27 +48,34 @@ export function RolePermissionEditor({ roles }: RolePermissionEditorProps) {
     } finally {
       if (currentReqId === requestIdRef.current) setLoadingRole(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (!selectedRoleId && roles[0]) {
+    if (roles[0] && (!selectedRoleId || !roles.some((role) => role.id === selectedRoleId))) {
       setSelectedRoleId(roles[0].id);
-      return;
     }
-    if (selectedRoleId) void fetchRolePermissions(selectedRoleId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRoleId]);
+  }, [roles, selectedRoleId]);
+
+  useEffect(() => {
+    void fetchRolePermissions();
+    return () => {
+      requestIdRef.current += 1;
+    };
+  }, [fetchRolePermissions]);
 
   const isDirty = Object.keys(dirtyMap).length > 0;
 
   const handleToggle = (permissionId: string) => {
-    if (!roleData) return;
-    setRoleData({
-      ...roleData,
-      permissions: roleData.permissions.map((p) =>
-        p.permissionId === permissionId ? { ...p, isGranted: !p.isGranted } : p,
-      ),
-    });
+    if (!roleData || !selectedRoleId) return;
+    setRoleDataById((current) => ({
+      ...current,
+      [selectedRoleId]: {
+        ...roleData,
+        permissions: roleData.permissions.map((p) =>
+          p.permissionId === permissionId ? { ...p, isGranted: !p.isGranted } : p,
+        ),
+      },
+    }));
     setDirtyMap((prev) => {
       const next = { ...prev };
       if (next[permissionId]) delete next[permissionId];
@@ -81,6 +94,10 @@ export function RolePermissionEditor({ roles }: RolePermissionEditorProps) {
         isGranted: p.isGranted,
       }));
       await adminApi.updateRolePermissions(roleData.roleId, grants);
+      savedRoleDataByIdRef.current = {
+        ...savedRoleDataByIdRef.current,
+        [roleData.roleId]: roleData,
+      };
       setDirtyMap({});
       toast.success('Đã cập nhật phân quyền', { description: `Vai trò: ${roleData.roleName}` });
       return true;
@@ -113,6 +130,15 @@ export function RolePermissionEditor({ roles }: RolePermissionEditorProps) {
   const handleDiscardAndSwitch = () => {
     if (!pendingRoleId) return;
     const nextRoleId = pendingRoleId;
+    if (selectedRoleId) {
+      const savedRoleData = savedRoleDataByIdRef.current[selectedRoleId];
+      if (savedRoleData) {
+        setRoleDataById((current) => ({
+          ...current,
+          [selectedRoleId]: savedRoleData,
+        }));
+      }
+    }
     setDirtyMap({});
     setSaveError(null);
     setPendingRoleId(null);
@@ -210,7 +236,7 @@ export function RolePermissionEditor({ roles }: RolePermissionEditorProps) {
           </div>
         )}
 
-        {loadingRole && (
+        {loadingRole && !roleData && (
           <div className="perm-skeleton" aria-hidden="true">
             <div className="perm-skeleton-row" />
             <div className="perm-skeleton-row" />
@@ -218,25 +244,25 @@ export function RolePermissionEditor({ roles }: RolePermissionEditorProps) {
           </div>
         )}
 
-        {!loadingRole && fetchError && (
+        {!loadingRole && fetchError && !roleData && (
           <div className="perm-inline-error">
             <AlertCircle aria-hidden="true" size={16} />
             <span>{fetchError}</span>
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => selectedRoleId && void fetchRolePermissions(selectedRoleId)}
+              onClick={() => void fetchRolePermissions()}
             >
               Thử lại
             </button>
           </div>
         )}
 
-        {!loadingRole && !fetchError && roleData && groupedPermissions.length === 0 && (
+        {!fetchError && roleData && groupedPermissions.length === 0 && (
           <p className="perm-empty">Không tìm thấy quyền phù hợp.</p>
         )}
 
-        {!loadingRole && !fetchError && groupedPermissions.map((group) => (
+        {!fetchError && groupedPermissions.map((group) => (
           <div key={group.category} className="perm-group">
             <h4 className="perm-group__title">{group.category}</h4>
             <ul className="perm-group__list">
