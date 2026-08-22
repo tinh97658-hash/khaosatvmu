@@ -136,7 +136,7 @@ export function CourseSectionImportDialog({
 
   const failedItems = result?.items.filter((item) => !item.succeeded) ?? [];
   const unidentifiedLecturers = result?.unidentifiedLecturers ?? [];
-  // Số bộ môn = số sheet trong tệp xuất ra.
+  // Các dòng trong tệp xuất ra được xếp liền nhau theo bộ môn.
   const unidentifiedDepartmentCount = new Set(
     unidentifiedLecturers.map((lecturer) => lecturer.departmentName ?? 'Chưa rõ bộ môn')
   ).size;
@@ -317,7 +317,10 @@ export function CourseSectionImportDialog({
                 </div>
 
                 <div className="import-template-row">
-                  <span>Tệp gồm {unidentifiedDepartmentCount} sheet, mỗi bộ môn một sheet.</span>
+                  <span>
+                    Tệp có đúng 10 cột của tệp import, xếp theo {unidentifiedDepartmentCount} bộ
+                    môn. Điền cột Email rồi nộp lại thẳng vào chức năng Import này.
+                  </span>
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"

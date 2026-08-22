@@ -73,7 +73,8 @@ public sealed record ImportCourseSectionRowCommand(
 
 /// <summary>
 /// Một giảng viên đọc được trong tệp nhưng thiếu email nên không gắn được vào
-/// bảng "Lecturers". Frontend gom theo bộ môn rồi xuất tệp Excel cho quản trị.
+/// bảng "Lecturers". Frontend xuất lại thành tệp Excel ĐÚNG cấu trúc tệp import,
+/// nên phải mang đủ mọi cột của tệp gốc chứ không chỉ mã học phần và tên lớp.
 /// </summary>
 public sealed record UnidentifiedLecturerDto(
     int RowNumber,
@@ -82,7 +83,13 @@ public sealed record UnidentifiedLecturerDto(
     string? DepartmentName,
     string? FacultyName,
     string CourseCode,
-    string SectionName);
+    string SectionName,
+    /// <summary>Cột "Học phần" của tệp import.</summary>
+    string CourseName,
+    /// <summary>Cột "TCHT" của tệp import.</summary>
+    int Credits,
+    /// <summary>Cột "Sĩ số" của tệp import.</summary>
+    int ClassSize);
 
 /// <summary>Một lớp chưa gắn được giảng viên, dựng lại từ dữ liệu chứ không từ tệp import.</summary>
 public sealed record UnidentifiedSectionDto(
@@ -95,7 +102,9 @@ public sealed record UnidentifiedSectionDto(
     int ClassSize,
     int? DepartmentId,
     string? DepartmentName,
-    string? FacultyName);
+    string? FacultyName,
+    /// <summary>Cột "TCHT" của tệp import, lấy theo học phần sở hữu lớp.</summary>
+    int Credits);
 
 /// <summary>
 /// Gom các lớp trên theo tên giảng viên. Đây mới là danh sách cầm đi xin email:
@@ -131,6 +140,23 @@ public sealed record CourseSectionImportDto(
     /// <summary>Số lớp đã có sẵn và được cập nhật lại mã giảng viên.</summary>
     int UpdatedSectionCount,
     IReadOnlyList<UnidentifiedLecturerDto> UnidentifiedLecturers);
+
+/// <summary>
+/// Bổ sung thông tin cho một giảng viên đang ở trạng thái "chưa xác định" của một
+/// lớp học phần. Đúng những gì tệp import mang theo cho một dòng thiếu email:
+/// tên, email, bộ môn, khoa viện.
+/// </summary>
+public sealed record ResolveUnidentifiedLecturerCommand(
+    string FullName,
+    string Email,
+    int? DepartmentId,
+    int? FacultyId);
+
+/// <summary>Kết quả của thao tác trên. Chỉ đúng một lớp được gắn mã.</summary>
+public sealed record ResolveUnidentifiedLecturerDto(
+    LecturerDto Lecturer,
+    /// <summary>Giảng viên vừa được tạo mới, hay đã có sẵn theo email.</summary>
+    bool LecturerCreated);
 
 public sealed record LecturerDto(
     int LecturerId,
@@ -367,6 +393,22 @@ public interface ICatalogService
         int? semesterId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Bổ sung email cho giảng viên chưa xác định của MỘT lớp, chạy đúng nhánh mà
+    /// <see cref="ImportCourseSectionsAsync"/> chạy cho một dòng có email: tra giảng
+    /// viên theo email, chưa có thì tạo mới kèm tài khoản đăng nhập, rồi gắn mã và
+    /// xoá cột tên chưa xác định.
+    /// <para>
+    /// Cố ý KHÔNG đụng tới các lớp khác cùng tên. Đây là sửa tay cho một lớp, mà hai
+    /// lớp treo cùng một tên vẫn có thể là hai người khác nhau — gắn hộ cả loạt là
+    /// gán nhầm email của người này cho lớp của người kia.
+    /// </para>
+    /// </summary>
+    Task<CatalogOperationResult<ResolveUnidentifiedLecturerDto>> ResolveUnidentifiedLecturerAsync(
+        int courseSectionId,
+        ResolveUnidentifiedLecturerCommand command,
+        CancellationToken cancellationToken = default);
+
     Task<CatalogOperationResult<LecturerDto>> CreateLecturerAsync(
         SaveLecturerCommand command,
         CancellationToken cancellationToken = default);
@@ -460,6 +502,10 @@ public static class CatalogErrorCodes
     public const string CourseSectionSizeInvalid = "CATALOG_COURSE_SECTION_SIZE_INVALID";
     public const string CourseSectionDuplicateInFile = "CATALOG_COURSE_SECTION_DUPLICATE_IN_FILE";
     public const string SectionLecturerRequired = "CATALOG_SECTION_LECTURER_REQUIRED";
+
+    /// <summary>Lớp đã có mã giảng viên nên không còn gì để bổ sung email.</summary>
+    public const string SectionLecturerAlreadySet = "CATALOG_SECTION_LECTURER_ALREADY_SET";
+
     public const string LecturerAmbiguous = "CATALOG_LECTURER_AMBIGUOUS";
 
     public const string LecturerNotFound = "CATALOG_LECTURER_NOT_FOUND";

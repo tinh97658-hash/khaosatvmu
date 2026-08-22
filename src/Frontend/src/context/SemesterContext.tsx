@@ -4,6 +4,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import { useAuth } from '../auth/authContext';
 import { catalogApi } from '../services/catalogApi';
 import type { AcademicYear } from '../types';
 import {
@@ -14,6 +15,12 @@ import {
 const STORAGE_KEY = 'vmu_active_semester_id';
 
 export function SemesterProvider({ children }: { children: React.ReactNode }) {
+  // Provider này bọc CẢ ứng dụng, kể cả màn làm bài công khai và màn đăng nhập.
+  // /api/catalog/academic-years lại đòi đăng nhập, nên gọi lúc chưa đăng nhập là
+  // ăn 401: sinh viên mở link khảo sát ra là thấy lỗi đỏ trong console, còn context
+  // thì mang sẵn thông báo "Không thể tải danh sách năm học & học kỳ".
+  const { status: authStatus } = useAuth();
+  const isAuthenticated = authStatus === 'authenticated';
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [activeSemesterId, setActiveSemesterIdState] = useState<number | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -24,6 +31,7 @@ export function SemesterProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   const reloadAcademicYears = useCallback(async (): Promise<AcademicYear[]> => {
+    if (!isAuthenticated) return [];
     try {
       setIsLoading(true);
       const years = await catalogApi.academicYears();
@@ -36,10 +44,20 @@ export function SemesterProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
-  // Nạp danh sách năm học & học kỳ lần đầu
+  // Nạp danh sách năm học & học kỳ lần đầu. Chờ đăng nhập xong mới gọi, và gọi lại
+  // khi vừa đăng nhập xong — các luồng đăng nhập không tải lại trang thì phải có
+  // lần chạy thứ hai này mới có dữ liệu.
   useEffect(() => {
+    if (!isAuthenticated) {
+      // Đăng xuất thì bỏ dữ liệu cũ đi, đừng để trạng thái nạp treo mãi.
+      setAcademicYears([]);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     const init = async () => {
@@ -82,7 +100,7 @@ export function SemesterProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAuthenticated]);
 
   const setActiveSemesterId = useCallback((id: number | null) => {
     setActiveSemesterIdState(id);

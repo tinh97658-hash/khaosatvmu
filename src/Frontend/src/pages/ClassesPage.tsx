@@ -5,6 +5,7 @@ import {
   ChevronRight,
   FileSpreadsheet,
   Layers,
+  MailPlus,
   Pencil,
   Plus,
   Trash2,
@@ -24,7 +25,15 @@ import {
   type SaveAcademicYearPayload,
   type UnidentifiedLecturerReport,
 } from '../services/catalogApi';
-import type { AcademicYear, Course, CourseSection, Lecturer, Semester } from '../types';
+import type {
+  AcademicYear,
+  Course,
+  CourseSection,
+  Department,
+  Faculty,
+  Lecturer,
+  Semester,
+} from '../types';
 import { useSemester } from '../context/semesterContext';
 import { useAuth } from '../auth/authContext';
 import { isReadOnlyRole, isUnrestrictedRole } from '../auth/roles';
@@ -32,6 +41,9 @@ import { isReadOnlyRole, isUnrestrictedRole } from '../auth/roles';
 interface ClassesPageProps {
   courses: Course[];
   lecturers: Lecturer[];
+  /** Cho hộp thoại bổ sung thông tin giảng viên chưa xác định. */
+  departments: Department[];
+  faculties: Faculty[];
   /**
    * Gọi sau khi import lớp học phần, vì bước đó có thể tạo thêm học phần và
    * giảng viên mà hai danh mục ở App chưa biết.
@@ -65,12 +77,22 @@ const emptySectionForm: SectionForm = {
   classSize: '40',
 };
 
+/** Hộp thoại "Cập nhật giảng viên" của lớp chưa xác định. */
+interface ResolveLecturerForm {
+  fullName: string;
+  email: string;
+  departmentId: string;
+  facultyId: string;
+}
+
 const errorCodeOf = (error: unknown): string =>
   error instanceof ApiError ? error.errorCode : 'API_REQUEST_FAILED';
 
 export const ClassesPage: React.FC<ClassesPageProps> = ({
   courses,
   lecturers,
+  departments,
+  faculties,
   onCatalogChanged,
 }) => {
   const {
@@ -107,6 +129,17 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
   const [sectionForm, setSectionForm] = useState<SectionForm>(emptySectionForm);
   const [sectionError, setSectionError] = useState('');
   const [savingSection, setSavingSection] = useState(false);
+
+  // Lớp đang được bổ sung thông tin giảng viên. Chỉ lớp chưa xác định mới vào đây.
+  const [resolvingSection, setResolvingSection] = useState<CourseSection | null>(null);
+  const [resolveForm, setResolveForm] = useState<ResolveLecturerForm>({
+    fullName: '',
+    email: '',
+    departmentId: '',
+    facultyId: '',
+  });
+  const [resolveError, setResolveError] = useState('');
+  const [savingResolve, setSavingResolve] = useState(false);
 
   // Khi học kỳ làm việc toàn cục (Header) thay đổi, đồng bộ sang trang lớp học phần
   useEffect(() => {
@@ -186,7 +219,10 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
           departmentName: section.departmentName,
           facultyName: section.facultyName,
           courseCode: section.courseCode,
+          courseName: section.courseName,
           sectionName: section.sectionName,
+          credits: section.credits,
+          classSize: section.classSize,
         })),
       );
     } catch {
@@ -480,6 +516,62 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     setSectionToDelete(null);
   };
 
+  // ----- Bổ sung giảng viên cho lớp chưa xác định ----------------------------
+  // Điền sẵn theo học phần sở hữu lớp: tệp import cũng lấy bộ môn và khoa viện từ
+  // chính dòng đó, nên mặc định này khớp với đường import lại.
+
+  const openResolveSection = (section: CourseSection) => {
+    const course = courseOf(section.courseId);
+    setResolvingSection(section);
+    setResolveForm({
+      fullName: section.unidentifiedLecturerName ?? '',
+      email: '',
+      departmentId: course?.departmentId == null ? '' : String(course.departmentId),
+      facultyId: course?.facultyId == null ? '' : String(course.facultyId),
+    });
+    setResolveError('');
+  };
+
+  const handleResolveSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!resolvingSection) return;
+
+    const fullName = resolveForm.fullName.trim();
+    const email = resolveForm.email.trim();
+    if (!fullName) {
+      setResolveError('Vui lòng nhập họ và tên giảng viên.');
+      return;
+    }
+    if (!email) {
+      setResolveError('Vui lòng nhập email giảng viên.');
+      return;
+    }
+
+    setSavingResolve(true);
+    try {
+      const result = await catalogApi.resolveUnidentifiedLecturer(resolvingSection.courseSectionId, {
+        fullName,
+        email,
+        departmentId: resolveForm.departmentId ? Number(resolveForm.departmentId) : null,
+        facultyId: resolveForm.facultyId ? Number(resolveForm.facultyId) : null,
+      });
+      // Danh mục giảng viên có thể vừa có thêm người, nạp trước rồi mới vẽ lại bảng.
+      await onCatalogChanged();
+      await reloadSections();
+      toast.success('Đã cập nhật giảng viên', {
+        description: `${fullName} · lớp ${resolvingSection.sectionName}${
+          result.lecturerCreated ? ' · đã tạo hồ sơ giảng viên mới' : ''
+        }`,
+      });
+      setResolvingSection(null);
+      setResolveError('');
+    } catch (error) {
+      setResolveError(catalogErrorMessage(errorCodeOf(error)));
+    } finally {
+      setSavingResolve(false);
+    }
+  };
+
   const handleImportSections = async (rows: ImportCourseSectionRow[]) => {
     if (selectedSemesterId === null) {
       throw new ApiError(400, 'CATALOG_SEMESTER_NOT_FOUND');
@@ -593,9 +685,22 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     columns.push({
       key: 'actions',
       header: 'Hành động',
-      width: '92px',
+      width: '128px',
       render: (item) => (
         <div className="catalog-actions">
+          {/* Chỉ lớp còn treo mới có nút này. Nó chỉ sửa đúng lớp đó, vì hai lớp
+              treo cùng một tên vẫn có thể là hai người khác nhau. */}
+          {item.lecturerId === null && (
+            <button
+              type="button"
+              className="catalog-icon-button catalog-icon-button--accent"
+              onClick={() => openResolveSection(item)}
+              aria-label={`Cập nhật giảng viên lớp ${item.sectionName}`}
+              title="Cập nhật giảng viên"
+            >
+              <MailPlus aria-hidden="true" size={15} />
+            </button>
+          )}
           <button
             type="button"
             className="catalog-icon-button"
@@ -803,8 +908,9 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
                   {unidentified.lecturerCount > 0 && `, thuộc ${unidentified.lecturerCount} người`}
                 </strong>
                 <span>
-                  Mở từng lớp rồi chọn đúng giảng viên để gắn mã. Chưa có email thì thêm giảng
-                  viên trước ở trang Giảng viên.
+                  Bấm nút <strong>Cập nhật giảng viên</strong> ở cột Hành động để điền email, bộ
+                  môn và khoa viện cho từng lớp. Muốn xử lý cả loạt thì tải tệp Excel dưới đây,
+                  điền cột Email rồi import lại.
                 </span>
               </div>
               <div className="unidentified-banner__actions">
@@ -1106,6 +1212,117 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
         </form>
       </Modal>
 
+      {/* Bổ sung thông tin cho giảng viên chưa xác định. Lưu xong server chạy đúng
+          nhánh của lần import lại: tra theo email, chưa có thì tạo giảng viên kèm
+          tài khoản, rồi gắn mã cho mọi lớp cùng người đó trong học kỳ. */}
+      <Modal
+        isOpen={resolvingSection !== null}
+        onClose={() => setResolvingSection(null)}
+        title="Cập nhật giảng viên"
+      >
+        <form className="catalog-form" onSubmit={(event) => void handleResolveSubmit(event)}>
+          {resolveError && (
+            <div className="catalog-validation-error" role="alert">{resolveError}</div>
+          )}
+          <div className="catalog-context-band">
+            Lớp: <strong>{resolvingSection?.sectionName ?? '—'}</strong> ·{' '}
+            {resolvingSection ? courseOf(resolvingSection.courseId)?.courseName ?? '—' : '—'} ·{' '}
+            {selectedSemester?.semesterName ?? '—'}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="resolve-name">Họ và tên</label>
+            <input
+              id="resolve-name"
+              type="text"
+              value={resolveForm.fullName}
+              onChange={(event) =>
+                setResolveForm((prev) => ({ ...prev, fullName: event.target.value }))
+              }
+              required
+            />
+            <small className="catalog-field-hint">
+              Tên đọc từ tệp import. Sửa lại nếu tệp ghi sai chính tả.
+            </small>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="resolve-email">Email</label>
+            <input
+              id="resolve-email"
+              type="email"
+              placeholder="ten.giangvien@vimaru.edu.vn"
+              value={resolveForm.email}
+              onChange={(event) =>
+                setResolveForm((prev) => ({ ...prev, email: event.target.value }))
+              }
+              required
+            />
+            <small className="catalog-field-hint">
+              Email là khoá định danh giảng viên. Đã có người mang email này thì lớp được gắn
+              vào chính người đó, không tạo hồ sơ trùng.
+            </small>
+          </div>
+
+          <div className="catalog-form-grid catalog-form-grid--2">
+            <div className="form-group">
+              <label htmlFor="resolve-department">Bộ môn</label>
+              <select
+                id="resolve-department"
+                value={resolveForm.departmentId}
+                onChange={(event) =>
+                  setResolveForm((prev) => ({ ...prev, departmentId: event.target.value }))
+                }
+              >
+                <option value="">Chưa xác định</option>
+                {departments.map((department) => (
+                  <option key={department.departmentId} value={String(department.departmentId)}>
+                    [{department.departmentId}] {department.departmentName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="resolve-faculty">Khoa viện</label>
+              <select
+                id="resolve-faculty"
+                value={resolveForm.facultyId}
+                onChange={(event) =>
+                  setResolveForm((prev) => ({ ...prev, facultyId: event.target.value }))
+                }
+              >
+                <option value="">Chưa xác định</option>
+                {faculties.map((faculty) => (
+                  <option key={faculty.facultyId} value={String(faculty.facultyId)}>
+                    {faculty.facultyName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="catalog-context-band">
+            Lưu xong chỉ <strong>lớp {resolvingSection?.sectionName ?? '—'}</strong> được gắn mã
+            giảng viên. Các lớp khác còn treo tên{' '}
+            <strong>{resolvingSection?.unidentifiedLecturerName || '—'}</strong> giữ nguyên, vì có
+            thể là người khác trùng tên — sửa từng lớp, hoặc import lại tệp Excel đã điền Email.
+          </div>
+
+          <div className="modal-footer catalog-form-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setResolvingSection(null)}
+            >
+              Hủy
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={savingResolve}>
+              {savingResolve ? 'Đang cập nhật...' : 'Cập nhật thông tin giảng viên'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
       {/* Gom theo người thay vì theo lớp. Đây mới là danh sách cầm đi xin email:
           36 lớp thiếu của một bộ môn có khi chỉ do 6 người dạy. */}
       <Modal
@@ -1117,7 +1334,8 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
           <p className="unidentified-dialog__hint">
             {unidentified?.lecturerCount ?? 0} người, tổng {unidentified?.sectionCount ?? 0} lớp
             trong học kỳ <strong>{selectedSemester?.semesterName ?? '—'}</strong>. Xin email của
-            từng người rồi thêm vào trang Giảng viên, sau đó quay lại gán cho lớp.
+            từng người, rồi điền ngay bằng nút Cập nhật giảng viên ở cột Hành động của từng lớp —
+            không phải sang trang Giảng viên nữa.
           </p>
 
           <div className="admin-import-table-scroll">

@@ -916,9 +916,15 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         // Các map tra ngược. Học phần và giảng viên được tạo giữa chừng cũng ghi
         // vào đây để dòng sau dùng lại, tránh tạo trùng trong cùng một tệp.
         var courseIdByCode = new Dictionary<string, int>();
-        foreach (var course in await db.Courses.Select(x => new { x.CourseId, x.CourseCode }).ToListAsync(cancellationToken))
+        // Tên và số tín chỉ đi kèm để dòng thiếu email xuất lại được ĐÚNG cấu trúc
+        // tệp import, gồm cả cột "Học phần" và "TCHT".
+        var courseInfoById = new Dictionary<int, (string CourseName, int Credits)>();
+        foreach (var course in await db.Courses
+            .Select(x => new { x.CourseId, x.CourseCode, x.CourseName, x.Credits })
+            .ToListAsync(cancellationToken))
         {
             courseIdByCode[NormalizeKey(course.CourseCode)] = course.CourseId;
+            courseInfoById[course.CourseId] = (course.CourseName, course.Credits);
         }
 
         var departmentNameById = await db.Departments
@@ -1059,6 +1065,7 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
 
                 courseId = course.CourseId;
                 courseIdByCode[NormalizeKey(courseCode)] = courseId;
+                courseInfoById[courseId] = (course.CourseName, course.Credits);
                 createdCourseCount++;
             }
 
@@ -1110,6 +1117,9 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
                 // Thiếu email: vẫn tạo lớp học phần nhưng để trống mã giảng viên,
                 // tên đưa vào cột chưa xác định và gom lại để xuất tệp báo lỗi.
                 unidentifiedLecturerName = lecturerFullName;
+                var courseInfo = courseInfoById.TryGetValue(courseId, out var found)
+                    ? found
+                    : (CourseName: row.CourseName?.Trim() ?? string.Empty, Credits: 0);
                 unidentifiedLecturers.Add(new UnidentifiedLecturerDto(
                     row.RowNumber,
                     lecturerFullName,
@@ -1119,7 +1129,10 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
                         : NullIfBlank(departmentName),
                     NullIfBlank(facultyName),
                     courseCode,
-                    sectionName));
+                    sectionName,
+                    courseInfo.CourseName,
+                    courseInfo.Credits,
+                    classSize));
             }
 
             var key = $"{courseId}|{NormalizeKey(sectionName)}";
@@ -1218,6 +1231,7 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
                 LecturerName = section.UnidentifiedLecturerName!,
                 course.CourseCode,
                 course.CourseName,
+                course.Credits,
                 course.DepartmentId,
                 course.FacultyId,
             };
@@ -1258,7 +1272,8 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
                 x.ClassSize,
                 x.DepartmentId,
                 DepartmentNameOf(x.DepartmentId),
-                FacultyNameOf(x.FacultyId)))
+                FacultyNameOf(x.FacultyId),
+                x.Credits))
             .ToList();
 
         // Gom theo tên đã chuẩn hoá cộng bộ môn. Hai người trùng tên khác bộ môn thì
@@ -1279,6 +1294,123 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             lecturers.Count,
             sections,
             lecturers);
+    }
+
+    /// <summary>
+    /// Bổ sung email cho giảng viên chưa xác định của một lớp, chạy lại đúng nhánh
+    /// của <see cref="ImportCourseSectionsAsync"/> cho một dòng có email — chỉ khác
+    /// là không đi qua tệp, và chỉ tác động lên đúng lớp được sửa.
+    /// </summary>
+    public async Task<CatalogOperationResult<ResolveUnidentifiedLecturerDto>> ResolveUnidentifiedLecturerAsync(
+        int courseSectionId,
+        ResolveUnidentifiedLecturerCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var section = await db.CourseSections
+            .FirstOrDefaultAsync(x => x.CourseSectionId == courseSectionId, cancellationToken);
+        if (section is null)
+        {
+            return Failed<ResolveUnidentifiedLecturerDto>(CatalogErrorCodes.CourseSectionNotFound);
+        }
+
+        // Gác phạm vi trước mọi thứ khác, y như các hàm ghi còn lại: lớp thuộc bộ
+        // môn nào là theo học phần sở hữu.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        var sectionDepartmentId = await DepartmentOfCourseAsync(section.CourseId, cancellationToken);
+        if (CheckDepartmentInScope(scope, sectionDepartmentId) is { } outOfScope)
+        {
+            return Failed<ResolveUnidentifiedLecturerDto>(outOfScope);
+        }
+
+        // Nút này chỉ dành cho lớp còn treo. Lớp đã có mã giảng viên thì sửa bằng
+        // hộp thoại sửa lớp bình thường, không đi đường này.
+        if (section.LecturerId is not null)
+        {
+            return Failed<ResolveUnidentifiedLecturerDto>(CatalogErrorCodes.SectionLecturerAlreadySet);
+        }
+
+        var fullName = command.FullName?.Trim() ?? string.Empty;
+        if (fullName.Length == 0)
+        {
+            // Tên đọc từ tệp là mặc định; bỏ trống hẳn thì không biết đang gắn cho ai.
+            fullName = section.UnidentifiedLecturerName?.Trim() ?? string.Empty;
+        }
+        if (fullName.Length == 0)
+        {
+            return Failed<ResolveUnidentifiedLecturerDto>(CatalogErrorCodes.LecturerNameRequired);
+        }
+
+        var email = command.Email?.Trim() ?? string.Empty;
+        if (email.Length == 0)
+        {
+            return Failed<ResolveUnidentifiedLecturerDto>(CatalogErrorCodes.LecturerEmailRequired);
+        }
+
+        // Trưởng bộ môn chỉ được tạo người của bộ môn mình, giống CreateLecturerAsync.
+        var departmentId = command.DepartmentId;
+        if (!scope.SeesEverything)
+        {
+            if (scope.DepartmentId is not { } ownDepartmentId)
+            {
+                return Failed<ResolveUnidentifiedLecturerDto>(CatalogErrorCodes.OutOfScope);
+            }
+            departmentId = ownDepartmentId;
+        }
+
+        if (departmentId is { } deptId
+            && !await db.Departments.AnyAsync(x => x.DepartmentId == deptId, cancellationToken))
+        {
+            return Failed<ResolveUnidentifiedLecturerDto>(CatalogErrorCodes.DepartmentNotFound);
+        }
+        if (command.FacultyId is { } facultyId && !await FacultyExistsAsync(facultyId, cancellationToken))
+        {
+            return Failed<ResolveUnidentifiedLecturerDto>(CatalogErrorCodes.FacultyNotFound);
+        }
+
+        // Email là khoá định danh: đã có người mang email này thì gắn vào người đó,
+        // không tạo trùng và cũng không ghi đè hồ sơ sẵn có — đúng như import.
+        var normalizedEmail = NormalizeKey(email);
+        var lecturer = await db.Lecturers
+            .FirstOrDefaultAsync(x => x.Email.Trim().ToLower() == normalizedEmail, cancellationToken);
+        var lecturerCreated = lecturer is null;
+
+        if (lecturer is null)
+        {
+            var defaultPositionId = await db.Positions
+                .Where(x => x.PositionName == CatalogDefaults.PositionName)
+                .Select(x => (int?)x.PositionId)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            lecturer = new Lecturer
+            {
+                FullName = fullName,
+                Email = email,
+                DepartmentId = departmentId,
+                FacultyId = command.FacultyId,
+                PositionId = defaultPositionId
+            };
+            db.Lecturers.Add(lecturer);
+            await db.SaveChangesAsync(cancellationToken);
+
+            // Thêm giảng viên là tạo luôn tài khoản đăng nhập, một luật duy nhất
+            // cho cả nhập tay, import lẫn đường này.
+            await EnsureUserForLecturerAsync(lecturer, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        else if (!scope.SeesEverything && lecturer.DepartmentId != departmentId)
+        {
+            // Trưởng bộ môn không được kéo người của bộ môn khác về lớp của mình.
+            return Failed<ResolveUnidentifiedLecturerDto>(CatalogErrorCodes.OutOfScope);
+        }
+
+        // Chỉ đúng lớp được sửa. Các lớp khác đang treo cùng một tên vẫn có thể là
+        // người khác trùng tên, nên không gắn hộ — ai muốn làm cả loạt thì dùng
+        // đường import lại tệp, ở đó mỗi dòng mang email của chính nó.
+        section.LecturerId = lecturer.LecturerId;
+        section.UnidentifiedLecturerName = null;
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Succeeded(new ResolveUnidentifiedLecturerDto(ToDto(lecturer), lecturerCreated));
     }
 
     public async Task<IReadOnlyList<LecturerDto>> GetLecturersAsync(CancellationToken cancellationToken = default)
@@ -2054,7 +2186,12 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         {
             return CatalogErrorCodes.SemesterNotFound;
         }
-        if (!await db.Lecturers.AnyAsync(x => x.LecturerId == command.LecturerId, cancellationToken))
+        // Chỉ kiểm khi có mã. Để trống giảng viên là hợp lệ — đó chính là trạng thái
+        // của lớp import từ tệp thiếu email. So sánh thẳng với null thì EF dịch ra
+        // "LecturerId" = NULL, không bao giờ đúng, nên lưu lớp chưa xác định là dính
+        // CATALOG_LECTURER_NOT_FOUND.
+        if (command.LecturerId is { } lecturerId
+            && !await db.Lecturers.AnyAsync(x => x.LecturerId == lecturerId, cancellationToken))
         {
             return CatalogErrorCodes.LecturerNotFound;
         }

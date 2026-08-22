@@ -361,6 +361,14 @@
   line-height: 1.5;
 }
 
+.catalog-field-hint {
+  display: block;
+  margin-top: 6px;
+  color: #68737d;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .catalog-code {
   display: inline-block;
   color: #075f80;
@@ -465,6 +473,20 @@
   border-color: #e5b8b8;
   background: #fcebec;
   color: #b52d2d;
+}
+
+/* Nút bổ sung email cho lớp chưa xác định giảng viên. Nổi hơn hai nút còn lại vì
+   nó chỉ hiện ở đúng những dòng đang chờ xử lý. */
+.catalog-icon-button--accent {
+  border-color: #f0c98a;
+  background: #fdf5e7;
+  color: #a35f07;
+}
+
+.catalog-icon-button--accent:hover {
+  border-color: #dfae61;
+  background: #f9e9cd;
+  color: #7d4805;
 }
 
 .catalog-empty {

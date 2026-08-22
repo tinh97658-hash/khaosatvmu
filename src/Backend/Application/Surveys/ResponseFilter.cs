@@ -42,7 +42,7 @@ public static class ResponseFilter
     /// Số giây tối thiểu cho mỗi câu hỏi. Viết cứng theo quyết định A-c, không
     /// đọc từ cấu hình và không cho sửa qua giao diện.
     /// </summary>
-    public const int SecondsPerQuestion = 4;
+    public const int SecondsPerQuestion = 3;
 
     /// <summary>
     /// Ngưỡng thời gian tối thiểu của cả bài: tính trên TỔNG số câu, kể cả câu

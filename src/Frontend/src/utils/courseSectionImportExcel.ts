@@ -99,6 +99,12 @@ export interface UnidentifiedLecturer {
   facultyName: string | null;
   courseCode: string;
   sectionName: string;
+  /** Cột "Học phần" của tệp import. */
+  courseName: string;
+  /** Cột "TCHT" của tệp import. */
+  credits: number;
+  /** Cột "Sĩ số" của tệp import. */
+  classSize: number;
 }
 
 export type CourseSectionImportFileErrorCode =
@@ -156,6 +162,20 @@ const templateHeader = [
   'Mã BM',
 ];
 
+/** Bề rộng cột đi kèm templateHeader, dùng chung cho tệp mẫu và tệp thiếu email. */
+const templateColumnWidths = [
+  { width: 12 },
+  { width: 34 },
+  { width: 10 },
+  { width: 8 },
+  { width: 8 },
+  { width: 24 },
+  { width: 20 },
+  { width: 24 },
+  { width: 30 },
+  { width: 10 },
+];
+
 /**
  * Tạo và tải tệp Excel mẫu cho lớp học phần, dựng đúng 10 cột của tệp gốc.
  * Học kỳ lấy từ học kỳ đang chọn trên cây bên trái nên tệp không cần cột học kỳ.
@@ -210,89 +230,62 @@ export async function downloadCourseSectionImportTemplate(): Promise<void> {
 
   await writeXlsxFile(data, {
     sheet: 'Lop hoc phan',
-    columns: [
-      { width: 12 },
-      { width: 34 },
-      { width: 10 },
-      { width: 8 },
-      { width: 8 },
-      { width: 24 },
-      { width: 20 },
-      { width: 24 },
-      { width: 30 },
-      { width: 10 },
-    ],
+    columns: templateColumnWidths,
   }).toFile(courseSectionTemplateFileName);
 }
 
-/**
- * Xuất tệp Excel các giảng viên thiếu email, mỗi bộ môn một sheet.
- * Cột Email để trống sẵn cho trưởng bộ môn điền rồi gửi lại.
- */
 /**
  * Đủ dữ liệu để xuất tệp. Cố ý không đòi `rowNumber` vì danh sách còn đến từ endpoint
  * dựng lại theo phạm vi bộ môn, chỗ đó không có số dòng của tệp import nào cả.
  */
 export type UnidentifiedLecturerRow = Omit<UnidentifiedLecturer, 'rowNumber'>;
 
+/**
+ * Xuất tệp Excel các lớp có giảng viên thiếu email, ĐÚNG mười cột của tệp import
+ * lớp học phần. Người nhận chỉ việc điền thêm cột Email (và Bộ môn / Mã BM / Khoa
+ * nếu còn trống) rồi nộp lại thẳng vào chức năng Import, không phải chép tay sang
+ * tệp khác.
+ *
+ * Cố ý để MỘT sheet duy nhất dù danh sách có nhiều bộ môn: hàm đọc tệp chỉ đọc
+ * sheet đầu tiên, tách sheet theo bộ môn là mất trắng các bộ môn còn lại khi nhập
+ * lại. Các dòng vẫn được xếp liền nhau theo bộ môn để dễ cắt ra gửi từng người.
+ */
 export async function downloadUnidentifiedLecturerFile(
   lecturers: readonly UnidentifiedLecturerRow[]
 ): Promise<void> {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
 
-  const header = ['Họ và tên', 'Email', 'Bộ môn', 'Mã BM', 'Khoa', 'Mã HP', 'Nhóm'];
-  const columns = [
-    { width: 26 },
-    { width: 30 },
-    { width: 24 },
-    { width: 10 },
-    { width: 20 },
-    { width: 12 },
-    { width: 10 },
-  ];
-
-  // Gom theo bộ môn, giữ nguyên thứ tự xuất hiện trong tệp.
+  // Gom theo bộ môn, giữ nguyên thứ tự xuất hiện trong danh sách.
   const groups = new Map<string, UnidentifiedLecturerRow[]>();
   for (const lecturer of lecturers) {
-    const key = lecturer.departmentName ?? 'Chưa rõ bộ môn';
+    const key = lecturer.departmentName ?? '';
     const group = groups.get(key);
     if (group) group.push(lecturer);
     else groups.set(key, [lecturer]);
   }
+  const ordered = [...groups.values()].flat();
 
-  // Tên sheet của Excel tối đa 31 ký tự và không chứa : \ / ? * [ ]
-  const usedSheetNames = new Set<string>();
-  const sheetNameOf = (departmentName: string) => {
-    const base = departmentName.replace(/[:\\/?*[\]]/g, ' ').trim().slice(0, 31) || 'Bo mon';
-    let name = base;
-    let counter = 2;
-    while (usedSheetNames.has(name)) {
-      const suffix = ` (${counter})`;
-      name = base.slice(0, 31 - suffix.length) + suffix;
-      counter += 1;
-    }
-    usedSheetNames.add(name);
-    return name;
-  };
+  const data: SheetData = [
+    templateHeader.map((value) => ({ value, type: String, fontWeight: 'bold' as const })),
+    ...ordered.map((lecturer) => [
+      { value: lecturer.courseCode, type: String },
+      { value: lecturer.courseName, type: String },
+      { value: lecturer.sectionName, type: String },
+      { value: String(lecturer.credits), type: String },
+      { value: String(lecturer.classSize), type: String },
+      { value: lecturer.departmentName ?? '', type: String },
+      { value: lecturer.facultyName ?? '', type: String },
+      { value: lecturer.fullName, type: String },
+      // Cột phải điền. Để trống chính là lý do lớp này có mặt trong tệp.
+      { value: '', type: String },
+      { value: lecturer.departmentId === null ? '' : String(lecturer.departmentId), type: String },
+    ]),
+  ];
 
-  const sheets = [...groups].map(([departmentName, group]) => ({
-    sheet: sheetNameOf(departmentName),
-    columns,
-    data: [
-      header.map((value) => ({ value, type: String, fontWeight: 'bold' as const })),
-      ...group.map((lecturer) => [
-        { value: lecturer.fullName, type: String },
-        { value: '', type: String },
-        { value: lecturer.departmentName ?? '', type: String },
-        { value: lecturer.departmentId === null ? '' : String(lecturer.departmentId), type: String },
-        { value: lecturer.facultyName ?? '', type: String },
-        { value: lecturer.courseCode, type: String },
-        { value: lecturer.sectionName, type: String },
-      ]),
-    ] as SheetData,
-  }));
-
-  await writeXlsxFile(sheets).toFile(unidentifiedLecturerFileName);
+  await writeXlsxFile(data, {
+    sheet: 'Lop hoc phan',
+    columns: templateColumnWidths,
+  }).toFile(unidentifiedLecturerFileName);
 }
 
 /** Đọc tệp .xlsx của danh sách lớp học phần. */

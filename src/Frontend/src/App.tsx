@@ -677,6 +677,8 @@ function DashboardApp() {
               <ClassesPage
                 courses={courses}
                 lecturers={lecturers}
+                departments={departments}
+                faculties={faculties}
                 onCatalogChanged={reloadCoursesAndLecturers}
               />
             )}

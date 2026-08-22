@@ -60,6 +60,8 @@ export interface UnidentifiedSection {
   departmentId: number | null;
   departmentName: string | null;
   facultyName: string | null;
+  /** Cột "TCHT" của tệp import, lấy theo học phần sở hữu lớp. */
+  credits: number;
 }
 
 /**
@@ -176,6 +178,21 @@ export const catalogApi = {
         : `/api/catalog/course-sections/unidentified-lecturers?semesterId=${semesterId}`,
     ),
 
+  /**
+   * Bổ sung email (kèm bộ môn, khoa viện) cho giảng viên chưa xác định của MỘT lớp.
+   * Chỉ lớp này được gắn mã; các lớp khác đang treo cùng tên có thể là người khác
+   * nên không đụng tới.
+   */
+  resolveUnidentifiedLecturer: (
+    courseSectionId: number,
+    payload: ResolveUnidentifiedLecturerPayload,
+  ) =>
+    csrfRequest<ResolveUnidentifiedLecturerResponse>(
+      `/api/catalog/course-sections/${courseSectionId}/resolve-lecturer`,
+      'POST',
+      payload,
+    ),
+
   lecturers: () => apiRequest<Lecturer[]>('/api/catalog/lecturers'),
   createLecturer: (lecturer: SaveLecturerPayload) =>
     csrfRequest<Lecturer>('/api/catalog/lecturers', 'POST', lecturer),
@@ -213,6 +230,20 @@ export interface SaveCourseSectionPayload {
   classSize: number;
   /** Chỉ điền khi lecturerId là null. */
   unidentifiedLecturerName: string | null;
+}
+
+/** Đúng những gì tệp import mang theo cho một dòng thiếu email. */
+export interface ResolveUnidentifiedLecturerPayload {
+  fullName: string;
+  email: string;
+  departmentId: number | null;
+  facultyId: number | null;
+}
+
+export interface ResolveUnidentifiedLecturerResponse {
+  lecturer: Lecturer;
+  /** Giảng viên vừa được tạo mới, hay đã có sẵn theo email. */
+  lecturerCreated: boolean;
 }
 
 export interface SaveLecturerPayload {
@@ -272,6 +303,7 @@ export const catalogErrorMessages: Record<string, string> = {
   CATALOG_COURSE_SECTION_SIZE_INVALID: 'Sĩ số không hợp lệ.',
   CATALOG_COURSE_SECTION_DUPLICATE_IN_FILE: 'Lớp bị lặp trong tệp.',
   CATALOG_SECTION_LECTURER_REQUIRED: 'Thiếu giảng viên (cần email hoặc họ tên).',
+  CATALOG_SECTION_LECTURER_ALREADY_SET: 'Lớp này đã có giảng viên, dùng nút Sửa để đổi.',
   CATALOG_LECTURER_AMBIGUOUS:
     'Có nhiều giảng viên trùng tên. Hãy ghi thêm email, bộ môn hoặc khoa viện.',
   CATALOG_LECTURER_NOT_FOUND: 'Không tìm thấy giảng viên.',

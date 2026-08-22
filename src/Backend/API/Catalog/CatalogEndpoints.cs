@@ -325,6 +325,20 @@ public static class CatalogEndpoints
             ToResult(await service.DeleteCourseSectionAsync(courseSectionId, cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
+        // Bổ sung email cho giảng viên chưa xác định của một lớp. Đòi thêm quyền
+        // Giảng viên vì thao tác này tạo được bản ghi trong danh mục giảng viên.
+        courseSections.MapPost("/{courseSectionId:int}/resolve-lecturer", async (
+            int courseSectionId,
+            ResolveUnidentifiedLecturerRequest request,
+            ICatalogService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.ResolveUnidentifiedLecturerAsync(
+                courseSectionId,
+                request.ToCommand(),
+                cancellationToken)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>()
+            .RequireAuthorization(AuthPolicies.LecturersAccess);
+
         courseSections.MapPost("/import", async (
             ImportCourseSectionsRequest request,
             ICatalogService service,
@@ -530,6 +544,7 @@ public static class CatalogEndpoints
             CatalogErrorCodes.AcademicYearNameExists => StatusCodes.Status409Conflict,
             CatalogErrorCodes.SemesterNameExists => StatusCodes.Status409Conflict,
             CatalogErrorCodes.CourseSectionExists => StatusCodes.Status409Conflict,
+            CatalogErrorCodes.SectionLecturerAlreadySet => StatusCodes.Status409Conflict,
             CatalogErrorCodes.LecturerAmbiguous => StatusCodes.Status409Conflict,
             CatalogErrorCodes.PrerequisiteNotFound => StatusCodes.Status404NotFound,
             CatalogErrorCodes.FacultyNameExists => StatusCodes.Status409Conflict,
@@ -584,6 +599,19 @@ public static class CatalogEndpoints
     {
         public SaveCourseSectionCommand ToCommand() =>
             new(CourseId, SemesterId, LecturerId, SectionName, ClassSize, UnidentifiedLecturerName);
+    }
+
+    public sealed record ResolveUnidentifiedLecturerRequest(
+        string? FullName,
+        string? Email,
+        int? DepartmentId,
+        int? FacultyId)
+    {
+        public ResolveUnidentifiedLecturerCommand ToCommand() => new(
+            FullName ?? string.Empty,
+            Email ?? string.Empty,
+            DepartmentId,
+            FacultyId);
     }
 
     public sealed record ImportCourseSectionsRequest(
