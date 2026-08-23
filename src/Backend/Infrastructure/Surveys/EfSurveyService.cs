@@ -879,9 +879,15 @@ public sealed class EfSurveyService(
             return Failed<PublicSurveyDto>(SurveyErrorCodes.LinkNotFound);
         }
 
+        // Ngoài khung giờ thì coi như không có link: chặn ngay ở đây nên phiếu
+        // không mở ra được nữa, và bộ câu hỏi cũng không lọt ra ngoài.
         var now = DateTime.UtcNow;
-        var isOpen = now >= cached.StartTime && now <= cached.EndTime;
-        return Succeeded(cached with { IsOpen = isOpen });
+        if (now < cached.StartTime || now > cached.EndTime)
+        {
+            return Failed<PublicSurveyDto>(SurveyErrorCodes.LinkNotOpen);
+        }
+
+        return Succeeded(cached with { IsOpen = true });
     }
 
     public async Task<SurveyOperationResult<SubmitSurveyResponseDto>> SubmitSurveyResponseAsync(

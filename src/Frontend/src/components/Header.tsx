@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronRight, QrCode } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AuthProfile, AuthUser } from '../types';
 import { ProfileSelectionDialog } from './ProfileSelectionDialog';
@@ -7,7 +7,6 @@ import { UserAccountMenu } from './UserAccountMenu';
 
 interface HeaderProps {
   currentTab: string;
-  onOpenStudentView: () => void;
   user: AuthUser;
   activeProfile: AuthProfile;
   availableProfiles: AuthProfile[];
@@ -47,7 +46,6 @@ const roleNames: Record<string, string> = {
 
 export function Header({
   currentTab,
-  onOpenStudentView,
   user,
   activeProfile,
   availableProfiles,
@@ -108,16 +106,6 @@ export function Header({
       </div>
 
       <div className="header-actions">
-        <button
-          type="button"
-          className="header-preview-button"
-          onClick={onOpenStudentView}
-          title="Xem giao diện khảo sát của sinh viên"
-        >
-          <QrCode aria-hidden="true" />
-          <span>Xem bản khảo sát</span>
-        </button>
-
         <UserAccountMenu
           user={user}
           activeProfile={activeProfile}

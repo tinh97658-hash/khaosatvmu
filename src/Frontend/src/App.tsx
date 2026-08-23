@@ -558,7 +558,6 @@ function DashboardApp() {
       <div className="main-wrapper">
         <Header
           currentTab={currentTab}
-          onOpenStudentView={() => setIsStudentView(true)}
           user={auth.user!}
           activeProfile={auth.activeProfile!}
           availableProfiles={auth.availableProfiles}

@@ -439,33 +439,6 @@ textarea:focus-visible {
   pointer-events: none;
 }
 
-.header-preview-button {
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 0 11px;
-  border: 1px solid #9CCFDF;
-  border-radius: 3px;
-  background: #F5FBFD;
-  color: var(--sidebar-accent-strong);
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.header-preview-button:hover {
-  background: var(--sidebar-accent-soft);
-  border-color: #78BDD4;
-}
-
-.header-preview-button svg {
-  width: 17px;
-  height: 17px;
-}
-
 .user-account {
   position: relative;
   min-width: 0;
@@ -1533,15 +1506,6 @@ textarea:focus-visible {
 }
 
 @media (max-width: 1180px) {
-  .header-preview-button {
-    width: 34px;
-    padding: 0;
-  }
-
-  .header-preview-button span {
-    display: none;
-  }
-
   .user-account__trigger {
     width: 190px;
   }
@@ -1559,8 +1523,7 @@ textarea:focus-visible {
 }
 
 @media (max-width: 640px) {
-  .header-title-area,
-  .header-preview-button {
+  .header-title-area {
     display: none;
   }
 
