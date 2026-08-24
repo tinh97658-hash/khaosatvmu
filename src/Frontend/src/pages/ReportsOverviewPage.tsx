@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   BarChart3,
   Building2,
   CheckCircle2,
@@ -10,7 +13,6 @@ import {
   LayoutDashboard,
   ListFilter,
   LoaderCircle,
-  Medal,
   Search,
   ShieldAlert,
   Star,
@@ -21,6 +23,7 @@ import {
 import { useAuth } from '../auth/authContext';
 import { useSemester } from '../context/semesterContext';
 import { DataTable, type Column, type DataTableSortDirection } from '../components/DataTable';
+import { TablePagination } from '../components/TablePagination';
 import { QuestionAnalysisChart } from '../components/QuestionAnalysisChart';
 import { SchoolSurveyOverview } from '../components/reports/SchoolSurveyOverview';
 import { SectionSurveyResponsesPage } from './SectionSurveyResponsesPage';
@@ -57,11 +60,165 @@ interface RankedUnit {
   sectionCount: number;
 }
 
+type RankedUnitSortKey = 'name' | 'sectionCount' | 'responseCount' | 'completionRate' | 'averageScore';
+type RankedUnitSortDirection = 'asc' | 'desc';
+
+const RANKED_UNIT_PAGE_SIZE = 10;
+
 const scoreColor = (score: number): string =>
   score >= 4.5 ? '#137b3b' : score >= 4.0 ? '#0788b8' : '#b86216';
 
 const completionColor = (rate: number): string =>
   rate >= 80 ? '#137b3b' : rate >= 40 ? '#0788b8' : '#b86216';
+
+interface RankedUnitTableProps {
+  title: string;
+  icon: React.ReactNode;
+  data: RankedUnit[];
+  itemLabel: string;
+}
+
+const RankedUnitTable: React.FC<RankedUnitTableProps> = ({ title, icon, data, itemLabel }) => {
+  const [sortKey, setSortKey] = useState<RankedUnitSortKey | undefined>('averageScore');
+  const [sortDirection, setSortDirection] = useState<RankedUnitSortDirection>('desc');
+  const [page, setPage] = useState(1);
+
+  const sortedData = useMemo(() => {
+    if (!sortKey) return data;
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    return [...data].sort((left, right) => {
+      const leftValue = left[sortKey];
+      const rightValue = right[sortKey];
+      const comparison = typeof leftValue === 'string'
+        ? leftValue.localeCompare(String(rightValue), 'vi')
+        : Number(leftValue) - Number(rightValue);
+      return comparison === 0
+        ? left.name.localeCompare(right.name, 'vi')
+        : comparison * direction;
+    });
+  }, [data, sortDirection, sortKey]);
+
+  const pageCount = Math.max(1, Math.ceil(sortedData.length / RANKED_UNIT_PAGE_SIZE));
+  const pageItems = sortedData.slice(
+    (page - 1) * RANKED_UNIT_PAGE_SIZE,
+    page * RANKED_UNIT_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, pageCount));
+  }, [pageCount]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [data]);
+
+  const changeSort = (nextKey: RankedUnitSortKey) => {
+    const defaultDirection: RankedUnitSortDirection = nextKey === 'name' ? 'asc' : 'desc';
+    if (sortKey !== nextKey) {
+      setSortKey(nextKey);
+      setSortDirection(defaultDirection);
+    } else if (sortDirection === defaultDirection) {
+      setSortDirection(defaultDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(undefined);
+      setSortDirection(defaultDirection);
+    }
+    setPage(1);
+  };
+
+  const sortableHeader = (key: RankedUnitSortKey, label: string, numeric = false) => {
+    const defaultDirection: RankedUnitSortDirection = key === 'name' ? 'asc' : 'desc';
+    const nextDirection = defaultDirection === 'asc' ? 'desc' : 'asc';
+    const nextAction = sortKey !== key
+      ? defaultDirection === 'asc' ? 'tăng dần' : 'giảm dần'
+      : sortDirection === defaultDirection
+        ? nextDirection === 'asc' ? 'tăng dần' : 'giảm dần'
+        : 'bỏ sắp xếp';
+    const icon = sortKey !== key
+      ? <ArrowUpDown aria-hidden="true" />
+      : sortDirection === 'asc'
+        ? <ArrowUp aria-hidden="true" />
+        : <ArrowDown aria-hidden="true" />;
+
+    return (
+      <button
+        type="button"
+        className={`reports-sort-button${numeric ? ' is-numeric' : ''}`}
+        onClick={() => changeSort(key)}
+        aria-label={`Sắp xếp ${label}: ${nextAction}`}
+      >
+        {label}
+        {icon}
+      </button>
+    );
+  };
+
+  return (
+    <section className="reports-rank" aria-label={title}>
+      <header className="reports-rank-header">
+        <span className="reports-rank-title">
+          {icon}
+          <h3>{title}</h3>
+        </span>
+        <span className="reports-rank-note">{data.length} {itemLabel}</span>
+      </header>
+      {data.length === 0 ? (
+        <div className="reports-rank-empty">Chưa có dữ liệu tổng hợp.</div>
+      ) : (
+        <>
+          <div className="reports-rank-table-wrap">
+            <table className="campaign-table reports-rank-table">
+              <thead>
+                <tr>
+                  <th className="reports-rank-col">STT</th>
+                  <th>{sortableHeader('name', 'Đơn vị')}</th>
+                  <th className="reports-rank-num-col">{sortableHeader('responseCount', 'Phiếu', true)}</th>
+                  <th className="reports-rank-completion-col">{sortableHeader('completionRate', 'Hoàn thành')}</th>
+                  <th className="reports-rank-num-col">{sortableHeader('averageScore', 'Điểm TB', true)}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageItems.map((item, index) => (
+                  <tr key={`${title}-${item.id}`}>
+                    <td className="reports-rank-medal">
+                      <span className="reports-rank-place">
+                        {(page - 1) * RANKED_UNIT_PAGE_SIZE + index + 1}
+                      </span>
+                    </td>
+                    <td className="reports-rank-name">
+                      <span className="catalog-cell-primary">{item.name}</span>
+                      <span className="catalog-secondary-value">{item.sectionCount} lớp khảo sát</span>
+                    </td>
+                    <td className="report-number-cell">{item.responseCount}</td>
+                    <td className="reports-rank-completion">
+                      <div className="reports-progress">
+                        <span style={{ width: `${Math.min(100, item.completionRate)}%`, background: completionColor(item.completionRate) }} />
+                      </div>
+                      <span style={{ color: completionColor(item.completionRate) }}>{item.completionRate.toFixed(0)}%</span>
+                    </td>
+                    <td className="report-number-cell">
+                      <span className="reports-rank-score" style={{ color: scoreColor(item.averageScore) }}>
+                        <Star style={{ width: '13px', height: '13px', fill: 'currentColor' }} aria-hidden="true" />
+                        {item.averageScore.toFixed(2)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <TablePagination
+            page={page}
+            pageSize={RANKED_UNIT_PAGE_SIZE}
+            totalItems={sortedData.length}
+            itemLabel={itemLabel}
+            onPageChange={setPage}
+          />
+        </>
+      )}
+    </section>
+  );
+};
 
 export const ReportsOverviewPage: React.FC = () => {
   const initialRoute = useMemo(() => parseReportRoute(), []);
@@ -534,13 +691,13 @@ export const ReportsOverviewPage: React.FC = () => {
         group.completionRate = group.classSize > 0 ? (group.responseCount / group.classSize) * 100 : 0;
         ranked.push(group);
       }
-      return ranked.sort((a, b) => b.averageScore - a.averageScore).slice(0, 10);
+      return ranked.sort((left, right) => left.name.localeCompare(right.name, 'vi'));
     },
     [results],
   );
 
-  const topFaculties = useMemo(() => buildRanking('faculty'), [buildRanking]);
-  const topDepartments = useMemo(() => buildRanking('department'), [buildRanking]);
+  const facultyRankings = useMemo(() => buildRanking('faculty'), [buildRanking]);
+  const departmentRankings = useMemo(() => buildRanking('department'), [buildRanking]);
 
   const semesterLabel = useMemo(() => {
     for (const year of academicYears) {
@@ -588,57 +745,6 @@ export const ReportsOverviewPage: React.FC = () => {
       />
     );
   };
-
-  const renderRankedTable = (title: string, icon: React.ReactNode, data: RankedUnit[]) => (
-    <section className="reports-rank" aria-label={title}>
-      <header className="reports-rank-header">
-        <span className="reports-rank-title">
-          {icon}
-          <h3>{title}</h3>
-        </span>
-        <span className="reports-rank-note">Theo điểm trung bình</span>
-      </header>
-      {data.length === 0 ? (
-        <div className="reports-rank-empty">Chưa có dữ liệu xếp hạng.</div>
-      ) : (
-        <table className="campaign-table reports-rank-table">
-          <thead>
-            <tr>
-              <th className="reports-rank-col">Hạng</th>
-              <th>Đơn vị</th>
-              <th className="reports-rank-num-col">Phiếu</th>
-              <th className="reports-rank-completion-col">Hoàn thành</th>
-              <th className="reports-rank-num-col">Điểm TB</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((item, index) => (
-              <tr key={`${title}-${item.id}`}>
-                <td className="reports-rank-medal">
-                  <span className={index < 3 ? `reports-rank-place is-top${index + 1}` : ''}>{index + 1}</span>
-                </td>
-                <td className="reports-rank-name">
-                  <span className="catalog-cell-primary">{item.name}</span>
-                  <span className="catalog-secondary-value">{item.sectionCount} lớp khảo sát</span>
-                </td>
-                <td className="report-number-cell">{item.responseCount}</td>
-                <td className="reports-rank-completion">
-                  <div className="reports-progress">
-                    <span style={{ width: `${Math.min(100, item.completionRate)}%`, background: completionColor(item.completionRate) }} />
-                  </div>
-                  <span style={{ color: completionColor(item.completionRate) }}>{item.completionRate.toFixed(0)}%</span>
-                </td>
-                <td className="reports-rank-score" style={{ color: scoreColor(item.averageScore) }}>
-                  <Star style={{ width: '13px', height: '13px', fill: 'currentColor' }} aria-hidden="true" />
-                  {item.averageScore.toFixed(2)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
-  );
 
   const resultColumns: Column<SurveyResultDetail>[] = [
     {
@@ -963,8 +1069,8 @@ export const ReportsOverviewPage: React.FC = () => {
               className={`reports-workspace-tab${workspace === 'rankings' ? ' is-active' : ''}`}
               onClick={() => navigateToWorkspace('rankings')}
             >
-              <Medal className="operation-icon" aria-hidden="true" />
-              <span><strong>Xếp hạng đơn vị</strong><small>So sánh Khoa và Bộ môn</small></span>
+              <Building2 className="operation-icon" aria-hidden="true" />
+              <span><strong>Tổng hợp đơn vị</strong><small>Kết quả theo Khoa/Viện và Bộ môn</small></span>
             </button>
           </nav>
 
@@ -1128,19 +1234,21 @@ export const ReportsOverviewPage: React.FC = () => {
           </div>
           )}
 
-          {/* Xếp hạng Top Khoa / Bộ môn */}
+          {/* Tổng hợp kết quả theo Khoa / Viện và Bộ môn */}
           {workspace === 'rankings' && (
           <div className="reports-rank-grid reports-workspace-panel" role="tabpanel">
-            {renderRankedTable(
-              'Top Khoa / Viện theo điểm TB',
-              <Building2 className="operation-icon" aria-hidden="true" />,
-              topFaculties,
-            )}
-            {renderRankedTable(
-              'Top Bộ môn theo điểm TB',
-              <Target className="operation-icon" aria-hidden="true" />,
-              topDepartments,
-            )}
+            <RankedUnitTable
+              title="Kết quả theo Khoa/Viện"
+              icon={<Building2 className="operation-icon" aria-hidden="true" />}
+              data={facultyRankings}
+              itemLabel="Khoa/Viện"
+            />
+            <RankedUnitTable
+              title="Kết quả theo Bộ môn"
+              icon={<Target className="operation-icon" aria-hidden="true" />}
+              data={departmentRankings}
+              itemLabel="Bộ môn"
+            />
           </div>
           )}
 

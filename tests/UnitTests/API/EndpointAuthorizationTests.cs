@@ -1,8 +1,10 @@
+using System.Security.Claims;
 using API.Auth;
 using API.Catalog;
 using API.Reports;
 using API.Surveys;
 using API.UserAdministration;
+using Application.Auth;
 using Application.Catalog;
 using Application.Reports;
 using Application.Surveys;
@@ -19,6 +21,36 @@ namespace UnitTests.API;
 
 public sealed class EndpointAuthorizationTests
 {
+    [Fact]
+    public async Task AnyPermissionHandler_ChecksThePermissionSetOnce()
+    {
+        var authService = new Mock<IAuthService>();
+        authService
+            .Setup(x => x.HasAnyPermissionAsync(
+                It.IsAny<ClaimsPrincipal>(),
+                It.IsAny<IReadOnlyCollection<string>>(),
+                null))
+            .ReturnsAsync(true);
+        var requirement = new AnyPermissionRequirement("REPORTS_ACCESS", "SURVEY_ANALYSIS_ACCESS");
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())],
+            "test"));
+        var context = new AuthorizationHandlerContext([requirement], principal, null);
+        var handler = new AnyPermissionAuthorizationHandler(authService.Object);
+
+        await handler.HandleAsync(context);
+
+        context.HasSucceeded.Should().BeTrue();
+        authService.Verify(x => x.HasAnyPermissionAsync(
+            principal,
+            It.Is<IReadOnlyCollection<string>>(codes => codes.Count == 2),
+            null), Times.Once);
+        authService.Verify(x => x.HasPermissionAsync(
+            It.IsAny<ClaimsPrincipal>(),
+            It.IsAny<string>(),
+            It.IsAny<string?>()), Times.Never);
+    }
+
     [Theory]
     [InlineData("/api/admin", AuthPolicies.UserAdminAccess)]
     [InlineData("/api/v1/reports", AuthPolicies.ReportsAccess)]

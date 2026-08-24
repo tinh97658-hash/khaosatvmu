@@ -71,6 +71,10 @@ public interface IAuthService
         ClaimsPrincipal? principal,
         string permissionCode,
         string? resourceOrganizationUnitCode = null);
+    Task<bool> HasAnyPermissionAsync(
+        ClaimsPrincipal? principal,
+        IReadOnlyCollection<string> permissionCodes,
+        string? resourceOrganizationUnitCode = null);
 }
 
 public abstract record AuthErrorCodes

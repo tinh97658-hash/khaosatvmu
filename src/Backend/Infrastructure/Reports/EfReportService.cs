@@ -115,6 +115,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .AsNoTracking()
             .Where(x => lecturerIds.Contains(x.LecturerId))
             .ToListAsync(cancellationToken);
+        var sectionById = sections.ToDictionary(x => x.CourseSectionId);
+        var courseById = courses.ToDictionary(x => x.CourseId);
+        var lecturerById = lecturers.ToDictionary(x => x.LecturerId);
 
         var sectionDetails = new List<SectionProgressDetailDto>();
         int completedCount = 0;
@@ -123,9 +126,11 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
         foreach (var ss in sectionSurveys)
         {
-            var sec = sections.FirstOrDefault(x => x.CourseSectionId == ss.CourseSectionId);
-            var crs = courses.FirstOrDefault(x => x.CourseId == sec?.CourseId);
-            var lec = lecturers.FirstOrDefault(x => x.LecturerId == sec?.LecturerId);
+            var sec = sectionById.GetValueOrDefault(ss.CourseSectionId);
+            var crs = sec is null ? null : courseById.GetValueOrDefault(sec.CourseId);
+            var lec = sec?.LecturerId is { } lecturerId
+                ? lecturerById.GetValueOrDefault(lecturerId)
+                : null;
 
             int classSize = sec?.ClassSize ?? 0;
             int responseCount = responseCounts.TryGetValue(ss.CourseSectionSurveyId, out var cnt) ? cnt : 0;
@@ -207,8 +212,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         var sections = await sectionQuery.ToListAsync(cancellationToken);
         var sectionIds = sections.Select(x => x.CourseSectionId).ToList();
 
+        var courseIds = sections.Select(x => x.CourseId).Distinct().ToList();
         var courses = await db.Courses.AsNoTracking()
-            .Where(x => sections.Select(s => s.CourseId).Contains(x.CourseId))
+            .Where(x => courseIds.Contains(x.CourseId))
             .ToDictionaryAsync(x => x.CourseId, x => x, cancellationToken);
 
         var sectionSurveys = await db.CourseSectionSurveys.AsNoTracking()
@@ -219,14 +225,20 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
         // Gộp ngay trong SQL thay vì kéo hết phiếu về bộ nhớ ứng dụng.
         var responseStats = await ResponseTalliesAsync(cssIds, cancellationToken);
+        var sectionsByLecturerId = sections
+            .Where(x => x.LecturerId.HasValue)
+            .ToLookup(x => x.LecturerId!.Value);
+        var sectionSurveysBySectionId = sectionSurveys.ToLookup(x => x.CourseSectionId);
 
         var reports = new List<LecturerPerformanceReportDto>();
 
         foreach (var lec in lecturers)
         {
-            var lecSections = sections.Where(x => x.LecturerId == lec.LecturerId).ToList();
-            var lecSecIds = lecSections.Select(x => x.CourseSectionId).ToList();
-            var lecCss = sectionSurveys.Where(x => lecSecIds.Contains(x.CourseSectionId)).ToList();
+            var lecSections = sectionsByLecturerId[lec.LecturerId].ToList();
+            var lecCss = lecSections
+                .SelectMany(section => sectionSurveysBySectionId[section.CourseSectionId])
+                .ToList();
+            var lecSectionById = lecSections.ToDictionary(x => x.CourseSectionId);
 
             // Số lượt nộp đếm hết (tiến độ); điểm chỉ gộp phiếu hợp lệ (chất lượng).
             int totalResponses = 0;
@@ -236,7 +248,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             var sectionSummaries = new List<LecturerSectionSummaryDto>();
             foreach (var css in lecCss)
             {
-                var sec = lecSections.FirstOrDefault(x => x.CourseSectionId == css.CourseSectionId);
+                var sec = lecSectionById.GetValueOrDefault(css.CourseSectionId);
                 var crs = sec != null && courses.TryGetValue(sec.CourseId, out var c) ? c : null;
 
                 var tally = responseStats.GetValueOrDefault(css.CourseSectionSurveyId, ResponseTally.Empty);
@@ -314,12 +326,13 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .Where(x => questionIds.Contains(x.QuestionId) && x.AttentionCheckValue == null)
             .ToListAsync(cancellationToken);
         var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
+        var answersByQuestionId = answers.ToLookup(x => x.QuestionId);
 
         var questionRatings = questions
             .Select(question => BuildQuestionRating(
                 question.QuestionId,
                 question.QuestionText,
-                answers.Where(x => x.QuestionId == question.QuestionId).ToList(),
+                answersByQuestionId[question.QuestionId].ToList(),
                 scaleByQuestion.GetValueOrDefault(question.QuestionId)))
             .ToList();
 
@@ -345,20 +358,26 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
         
         var responseStats = await ResponseTalliesAsync(cssIds, cancellationToken);
+        var departmentsByFacultyId = departments.ToLookup(x => x.FacultyId);
+        var lecturersByFacultyId = lecturers.ToLookup(x => x.FacultyId);
+        var sectionsByLecturerId = sections
+            .Where(x => x.LecturerId.HasValue)
+            .ToLookup(x => x.LecturerId!.Value);
+        var sectionSurveysBySectionId = sectionSurveys.ToLookup(x => x.CourseSectionId);
 
         var facultyReports = new List<FacultyDepartmentReportDto>();
 
         foreach (var fac in faculties)
         {
-            var facDepts = departments.Where(x => x.FacultyId == fac.FacultyId).ToList();
-            var facLecturers = lecturers.Where(x => x.FacultyId == fac.FacultyId).ToList();
-            var facLecIds = facLecturers.Select(x => x.LecturerId).ToList();
-
-            var facSections = sections
-                .Where(x => x.LecturerId is { } lecId && facLecIds.Contains(lecId))
+            var facDepts = departmentsByFacultyId[fac.FacultyId].ToList();
+            var facLecturers = lecturersByFacultyId[fac.FacultyId].ToList();
+            var facLecturersByDepartmentId = facLecturers.ToLookup(x => x.DepartmentId);
+            var facSections = facLecturers
+                .SelectMany(lecturer => sectionsByLecturerId[lecturer.LecturerId])
                 .ToList();
-            var facSecIds = facSections.Select(x => x.CourseSectionId).ToList();
-            var facCss = sectionSurveys.Where(x => facSecIds.Contains(x.CourseSectionId)).ToList();
+            var facCss = facSections
+                .SelectMany(section => sectionSurveysBySectionId[section.CourseSectionId])
+                .ToList();
 
             // Số lượt nộp đếm hết; điểm chỉ gộp phiếu hợp lệ.
             int facResponses = 0;
@@ -380,13 +399,13 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             var deptSummaries = new List<DepartmentSummaryDto>();
             foreach (var dept in facDepts)
             {
-                var deptLecs = facLecturers.Where(x => x.DepartmentId == dept.DepartmentId).ToList();
-                var deptLecIds = deptLecs.Select(x => x.LecturerId).ToList();
-                var deptSections = facSections
-                    .Where(x => x.LecturerId is { } deptLecId && deptLecIds.Contains(deptLecId))
+                var deptLecs = facLecturersByDepartmentId[dept.DepartmentId].ToList();
+                var deptSections = deptLecs
+                    .SelectMany(lecturer => sectionsByLecturerId[lecturer.LecturerId])
                     .ToList();
-                var deptSecIds = deptSections.Select(x => x.CourseSectionId).ToList();
-                var deptCss = facCss.Where(x => deptSecIds.Contains(x.CourseSectionId)).ToList();
+                var deptCss = deptSections
+                    .SelectMany(section => sectionSurveysBySectionId[section.CourseSectionId])
+                    .ToList();
 
                 int deptResponses = 0;
                 int deptValidResponses = 0;
@@ -478,12 +497,13 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .Where(x => responseIds.Contains(x.ResponseId))
             .ToListAsync(cancellationToken);
         var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
+        var answersByQuestionId = answers.ToLookup(x => x.QuestionId);
 
         var questionRatings = questions
             .Select(q => BuildQuestionRating(
                 q.QuestionId,
                 q.QuestionText,
-                answers.Where(x => x.QuestionId == q.QuestionId).ToList(),
+                answersByQuestionId[q.QuestionId].ToList(),
                 scaleByQuestion.GetValueOrDefault(q.QuestionId)))
             .ToList();
 
@@ -545,11 +565,12 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 .Where(x => responseIds.Contains(x.ResponseId))
                 .ToListAsync(cancellationToken);
             var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
+            var answersByQuestionId = answers.ToLookup(x => x.QuestionId);
 
             questionRatings.AddRange(questions.Select(q => BuildQuestionRating(
                 q.QuestionId,
                 q.QuestionText,
-                answers.Where(x => x.QuestionId == q.QuestionId).ToList(),
+                answersByQuestionId[q.QuestionId].ToList(),
                 scaleByQuestion.GetValueOrDefault(q.QuestionId))));
         }
         else
@@ -629,6 +650,8 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         var lecturers = await db.Lecturers.AsNoTracking()
             .Where(x => lecturerIds.Contains(x.LecturerId))
             .ToListAsync(cancellationToken);
+        var sectionById = sections.ToDictionary(x => x.CourseSectionId);
+        var lecturerById = lecturers.ToDictionary(x => x.LecturerId);
 
         var deptIds = lecturers.Where(x => x.DepartmentId.HasValue).Select(x => x.DepartmentId!.Value)
             .Concat(courses.Values.Where(x => x.DepartmentId.HasValue).Select(x => x.DepartmentId!.Value))
@@ -662,9 +685,11 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             var templateName = semesterSurvey != null && templates.TryGetValue(semesterSurvey.SurveyTemplateId, out var tn)
                 ? tn
                 : string.Empty;
-            var sec = sections.FirstOrDefault(x => x.CourseSectionId == css.CourseSectionId);
+            var sec = sectionById.GetValueOrDefault(css.CourseSectionId);
             var crs = sec != null && courses.TryGetValue(sec.CourseId, out var c) ? c : null;
-            var lec = sec != null ? lecturers.FirstOrDefault(x => x.LecturerId == sec.LecturerId) : null;
+            var lec = sec?.LecturerId is { } sectionLecturerId
+                ? lecturerById.GetValueOrDefault(sectionLecturerId)
+                : null;
             int? reportDepartmentId = crs?.DepartmentId ?? lec?.DepartmentId;
             int? reportFacultyId = crs?.FacultyId;
             if (reportFacultyId is null
@@ -815,6 +840,8 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             : await db.Lecturers.AsNoTracking()
                 .Where(x => lecturerIds.Contains(x.LecturerId))
                 .ToListAsync(cancellationToken);
+        var sectionById = sections.ToDictionary(x => x.CourseSectionId);
+        var lecturerById = lecturers.ToDictionary(x => x.LecturerId);
 
         var deptIds = lecturers.Where(x => x.DepartmentId.HasValue).Select(x => x.DepartmentId!.Value)
             .Concat(courses.Values.Where(x => x.DepartmentId.HasValue).Select(x => x.DepartmentId!.Value))
@@ -865,8 +892,10 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
         foreach (var ss in sectionSurveys)
         {
-            var sec = sections.FirstOrDefault(x => x.CourseSectionId == ss.CourseSectionId);
-            var lec = sec is null ? null : lecturers.FirstOrDefault(x => x.LecturerId == sec.LecturerId);
+            var sec = sectionById.GetValueOrDefault(ss.CourseSectionId);
+            var lec = sec?.LecturerId is { } sectionLecturerId
+                ? lecturerById.GetValueOrDefault(sectionLecturerId)
+                : null;
             var course = sec is not null && courses.TryGetValue(sec.CourseId, out var matchedCourse)
                 ? matchedCourse
                 : null;
@@ -970,10 +999,11 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             : 0;
 
         var scoreDistribution = new List<ScoreBandDto>();
+        var bandCountByBand = bandCounts.ToDictionary(x => x.Band, x => x.Count);
         int bandTotal = bandCounts.Sum(x => x.Count);
         foreach (var band in new[] { 5, 4, 3, 2 })
         {
-            int count = bandCounts.FirstOrDefault(x => x.Band == band)?.Count ?? 0;
+            int count = bandCountByBand.GetValueOrDefault(band);
             decimal pct = bandTotal > 0 ? Math.Round((decimal)count / bandTotal * 100, 1) : 0;
             scoreDistribution.Add(new ScoreBandDto(band, ScoreBandLabel(band), count, pct));
         }
@@ -1017,24 +1047,44 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     {
         if (cssIds.Count == 0) return [];
 
-        // Số lượt trả lời theo (Câu hỏi, Giá trị) gộp trong SQL qua join Responses →
-        // Answers. "AnswerValue" là chuỗi nên gộp nguyên văn rồi mới ép sang số ở
-        // dưới, chỉ với câu thuộc thang 'Options'.
+        // Xếp hạng trước trên bảng điểm đã gộp theo lớp. Nhờ vậy truy vấn raw answers
+        // bên dưới chỉ đụng tới đúng các câu sẽ hiển thị, thay vì quét mọi câu của kỳ.
+        var candidates = await db.CourseSectionSurveyQuestionScores.AsNoTracking()
+            .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
+            .GroupBy(x => x.QuestionId)
+            .Select(group => new
+            {
+                QuestionId = group.Key,
+                TotalAnswers = group.Sum(x => x.AnswerCount),
+                WeightedScore = group.Sum(x => (double)x.AverageScore * x.AnswerCount)
+            })
+            .Where(x => x.TotalAnswers >= WeakQuestionMinAnswers)
+            .OrderBy(x => x.WeightedScore / x.TotalAnswers)
+            .ThenByDescending(x => x.TotalAnswers)
+            .Take(WeakQuestionCount)
+            .ToListAsync(cancellationToken);
+
+        if (candidates.Count == 0) return [];
+
+        var candidateQuestionIds = candidates.Select(x => x.QuestionId).ToList();
+
+        // Phân bố lựa chọn vẫn cần dữ liệu gốc, nhưng chỉ cho tối đa WeakQuestionCount câu.
         // Chỉ gộp phiếu hợp lệ vì đây là số liệu chất lượng.
         var valueCounts = await (from r in db.SurveyResponses.AsNoTracking()
                                  join a in db.SurveyResponseAnswers.AsNoTracking()
                                      on r.ResponseId equals a.ResponseId
-                                 where cssIds.Contains(r.CourseSectionSurveyId) && r.IsValid
+                                 where cssIds.Contains(r.CourseSectionSurveyId)
+                                       && r.IsValid
+                                       && candidateQuestionIds.Contains(a.QuestionId)
                                  group a by new { a.QuestionId, a.AnswerValue } into g
                                  select new { g.Key.QuestionId, g.Key.AnswerValue, Count = g.Count() })
             .ToListAsync(cancellationToken);
 
         if (valueCounts.Count == 0) return [];
 
-        var questionIds = valueCounts.Select(x => x.QuestionId).Distinct().ToList();
         // Bỏ câu bẫy khỏi bảng xếp hạng câu hỏi yếu nhất.
         var questions = await db.SurveyQuestions.AsNoTracking()
-            .Where(x => questionIds.Contains(x.QuestionId) && x.AttentionCheckValue == null)
+            .Where(x => candidateQuestionIds.Contains(x.QuestionId) && x.AttentionCheckValue == null)
             .ToListAsync(cancellationToken);
         var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
         var textById = questions.ToDictionary(x => x.QuestionId, x => x.QuestionText);
@@ -1224,6 +1274,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .Where(x => scaleIds.Contains(x.AnswerScaleId))
             .OrderBy(x => x.Value)
             .ToListAsync(cancellationToken);
+        var optionsByScaleId = options.ToLookup(x => x.AnswerScaleId);
 
         var infoById = scales.ToDictionary(
             scale => scale.AnswerScaleId,
@@ -1231,7 +1282,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 scale.AnswerScaleId,
                 scale.AnswerScaleName,
                 scale.ScaleKind,
-                options.Where(option => option.AnswerScaleId == scale.AnswerScaleId).ToList()));
+                optionsByScaleId[scale.AnswerScaleId].ToList()));
 
         return questions
             .Where(question => infoById.ContainsKey(question.AnswerScaleId))

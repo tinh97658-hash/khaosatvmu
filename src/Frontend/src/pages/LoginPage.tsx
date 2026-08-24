@@ -167,6 +167,7 @@ export function LoginPage() {
         isOpen={isNoProfileDialogOpen}
         onClose={() => setIsNoProfileDialogOpen(false)}
         title="Cần cấp hồ sơ làm việc"
+        size="compact"
       >
         <div className="auth-access-dialog">
           <div className="auth-access-dialog__status" aria-hidden="true">
