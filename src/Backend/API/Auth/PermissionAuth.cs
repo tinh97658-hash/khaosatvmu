@@ -87,13 +87,9 @@ public sealed class AnyPermissionAuthorizationHandler : AuthorizationHandler<Any
             return;
         }
 
-        foreach (var permissionCode in requirement.PermissionCodes)
+        if (await _authService.HasAnyPermissionAsync(context.User, requirement.PermissionCodes))
         {
-            if (await _authService.HasPermissionAsync(context.User, permissionCode))
-            {
-                context.Succeed(requirement);
-                return;
-            }
+            context.Succeed(requirement);
         }
     }
 }

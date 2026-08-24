@@ -702,7 +702,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   place-items: center;
-  padding: 20px;
+  padding: 24px;
   overflow-y: auto;
   background: rgba(23, 36, 45, 0.34);
   backdrop-filter: blur(7px) saturate(0.72);
@@ -710,10 +710,11 @@
 }
 
 .profile-session-dialog {
-  width: min(100%, 680px);
+  width: min(100%, 1180px);
   min-width: 0;
-  max-width: calc(100vw - 40px);
-  max-height: min(760px, calc(100vh - 40px));
+  max-width: calc(100vw - 48px);
+  height: min(860px, calc(100dvh - 48px));
+  max-height: calc(100dvh - 48px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -780,7 +781,7 @@
 .profile-session-dialog__header p {
   margin-top: 4px;
   color: var(--ops-muted);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -810,6 +811,7 @@
 }
 
 .profile-session-dialog__body {
+  flex: 1 1 auto;
   min-height: 0;
   padding: 18px 26px;
   overflow-y: auto;
@@ -817,6 +819,7 @@
 
 .profile-session-list {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -905,7 +908,7 @@
 
 .profile-session-option__title strong {
   overflow: hidden;
-  font-size: 13px;
+  font-size: 15px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -930,7 +933,7 @@
 .profile-session-option__role {
   margin-top: 2px;
   color: #3b4850;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
 }
 
@@ -941,7 +944,7 @@
   margin-top: 3px;
   overflow: hidden;
   color: var(--ops-muted);
-  font-size: 10px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1007,7 +1010,7 @@
   border-top: 1px solid var(--ops-border);
   background: #f7f9fa;
   color: var(--ops-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .profile-session-dialog__footer svg {
@@ -1052,14 +1055,17 @@
   }
 
   .profile-session-backdrop {
-    place-items: center;
-    padding: 12px;
+    place-items: stretch;
+    padding: 0;
   }
 
   .profile-session-dialog {
     width: 100%;
-    max-width: calc(100vw - 24px);
-    max-height: calc(100vh - 24px);
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
   }
 
   .profile-session-dialog__header {
@@ -1082,7 +1088,7 @@
   }
 
   .profile-session-dialog__header p {
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .profile-session-dialog__body {
@@ -1749,7 +1755,7 @@
 }
 
 .admin-users-page .modal-card {
-  max-width: 720px;
+  max-width: 1280px;
   border: 1px solid #bfc9cf;
   border-radius: 3px !important;
   box-shadow: 0 12px 32px rgba(28, 38, 45, 0.18);
@@ -2695,19 +2701,35 @@
   }
 
   .admin-users-page .modal-backdrop {
-    align-items: flex-end;
+    align-items: stretch;
     padding: 0;
   }
 
+  .profile-session-list {
+    grid-template-columns: 1fr;
+  }
+
   .admin-users-page .modal-card {
-    max-height: 94vh;
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0 !important;
+  }
+
+  .admin-users-page .catalog-modal-card--compact {
+    width: min(560px, calc(100% - 16px));
+    max-width: 560px;
+    height: auto;
+    max-height: calc(100dvh - 16px);
+    margin: auto;
+    border: 1px solid var(--ops-border);
+    border-radius: 4px !important;
   }
 
   .admin-users-page .modal-body {
-    max-height: calc(94vh - 48px);
+    max-height: none;
     padding: 16px 12px;
   }
 

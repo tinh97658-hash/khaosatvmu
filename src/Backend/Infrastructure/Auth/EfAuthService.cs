@@ -9,12 +9,17 @@ namespace Infrastructure.Auth;
 
 public sealed class EfAuthService(AppDbContext db) : IAuthService
 {
+    private (Guid UserId, Guid ProfileId)? cachedPrincipalKey;
+    private Task<PrincipalState?>? cachedPrincipalState;
+    private Guid? cachedPermissionRoleId;
+    private Task<HashSet<string>>? cachedPermissionCodes;
+
     public async Task<AuthMeResponse> GetCurrentAsync(ClaimsPrincipal? principal)
     {
         var state = await ResolvePrincipalStateAsync(principal);
         return state is null
             ? new AuthMeResponse(false, null, null, [])
-            : await BuildResponseAsync(state.Value.User, state.Value.Profile);
+            : await BuildResponseAsync(state.User, state.Profile);
     }
 
     public async Task<AuthAccessResponse?> GetAccessAsync(ClaimsPrincipal? principal)
@@ -25,16 +30,12 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
             return null;
         }
 
-        var roleCode = await db.Roles
-            .Where(x => x.Id == state.Value.Profile.RoleId)
-            .Select(x => x.Code)
-            .SingleAsync();
-        var permissions = await GetPermissionCodesAsync(state.Value.Profile.RoleId);
+        var permissions = await ResolvePermissionCodesAsync(state.Profile.RoleId);
         return new AuthAccessResponse(
-            state.Value.Profile.Id,
-            roleCode,
-            state.Value.Profile.OrganizationUnitCode,
-            permissions);
+            state.Profile.Id,
+            state.RoleCode,
+            state.Profile.OrganizationUnitCode,
+            permissions.OrderBy(x => x).ToList());
     }
 
     public async Task<GoogleSignInResult> GoogleSignInAsync(GoogleIdentity identity)
@@ -161,7 +162,7 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
             return new SignOutResult(true);
         }
 
-        AddAudit(state.Value.User, state.Value.Profile, "LOGOUT");
+        AddAudit(state.User, state.Profile, "LOGOUT");
         await db.SaveChangesAsync();
         return new SignOutResult(true);
     }
@@ -170,47 +171,92 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
         ClaimsPrincipal? principal,
         string permissionCode,
         string? resourceOrganizationUnitCode = null)
+        => await HasAnyPermissionAsync(
+            principal,
+            [permissionCode],
+            resourceOrganizationUnitCode);
+
+    public async Task<bool> HasAnyPermissionAsync(
+        ClaimsPrincipal? principal,
+        IReadOnlyCollection<string> permissionCodes,
+        string? resourceOrganizationUnitCode = null)
     {
+        if (permissionCodes.Count == 0)
+        {
+            return false;
+        }
+
         var state = await ResolvePrincipalStateAsync(principal);
         if (state is null)
         {
             return false;
         }
 
-        var hasPermission = await (
-            from rolePermission in db.RolePermissions
-            join permission in db.Permissions on rolePermission.PermissionId equals permission.Id
-            where rolePermission.RoleId == state.Value.Profile.RoleId
-                  && permission.Code == permissionCode
-                  && rolePermission.IsGranted
-            select rolePermission.Id).AnyAsync();
+        var grantedPermissions = await ResolvePermissionCodesAsync(state.Profile.RoleId);
+        var hasPermission = permissionCodes.Any(grantedPermissions.Contains);
 
         if (!hasPermission || string.IsNullOrWhiteSpace(resourceOrganizationUnitCode))
         {
             return hasPermission;
         }
 
-        return string.IsNullOrWhiteSpace(state.Value.Profile.OrganizationUnitCode)
+        return string.IsNullOrWhiteSpace(state.Profile.OrganizationUnitCode)
             || string.Equals(
-                state.Value.Profile.OrganizationUnitCode,
+                state.Profile.OrganizationUnitCode,
                 resourceOrganizationUnitCode,
                 StringComparison.OrdinalIgnoreCase);
     }
 
-    private async Task<(User User, UserProfile Profile)?> ResolvePrincipalStateAsync(ClaimsPrincipal? principal)
+    private Task<PrincipalState?> ResolvePrincipalStateAsync(ClaimsPrincipal? principal)
     {
         var userId = GetGuidClaim(principal, ClaimTypes.NameIdentifier);
         var profileId = GetGuidClaim(principal, "active_profile_id");
         if (userId is null || profileId is null)
         {
-            return null;
+            return Task.FromResult<PrincipalState?>(null);
         }
 
-        var user = await db.Users.SingleOrDefaultAsync(x => x.Id == userId.Value && x.IsActive);
-        var profile = await db.UserProfiles.SingleOrDefaultAsync(x =>
-            x.Id == profileId.Value && x.UserId == userId.Value && x.IsActive);
-        return user is null || profile is null ? null : (user, profile);
+        var key = (UserId: userId.Value, ProfileId: profileId.Value);
+        if (cachedPrincipalKey != key || cachedPrincipalState is null)
+        {
+            cachedPrincipalKey = key;
+            cachedPrincipalState = LoadPrincipalStateAsync(key.UserId, key.ProfileId);
+        }
+
+        return cachedPrincipalState;
     }
+
+    private async Task<PrincipalState?> LoadPrincipalStateAsync(Guid userId, Guid profileId)
+    {
+        var state = await (
+            from user in db.Users
+            join profile in db.UserProfiles on user.Id equals profile.UserId
+            join role in db.Roles on profile.RoleId equals role.Id
+            where user.Id == userId
+                  && user.IsActive
+                  && profile.Id == profileId
+                  && profile.IsActive
+            select new { User = user, Profile = profile, RoleCode = role.Code })
+            .SingleOrDefaultAsync();
+
+        return state is null
+            ? null
+            : new PrincipalState(state.User, state.Profile, state.RoleCode);
+    }
+
+    private Task<HashSet<string>> ResolvePermissionCodesAsync(Guid roleId)
+    {
+        if (cachedPermissionRoleId != roleId || cachedPermissionCodes is null)
+        {
+            cachedPermissionRoleId = roleId;
+            cachedPermissionCodes = LoadPermissionCodesAsync(roleId);
+        }
+
+        return cachedPermissionCodes;
+    }
+
+    private async Task<HashSet<string>> LoadPermissionCodesAsync(Guid roleId) =>
+        (await GetPermissionCodesAsync(roleId)).ToHashSet(StringComparer.Ordinal);
 
     private async Task<AuthMeResponse> CompleteSignInAsync(User user, UserProfile profile, string eventName)
     {
@@ -277,4 +323,6 @@ public sealed class EfAuthService(AppDbContext db) : IAuthService
 
     private static Guid? GetGuidClaim(ClaimsPrincipal? principal, string claimType) =>
         Guid.TryParse(principal?.FindFirst(claimType)?.Value, out var value) ? value : null;
+
+    private sealed record PrincipalState(User User, UserProfile Profile, string RoleCode);
 }
