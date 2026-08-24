@@ -1450,6 +1450,21 @@
   white-space: nowrap;
 }
 
+/* Lời nhắc còn lớp chưa có bài khảo sát, kèm nút bù ngay tại chỗ. */
+.semester-survey-meta > span.semester-survey-missing {
+  gap: 8px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid #f0d3b2;
+  border-radius: 3px;
+  background: #fdf5ec;
+  color: #b86216;
+  font-weight: 600;
+}
+
+.semester-survey-missing .operation-icon {
+  flex-shrink: 0;
+}
+
 .semester-survey-card .campaign-table-scroll {
   border: 0;
 }

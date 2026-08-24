@@ -10,7 +10,6 @@ namespace Infrastructure.UserAdministration;
 public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdministrationService
 {
     private const int MaximumPageSize = 100;
-    private const int MaximumImportRows = 500;
 
     public async Task<AdminPage<AdminUserDto>> GetUsersAsync(
         string? search,
@@ -87,11 +86,6 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
         if (commands.Count == 0)
         {
             return Failure<AdminUserImportDto>(UserAdministrationErrorCodes.InvalidRequest);
-        }
-
-        if (commands.Count > MaximumImportRows)
-        {
-            return Failure<AdminUserImportDto>(UserAdministrationErrorCodes.ImportTooManyRows);
         }
 
         var normalizedEmails = commands

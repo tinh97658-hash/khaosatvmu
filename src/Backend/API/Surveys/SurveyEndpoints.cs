@@ -121,6 +121,14 @@ public static class SurveyEndpoints
             ToResult(await service.DeleteSemesterSurveyAsync(semesterSurveyId, cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
+        // Bù bài khảo sát cho lớp thêm vào kỳ sau khi đợt đã tạo.
+        campaignGroup.MapPost("/semester-surveys/{semesterSurveyId:int}/backfill-sections", async (
+            int semesterSurveyId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.BackfillSemesterSurveySectionsAsync(semesterSurveyId, cancellationToken)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
         operationalReadGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/sections", async (
             int semesterSurveyId,
             ISurveyService service,
@@ -312,6 +320,8 @@ public static class SurveyEndpoints
             SurveyErrorCodes.AnswerScaleKindLocked => StatusCodes.Status409Conflict,
             SurveyErrorCodes.TemplateInUse => StatusCodes.Status409Conflict,
             SurveyErrorCodes.SemesterSurveyHasResponses => StatusCodes.Status409Conflict,
+            SurveyErrorCodes.SemesterSurveySectionsUpToDate => StatusCodes.Status409Conflict,
+            SurveyErrorCodes.SemesterSurveyScheduleUnknown => StatusCodes.Status409Conflict,
             SurveyErrorCodes.LinkNotOpen => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status400BadRequest
         };

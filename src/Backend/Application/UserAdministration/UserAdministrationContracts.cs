@@ -198,7 +198,6 @@ public static class UserAdministrationErrorCodes
     public const string InvalidRequest = "ADMIN_INVALID_REQUEST";
     public const string UserNotFound = "ADMIN_USER_NOT_FOUND";
     public const string UserEmailExists = "ADMIN_USER_EMAIL_EXISTS";
-    public const string ImportTooManyRows = "ADMIN_IMPORT_TOO_MANY_ROWS";
     public const string ImportEmailRequired = "ADMIN_IMPORT_EMAIL_REQUIRED";
     public const string ImportEmailInvalid = "ADMIN_IMPORT_EMAIL_INVALID";
     public const string ImportDisplayNameInvalid = "ADMIN_IMPORT_DISPLAY_NAME_INVALID";

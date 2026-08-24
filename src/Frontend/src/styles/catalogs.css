@@ -590,7 +590,8 @@
 .term-layout {
   flex: 1 0 auto;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  /* Cây năm học chỉ chứa vài dòng ngắn, nhường chỗ cho bảng lớp học phần. */
+  grid-template-columns: 220px minmax(0, 1fr);
   min-height: 0;
   border-bottom: 1px solid #dfe4e8;
 }

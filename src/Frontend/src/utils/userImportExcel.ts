@@ -2,7 +2,6 @@ import type { CellValue } from 'read-excel-file/browser';
 import type { ImportAdminUserRow } from '../types';
 
 const maximumFileSize = 5 * 1024 * 1024;
-const maximumRows = 500;
 const emailHeaders = new Set(['email', 'email tai khoan google', 'gmail']);
 const displayNameHeaders = new Set(['ho va ten', 'ten hien thi', 'display name', 'name']);
 
@@ -12,7 +11,6 @@ export type UserImportFileErrorCode =
   | 'FILE_EMPTY'
   | 'EMAIL_HEADER_MISSING'
   | 'NO_DATA_ROWS'
-  | 'TOO_MANY_ROWS'
   | 'READ_FAILED';
 
 export class UserImportFileError extends Error {
@@ -76,9 +74,6 @@ export async function parseUserImportFile(file: File): Promise<ImportAdminUserRo
 
   if (users.length === 0) {
     throw new UserImportFileError('NO_DATA_ROWS');
-  }
-  if (users.length > maximumRows) {
-    throw new UserImportFileError('TOO_MANY_ROWS');
   }
 
   return users;

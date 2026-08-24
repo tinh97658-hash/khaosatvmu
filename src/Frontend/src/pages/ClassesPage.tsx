@@ -173,6 +173,28 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
   const lecturerOf = (lecturerId: number) =>
     lecturers.find((lecturer) => lecturer.lecturerId === lecturerId);
 
+  // Lớp học phần không giữ bộ môn / khoa của riêng nó: suy ra từ học phần, thiếu thì
+  // lấy của giảng viên. Giữ đúng thứ tự ưu tiên mà trang Thống kê & Báo cáo đang dùng
+  // để hai nơi không ra hai con số khác nhau.
+  const departmentOfSection = (section: CourseSection): Department | undefined => {
+    const departmentId =
+      courseOf(section.courseId)?.departmentId ??
+      (section.lecturerId === null ? null : lecturerOf(section.lecturerId)?.departmentId ?? null);
+    return departmentId === null
+      ? undefined
+      : departments.find((department) => department.departmentId === departmentId);
+  };
+
+  const facultyOfSection = (section: CourseSection): Faculty | undefined => {
+    const facultyId =
+      courseOf(section.courseId)?.facultyId ??
+      departmentOfSection(section)?.facultyId ??
+      (section.lecturerId === null ? null : lecturerOf(section.lecturerId)?.facultyId ?? null);
+    return facultyId === null
+      ? undefined
+      : faculties.find((faculty) => faculty.facultyId === facultyId);
+  };
+
   // Import lấy bộ môn từ tệp nên chỉ quản trị mới được dùng; ẩn nút cho gọn.
   const { activeProfile } = useAuth();
   const canManageAll = isUnrestrictedRole(activeProfile?.roleCode);
@@ -635,6 +657,34 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
       width: '160px',
       filterValue: (item) => item.sectionName,
       render: (item) => <span className="catalog-cell-primary">{item.sectionName}</span>,
+    },
+    {
+      key: 'departmentId',
+      header: 'Bộ môn',
+      width: '200px',
+      filterValue: (item) => departmentOfSection(item)?.departmentName ?? 'Chưa thuộc bộ môn',
+      render: (item) => {
+        const department = departmentOfSection(item);
+        return department ? (
+          <span className="catalog-cell-primary">{department.departmentName}</span>
+        ) : (
+          <span className="catalog-cell-meta">Chưa thuộc bộ môn</span>
+        );
+      },
+    },
+    {
+      key: 'facultyId',
+      header: 'Khoa / Viện',
+      width: '200px',
+      filterValue: (item) => facultyOfSection(item)?.facultyName ?? 'Chưa thuộc khoa',
+      render: (item) => {
+        const faculty = facultyOfSection(item);
+        return faculty ? (
+          <span className="catalog-cell-primary">{faculty.facultyName}</span>
+        ) : (
+          <span className="catalog-cell-meta">Chưa thuộc khoa</span>
+        );
+      },
     },
     {
       key: 'classSize',

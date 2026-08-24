@@ -191,6 +191,8 @@ export interface SemesterSurvey {
   endTime: string;
   sectionSurveyCount: number;
   responseCount: number;
+  /** Lớp của kỳ chưa có bài khảo sát trong đợt, do được thêm vào sau lúc tạo đợt. */
+  missingSectionCount: number;
 }
 
 /** Bảng "CourseSectionSurveys": bài khảo sát riêng của một lớp học phần. */
@@ -206,8 +208,17 @@ export interface CourseSectionSurvey {
   courseName: string;
   sectionName: string;
   lecturerName: string;
+  /** Bộ môn của lớp: theo học phần, thiếu thì lấy của giảng viên. */
+  departmentName: string;
+  /** Khoa của lớp: theo học phần, rồi khoa của bộ môn, rồi của giảng viên. */
+  facultyName: string;
   classSize: number;
+  /** Mọi lượt nộp, kể cả phiếu bị bộ lọc nhiễu loại. */
   responseCount: number;
+  /** Số phiếu qua được bộ lọc — phần duy nhất được tính vào tiến độ. */
+  validResponseCount: number;
+  /** Số phiếu bị bộ lọc loại. */
+  invalidResponseCount: number;
 }
 
 /** Số câu đã chọn ở một mức trả lời trong cùng một phiếu. */

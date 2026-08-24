@@ -463,6 +463,89 @@
   font-style: italic;
 }
 
+/* Bậc 1σ: đủ để ghi nhận, chưa đủ để kết luận. */
+.verdict--watch {
+  border: 1px solid #f0d3b2;
+  background: #fdf5ec;
+  color: #b86216;
+}
+
+/* Bậc 3σ: nặng nhất, tô đặc để tách hẳn khỏi bậc 2σ. */
+.verdict--severe {
+  border: 1px solid #b42318;
+  background: #b42318;
+  color: #ffffff;
+}
+
+/* Chú thích bốn bậc của quy tắc 68-95-99.7, đặt ngay dưới bảng. */
+/* Chú thích bốn bậc, ghim đáy khung nhìn để cuộn bảng vẫn đọc được mốc. */
+.z-legend {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: auto;
+  padding: 10px 14px;
+  border: 1px solid #dfe4e8;
+  background: #f7f9fa;
+}
+
+.z-legend__note {
+  margin: 0;
+  color: #3b4850;
+  font-size: 12px;
+}
+
+.z-legend__list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.z-legend__list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.z-legend__list code {
+  color: #20262c;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.z-legend__list li > span[aria-hidden] {
+  color: #68737d;
+}
+
+/* Biến thể xếp dọc: mỗi kết luận kèm một câu giải nghĩa dài. */
+.z-legend__list--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  flex: 1 1 100%;
+  gap: 6px;
+}
+
+.z-legend__list--stacked li {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+}
+
+.z-legend__meaning {
+  color: #3b4850;
+  line-height: 1.5;
+}
+
 /* Điểm dưới ngưỡng: tô để nhặt nhanh lớp cần để ý. */
 .statistics-table .is-weak {
   background: #fef3f2;

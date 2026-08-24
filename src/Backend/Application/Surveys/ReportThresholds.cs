@@ -10,13 +10,6 @@ namespace Application.Surveys;
 /// </summary>
 public static class ReportThresholds
 {
-    /// <summary>
-    /// Dưới mức này thì lớp bị coi là cần cảnh báo. Dùng chung cho cột "Lớp cảnh
-    /// báo" của bảng bộ môn và "số lớp dưới ngưỡng" của dashboard, để hai màn
-    /// hình không bao giờ nói ngược nhau.
-    /// </summary>
-    public const decimal LowScore = 3.20m;
-
     /// <summary>Từ mức này trở lên thì coi là tốt, dùng cho kết luận "nên nhân rộng".</summary>
     public const decimal GoodScore = 4.00m;
 
@@ -26,15 +19,24 @@ public static class ReportThresholds
     /// </summary>
     public const decimal WideSpread = 0.80m;
 
-    /// <summary>Z vượt mức này (theo cả hai chiều) mới coi là lệch đáng kể.</summary>
+    /// <summary>
+    /// Ba bậc của quy tắc thực nghiệm 68-95-99.7. Với phân phối chuẩn thì ngoài
+    /// ±1σ còn 31.7% số trường hợp, ngoài ±2σ còn 4.6%, ngoài ±3σ còn 0.3%. Chia
+    /// bậc để danh sách cần soi ngay tách khỏi danh sách chỉ cần biết.
+    /// </summary>
     public const decimal NotableZScore = 1.00m;
 
+    /// <summary>Bậc 2: lệch rõ, chỉ khoảng 4.6% trường hợp rơi vào.</summary>
+    public const decimal StrongZScore = 2.00m;
+
+    /// <summary>Bậc 3: lệch rất mạnh, khoảng 0.3% trường hợp.</summary>
+    public const decimal ExtremeZScore = 3.00m;
+
     /// <summary>
-    /// Khoa có ít hơn số lớp này thì không chuẩn hoá. Nhóm một lớp thì độ lệch
-    /// chuẩn không tồn tại; nhóm hai lớp thì Z luôn ra đúng ±0.71 bất kể điểm
-    /// thật, tức một con số trông chính xác nhưng vô nghĩa.
+    /// Nhóm có ít hơn số lớp này thì không chuẩn hoá. Một lớp thì độ lệch chuẩn
+    /// không tồn tại (mẫu số n−1 bằng 0), nên hai là mức thấp nhất còn tính được.
     /// </summary>
-    public const int MinimumSectionsForNormalization = 5;
+    public const int MinimumSectionsForNormalization = 2;
 }
 
 /// <summary>Mã kết luận chẩn đoán khi so các lớp trong cùng một học phần.</summary>

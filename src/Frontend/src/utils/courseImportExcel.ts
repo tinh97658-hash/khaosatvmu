@@ -2,7 +2,6 @@ import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
 
 const maximumFileSize = 5 * 1024 * 1024;
-const maximumRows = 500;
 
 const courseCodeHeaders = new Set(['ma hoc phan', 'ma mon hoc', 'coursecode', 'course code']);
 const courseNameHeaders = new Set(['ten hoc phan', 'ten mon hoc', 'coursename', 'course name']);
@@ -52,7 +51,6 @@ export type CourseImportFileErrorCode =
   | 'CODE_HEADER_MISSING'
   | 'NAME_HEADER_MISSING'
   | 'NO_DATA_ROWS'
-  | 'TOO_MANY_ROWS'
   | 'READ_FAILED';
 
 export class CourseImportFileError extends Error {
@@ -185,9 +183,6 @@ export async function parseCourseImportFile(file: File): Promise<ImportCourseRow
 
   if (rows.length === 0) {
     throw new CourseImportFileError('NO_DATA_ROWS');
-  }
-  if (rows.length > maximumRows) {
-    throw new CourseImportFileError('TOO_MANY_ROWS');
   }
 
   return rows;

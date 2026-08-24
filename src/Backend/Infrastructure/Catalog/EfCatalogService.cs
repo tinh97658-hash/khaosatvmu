@@ -8,8 +8,6 @@ namespace Infrastructure.Catalog;
 
 public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userScope) : ICatalogService
 {
-    private const int MaximumImportRows = 500;
-
     // ---------------------------------------------------------------- Faculties
 
     public async Task<IReadOnlyList<FacultyDto>> GetFacultiesAsync(CancellationToken cancellationToken = default) =>
@@ -97,11 +95,6 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         IReadOnlyList<ImportFacultyRowCommand> rows,
         CancellationToken cancellationToken = default)
     {
-        if (rows.Count > MaximumImportRows)
-        {
-            return Failed<CatalogImportDto>(CatalogErrorCodes.ImportTooManyRows);
-        }
-
         var existingNames = (await db.Faculties.Select(x => x.FacultyName).ToListAsync(cancellationToken))
             .Select(NormalizeKey)
             .ToHashSet();
@@ -242,11 +235,6 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         IReadOnlyList<ImportDepartmentRowCommand> rows,
         CancellationToken cancellationToken = default)
     {
-        if (rows.Count > MaximumImportRows)
-        {
-            return Failed<CatalogImportDto>(CatalogErrorCodes.ImportTooManyRows);
-        }
-
         var facultyIdByName = await LoadFacultyIdByNameAsync(cancellationToken);
         // Mã bộ môn do người dùng nhập nên phải tự kiểm tra trùng: trùng trong tệp và trùng dưới CSDL.
         var existingIds = await db.Departments
@@ -465,11 +453,6 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         IReadOnlyList<ImportMajorRowCommand> rows,
         CancellationToken cancellationToken = default)
     {
-        if (rows.Count > MaximumImportRows)
-        {
-            return Failed<CatalogImportDto>(CatalogErrorCodes.ImportTooManyRows);
-        }
-
         var facultyIdByName = await LoadFacultyIdByNameAsync(cancellationToken);
         var items = new List<CatalogImportItemDto>(rows.Count);
         var created = new List<Major>();
@@ -904,10 +887,6 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             return Failed<CourseSectionImportDto>(adminOnly);
         }
 
-        if (rows.Count > MaximumImportRows)
-        {
-            return Failed<CourseSectionImportDto>(CatalogErrorCodes.ImportTooManyRows);
-        }
         if (!await db.Semesters.AnyAsync(x => x.SemesterId == semesterId, cancellationToken))
         {
             return Failed<CourseSectionImportDto>(CatalogErrorCodes.SemesterNotFound);
@@ -1593,11 +1572,6 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             return Failed<CatalogImportDto>(adminOnly);
         }
 
-        if (rows.Count > MaximumImportRows)
-        {
-            return Failed<CatalogImportDto>(CatalogErrorCodes.ImportTooManyRows);
-        }
-
         var facultyIdByName = await LoadFacultyIdByNameAsync(cancellationToken);
         var departmentIdByName = await LoadDepartmentIdByNameAsync(cancellationToken);
         var positionIdByName = await LoadPositionIdByNameAsync(cancellationToken);
@@ -1865,11 +1839,6 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         if (CheckAdminOnly(scope) is { } adminOnly)
         {
             return Failed<CatalogImportDto>(adminOnly);
-        }
-
-        if (rows.Count > MaximumImportRows)
-        {
-            return Failed<CatalogImportDto>(CatalogErrorCodes.ImportTooManyRows);
         }
 
         var facultyIdByName = await LoadFacultyIdByNameAsync(cancellationToken);

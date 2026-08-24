@@ -2,7 +2,6 @@ import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
 
 const maximumFileSize = 5 * 1024 * 1024;
-const maximumRows = 500;
 
 const fullNameHeaders = new Set([
   'ho va ten',
@@ -59,7 +58,6 @@ export type LecturerImportFileErrorCode =
   | 'NAME_HEADER_MISSING'
   | 'EMAIL_HEADER_MISSING'
   | 'NO_DATA_ROWS'
-  | 'TOO_MANY_ROWS'
   | 'READ_FAILED';
 
 export class LecturerImportFileError extends Error {
@@ -174,9 +172,6 @@ export async function parseLecturerImportFile(file: File): Promise<ImportLecture
 
   if (rows.length === 0) {
     throw new LecturerImportFileError('NO_DATA_ROWS');
-  }
-  if (rows.length > maximumRows) {
-    throw new LecturerImportFileError('TOO_MANY_ROWS');
   }
 
   return rows;

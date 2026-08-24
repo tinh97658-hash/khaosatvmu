@@ -2,7 +2,6 @@ import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
 
 const maximumFileSize = 5 * 1024 * 1024;
-const maximumRows = 500;
 
 // Tên cột lấy theo tệp gốc của đơn vị đào tạo, kèm vài biến thể hay gặp.
 const courseCodeHeaders = new Set([
@@ -114,7 +113,6 @@ export type CourseSectionImportFileErrorCode =
   | 'CODE_HEADER_MISSING'
   | 'SECTION_HEADER_MISSING'
   | 'NO_DATA_ROWS'
-  | 'TOO_MANY_ROWS'
   | 'READ_FAILED';
 
 export class CourseSectionImportFileError extends Error {
@@ -353,9 +351,6 @@ export async function parseCourseSectionImportFile(file: File): Promise<ImportCo
 
   if (rows.length === 0) {
     throw new CourseSectionImportFileError('NO_DATA_ROWS');
-  }
-  if (rows.length > maximumRows) {
-    throw new CourseSectionImportFileError('TOO_MANY_ROWS');
   }
 
   return rows;

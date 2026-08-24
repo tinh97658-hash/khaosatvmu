@@ -33,7 +33,6 @@ const fileErrorMessages: Record<MajorImportFileErrorCode, string> = {
   NAME_HEADER_MISSING: 'Không tìm thấy cột "Tên ngành học" trong hàng tiêu đề.',
   FACULTY_HEADER_MISSING: 'Không tìm thấy cột "Tên khoa viện" trong hàng tiêu đề.',
   NO_DATA_ROWS: 'Tệp Excel chưa có dòng ngành học nào.',
-  TOO_MANY_ROWS: 'Mỗi lần chỉ được import tối đa 500 ngành học.',
   READ_FAILED: 'Không thể đọc tệp Excel. Hãy kiểm tra tệp không bị hỏng hoặc đặt mật khẩu.',
 };
 
@@ -121,7 +120,7 @@ export function MajorImportDialog({ isOpen, onClose, onImport }: MajorImportDial
           <p>
             Hàng đầu tiên cần có cột <strong>Tên ngành học</strong> và cột{' '}
             <strong>Tên khoa viện</strong>. Tên khoa viện được tra ngược trong danh mục Khoa / Viện
-            để lấy đúng <strong>FacultyId</strong>. Tối đa 500 dòng.
+            để lấy đúng <strong>FacultyId</strong>.
           </p>
         </div>
 

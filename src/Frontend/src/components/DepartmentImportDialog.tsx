@@ -34,7 +34,6 @@ const fileErrorMessages: Record<DepartmentImportFileErrorCode, string> = {
   NAME_HEADER_MISSING: 'Không tìm thấy cột "Tên bộ môn" trong hàng tiêu đề.',
   FACULTY_HEADER_MISSING: 'Không tìm thấy cột "Tên khoa viện" trong hàng tiêu đề.',
   NO_DATA_ROWS: 'Tệp Excel chưa có dòng bộ môn nào.',
-  TOO_MANY_ROWS: 'Mỗi lần chỉ được import tối đa 500 bộ môn.',
   READ_FAILED: 'Không thể đọc tệp Excel. Hãy kiểm tra tệp không bị hỏng hoặc đặt mật khẩu.',
 };
 
@@ -127,7 +126,7 @@ export function DepartmentImportDialog({
             Hàng đầu tiên cần có cột <strong>Mã bộ môn</strong>, <strong>Tên bộ môn</strong> và cột{' '}
             <strong>Tên khoa viện</strong>. Mã bộ môn phải tự điền, là số nguyên dương và không được
             trùng. Tên khoa viện được tra ngược trong danh mục Khoa / Viện để lấy đúng{' '}
-            <strong>FacultyId</strong>. Tối đa 500 dòng.
+            <strong>FacultyId</strong>.
           </p>
         </div>
 

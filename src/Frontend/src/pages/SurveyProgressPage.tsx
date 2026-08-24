@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Bell,
   CheckCircle2,
   CircleAlert,
   ClipboardCheck,
@@ -29,9 +28,15 @@ interface ProgressItem {
   name: string;
   groupCode: string;
   lecturerName: string;
+  departmentName: string;
+  facultyName: string;
   semester: string;
   targetCount: number;
+  /** Mọi lượt nộp, kể cả phiếu bị lọc. */
   actualCount: number;
+  /** Phiếu qua được bộ lọc — mẫu số của tiến độ. */
+  validCount: number;
+  invalidCount: number;
   rate: number;
   status: 'Hoàn thành' | 'Đang thu' | 'Chậm tiến độ';
 }
@@ -45,14 +50,16 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
-  // Mỗi lớp học phần đã được phát phiếu là một dòng theo dõi. Số phiếu đã nộp
-  // là "CourseSectionSurveys".ResponseCount do API khảo sát đếm từ bảng
-  // "SurveyResponses", không phải số tạm.
+  // Mỗi lớp học phần đã được phát phiếu là một dòng theo dõi. Các số phiếu đều do
+  // API khảo sát đếm sống từ bảng "SurveyResponses", không phải số tạm.
+  //
+  // Tiến độ tính trên PHIẾU HỢP LỆ: phiếu bị bộ lọc nhiễu loại vẫn là một lượt nộp
+  // nhưng không dùng được vào kết quả nào, nên đếm nó vào tiến độ là tự huyễn hoặc.
   const progressItems: ProgressItem[] = sectionSurveys.map((section) => {
     const survey = semesterSurveys.find(
       (item) => item.semesterSurveyId === section.semesterSurveyId
     );
-    const rate = Math.round((section.responseCount / (section.classSize || 1)) * 100);
+    const rate = Math.round((section.validResponseCount / (section.classSize || 1)) * 100);
 
     return {
       id: String(section.courseSectionSurveyId),
@@ -60,9 +67,13 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
       name: section.courseName,
       groupCode: section.sectionName,
       lecturerName: section.lecturerName || 'Chưa phân công',
+      departmentName: section.departmentName,
+      facultyName: section.facultyName,
       semester: survey ? `${survey.semesterName} - ${survey.academicYearName}` : '—',
       targetCount: section.classSize,
       actualCount: section.responseCount,
+      validCount: section.validResponseCount,
+      invalidCount: section.invalidResponseCount,
       rate,
       status: rate >= 80 ? 'Hoàn thành' : rate >= 40 ? 'Đang thu' : 'Chậm tiến độ',
     };
@@ -71,7 +82,9 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
   // Calculate Overall Progress Metrics
   const totalTarget = progressItems.reduce((acc, curr) => acc + curr.targetCount, 0);
   const totalActual = progressItems.reduce((acc, curr) => acc + curr.actualCount, 0);
-  const overallRate = Math.round((totalActual / (totalTarget || 1)) * 100);
+  const totalValid = progressItems.reduce((acc, curr) => acc + curr.validCount, 0);
+  const totalInvalid = totalActual - totalValid;
+  const overallRate = Math.round((totalValid / (totalTarget || 1)) * 100);
 
   const completedCount = progressItems.filter((i) => i.status === 'Hoàn thành').length;
   const laggingCount = progressItems.filter((i) => i.status === 'Chậm tiến độ').length;
@@ -91,13 +104,20 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
       item.code,
       item.name,
       item.lecturerName,
+      item.departmentName,
+      item.facultyName,
       item.targetCount.toString(),
       item.actualCount.toString(),
+      item.invalidCount.toString(),
+      item.validCount.toString(),
       `${item.rate}%`,
       item.status,
     ]);
     const csv = [
-      ['Mã lớp', 'Tên học phần', 'Giảng viên', 'Chỉ tiêu', 'Đã nộp', 'Tỷ lệ', 'Trạng thái'],
+      [
+        'Mã lớp', 'Tên học phần', 'Giảng viên', 'Bộ môn', 'Khoa / Viện',
+        'Chỉ tiêu', 'Đã nộp', 'Không hợp lệ', 'Hợp lệ', 'Tỷ lệ', 'Trạng thái',
+      ],
       ...rows,
     ].map((row) => row.map(quote).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
@@ -114,7 +134,7 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
   const columns: Column<ProgressItem>[] = [
     {
       key: 'code',
-      header: 'Mã Lớp / Nhóm N01-N02',
+      header: 'Nhóm lớp',
       width: '150px',
       filterValue: (item) => item.code,
       render: (item) => <span className="operations-code">{item.code}</span>,
@@ -134,6 +154,20 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
       ),
     },
     {
+      key: 'departmentName',
+      header: 'Bộ Môn',
+      width: '180px',
+      filterValue: (item) => item.departmentName,
+      render: (item) => <span className="operations-primary-text">{item.departmentName}</span>,
+    },
+    {
+      key: 'facultyName',
+      header: 'Khoa / Viện',
+      width: '180px',
+      filterValue: (item) => item.facultyName,
+      render: (item) => <span className="operations-primary-text">{item.facultyName}</span>,
+    },
+    {
       key: 'targetCount',
       header: 'Chỉ Tiêu / Sĩ Số',
       width: '120px',
@@ -150,6 +184,21 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
       render: (item) => <span className="operations-primary-text">{item.actualCount} phiếu</span>,
     },
     {
+      key: 'invalidCount',
+      header: 'Phiếu Không Hợp Lệ',
+      width: '140px',
+      filterValue: (item) => String(item.invalidCount),
+      numeric: true,
+      render: (item) =>
+        item.invalidCount === 0 ? (
+          <span className="operations-secondary-text">0 phiếu</span>
+        ) : (
+          <span className="operations-status operations-status--danger">
+            {item.invalidCount} phiếu
+          </span>
+        ),
+    },
+    {
       key: 'progress',
       header: 'Tỷ Lệ Hoàn Thành (%)',
       render: (item) => {
@@ -163,7 +212,7 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
           <div className="operations-progress">
             <div className="operations-progress-meta">
               <strong>{item.rate}%</strong>
-              <span>{item.actualCount}/{item.targetCount}</span>
+              <span>{item.validCount}/{item.targetCount} hợp lệ</span>
             </div>
             <div
               className="operations-progress-track"
@@ -194,22 +243,6 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
         return <span className={`operations-status ${statusClass}`}>{item.status}</span>;
       },
     },
-    {
-      key: 'actions',
-      header: 'Thao Tác',
-      width: '120px',
-      render: (item) => (
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => toast.success('Đã ghi nhận yêu cầu nhắc nộp', {
-            description: `Lớp hoặc nhóm ${item.code}`,
-          })}
-        >
-          <Bell className="operation-icon" aria-hidden="true" />
-          Nhắc nộp
-        </button>
-      ),
-    },
   ];
 
   return (
@@ -237,9 +270,11 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
             </div>
             <div className="operation-metric operation-metric--success">
               <span className="operation-metric-icon"><ClipboardCheck className="operation-icon" aria-hidden="true" /></span>
-              <span className="operation-metric-label">Phiếu đã thu</span>
-              <strong className="operation-metric-value">{totalActual.toLocaleString()}</strong>
-              <span className="operation-metric-note">Đạt {overallRate}% tổng chỉ tiêu</span>
+              <span className="operation-metric-label">Phiếu hợp lệ</span>
+              <strong className="operation-metric-value">{totalValid.toLocaleString()}</strong>
+              <span className="operation-metric-note">
+                Đạt {overallRate}% tổng chỉ tiêu · {totalInvalid.toLocaleString()} phiếu bị lọc
+              </span>
             </div>
             <div className="operation-metric operation-metric--warning">
               <span className="operation-metric-icon"><CheckCircle2 className="operation-icon" aria-hidden="true" /></span>

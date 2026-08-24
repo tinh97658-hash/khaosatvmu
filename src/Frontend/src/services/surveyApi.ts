@@ -49,6 +49,11 @@ export interface NormalizationGroup {
   /** Null khi nhóm có ít hơn hai lớp. */
   standardDeviation: number | null;
   canNormalize: boolean;
+  /**
+   * Mặt bằng khoa lệch mặt bằng trường bao nhiêu lần sai số chuẩn `σ/√n`.
+   * Không phải bao nhiêu lần σ — đây là trung bình của n lớp, không phải một lớp.
+   */
+  meanZScore: number | null;
 }
 
 export interface NormalizedSection {
@@ -57,6 +62,7 @@ export interface NormalizedSection {
   courseName: string;
   sectionName: string;
   lecturerName: string;
+  departmentName: string;
   facultyName: string;
   classSize: number;
   averageScore: number;
@@ -96,13 +102,15 @@ export interface DepartmentSummaryRow {
   departmentName: string;
   sectionCount: number;
   lecturerCount: number;
+  /** Tổng sĩ số các lớp của bộ môn — mẫu số của tỷ lệ phiếu hợp lệ. */
+  totalClassSize: number;
+  /** Tổng phiếu thu về, kể cả phiếu bị bộ lọc nhiễu loại. */
   responseCount: number;
-  averageCompletionRate: number;
+  validResponseCount: number;
+  /** Phiếu hợp lệ chia tổng sĩ số, theo phần trăm. */
+  validResponseRate: number;
   averageScore: number | null;
   warningSectionCount: number;
-  weakestQuestionOrder: number | null;
-  weakestQuestionScore: number | null;
-  weakestQuestionText: string | null;
 }
 
 export interface SemesterSurveyDepartmentSummary {
@@ -125,6 +133,7 @@ export interface CourseDiagnosisRow {
   courseId: number;
   courseCode: string;
   courseName: string;
+  departmentName: string;
   facultyName: string;
   sectionCount: number;
   lecturerCount: number;
@@ -149,10 +158,27 @@ export interface SemesterSurveyCourseDiagnosis {
 }
 
 export const courseDiagnosisLabels: Record<string, string> = {
-  COURSE_ISSUE: 'Mọi lớp đều thấp — xem lại học phần',
-  LECTURER_VARIANCE: 'Chênh lệch lớn giữa các lớp — khác biệt ở giảng viên',
-  ALL_GOOD: 'Mọi lớp đều tốt — nên nhân rộng',
-  INCONCLUSIVE: 'Chưa đủ căn cứ kết luận',
+  COURSE_ISSUE: 'Do học phần',
+  LECTURER_VARIANCE: 'Do giảng viên',
+  ALL_GOOD: 'Tốt đều',
+  INCONCLUSIVE: 'Không có vấn đề rõ',
+};
+
+/** Giải nghĩa từng kết luận, hiện khi di chuột và trong phần chú thích. */
+export const courseDiagnosisDescriptions: Record<string, string> = {
+  COURSE_ISSUE:
+    'Kể cả lớp cao điểm nhất cũng nằm ở mức cảnh báo. Mọi giảng viên dạy học phần này '
+    + 'đều bị chấm thấp, nên vấn đề nằm ở bản thân học phần: nội dung, giáo trình hoặc '
+    + 'cách tổ chức. Đổi giảng viên sẽ không giải quyết được.',
+  LECTURER_VARIANCE:
+    'Các lớp cùng học phần chấm chênh nhau nhiều. Cùng một nội dung mà lớp này hài lòng '
+    + 'lớp kia không, nên khác biệt đến từ người dạy chứ không từ học phần.',
+  ALL_GOOD:
+    'Kể cả lớp thấp điểm nhất cũng đạt từ 4.00 trở lên. Cách dạy học phần này đang hiệu '
+    + 'quả ở mọi lớp, nên xem xét nhân rộng.',
+  INCONCLUSIVE:
+    'Không rơi vào ba trường hợp trên: điểm không thấp đều, không tốt đều, các lớp cũng '
+    + 'không chênh nhau nhiều. Học phần chạy bình thường.',
 };
 
 /**
@@ -191,20 +217,20 @@ export interface LecturerSection {
   courseName: string;
   sectionName: string;
   classSize: number;
+  /** Tổng phiếu thu về, kể cả phiếu bị bộ lọc nhiễu loại. */
   responseCount: number;
-  completionRate: number;
+  validResponseCount: number;
+  /** Phiếu hợp lệ chia sĩ số, theo phần trăm. */
+  validResponseRate: number;
   averageScore: number;
+  /** Trung bình mọi lớp cùng học phần, kể cả lớp người khác dạy. Null khi chỉ có một lớp. */
+  courseAverageScore: number | null;
+  differenceFromCourse: number | null;
+  zSchool: number | null;
   /** Null khi khoa quá ít lớp để chuẩn hoá. */
   zFaculty: number | null;
-}
-
-export interface LecturerQuestionComparison {
-  questionOrder: number;
-  questionText: string;
-  lecturerScore: number;
-  departmentMedian: number | null;
-  facultyMedian: number | null;
-  differenceFromDepartment: number | null;
+  /** Null khi bộ môn quá ít lớp để chuẩn hoá. */
+  zDepartment: number | null;
 }
 
 export interface LecturerReport {
@@ -216,7 +242,6 @@ export interface LecturerReport {
   totalResponseCount: number;
   averageScore: number;
   sections: LecturerSection[];
-  comparisons: LecturerQuestionComparison[];
 }
 
 /** Điểm trung bình toàn trường của một câu hỏi. */
@@ -259,6 +284,15 @@ export interface RecalculateScoresResult {
   updatedSectionCount: number;
   /** ISO 8601 */
   calculatedAt: string;
+}
+
+/** Kết quả bù bài khảo sát cho lớp thêm vào kỳ sau khi đợt đã tạo. */
+export interface BackfillSectionSurveysResult {
+  semesterSurveyId: number;
+  createdSectionCount: number;
+  /** ISO 8601, lấy theo các bài khảo sát đã có của đợt. */
+  startTime: string;
+  endTime: string;
 }
 
 /** Một cột C của bảng thống kê, sinh theo bộ câu hỏi của đợt. */
@@ -388,6 +422,12 @@ export const surveyApi = {
     csrfRequest<SemesterSurvey>('/api/surveys/semester-surveys', 'POST', survey),
   deleteSemesterSurvey: (semesterSurveyId: number) =>
     csrfRequest<boolean>(`/api/surveys/semester-surveys/${semesterSurveyId}`, 'DELETE'),
+  /** Bù bài khảo sát cho những lớp của kỳ chưa có bài trong đợt. */
+  backfillSemesterSurveySections: (semesterSurveyId: number) =>
+    csrfRequest<BackfillSectionSurveysResult>(
+      `/api/surveys/semester-surveys/${semesterSurveyId}/backfill-sections`,
+      'POST',
+    ),
 
   courseSectionSurveys: (semesterSurveyId: number) =>
     apiRequest<CourseSectionSurvey[]>(
@@ -491,6 +531,10 @@ export const surveyErrorMessages: Record<string, string> = {
   SURVEY_SCHEDULE_INVALID: 'Thời gian đóng phải sau thời gian mở.',
   SURVEY_SEMESTER_SURVEY_NOT_FOUND: 'Không tìm thấy đợt khảo sát.',
   SURVEY_SEMESTER_SURVEY_HAS_RESPONSES: 'Đợt khảo sát đã có phiếu trả lời nên không xóa được.',
+  SURVEY_SEMESTER_SURVEY_SECTIONS_UP_TO_DATE:
+    'Mọi lớp học phần của học kỳ đều đã có bài khảo sát trong đợt này.',
+  SURVEY_SEMESTER_SURVEY_SCHEDULE_UNKNOWN:
+    'Đợt chưa có bài khảo sát nào nên không suy ra được khung giờ để bù theo.',
   SURVEY_SECTION_SURVEY_NOT_FOUND: 'Không tìm thấy bài khảo sát của lớp học phần.',
   SURVEY_RESPONSE_NOT_FOUND: 'Không tìm thấy phiếu trả lời.',
   SURVEY_LINK_NOT_FOUND: 'Đường dẫn khảo sát không tồn tại.',

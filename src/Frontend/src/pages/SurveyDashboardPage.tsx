@@ -28,7 +28,7 @@ function messageFrom(error: unknown): string {
   return error instanceof ApiError ? surveyErrorMessage(error.errorCode) : surveyErrorMessage(null);
 }
 
-/** Khớp ReportThresholds.LowScore ở backend. */
+/** Mốc tô màu biểu đồ. Không phải mốc cảnh báo — mốc đó backend tính theo Z-Score. */
 const lowScore = 3.2;
 
 /** Thang màu cột biểu đồ, dùng chung ngưỡng với bảng để hai chỗ không nói ngược nhau. */
@@ -277,7 +277,10 @@ const QuestionTooltip: React.FC<{ active?: boolean; payload?: ChartTooltipItem[]
       <span style={{ color: barColor(item.averageScore) }}>
         Điểm TB: {item.averageScore.toFixed(2)} / 5.0
       </span>
-      <span>{item.sectionsBelowThreshold} lớp dưới {lowScore.toFixed(2)}</span>
+      <span>
+        {item.sectionsBelowThreshold} lớp chấm câu này thấp hơn trung bình của chính câu đó từ 1
+        độ lệch chuẩn trở lên
+      </span>
     </div>
   );
 };
@@ -353,7 +356,12 @@ const WeakestQuestions: React.FC<{ rows: DashboardQuestionScore[] }> = ({ rows }
               <th scope="col">Câu</th>
               <th scope="col">Nội dung</th>
               <th scope="col">Điểm TB</th>
-              <th scope="col">Số lớp &lt; {lowScore.toFixed(2)}</th>
+              <th
+                scope="col"
+                title="Lớp chấm câu này thấp hơn trung bình của chính câu đó từ 1 độ lệch chuẩn trở lên"
+              >
+                Lớp cảnh báo
+              </th>
             </tr>
           </thead>
           <tbody>
