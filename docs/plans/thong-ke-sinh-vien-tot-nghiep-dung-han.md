@@ -537,8 +537,8 @@ Không tạo một component riêng cho từng chart nếu cùng wrapper + optio
 
 - [x] C1. Parser và typed service.
 - [x] C2. Modal chọn file → preview C–U → xác nhận.
-- [ ] C3. Sticky grouped header, toggle nhóm cột, null/zero/percent đúng.
-- [ ] C4. Retry không mất preview; duplicate dataset có thông báo rõ.
+- [x] C3. Sticky grouped header, toggle nhóm cột, null/zero/percent đúng.
+- [x] C4. Retry không mất preview; duplicate dataset có thông báo rõ.
 - [x] C5. Thành công điều hướng đến dataset vừa import.
 
 ### Giai đoạn D — Dashboard mặc định
@@ -547,7 +547,7 @@ Không tạo một component riêng cho từng chart nếu cùng wrapper + optio
 - [x] D2. KPI strip từ dữ liệu nguồn/tổng hợp có chú thích.
 - [x] D3. So sánh khoa.
 - [x] D4. So sánh CTĐT trong khoa.
-- [ ] D5. Cơ cấu kết quả.
+- [x] D5. Cơ cấu kết quả.
 - [x] D6. Xu hướng nhiều năm/thời điểm xét.
 - [x] D7. Bảng nguồn C–U và lịch sử dataset.
 
@@ -557,8 +557,8 @@ Không tạo một component riêng cho từng chart nếu cùng wrapper + optio
 - [x] E2. Chọn dimension và series.
 - [x] E3. Compatibility engine chỉ hiện chart phù hợp trong phạm vi MVP.
 - [x] E4. Chart type picker theo ảnh tham chiếu, responsive và keyboard.
-- [ ] E5. Sort/top N/label/legend/source note.
-- [ ] E6. Đồng bộ cấu hình vào URL và data table tương đương.
+- [x] E5. Sort/top N/label/legend/source note.
+- [x] E6. Đồng bộ cấu hình vào URL và data table tương đương.
 
 ### Giai đoạn F — Xác minh
 

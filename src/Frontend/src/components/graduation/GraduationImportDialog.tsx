@@ -41,6 +41,7 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
   const [fileName, setFileName] = useState('');
   const [datasetName, setDatasetName] = useState('');
   const [parsed, setParsed] = useState<GraduationParsedFile | null>(null);
+  const [previewMode, setPreviewMode] = useState<'all' | 'metrics'>('all');
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +51,7 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
     setFileName('');
     setDatasetName('');
     setParsed(null);
+    setPreviewMode('all');
     setError(null);
   };
 
@@ -135,16 +137,23 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
               <div><strong>{parsed.sheetName}</strong><span>sheet được đọc</span></div>
             </div>
 
+            <div className="graduation-preview-toolbar" aria-label="Tùy chọn cột xem trước">
+              <span>Xem trước dữ liệu</span>
+              <div role="group" aria-label="Nhóm cột hiển thị">
+                <button type="button" className={previewMode === 'all' ? 'is-selected' : ''} onClick={() => setPreviewMode('all')}>Tất cả cột</button>
+                <button type="button" className={previewMode === 'metrics' ? 'is-selected' : ''} onClick={() => setPreviewMode('metrics')}>Chỉ tiêu</button>
+              </div>
+            </div>
             <div className="graduation-preview" aria-label="Xem trước dữ liệu import">
-              <table>
+              <table className={previewMode === 'metrics' ? 'is-metrics-only' : ''}>
                 <thead>
                   <tr>
                     <th rowSpan={2}>Dòng</th>
-                    <th colSpan={6}>Thông tin chính</th>
+                    {previewMode === 'all' && <th colSpan={6}>Thông tin chính</th>}
                     <th colSpan={13}>Thông số trong đợt xét tốt nghiệp</th>
                   </tr>
                   <tr>
-                    <th>Khoa</th><th>Mã CTĐT</th><th>Tên CTĐT</th><th>Khóa</th><th>Nhập học</th><th>Thời điểm</th>
+                    {previewMode === 'all' && <><th>Khoa</th><th>Mã CTĐT</th><th>Tên CTĐT</th><th>Khóa</th><th>Nhập học</th><th>Thời điểm</th></>}
                     <th>Được xét</th><th>Đúng hạn</th><th>Tỷ lệ</th><th>XS</th><th>% XS</th>
                     <th>Giỏi</th><th>% Giỏi</th><th>Khá</th><th>% Khá</th><th>T.Bình</th><th>% T.Bình</th>
                     <th>VHVL</th><th>% VHVL</th>
@@ -153,9 +162,11 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
                 <tbody>
                   {parsed.rows.slice(0, 100).map((row) => (
                     <tr key={row.sourceRowNumber}>
-                      <td>{row.sourceRowNumber}</td><td>{row.facultyName}</td><td>{display(row.programCode)}</td>
-                      <td>{row.programName}</td><td>{row.cohort}</td><td>{display(row.initialEnrollmentCount)}</td>
-                      <td>{row.reviewPeriodText}</td><td>{display(row.eligibleGraduateCount)}</td>
+                      <td>{row.sourceRowNumber}</td>
+                      {previewMode === 'all' && <><td>{row.facultyName}</td><td>{display(row.programCode)}</td>
+                        <td>{row.programName}</td><td>{row.cohort}</td><td>{display(row.initialEnrollmentCount)}</td>
+                        <td>{row.reviewPeriodText}</td></>}
+                      <td>{display(row.eligibleGraduateCount)}</td>
                       <td>{display(row.onTimeGraduateCount)}</td><td>{display(row.onTimeGraduateRate, true)}</td>
                       <td>{display(row.excellentCount)}</td><td>{display(row.excellentRate, true)}</td>
                       <td>{display(row.veryGoodCount)}</td><td>{display(row.veryGoodRate, true)}</td>
