@@ -22,7 +22,9 @@
   grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
   gap: 12px;
   margin-bottom: 12px;
-  align-items: start;
+  /* Hai thẻ cao bằng nhau: thẻ chỉ số ngắn hơn biểu đồ nên phải giãn theo,
+     nếu không sẽ hụt một mảng trắng bên trái. */
+  align-items: stretch;
 }
 
 .dashboard-report-block {
@@ -33,6 +35,8 @@
 }
 
 .dashboard-report-grid .dashboard-report-block {
+  display: flex;
+  flex-direction: column;
   margin-bottom: 0;
 }
 
@@ -55,7 +59,9 @@
 /* Nhãn bên trái, số bên phải trong ô nền nhạt — giữ đúng bố cục bản mô phỏng. */
 .dashboard-kpi-list {
   display: flex;
+  flex: 1;
   flex-direction: column;
+  justify-content: space-evenly;
   gap: 6px;
   margin: 0;
 }

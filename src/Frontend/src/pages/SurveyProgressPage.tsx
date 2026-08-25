@@ -48,7 +48,6 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
   loadError,
 }) => {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
 
   // Mỗi lớp học phần đã được phát phiếu là một dòng theo dõi. Các số phiếu đều do
   // API khảo sát đếm sống từ bảng "SurveyResponses", không phải số tạm.
@@ -75,7 +74,7 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
       validCount: section.validResponseCount,
       invalidCount: section.invalidResponseCount,
       rate,
-      status: rate >= 80 ? 'Hoàn thành' : rate >= 40 ? 'Đang thu' : 'Chậm tiến độ',
+      status: rate >= 80 ? 'Hoàn thành' : rate >= 20 ? 'Đang thu' : 'Chậm tiến độ',
     };
   });
 
@@ -89,14 +88,12 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
   const completedCount = progressItems.filter((i) => i.status === 'Hoàn thành').length;
   const laggingCount = progressItems.filter((i) => i.status === 'Chậm tiến độ').length;
 
-  const filtered = progressItems.filter((item) => {
-    const matchesSearch =
+  const filtered = progressItems.filter(
+    (item) =>
       item.code.toLowerCase().includes(search.toLowerCase()) ||
       item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.lecturerName.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = !statusFilter || item.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+      item.lecturerName.toLowerCase().includes(search.toLowerCase())
+  );
 
   const handleExportCsv = () => {
     const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
@@ -135,7 +132,7 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
     {
       key: 'code',
       header: 'Nhóm lớp',
-      width: '150px',
+      width: '90px',
       filterValue: (item) => item.code,
       render: (item) => <span className="operations-code">{item.code}</span>,
     },
@@ -201,10 +198,20 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
     {
       key: 'progress',
       header: 'Tỷ Lệ Hoàn Thành (%)',
+      filterValue: (item) => String(item.rate),
+      numeric: true,
+      quickFilters: [
+        { label: 'Hoàn thành (≥80%)', match: (value) => Number(value) >= 80 },
+        {
+          label: 'Đang thu (20-79%)',
+          match: (value) => Number(value) >= 20 && Number(value) < 80,
+        },
+        { label: 'Chậm tiến độ (<20%)', match: (value) => Number(value) < 20 },
+      ],
       render: (item) => {
         const progressClass = item.rate >= 80
           ? 'operations-progress-fill--success'
-          : item.rate >= 40
+          : item.rate >= 20
             ? 'operations-progress-fill--warning'
             : '';
 
@@ -235,6 +242,7 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
       key: 'status',
       header: 'Trạng Thái Tiến Độ',
       width: '130px',
+      filterValue: (item) => item.status,
       render: (item) => {
         let statusClass = 'operations-status--danger';
         if (item.status === 'Hoàn thành') statusClass = 'operations-status--success';
@@ -284,7 +292,7 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
             </div>
             <div className="operation-metric operation-metric--danger">
               <span className="operation-metric-icon"><TriangleAlert className="operation-icon" aria-hidden="true" /></span>
-              <span className="operation-metric-label">Nhóm dưới 40%</span>
+              <span className="operation-metric-label">Nhóm dưới 20%</span>
               <strong className="operation-metric-value">{laggingCount}</strong>
               <span className="operation-metric-note">Cần gửi nhắc nhở</span>
             </div>
@@ -297,14 +305,6 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="Tìm mã lớp HP, nhóm N01/N02, tên môn hoặc giảng viên..."
-            filterOptions={[
-              { label: '-- Tất cả tiến độ --', value: '' },
-              { label: 'Hoàn thành (≥80%)', value: 'Hoàn thành' },
-              { label: 'Đang thu (40-80%)', value: 'Đang thu' },
-              { label: 'Chậm tiến độ (<40%)', value: 'Chậm tiến độ' },
-            ]}
-            currentFilter={statusFilter}
-            onFilterChange={setStatusFilter}
             toolbarActions={(
               <button className="btn btn-primary btn-sm" onClick={handleExportCsv}>
                 <Download className="operation-icon" aria-hidden="true" />

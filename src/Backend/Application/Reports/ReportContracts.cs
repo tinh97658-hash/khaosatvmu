@@ -40,6 +40,12 @@ public sealed record OptionCountDto(
 /// </summary>
 public sealed record QuestionRatingDto(
     int QuestionId,
+    /// <summary>
+    /// Số thứ tự câu trong bộ đề (C1, C2...). Đánh trên TOÀN BỘ câu của bộ, kể cả
+    /// câu bẫy và câu tự nhập, để mã câu ở mọi màn hình trùng nhau — đánh lại theo
+    /// vị trí trong danh sách đã lọc thì C16 ở màn này là C15 ở màn kia.
+    /// </summary>
+    int QuestionOrder,
     string QuestionText,
     decimal AverageScore,
     int TotalAnswers,
@@ -55,7 +61,13 @@ public sealed record LecturerSectionSummaryDto(
     string CourseName,
     string SectionName,
     int ClassSize,
+    /// <summary>Mọi lượt nộp, kể cả phiếu bị bộ lọc nhiễu loại.</summary>
     int ResponseCount,
+    /// <summary>Phiếu qua được bộ lọc — mẫu số của mọi số liệu chất lượng.</summary>
+    int ValidResponseCount,
+    int InvalidResponseCount,
+    /// <summary>Tính trên phiếu hợp lệ so với sĩ số.</summary>
+    decimal CompletionRate,
     decimal AverageScore);
 
 /// <summary>Báo cáo chi tiết đánh giá năng lực & hài lòng của Giảng viên.</summary>
@@ -129,7 +141,12 @@ public sealed record SurveyResultDetailDto(
     string CourseName,
     string SectionName,
     int ClassSize,
+    /// <summary>Mọi lượt nộp, kể cả phiếu bị bộ lọc nhiễu loại.</summary>
     int ResponseCount,
+    /// <summary>Phiếu qua được bộ lọc — mẫu số của mọi số liệu chất lượng.</summary>
+    int ValidResponseCount,
+    int InvalidResponseCount,
+    /// <summary>Tính trên phiếu hợp lệ so với sĩ số.</summary>
     decimal CompletionRate,
     decimal AverageScore);
 
@@ -251,9 +268,24 @@ public interface IReportService
         string? search,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Lấy bảng tổng quan toàn trường và so sánh với kỳ được chọn (mặc định là kỳ trước).</summary>
+    /// <summary>
+    /// Lấy bảng tổng quan toàn trường và so sánh với kỳ được chọn (mặc định là kỳ trước).
+    /// Truyền <paramref name="semesterSurveyId"/> để chỉ phân tích một bài khảo sát của kỳ.
+    /// </summary>
     Task<SchoolSurveyOverviewDto?> GetSchoolSurveyOverviewAsync(
         int semesterId,
         int? comparisonSemesterId = null,
+        int? semesterSurveyId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Xếp hạng tiêu chí (câu hỏi) của một học kỳ / bài khảo sát theo điểm trung bình.
+    /// <paramref name="lowestFirst"/> = true lấy nhóm điểm thấp nhất, false lấy nhóm cao nhất.
+    /// </summary>
+    Task<IReadOnlyList<QuestionRatingDto>> GetQuestionRankingAsync(
+        int semesterId,
+        int? semesterSurveyId,
+        int count,
+        bool lowestFirst,
         CancellationToken cancellationToken = default);
 }

@@ -36,6 +36,16 @@
   padding: 0;
 }
 
+/* Neo chiều cao xuống tận #root. Thiếu mắt xích này thì .app-container cao 100vh
+   nằm trong một #root không bị chặn, chỉ cần một phần tử tràn ra là trình duyệt
+   đẻ thêm thanh cuộn thứ hai kéo đi cả sidebar lẫn header. Không khóa overflow
+   của body vì trang đăng nhập và trang làm khảo sát vẫn cần cuộn bình thường. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   font-family: var(--font-family);
   background-color: var(--bg-main);
@@ -46,6 +56,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   overflow-x: hidden;
+}
+
+/* Khi đang ở trong khung ứng dụng thì tài liệu không được cuộn: mọi thứ đã nằm
+   trong .content-area. Chỉ khóa đúng lúc này, để trang đăng nhập và trang làm
+   khảo sát (không có .app-container) vẫn cuộn bình thường. */
+body:has(> #root > .app-container) {
+  overflow: hidden;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -75,8 +92,8 @@ textarea:focus-visible {
 /* App Container Layout */
 .app-container {
   display: flex;
-  height: 100vh;
-  min-height: 100vh;
+  height: 100%;
+  max-height: 100vh;
   overflow: hidden;
 }
 
@@ -85,7 +102,7 @@ textarea:focus-visible {
   position: sticky;
   top: 0;
   width: var(--sidebar-width);
-  height: 100vh;
+  height: 100%;
   display: grid;
   grid-template-rows: 56px minmax(0, 1fr) auto;
   flex-shrink: 0;
@@ -285,7 +302,7 @@ textarea:focus-visible {
   flex-grow: 1;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   min-width: 0;
   overflow: hidden;
 }

@@ -3,33 +3,23 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
-  BookOpen,
   Building2,
   ChevronRight,
   CircleAlert,
-  GraduationCap,
   Info,
   Layers,
   Lightbulb,
-  ListChecks,
   LoaderCircle,
-  Minus,
   QrCode,
   RadioTower,
   Search,
   ShieldAlert,
-  Sparkles,
   Star,
   Target,
-  TrendingDown,
-  TrendingUp,
-  type LucideIcon,
 } from 'lucide-react';
 import { useSemester } from '../context/semesterContext';
 import { reportApi } from '../services/reportApi';
 import { buildReportHash } from './reportRoute';
-import { CompletionGauge } from '../components/reports/CompletionGauge';
-import { SatisfactionGauge } from '../components/reports/SatisfactionGauge';
 import { FacultyScoreChart } from '../components/reports/FacultyScoreChart';
 import { FacultyCompletionChart } from '../components/reports/FacultyCompletionChart';
 import { ScoreDistributionDonut } from '../components/reports/ScoreDistributionDonut';
@@ -38,57 +28,16 @@ import { formatNumber, scoreColor, completionColor } from '../components/reports
 import type {
   SchoolSurveyOverview as SchoolSurveyOverviewData,
   SurveyCampaign,
-  SystemStats,
 } from '../types';
 import '../styles/reports.css';
 import '../styles/dashboard.css';
 
 interface DashboardOverviewProps {
-  stats: SystemStats;
   campaigns: SurveyCampaign[];
   onOpenQR: (campaign: SurveyCampaign) => void;
   onNavigateTab: (tab: string) => void;
   permissions: readonly string[];
 }
-
-interface QuickAction {
-  tab: string;
-  title: string;
-  description: string;
-  icon: LucideIcon;
-  tone: 'blue' | 'teal' | 'green' | 'amber';
-}
-
-const quickActions: QuickAction[] = [
-  {
-    tab: 'faculties',
-    title: 'Khoa / Viện',
-    description: 'Cơ cấu đơn vị đào tạo',
-    icon: Building2,
-    tone: 'blue',
-  },
-  {
-    tab: 'majors',
-    title: 'Ngành đào tạo',
-    description: 'Chương trình & chuẩn đầu ra',
-    icon: GraduationCap,
-    tone: 'teal',
-  },
-  {
-    tab: 'courses',
-    title: 'Học phần',
-    description: 'Môn học & số tín chỉ',
-    icon: BookOpen,
-    tone: 'green',
-  },
-  {
-    tab: 'course-question-sets',
-    title: 'Bộ câu hỏi',
-    description: 'Bộ câu hỏi & thang đánh giá',
-    icon: ListChecks,
-    tone: 'amber',
-  },
-];
 
 const formatDate = (value: string) => {
   const [year, month, day] = value.split('-');
@@ -100,12 +49,6 @@ const getProgress = (campaign: SurveyCampaign) => {
   return Math.min(100, Math.round((campaign.actualResponses / campaign.totalTargetResponses) * 100));
 };
 
-const deltaClass = (delta: number): string => {
-  if (delta > 0.005) return 'is-up';
-  if (delta < -0.005) return 'is-down';
-  return 'is-flat';
-};
-
 const getRatingLabel = (score: number): { label: string; tone: string } => {
   if (score >= 4.5) return { label: 'Xuất sắc', tone: '#137b3b' };
   if (score >= 4.0) return { label: 'Tốt', tone: '#0788b8' };
@@ -113,6 +56,9 @@ const getRatingLabel = (score: number): { label: string; tone: string } => {
   if (score > 0) return { label: 'Cần cải thiện', tone: '#b52d2d' };
   return { label: 'Chưa có điểm', tone: '#64748b' };
 };
+
+/** Dưới ngưỡng này thì một đơn vị bị coi là chậm tiến độ, khớp với các trang khác. */
+const LAGGING_THRESHOLD = 20;
 
 const MIN_RESPONSES_FOR_PUBLISHED_SCORE = 30;
 const MIN_COMPLETION_RATE_FOR_PUBLISHED_SCORE = 5;
@@ -127,13 +73,11 @@ const formatLoadedAt = (value: Date | null): string =>
     : '—';
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
-  stats,
   campaigns,
   onOpenQR,
   onNavigateTab,
 }) => {
   const { academicYears, activeSemesterId, setActiveSemesterId } = useSemester();
-  const [comparisonSemesterId, setComparisonSemesterId] = useState<number | undefined>(undefined);
   const [overviewData, setOverviewData] = useState<SchoolSurveyOverviewData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -149,15 +93,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'good' | 'progress' | 'lagging'>('all');
 
-  const comparisonOptions = useMemo(() => {
-    return academicYears.flatMap((year) =>
-      year.semesters.map((sem) => ({
-        semesterId: sem.semesterId,
-        label: `${sem.semesterName} (${year.academicYearName})`,
-      }))
-    );
-  }, [academicYears]);
-
   const loadOverview = useCallback(async () => {
     if (!activeSemesterId) {
       setLoading(false);
@@ -166,7 +101,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     setLoading(true);
     setError(null);
     try {
-      let data = await reportApi.schoolOverview(activeSemesterId, comparisonSemesterId);
+      let data = await reportApi.schoolOverview(activeSemesterId);
 
       // Trang điều hành không nên mở mặc định ở một kỳ hoàn toàn rỗng. Chỉ tự
       // tìm kỳ gần nhất có dữ liệu đúng một lần; các lựa chọn thủ công sau đó
@@ -203,15 +138,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [academicYears, activeSemesterId, comparisonSemesterId, setActiveSemesterId]);
+  }, [academicYears, activeSemesterId, setActiveSemesterId]);
 
   useEffect(() => {
     void loadOverview();
   }, [loadOverview]);
-
-  useEffect(() => {
-    setComparisonSemesterId(undefined);
-  }, [activeSemesterId]);
 
   const hasSurveyData = Boolean(
     overviewData
@@ -223,12 +154,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     && overviewData.totalResponses >= MIN_RESPONSES_FOR_PUBLISHED_SCORE
     && overviewData.completionRate >= MIN_COMPLETION_RATE_FOR_PUBLISHED_SCORE,
   );
-  const hasValidComparison = Boolean(
-    overviewData?.semesterComparison
-    && overviewData.semesterComparison.comparisonCompletionRate > 0
-    && overviewData.semesterComparison.comparisonAverageScore > 0,
-  );
-
   // Tóm tắt điều hành được suy ra trực tiếp từ số liệu báo cáo.
   const aiInsights = useMemo(() => {
     if (!overviewData || overviewData.totalSections === 0) return null;
@@ -237,8 +162,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       (a, b) => b.completionRate - a.completionRate
     );
     const topCompletionFaculty = sortedByCompletion[0];
-    const laggingDepartments = overviewData.departments.filter((d) => d.completionRate < 40);
-    const laggingFaculties = overviewData.faculties.filter((f) => f.completionRate < 40);
+    const laggingDepartments = overviewData.departments.filter(
+      (d) => d.completionRate < LAGGING_THRESHOLD,
+    );
+    const laggingFaculties = overviewData.faculties.filter(
+      (f) => f.completionRate < LAGGING_THRESHOLD,
+    );
 
     const weakestQuestion =
       overviewData.weakestQuestions.length > 0 ? overviewData.weakestQuestions[0] : null;
@@ -251,9 +180,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       weakestQuestion,
       completionRate: overviewData.completionRate,
       averageScore: overviewData.overallAverageScore,
-      comparison: hasValidComparison ? overviewData.semesterComparison : null,
     };
-  }, [hasValidComparison, overviewData]);
+  }, [overviewData]);
 
   // Filtered Faculties Table Data
   const filteredFaculties = useMemo(() => {
@@ -263,8 +191,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       if (!matchesSearch) return false;
 
       if (filterStatus === 'good') return f.completionRate >= 80;
-      if (filterStatus === 'progress') return f.completionRate >= 40 && f.completionRate < 80;
-      if (filterStatus === 'lagging') return f.completionRate < 40;
+      if (filterStatus === 'progress') {
+        return f.completionRate >= LAGGING_THRESHOLD && f.completionRate < 80;
+      }
+      if (filterStatus === 'lagging') return f.completionRate < LAGGING_THRESHOLD;
       return true;
     });
   }, [overviewData?.faculties, searchTerm, filterStatus]);
@@ -301,54 +231,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
 
         <div className="executive-header-controls">
-          <div className="executive-compare-select">
-            <label htmlFor="exec-compare-semester">So sánh với:</label>
-            <select
-              id="exec-compare-semester"
-              value={comparisonSemesterId ?? ''}
-              onChange={(e) => {
-                const val = e.target.value;
-                setComparisonSemesterId(val ? Number(val) : undefined);
-              }}
-            >
-              <option value="">Học kỳ liền trước (Mặc định)</option>
-              {comparisonOptions
-                .filter((opt) => opt.semesterId !== activeSemesterId)
-                .map((opt) => (
-                  <option key={opt.semesterId} value={opt.semesterId}>
-                    {opt.label}
-                  </option>
-                ))}
-            </select>
-          </div>
-
-          {overviewData?.semesterComparison && hasValidComparison && (
-            <div className="executive-deltas">
-              <span className={`executive-delta-badge ${deltaClass(overviewData.semesterComparison.completionRateDelta)}`}>
-                {overviewData.semesterComparison.completionRateDelta > 0.005 ? (
-                  <TrendingUp aria-hidden="true" />
-                ) : overviewData.semesterComparison.completionRateDelta < -0.005 ? (
-                  <TrendingDown aria-hidden="true" />
-                ) : (
-                  <Minus aria-hidden="true" />
-                )}
-                Tiến độ {overviewData.semesterComparison.completionRateDelta > 0 ? '+' : ''}
-                {overviewData.semesterComparison.completionRateDelta.toFixed(1)}%
-              </span>
-              <span className={`executive-delta-badge ${deltaClass(overviewData.semesterComparison.averageScoreDelta)}`}>
-                {overviewData.semesterComparison.averageScoreDelta > 0.005 ? (
-                  <TrendingUp aria-hidden="true" />
-                ) : overviewData.semesterComparison.averageScoreDelta < -0.005 ? (
-                  <TrendingDown aria-hidden="true" />
-                ) : (
-                  <Minus aria-hidden="true" />
-                )}
-                Điểm TB {overviewData.semesterComparison.averageScoreDelta > 0 ? '+' : ''}
-                {overviewData.semesterComparison.averageScoreDelta.toFixed(2)}
-              </span>
-            </div>
-          )}
-
           <button
             type="button"
             className="executive-btn-primary"
@@ -388,23 +270,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </section>
       )}
 
-      {overviewData && !loading && !error && (
-        <section className="executive-trust-strip" aria-label="Thông tin độ tin cậy của báo cáo">
-          <span>
-            <strong>Kỳ báo cáo:</strong> {overviewData.academicYearName} · {overviewData.semesterName}
-          </span>
-          <span>
-            <strong>Độ phủ:</strong> {overviewData.faculties.length}/{stats.totalFaculties} Khoa/Viện có lớp được phát phiếu
-          </span>
-          <span>
-            <strong>Cỡ mẫu:</strong> {formatNumber(overviewData.totalResponses)}/{formatNumber(overviewData.totalTargetResponses)} phiếu
-          </span>
-          <span>
-            <strong>Nạp dữ liệu lúc:</strong> {formatLoadedAt(lastUpdatedAt)}
-          </span>
-        </section>
-      )}
-
       {overviewData && !loading && !error && !hasSurveyData && (
         <section className="executive-empty-state" aria-labelledby="executive-empty-title">
           <AlertTriangle aria-hidden="true" />
@@ -436,97 +301,37 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </section>
       )}
 
-      {/* 2. EXECUTIVE BRIEFING PANEL */}
+      {/* 2. ĐIỂM TIN — chỉ hai điều mà các thẻ số phía dưới không nói được:
+             đơn vị nào đang dẫn đầu và tiêu chí nào đang yếu nhất. */}
       {!loading && !error && hasSurveyData && aiInsights && (
-        <section className="executive-ai-brief" aria-label="Tóm tắt điều hành">
-          <div className="executive-ai-header">
-            <span className="executive-ai-tag">
-              <Sparkles aria-hidden="true" />
-              Tóm tắt điều hành · Thông tin nhanh cho Lãnh đạo
-            </span>
-            <span className="executive-ai-timestamp">Nạp lúc {formatLoadedAt(lastUpdatedAt)}</span>
-          </div>
+        <section className="executive-brief-strip" aria-label="Điểm tin điều hành">
+          <span className="executive-brief-item">
+            <Building2 aria-hidden="true" />
+            Dẫn đầu tiến độ:{' '}
+            {aiInsights.topCompletionFaculty && aiInsights.topCompletionFaculty.completionRate > 0 ? (
+              <strong>
+                {aiInsights.topCompletionFaculty.facultyName}{' '}
+                ({aiInsights.topCompletionFaculty.completionRate.toFixed(1)}%)
+              </strong>
+            ) : (
+              <strong>chưa xác định</strong>
+            )}
+          </span>
 
-          <div className="executive-ai-grid">
-            <div className="executive-ai-card is-highlight">
-              <span className="executive-ai-label">
-                <Target aria-hidden="true" />
-                Tiến độ toàn trường
-              </span>
-              <div className="executive-ai-text">
-                Đạt <strong>{aiInsights.completionRate.toFixed(1)}%</strong> chỉ tiêu thu phiếu (
-                {formatNumber(overviewData?.totalResponses || 0)} / {formatNumber(overviewData?.totalTargetResponses || 0)} phiếu).
-                {aiInsights.comparison && (
-                  <span>
-                    {' '}
-                    Biến động: <strong>{aiInsights.comparison.completionRateDelta > 0 ? '+' : ''}{aiInsights.comparison.completionRateDelta.toFixed(1)}%</strong> so với {aiInsights.comparison.comparisonSemesterName}.
-                  </span>
-                )}
-              </div>
-            </div>
+          <span className="executive-brief-item">
+            <Lightbulb aria-hidden="true" />
+            Tiêu chí yếu nhất:{' '}
+            {canPublishScore && aiInsights.weakestQuestion ? (
+              <strong title={aiInsights.weakestQuestion.questionText}>
+                {aiInsights.weakestQuestion.questionText} (
+                {aiInsights.weakestQuestion.averageScore.toFixed(2)}/5.0)
+              </strong>
+            ) : (
+              <strong>chưa đủ mẫu để công bố</strong>
+            )}
+          </span>
 
-            <div className="executive-ai-card is-success">
-              <span className="executive-ai-label">
-                <Building2 aria-hidden="true" />
-                Đơn vị dẫn đầu
-              </span>
-              <div className="executive-ai-text">
-                {aiInsights.topCompletionFaculty && aiInsights.topCompletionFaculty.completionRate > 0 ? (
-                  <>
-                    <strong>{aiInsights.topCompletionFaculty.facultyName}</strong> dẫn đầu về tiến độ (
-                    <strong>{aiInsights.topCompletionFaculty.completionRate.toFixed(1)}%</strong>)
-                    {canPublishScore ? (
-                      <>
-                        {' '}với điểm TB{' '}
-                        <strong>{aiInsights.topCompletionFaculty.averageScore.toFixed(2)}/5.0</strong>.
-                      </>
-                    ) : (
-                      '. Điểm chất lượng đang được tạm ẩn do cỡ mẫu nhỏ.'
-                    )}
-                  </>
-                ) : (
-                  'Chưa có đơn vị đạt tiến độ để xác định đơn vị dẫn đầu.'
-                )}
-              </div>
-            </div>
-
-            <div className={`executive-ai-card ${aiInsights.laggingCount > 0 ? 'is-warning' : 'is-success'}`}>
-              <span className="executive-ai-label">
-                <ShieldAlert aria-hidden="true" />
-                Cảnh báo đôn đốc
-              </span>
-              <div className="executive-ai-text">
-                {aiInsights.laggingCount > 0 ? (
-                  <>
-                    Có <strong>{aiInsights.laggingFacultyCount} Khoa/Viện</strong> và{' '}
-                    <strong>{aiInsights.laggingDepartmentCount} Bộ môn</strong> có tỷ lệ thu phiếu dưới{' '}
-                    <strong>40%</strong>, cần đôn đốc hoàn thành chỉ tiêu.
-                  </>
-                ) : (
-                  (overviewData?.faculties.length ?? 0) > 0
-                    ? 'Các đơn vị có dữ liệu đều đạt ngưỡng tiến độ an toàn (≥40%).'
-                    : 'Chưa có đủ dữ liệu đơn vị để đánh giá tiến độ.'
-                )}
-              </div>
-            </div>
-
-            <div className="executive-ai-card is-highlight">
-              <span className="executive-ai-label">
-                <Lightbulb aria-hidden="true" />
-                Trọng tâm cải tiến
-              </span>
-              <div className="executive-ai-text">
-                {canPublishScore && aiInsights.weakestQuestion ? (
-                  <>
-                    Tiêu chí điểm thấp nhất: <strong>"{aiInsights.weakestQuestion.questionText}"</strong> (
-                    <strong>{aiInsights.weakestQuestion.averageScore.toFixed(2)}/5.0</strong>).
-                  </>
-                ) : (
-                  'Chưa đủ mẫu hợp lệ để công bố tiêu chí cần cải tiến.'
-                )}
-              </div>
-            </div>
-          </div>
+          <span className="executive-brief-time">Nạp lúc {formatLoadedAt(lastUpdatedAt)}</span>
         </section>
       )}
 
@@ -539,21 +344,23 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <span className="executive-kpi-title">Tiến độ thu phiếu toàn trường</span>
               <Target className="operation-icon text-cyan-600" aria-hidden="true" />
             </div>
-            <div className="executive-kpi-body">
-              <CompletionGauge
-                value={overviewData.completionRate}
-                collected={overviewData.totalResponses}
-                target={overviewData.totalTargetResponses}
-                size={88}
-              />
-              <div>
-                <div className="executive-kpi-main-number">
-                  {overviewData.completionRate.toFixed(1)}
-                  <span className="executive-kpi-unit">%</span>
-                </div>
-                <div className="executive-kpi-desc">
-                  <strong>{formatNumber(overviewData.totalResponses)}</strong> / {formatNumber(overviewData.totalTargetResponses)} phiếu đã nộp
-                </div>
+            <div>
+              <div className="executive-kpi-main-number">
+                {overviewData.completionRate.toFixed(1)}
+                <span className="executive-kpi-unit">%</span>
+              </div>
+              <div className="executive-mini-track" aria-hidden="true">
+                <div
+                  className="executive-mini-fill"
+                  style={{
+                    width: `${Math.min(100, overviewData.completionRate)}%`,
+                    background: completionColor(overviewData.completionRate),
+                  }}
+                />
+              </div>
+              <div className="executive-kpi-desc">
+                <strong>{formatNumber(overviewData.totalResponses)}</strong> /{' '}
+                {formatNumber(overviewData.totalTargetResponses)} phiếu hợp lệ
               </div>
             </div>
           </div>
@@ -589,9 +396,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 </div>
               </div>
             </div>
-            {canPublishScore ? (
-              <SatisfactionGauge score={overviewData.overallAverageScore} label="Thang điểm chuẩn VMU" />
-            ) : (
+            {!canPublishScore && (
               <div className="executive-score-withheld">
                 <ShieldAlert aria-hidden="true" />
                 <span>Chỉ số đang được tạm ẩn để tránh diễn giải sai từ mẫu quá nhỏ.</span>
@@ -651,12 +456,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <AlertTriangle className="operation-icon text-amber-600" aria-hidden="true" />
             </div>
             <div>
-              <div className="executive-kpi-main-number" style={{ color: (overviewData.departments.filter(d => d.completionRate < 40).length > 0) ? '#b52d2d' : '#137b3b' }}>
-                {overviewData.departments.filter((d) => d.completionRate < 40).length}
-                <span className="executive-kpi-unit">Bộ môn &lt; 40%</span>
+              <div className="executive-kpi-main-number" style={{ color: (overviewData.departments.filter(d => d.completionRate < LAGGING_THRESHOLD).length > 0) ? '#b52d2d' : '#137b3b' }}>
+                {overviewData.departments.filter((d) => d.completionRate < LAGGING_THRESHOLD).length}
+                <span className="executive-kpi-unit">Bộ môn &lt; {LAGGING_THRESHOLD}%</span>
               </div>
               <div className="executive-kpi-desc">
-                {overviewData.departments.filter((d) => d.completionRate < 40).length > 0 ? (
+                {overviewData.departments.filter((d) => d.completionRate < LAGGING_THRESHOLD).length > 0 ? (
                   <button
                     type="button"
                     className="executive-action-link"
@@ -813,14 +618,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 className={`executive-chip ${filterStatus === 'progress' ? 'is-active' : ''}`}
                 onClick={() => setFilterStatus('progress')}
               >
-                Đang thực hiện ({overviewData.faculties.filter((f) => f.completionRate >= 40 && f.completionRate < 80).length})
+                Đang thu ({overviewData.faculties.filter((f) => f.completionRate >= LAGGING_THRESHOLD && f.completionRate < 80).length})
               </button>
               <button
                 type="button"
                 className={`executive-chip ${filterStatus === 'lagging' ? 'is-active' : ''}`}
                 onClick={() => setFilterStatus('lagging')}
               >
-                Cảnh báo chậm &lt;40% ({overviewData.faculties.filter((f) => f.completionRate < 40).length})
+                Chậm &lt;{LAGGING_THRESHOLD}% ({overviewData.faculties.filter((f) => f.completionRate < LAGGING_THRESHOLD).length})
               </button>
             </div>
           </div>
@@ -832,7 +637,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   <th scope="col" style={{ width: 48 }}>STT</th>
                   <th scope="col">Khoa / Viện Đào tạo</th>
                   <th scope="col" style={{ width: 130 }}>Quy mô</th>
-                  <th scope="col" style={{ width: 140 }}>Phiếu thu / Chỉ tiêu</th>
+                  <th scope="col" style={{ width: 150 }}>Phiếu hợp lệ / Chỉ tiêu</th>
                   <th scope="col" style={{ width: 180 }}>Tiến độ thu phiếu</th>
                   <th scope="col" style={{ width: 110 }}>Điểm TB</th>
                   <th scope="col" style={{ width: 130 }}>Trạng thái</th>
@@ -890,7 +695,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                         <td>
                           {faculty.completionRate >= 80 ? (
                             <span className="executive-status-pill is-good">Đạt chuẩn</span>
-                          ) : faculty.completionRate >= 40 ? (
+                          ) : faculty.completionRate >= LAGGING_THRESHOLD ? (
                             <span className="executive-status-pill is-ok">Đang thu</span>
                           ) : (
                             <span className="executive-status-pill is-alert">Chậm tiến độ</span>
@@ -1017,43 +822,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
       </section>
 
-      {/* 7. PHÍM TẮT DANH MỤC ĐÀO TẠO */}
-      <section className="dashboard-block" aria-labelledby="dashboard-catalog-title">
-        <header className="dashboard-block-heading">
-          <div>
-            <h2 id="dashboard-catalog-title">Cơ cấu & Danh mục đào tạo</h2>
-            <p>Truy cập nhanh dữ liệu nền phục vụ công tác khảo sát & đánh giá chất lượng</p>
-          </div>
-          <div className="dashboard-heading-actions">
-            <span className="dashboard-result-count">
-              {stats.totalFaculties} Khoa · {stats.totalMajors} Ngành · {stats.totalCourses} Học phần · {stats.totalClasses} Lớp
-            </span>
-          </div>
-        </header>
-
-        <div className="dashboard-quick-grid">
-          {quickActions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <button
-                type="button"
-                key={action.tab}
-                className={`dashboard-quick-action is-${action.tone}`}
-                onClick={() => onNavigateTab(action.tab)}
-              >
-                <span className="dashboard-quick-icon" aria-hidden="true">
-                  <Icon />
-                </span>
-                <span className="dashboard-quick-copy">
-                  <strong>{action.title}</strong>
-                  <small>{action.description}</small>
-                </span>
-                <ArrowRight className="dashboard-quick-arrow" aria-hidden="true" />
-              </button>
-            );
-          })}
-        </div>
-      </section>
     </div>
   );
 };

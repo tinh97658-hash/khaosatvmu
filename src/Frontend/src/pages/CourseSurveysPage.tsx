@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../auth/authContext';
 import { isReadOnlyRole } from '../auth/roles';
 import { ConfirmDialog, Modal } from '../components/Modal';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { QRCodeModal } from '../components/QRCodeModal';
 import { useSemester } from '../context/semesterContext';
 import { ApiError } from '../services/apiClient';
@@ -663,19 +664,17 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
 
           <div className="form-group">
             <label htmlFor="create-survey-template">Bộ câu hỏi khảo sát</label>
-            <select
+            <SearchableSelect
               id="create-survey-template"
               value={createTemplateId}
-              onChange={(event) => setCreateTemplateId(event.target.value)}
+              onChange={setCreateTemplateId}
               required
-            >
-              <option value="">Chọn bộ câu hỏi</option>
-              {templates.map((template) => (
-                <option key={template.surveyTemplateId} value={String(template.surveyTemplateId)}>
-                  {template.templateName} ({template.questions.length} câu)
-                </option>
-              ))}
-            </select>
+              placeholder="Chọn bộ câu hỏi"
+              options={templates.map((template) => ({
+                value: String(template.surveyTemplateId),
+                label: `${template.templateName} (${template.questions.length} câu)`,
+              }))}
+            />
           </div>
 
           <div className="catalog-form-grid catalog-form-grid--2">

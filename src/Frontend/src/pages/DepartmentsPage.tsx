@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { DepartmentImportDialog } from '../components/DepartmentImportDialog';
 import { catalogErrorMessage, type CatalogImportResponse } from '../services/catalogApi';
 import type { ImportDepartmentRow } from '../utils/departmentImportExcel';
@@ -297,18 +298,16 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
           </div>
           <div className="form-group">
             <label htmlFor="department-faculty">Khoa viện</label>
-            <select
+            <SearchableSelect
               id="department-faculty"
               value={form.facultyId}
-              onChange={(event) => updateForm({ facultyId: event.target.value })}
-            >
-              <option value="">Chưa thuộc khoa viện</option>
-              {faculties.map((faculty) => (
-                <option key={faculty.facultyId} value={String(faculty.facultyId)}>
-                  {faculty.facultyName}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => updateForm({ facultyId: value })}
+              emptyLabel="Chưa thuộc khoa viện"
+              options={faculties.map((faculty) => ({
+                value: String(faculty.facultyId),
+                label: faculty.facultyName,
+              }))}
+            />
           </div>
           <div className="modal-footer catalog-form-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>

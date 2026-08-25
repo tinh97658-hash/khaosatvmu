@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { CourseSectionImportDialog } from '../components/CourseSectionImportDialog';
 import type { ImportCourseSectionRow } from '../utils/courseSectionImportExcel';
 import { downloadUnidentifiedLecturerFile } from '../utils/courseSectionImportExcel';
@@ -1170,40 +1171,33 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
 
           <div className="form-group">
             <label htmlFor="section-course">Học phần</label>
-            <select
+            <SearchableSelect
               id="section-course"
               value={sectionForm.courseId}
-              onChange={(event) =>
-                setSectionForm((prev) => ({ ...prev, courseId: event.target.value }))
-              }
+              onChange={(value) => setSectionForm((prev) => ({ ...prev, courseId: value }))}
               required
-            >
-              <option value="">Chọn học phần</option>
-              {courses.map((course) => (
-                <option key={course.courseId} value={String(course.courseId)}>
-                  [{course.courseCode}] {course.courseName}
-                </option>
-              ))}
-            </select>
+              placeholder="Chọn học phần"
+              options={courses.map((course) => ({
+                value: String(course.courseId),
+                label: `[${course.courseCode}] ${course.courseName}`,
+              }))}
+            />
           </div>
 
           <div className="form-group">
             <label htmlFor="section-lecturer">Giảng viên</label>
-            <select
+            <SearchableSelect
               id="section-lecturer"
               value={sectionForm.lecturerId}
-              onChange={(event) =>
-                setSectionForm((prev) => ({ ...prev, lecturerId: event.target.value }))
-              }
-            >
-              <option value="">Chưa xác định</option>
-              {lecturers.map((lecturer) => (
-                <option key={lecturer.lecturerId} value={String(lecturer.lecturerId)}>
-                  {lecturer.fullName}
-                  {lecturer.email ? ` · ${lecturer.email}` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => setSectionForm((prev) => ({ ...prev, lecturerId: value }))}
+              emptyLabel="Chưa xác định"
+              options={lecturers.map((lecturer) => ({
+                value: String(lecturer.lecturerId),
+                label: lecturer.email
+                  ? `${lecturer.fullName} · ${lecturer.email}`
+                  : lecturer.fullName,
+              }))}
+            />
             {!sectionForm.lecturerId && editingSection?.unidentifiedLecturerName && (
               <small className="catalog-field-warning">
                 <TriangleAlert aria-hidden="true" size={13} />
@@ -1317,37 +1311,29 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
           <div className="catalog-form-grid catalog-form-grid--2">
             <div className="form-group">
               <label htmlFor="resolve-department">Bộ môn</label>
-              <select
+              <SearchableSelect
                 id="resolve-department"
                 value={resolveForm.departmentId}
-                onChange={(event) =>
-                  setResolveForm((prev) => ({ ...prev, departmentId: event.target.value }))
-                }
-              >
-                <option value="">Chưa xác định</option>
-                {departments.map((department) => (
-                  <option key={department.departmentId} value={String(department.departmentId)}>
-                    [{department.departmentId}] {department.departmentName}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setResolveForm((prev) => ({ ...prev, departmentId: value }))}
+                emptyLabel="Chưa xác định"
+                options={departments.map((department) => ({
+                  value: String(department.departmentId),
+                  label: `[${department.departmentId}] ${department.departmentName}`,
+                }))}
+              />
             </div>
             <div className="form-group">
               <label htmlFor="resolve-faculty">Khoa viện</label>
-              <select
+              <SearchableSelect
                 id="resolve-faculty"
                 value={resolveForm.facultyId}
-                onChange={(event) =>
-                  setResolveForm((prev) => ({ ...prev, facultyId: event.target.value }))
-                }
-              >
-                <option value="">Chưa xác định</option>
-                {faculties.map((faculty) => (
-                  <option key={faculty.facultyId} value={String(faculty.facultyId)}>
-                    {faculty.facultyName}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setResolveForm((prev) => ({ ...prev, facultyId: value }))}
+                emptyLabel="Chưa xác định"
+                options={faculties.map((faculty) => ({
+                  value: String(faculty.facultyId),
+                  label: faculty.facultyName,
+                }))}
+              />
             </div>
           </div>
 
@@ -1389,22 +1375,26 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
           </p>
 
           <div className="admin-import-table-scroll">
-            <table>
+            <table className="unidentified-table">
               <thead>
                 <tr>
-                  <th>Họ và tên</th>
-                  <th>Bộ môn</th>
-                  <th>Số lớp</th>
-                  <th>Các lớp</th>
+                  <th scope="col">STT</th>
+                  <th scope="col">Họ và tên</th>
+                  <th scope="col">Bộ môn</th>
+                  <th scope="col">Số lớp</th>
+                  <th scope="col">Các lớp</th>
                 </tr>
               </thead>
               <tbody>
-                {(unidentified?.lecturers ?? []).map((lecturer) => (
+                {(unidentified?.lecturers ?? []).map((lecturer, index) => (
                   <tr key={`${lecturer.lecturerName}-${lecturer.departmentName ?? ''}`}>
+                    <td>{index + 1}</td>
                     <td><strong>{lecturer.lecturerName}</strong></td>
                     <td>{lecturer.departmentName ?? '—'}</td>
-                    <td>{lecturer.sectionCount}</td>
-                    <td>{lecturer.sectionLabels.join(', ')}</td>
+                    <td className="unidentified-table__count">{lecturer.sectionCount}</td>
+                    <td className="unidentified-table__classes">
+                      {lecturer.sectionLabels.join(', ')}
+                    </td>
                   </tr>
                 ))}
               </tbody>

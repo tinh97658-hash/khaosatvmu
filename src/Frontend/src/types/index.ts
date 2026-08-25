@@ -518,6 +518,8 @@ export interface OptionCount {
 
 export interface QuestionRating {
   questionId: number;
+  /** Số thứ tự câu trong bộ đề (C1, C2...), đánh trên cả câu bẫy và câu tự nhập. */
+  questionOrder: number;
   questionText: string;
   /** Chỉ có ý nghĩa với câu thuộc thang `Options`. */
   averageScore: number;
@@ -536,7 +538,13 @@ export interface LecturerSectionSummary {
   courseName: string;
   sectionName: string;
   classSize: number;
+  /** Mọi lượt nộp, kể cả phiếu bị bộ lọc nhiễu loại. */
   responseCount: number;
+  /** Phiếu qua được bộ lọc — mẫu số của mọi số liệu chất lượng. */
+  validResponseCount: number;
+  invalidResponseCount: number;
+  /** Tính trên phiếu hợp lệ so với sĩ số. */
+  completionRate: number;
   averageScore: number;
 }
 
@@ -612,7 +620,12 @@ export interface SurveyResultDetail {
   courseName: string;
   sectionName: string;
   classSize: number;
+  /** Mọi lượt nộp, kể cả phiếu bị bộ lọc nhiễu loại. */
   responseCount: number;
+  /** Phiếu qua được bộ lọc — mẫu số của mọi số liệu chất lượng. */
+  validResponseCount: number;
+  invalidResponseCount: number;
+  /** Tính trên phiếu hợp lệ so với sĩ số. */
   completionRate: number;
   averageScore: number;
 }

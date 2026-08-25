@@ -3,6 +3,8 @@ import { ChevronDown, CircleAlert, LoaderCircle, RefreshCw, Search } from 'lucid
 import { useSemester } from '../context/semesterContext';
 import { TablePagination } from '../components/TablePagination';
 import { usePaginatedItems } from '../hooks/usePaginatedItems';
+import { useColumnFilters, type FilterableColumn } from '../hooks/useColumnFilters';
+import { NoteModalButton } from '../components/NoteModalButton';
 import { ApiError } from '../services/apiClient';
 import {
   courseDiagnosisDescriptions,
@@ -130,25 +132,82 @@ function zVerdict(value: number | null): { label: string; className: string } {
   return zVerdictTiers[3];
 }
 
-/** Chú thích bốn bậc của cột Nhận định. */
+/** Công thức và bốn bậc của cột Nhận định, đọc trong hộp thoại chú thích. */
 const ZVerdictLegend: React.FC<{ notes: string[] }> = ({ notes }) => (
-  <div className="z-legend">
-    {notes.map((note) => (
-      <p className="z-legend__note" key={note}>
-        {note}
-      </p>
-    ))}
-    <ul className="z-legend__list">
-      {[...zVerdictTiers].reverse().map((tier) => (
-        <li key={tier.label}>
-          <code>{tier.range}</code>
-          <span aria-hidden="true">→</span>
-          <span className={tier.className}>{tier.label}</span>
-        </li>
+  <NoteModalButton title="Chú thích cách tính">
+    <div className="z-legend">
+      {notes.map((note) => (
+        <p className="z-legend__note" key={note}>
+          {note}
+        </p>
       ))}
-    </ul>
-  </div>
+      <ul className="z-legend__list">
+        {[...zVerdictTiers].reverse().map((tier) => (
+          <li key={tier.label}>
+            <code>{tier.range}</code>
+            <span aria-hidden="true">→</span>
+            <span className={tier.className}>{tier.label}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </NoteModalButton>
 );
+
+/**
+ * Chú thích của từng tab. Gom về một chỗ để trang cha đặt nút ở góc phải trên,
+ * ngay dưới thanh tab — thay vì mỗi tab tự thả một khối ở cuối, phải cuộn hết
+ * bảng mới thấy.
+ */
+const tabNotes: Partial<Record<TabId, React.ReactNode>> = {
+  normalization: (
+    <ZVerdictLegend
+      notes={[
+        'Độ lệch chuẩn = √( Tổng bình phương (Điểm từng lớp − Điểm TB khoa) ÷ (Số lớp − 1) )',
+        'Z-Score = (Điểm TB khoa − Trung bình toàn trường)'
+          + ' ÷ (Độ lệch chuẩn toàn trường ÷ √Số lớp)',
+      ]}
+    />
+  ),
+  normalizationSections: (
+    <ZVerdictLegend
+      notes={[
+        'Z-Score toàn trường = (Điểm lớp − Trung bình toàn trường) ÷ Độ lệch chuẩn toàn trường',
+        'Z-Score trong khoa = (Điểm lớp − Điểm TB khoa) ÷ Độ lệch chuẩn khoa',
+        'Chênh lệch Z-Score = Z-Score trong khoa − Z-Score toàn trường',
+      ]}
+    />
+  ),
+  courses: (
+    <NoteModalButton title="Chú thích các kết luận">
+      <div className="z-legend">
+        <p className="z-legend__note">
+          Bảng này so các lớp TRONG CÙNG một học phần với nhau, để tách lỗi của học phần ra
+          khỏi lỗi của người dạy.
+        </p>
+        <ul className="z-legend__list z-legend__list--stacked">
+          {['COURSE_ISSUE', 'LECTURER_VARIANCE', 'ALL_GOOD', 'INCONCLUSIVE'].map((code) => (
+            <li key={code}>
+              <span className={verdictClass(code)}>{courseDiagnosisLabels[code]}</span>
+              <span className="z-legend__meaning">{courseDiagnosisDescriptions[code]}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </NoteModalButton>
+  ),
+  lecturer: (
+    <ZVerdictLegend
+      notes={[
+        'Z-Score = (Điểm lớp − Trung bình nhóm so) ÷ Độ lệch chuẩn nhóm so.'
+          + ' Ba cột Z dùng ba nhóm: toàn trường, các lớp cùng khoa, các lớp cùng bộ môn.',
+        'Chênh so học phần = Điểm lớp − Điểm TB học phần.'
+          + ' Để trống khi học phần chỉ có đúng lớp này, không có ai để so.',
+        'Cột Nhận xét xét theo Z-Score trong bộ môn — nhóm so sát nhất.',
+      ]}
+    />
+  ),
+};
 
 export const SurveyAnalysisPage: React.FC = () => {
   const { academicYears, activeSemesterId } = useSemester();
@@ -305,7 +364,10 @@ export const SurveyAnalysisPage: React.FC = () => {
         ))}
       </nav>
 
-      <p className="analysis-hint">{activeTab.hint}</p>
+      <div className="analysis-hint-row">
+        <p className="analysis-hint">{activeTab.hint}</p>
+        {tabNotes[tab]}
+      </div>
 
       {loadError && (
         <div className="admin-alert" role="alert">
@@ -386,7 +448,24 @@ const NormalizationGroupTab: React.FC<{
   data: SemesterSurveyNormalization | null;
 }> = ({ data }) => {
   const groups = useMemo(() => data?.groups ?? [], [data]);
-  const groupPagination = usePaginatedItems(groups, analysisPageSize);
+  const groupColumns = useMemo<FilterableColumn<(typeof groups)[number]>[]>(() => [
+    { key: 'facultyName', value: (row) => row.facultyName },
+    { key: 'sectionCount', value: (row) => String(row.sectionCount), numeric: true },
+    { key: 'averageScore', value: (row) => row.averageScore.toFixed(3), numeric: true },
+    {
+      key: 'standardDeviation',
+      value: (row) => (row.standardDeviation === null ? '—' : row.standardDeviation.toFixed(3)),
+      sortValue: (row) => row.standardDeviation,
+    },
+    {
+      key: 'meanZScore',
+      value: (row) => (row.meanZScore === null ? '—' : row.meanZScore.toFixed(2)),
+      sortValue: (row) => row.meanZScore,
+    },
+    { key: 'verdict', value: (row) => zVerdict(row.meanZScore).label },
+  ], []);
+  const groupFilters = useColumnFilters(groups, groupColumns);
+  const groupPagination = usePaginatedItems(groupFilters.visibleRows, analysisPageSize);
 
   if (!data || data.sections.length === 0) return emptyNormalization;
 
@@ -398,17 +477,17 @@ const NormalizationGroupTab: React.FC<{
         <table className="statistics-table">
           <thead>
             <tr>
-              <th scope="col">Khoa / Viện</th>
-              <th scope="col">Số lớp</th>
-              <th scope="col">Điểm TB khoa</th>
-              <th scope="col">Độ lệch chuẩn</th>
+              <th scope="col">{groupFilters.filterHeader('facultyName', 'Khoa / Viện')}</th>
+              <th scope="col">{groupFilters.filterHeader('sectionCount', 'Số lớp')}</th>
+              <th scope="col">{groupFilters.filterHeader('averageScore', 'Điểm TB khoa')}</th>
+              <th scope="col">{groupFilters.filterHeader('standardDeviation', 'Độ lệch chuẩn')}</th>
               <th
                 scope="col"
                 title="Điểm TB khoa lệch trung bình toàn trường bao nhiêu lần sai số chuẩn σ/√n"
               >
-                Z-Score so toàn trường
+                {groupFilters.filterHeader('meanZScore', 'Z-Score so toàn trường')}
               </th>
-              <th scope="col">Nhận xét</th>
+              <th scope="col">{groupFilters.filterHeader('verdict', 'Nhận xét')}</th>
             </tr>
           </thead>
           <tbody>
@@ -453,19 +532,11 @@ const NormalizationGroupTab: React.FC<{
         <TablePagination
           page={groupPagination.page}
           pageSize={analysisPageSize}
-          totalItems={data.groups.length}
+          totalItems={groupFilters.visibleRows.length}
           itemLabel="khoa/viện"
           onPageChange={groupPagination.setPage}
         />
       </div>
-
-      <ZVerdictLegend
-        notes={[
-          'Độ lệch chuẩn = √( Tổng bình phương (Điểm từng lớp − Điểm TB khoa) ÷ (Số lớp − 1) )',
-          'Z-Score = (Điểm TB khoa − Trung bình toàn trường)'
-            + ' ÷ (Độ lệch chuẩn toàn trường ÷ √Số lớp)',
-        ]}
-      />
     </>
   );
 };
@@ -477,7 +548,34 @@ const NormalizationSectionTab: React.FC<{
   flipCount: number;
 }> = ({ data, flipCount }) => {
   const sections = useMemo(() => data?.sections ?? [], [data]);
-  const sectionPagination = usePaginatedItems(sections, analysisPageSize);
+  const sectionColumns = useMemo<FilterableColumn<(typeof sections)[number]>[]>(() => [
+    { key: 'courseCode', value: (row) => row.courseCode },
+    { key: 'sectionName', value: (row) => row.sectionName },
+    { key: 'courseName', value: (row) => row.courseName },
+    { key: 'lecturerName', value: (row) => row.lecturerName },
+    { key: 'departmentName', value: (row) => row.departmentName },
+    { key: 'facultyName', value: (row) => row.facultyName },
+    { key: 'classSize', value: (row) => String(row.classSize), numeric: true },
+    { key: 'averageScore', value: (row) => row.averageScore.toFixed(2), numeric: true },
+    {
+      key: 'zSchool',
+      value: (row) => (row.zSchool === null ? '—' : row.zSchool.toFixed(2)),
+      sortValue: (row) => row.zSchool,
+    },
+    {
+      key: 'zFaculty',
+      value: (row) => (row.zFaculty === null ? '—' : row.zFaculty.toFixed(2)),
+      sortValue: (row) => row.zFaculty,
+    },
+    {
+      key: 'zDifference',
+      value: (row) => (row.zDifference === null ? '—' : row.zDifference.toFixed(2)),
+      sortValue: (row) => row.zDifference,
+    },
+    { key: 'verdict', value: (row) => zVerdict(row.zFaculty).label },
+  ], []);
+  const sectionFilters = useColumnFilters(sections, sectionColumns);
+  const sectionPagination = usePaginatedItems(sectionFilters.visibleRows, analysisPageSize);
 
   if (!data || data.sections.length === 0) return emptyNormalization;
 
@@ -489,18 +587,24 @@ const NormalizationSectionTab: React.FC<{
         <table className="statistics-table">
           <thead>
             <tr>
-              <th className="col-left col-left-1" scope="col">Mã HP</th>
-              <th className="col-left col-left-2" scope="col">Lớp</th>
-              <th className="col-left col-left-3" scope="col">Học phần</th>
-              <th scope="col">Giảng viên</th>
-              <th scope="col">Bộ môn</th>
-              <th scope="col">Khoa / Viện</th>
-              <th scope="col">Sĩ số</th>
-              <th scope="col">Điểm</th>
-              <th scope="col">Z-Score toàn trường</th>
-              <th scope="col">Z-Score trong khoa</th>
-              <th scope="col">Chênh lệch Z-Score</th>
-              <th scope="col">Nhận xét</th>
+              <th className="col-left col-left-1" scope="col">
+                {sectionFilters.filterHeader('courseCode', 'Mã HP')}
+              </th>
+              <th className="col-left col-left-2" scope="col">
+                {sectionFilters.filterHeader('sectionName', 'Lớp')}
+              </th>
+              <th className="col-left col-left-3" scope="col">
+                {sectionFilters.filterHeader('courseName', 'Học phần')}
+              </th>
+              <th scope="col">{sectionFilters.filterHeader('lecturerName', 'Giảng viên')}</th>
+              <th scope="col">{sectionFilters.filterHeader('departmentName', 'Bộ môn')}</th>
+              <th scope="col">{sectionFilters.filterHeader('facultyName', 'Khoa / Viện')}</th>
+              <th scope="col">{sectionFilters.filterHeader('classSize', 'Sĩ số')}</th>
+              <th scope="col">{sectionFilters.filterHeader('averageScore', 'Điểm')}</th>
+              <th scope="col">{sectionFilters.filterHeader('zSchool', 'Z-Score toàn trường')}</th>
+              <th scope="col">{sectionFilters.filterHeader('zFaculty', 'Z-Score trong khoa')}</th>
+              <th scope="col">{sectionFilters.filterHeader('zDifference', 'Chênh lệch Z-Score')}</th>
+              <th scope="col">{sectionFilters.filterHeader('verdict', 'Nhận xét')}</th>
             </tr>
           </thead>
           <tbody>
@@ -548,19 +652,11 @@ const NormalizationSectionTab: React.FC<{
         <TablePagination
           page={sectionPagination.page}
           pageSize={analysisPageSize}
-          totalItems={data.sections.length}
+          totalItems={sectionFilters.visibleRows.length}
           itemLabel="lớp"
           onPageChange={sectionPagination.setPage}
         />
       </div>
-
-      <ZVerdictLegend
-        notes={[
-          'Z-Score toàn trường = (Điểm lớp − Trung bình toàn trường) ÷ Độ lệch chuẩn toàn trường',
-          'Z-Score trong khoa = (Điểm lớp − Điểm TB khoa) ÷ Độ lệch chuẩn khoa',
-          'Chênh lệch Z-Score = Z-Score trong khoa − Z-Score toàn trường',
-        ]}
-      />
     </>
   );
 };
@@ -569,7 +665,28 @@ const NormalizationSectionTab: React.FC<{
 
 const DepartmentTab: React.FC<{ data: SemesterSurveyDepartmentSummary | null }> = ({ data }) => {
   const rows = useMemo(() => data?.rows ?? [], [data]);
-  const pagination = usePaginatedItems(rows, analysisPageSize);
+  const columns = useMemo<FilterableColumn<(typeof rows)[number]>[]>(() => [
+    { key: 'facultyName', value: (row) => row.facultyName },
+    { key: 'departmentName', value: (row) => row.departmentName },
+    { key: 'sectionCount', value: (row) => String(row.sectionCount), numeric: true },
+    { key: 'lecturerCount', value: (row) => String(row.lecturerCount), numeric: true },
+    { key: 'totalClassSize', value: (row) => String(row.totalClassSize), numeric: true },
+    { key: 'responseCount', value: (row) => String(row.responseCount), numeric: true },
+    { key: 'validResponseCount', value: (row) => String(row.validResponseCount), numeric: true },
+    {
+      key: 'validResponseRate',
+      value: (row) => `${row.validResponseRate.toFixed(1)}%`,
+      sortValue: (row) => row.validResponseRate,
+    },
+    {
+      key: 'averageScore',
+      value: (row) => (row.averageScore === null ? '—' : row.averageScore.toFixed(2)),
+      sortValue: (row) => row.averageScore,
+    },
+    { key: 'warningSectionCount', value: (row) => String(row.warningSectionCount), numeric: true },
+  ], []);
+  const filters = useColumnFilters(rows, columns);
+  const pagination = usePaginatedItems(filters.visibleRows, analysisPageSize);
 
   if (!data || data.rows.length === 0) {
     return (
@@ -615,22 +732,26 @@ const DepartmentTab: React.FC<{ data: SemesterSurveyDepartmentSummary | null }> 
         <table className="statistics-table statistics-table--fill">
           <thead>
             <tr>
-              <th className="col-left col-dept-1" scope="col">Khoa / Viện</th>
-              <th className="col-left col-dept-2" scope="col">Bộ môn</th>
-              <th scope="col">Số lớp</th>
-              <th scope="col">Số GV</th>
-              <th scope="col">Tổng sĩ số</th>
-              <th scope="col">Số phiếu thu về</th>
-              <th scope="col">Số phiếu hợp lệ</th>
-              <th scope="col" title="Số phiếu hợp lệ chia tổng sĩ số">
-                Tỷ lệ phiếu hợp lệ
+              <th className="col-left col-dept-1" scope="col">
+                {filters.filterHeader('facultyName', 'Khoa / Viện')}
               </th>
-              <th scope="col">Điểm trung bình</th>
+              <th className="col-left col-dept-2" scope="col">
+                {filters.filterHeader('departmentName', 'Bộ môn')}
+              </th>
+              <th scope="col">{filters.filterHeader('sectionCount', 'Số lớp')}</th>
+              <th scope="col">{filters.filterHeader('lecturerCount', 'Số GV')}</th>
+              <th scope="col">{filters.filterHeader('totalClassSize', 'Tổng sĩ số')}</th>
+              <th scope="col">{filters.filterHeader('responseCount', 'Số phiếu thu về')}</th>
+              <th scope="col">{filters.filterHeader('validResponseCount', 'Số phiếu hợp lệ')}</th>
+              <th scope="col" title="Số phiếu hợp lệ chia tổng sĩ số">
+                {filters.filterHeader('validResponseRate', 'Tỷ lệ phiếu hợp lệ')}
+              </th>
+              <th scope="col">{filters.filterHeader('averageScore', 'Điểm trung bình')}</th>
               <th
                 scope="col"
                 title="Lớp có điểm thấp hơn trung bình toàn trường từ 1 độ lệch chuẩn trở lên"
               >
-                Lớp cảnh báo
+                {filters.filterHeader('warningSectionCount', 'Lớp cảnh báo')}
               </th>
             </tr>
           </thead>
@@ -687,7 +808,7 @@ const DepartmentTab: React.FC<{ data: SemesterSurveyDepartmentSummary | null }> 
         <TablePagination
           page={pagination.page}
           pageSize={analysisPageSize}
-          totalItems={data.rows.length}
+          totalItems={filters.visibleRows.length}
           itemLabel="bộ môn"
           onPageChange={pagination.setPage}
         />
@@ -705,7 +826,31 @@ function spreadClass(spread: number): string {
 
 const CourseDiagnosisTab: React.FC<{ data: SemesterSurveyCourseDiagnosis | null }> = ({ data }) => {
   const rows = useMemo(() => data?.rows ?? [], [data]);
-  const pagination = usePaginatedItems(rows, analysisPageSize);
+  const columns = useMemo<FilterableColumn<(typeof rows)[number]>[]>(() => [
+    { key: 'courseCode', value: (row) => row.courseCode },
+    { key: 'courseName', value: (row) => row.courseName },
+    { key: 'departmentName', value: (row) => row.departmentName },
+    { key: 'facultyName', value: (row) => row.facultyName },
+    { key: 'sectionCount', value: (row) => String(row.sectionCount), numeric: true },
+    { key: 'lecturerCount', value: (row) => String(row.lecturerCount), numeric: true },
+    { key: 'averageScore', value: (row) => row.averageScore.toFixed(2), numeric: true },
+    { key: 'minScore', value: (row) => row.minScore.toFixed(2), numeric: true },
+    { key: 'maxScore', value: (row) => row.maxScore.toFixed(2), numeric: true },
+    { key: 'spread', value: (row) => row.spread.toFixed(2), numeric: true },
+    {
+      key: 'weakestQuestionOrder',
+      value: (row) => (row.weakestQuestionOrder === null ? '—' : `C${row.weakestQuestionOrder}`),
+      sortValue: (row) => row.weakestQuestionOrder,
+    },
+    {
+      key: 'weakestQuestionScore',
+      value: (row) => (row.weakestQuestionScore === null ? '—' : row.weakestQuestionScore.toFixed(2)),
+      sortValue: (row) => row.weakestQuestionScore,
+    },
+    { key: 'verdict', value: (row) => courseDiagnosisLabels[row.verdict] ?? row.verdict },
+  ], []);
+  const filters = useColumnFilters(rows, columns);
+  const pagination = usePaginatedItems(filters.visibleRows, analysisPageSize);
 
   if (!data || data.rows.length === 0) {
     return (
@@ -749,21 +894,25 @@ const CourseDiagnosisTab: React.FC<{ data: SemesterSurveyCourseDiagnosis | null 
         <table className="statistics-table">
           <thead>
             <tr>
-              <th className="col-left col-course-1" scope="col">Mã HP</th>
-              <th className="col-left col-course-2" scope="col">Học phần</th>
-              <th scope="col">Bộ môn</th>
-              <th scope="col">Khoa / Viện</th>
-              <th scope="col">Số lớp</th>
-              <th scope="col">Số GV</th>
-              <th scope="col">Điểm TB</th>
-              <th scope="col">Lớp thấp nhất</th>
-              <th scope="col">Lớp cao nhất</th>
-              <th scope="col" title="Điểm lớp cao nhất trừ điểm lớp thấp nhất">
-                Chênh lệch giữa các lớp
+              <th className="col-left col-course-1" scope="col">
+                {filters.filterHeader('courseCode', 'Mã HP')}
               </th>
-              <th scope="col">Câu hỏi yếu nhất</th>
-              <th scope="col">Điểm câu yếu</th>
-              <th scope="col">Kết luận</th>
+              <th className="col-left col-course-2" scope="col">
+                {filters.filterHeader('courseName', 'Học phần')}
+              </th>
+              <th scope="col">{filters.filterHeader('departmentName', 'Bộ môn')}</th>
+              <th scope="col">{filters.filterHeader('facultyName', 'Khoa / Viện')}</th>
+              <th scope="col">{filters.filterHeader('sectionCount', 'Số lớp')}</th>
+              <th scope="col">{filters.filterHeader('lecturerCount', 'Số GV')}</th>
+              <th scope="col">{filters.filterHeader('averageScore', 'Điểm TB')}</th>
+              <th scope="col">{filters.filterHeader('minScore', 'Lớp thấp nhất')}</th>
+              <th scope="col">{filters.filterHeader('maxScore', 'Lớp cao nhất')}</th>
+              <th scope="col" title="Điểm lớp cao nhất trừ điểm lớp thấp nhất">
+                {filters.filterHeader('spread', 'Chênh lệch giữa các lớp')}
+              </th>
+              <th scope="col">{filters.filterHeader('weakestQuestionOrder', 'Câu hỏi yếu nhất')}</th>
+              <th scope="col">{filters.filterHeader('weakestQuestionScore', 'Điểm câu yếu')}</th>
+              <th scope="col">{filters.filterHeader('verdict', 'Kết luận')}</th>
             </tr>
           </thead>
           <tbody>
@@ -804,25 +953,10 @@ const CourseDiagnosisTab: React.FC<{ data: SemesterSurveyCourseDiagnosis | null 
         <TablePagination
           page={pagination.page}
           pageSize={analysisPageSize}
-          totalItems={data.rows.length}
+          totalItems={filters.visibleRows.length}
           itemLabel="học phần"
           onPageChange={pagination.setPage}
         />
-      </div>
-
-      <div className="z-legend">
-        <p className="z-legend__note">
-          Bảng này so các lớp TRONG CÙNG một học phần với nhau, để tách lỗi của học phần ra
-          khỏi lỗi của người dạy.
-        </p>
-        <ul className="z-legend__list z-legend__list--stacked">
-          {['COURSE_ISSUE', 'LECTURER_VARIANCE', 'ALL_GOOD', 'INCONCLUSIVE'].map((code) => (
-            <li key={code}>
-              <span className={verdictClass(code)}>{courseDiagnosisLabels[code]}</span>
-              <span className="z-legend__meaning">{courseDiagnosisDescriptions[code]}</span>
-            </li>
-          ))}
-        </ul>
       </div>
     </>
   );
@@ -1068,6 +1202,47 @@ const LecturerTab: React.FC<{
 };
 
 const LecturerReportView: React.FC<{ report: LecturerReport }> = ({ report }) => {
+  const columns = useMemo<FilterableColumn<LecturerReport['sections'][number]>[]>(() => [
+    { key: 'courseCode', value: (row) => row.courseCode },
+    { key: 'courseName', value: (row) => row.courseName },
+    { key: 'sectionName', value: (row) => row.sectionName },
+    { key: 'classSize', value: (row) => String(row.classSize), numeric: true },
+    { key: 'responseCount', value: (row) => String(row.responseCount), numeric: true },
+    { key: 'validResponseCount', value: (row) => String(row.validResponseCount), numeric: true },
+    {
+      key: 'validResponseRate',
+      value: (row) => `${row.validResponseRate.toFixed(1)}%`,
+      sortValue: (row) => row.validResponseRate,
+    },
+    { key: 'averageScore', value: (row) => row.averageScore.toFixed(2), numeric: true },
+    {
+      key: 'courseAverageScore',
+      value: (row) => (row.courseAverageScore === null ? '—' : row.courseAverageScore.toFixed(2)),
+      sortValue: (row) => row.courseAverageScore,
+    },
+    {
+      key: 'differenceFromCourse',
+      value: (row) => (row.differenceFromCourse === null ? '—' : row.differenceFromCourse.toFixed(2)),
+      sortValue: (row) => row.differenceFromCourse,
+    },
+    {
+      key: 'zSchool',
+      value: (row) => (row.zSchool === null ? '—' : row.zSchool.toFixed(2)),
+      sortValue: (row) => row.zSchool,
+    },
+    {
+      key: 'zFaculty',
+      value: (row) => (row.zFaculty === null ? '—' : row.zFaculty.toFixed(2)),
+      sortValue: (row) => row.zFaculty,
+    },
+    {
+      key: 'zDepartment',
+      value: (row) => (row.zDepartment === null ? '—' : row.zDepartment.toFixed(2)),
+      sortValue: (row) => row.zDepartment,
+    },
+    { key: 'verdict', value: (row) => zVerdict(row.zDepartment).label },
+  ], []);
+  const filters = useColumnFilters(report.sections, columns);
   const totalClassSize = report.sections.reduce((sum, row) => sum + row.classSize, 0);
   const overallRate =
     totalClassSize === 0 ? 0 : (report.totalResponseCount / totalClassSize) * 100;
@@ -1100,28 +1275,28 @@ const LecturerReportView: React.FC<{ report: LecturerReport }> = ({ report }) =>
           <table className="statistics-table">
             <thead>
               <tr>
-                <th scope="col">Mã HP</th>
-                <th scope="col">Học phần</th>
-                <th scope="col">Lớp</th>
-                <th scope="col">Sĩ số</th>
-                <th scope="col">Số phiếu thu về</th>
-                <th scope="col">Số phiếu hợp lệ</th>
+                <th scope="col">{filters.filterHeader('courseCode', 'Mã HP')}</th>
+                <th scope="col">{filters.filterHeader('courseName', 'Học phần')}</th>
+                <th scope="col">{filters.filterHeader('sectionName', 'Lớp')}</th>
+                <th scope="col">{filters.filterHeader('classSize', 'Sĩ số')}</th>
+                <th scope="col">{filters.filterHeader('responseCount', 'Số phiếu thu về')}</th>
+                <th scope="col">{filters.filterHeader('validResponseCount', 'Số phiếu hợp lệ')}</th>
                 <th scope="col" title="Số phiếu hợp lệ chia sĩ số">
-                  Tỷ lệ phiếu hợp lệ
+                  {filters.filterHeader('validResponseRate', 'Tỷ lệ phiếu hợp lệ')}
                 </th>
-                <th scope="col">Điểm</th>
+                <th scope="col">{filters.filterHeader('averageScore', 'Điểm')}</th>
                 <th scope="col" title="Trung bình mọi lớp cùng học phần, kể cả lớp người khác dạy">
-                  Điểm TB học phần
+                  {filters.filterHeader('courseAverageScore', 'Điểm TB học phần')}
                 </th>
-                <th scope="col">Chênh so học phần</th>
-                <th scope="col">Z-Score toàn trường</th>
-                <th scope="col">Z-Score trong khoa</th>
-                <th scope="col">Z-Score trong bộ môn</th>
-                <th scope="col">Nhận xét</th>
+                <th scope="col">{filters.filterHeader('differenceFromCourse', 'Chênh so học phần')}</th>
+                <th scope="col">{filters.filterHeader('zSchool', 'Z-Score toàn trường')}</th>
+                <th scope="col">{filters.filterHeader('zFaculty', 'Z-Score trong khoa')}</th>
+                <th scope="col">{filters.filterHeader('zDepartment', 'Z-Score trong bộ môn')}</th>
+                <th scope="col">{filters.filterHeader('verdict', 'Nhận xét')}</th>
               </tr>
             </thead>
             <tbody>
-              {report.sections.map((section) => {
+              {filters.visibleRows.map((section) => {
                 const verdict = zVerdict(section.zDepartment);
                 return (
                   <tr key={section.courseSectionSurveyId}>
@@ -1185,16 +1360,6 @@ const LecturerReportView: React.FC<{ report: LecturerReport }> = ({ report }) =>
           </table>
         </div>
       </div>
-
-      <ZVerdictLegend
-        notes={[
-          'Z-Score = (Điểm lớp − Trung bình nhóm so) ÷ Độ lệch chuẩn nhóm so.'
-            + ' Ba cột Z dùng ba nhóm: toàn trường, các lớp cùng khoa, các lớp cùng bộ môn.',
-          'Chênh so học phần = Điểm lớp − Điểm TB học phần.'
-            + ' Để trống khi học phần chỉ có đúng lớp này, không có ai để so.',
-          'Cột Nhận xét xét theo Z-Score trong bộ môn — nhóm so sát nhất.',
-        ]}
-      />
     </>
   );
 };

@@ -70,14 +70,33 @@ public static class ReportEndpoints
         group.MapGet("/school-overview", async (
             int semesterId,
             int? comparisonSemesterId,
+            int? semesterSurveyId,
             IReportService reportService,
             CancellationToken cancellationToken) =>
         {
             var report = await reportService.GetSchoolSurveyOverviewAsync(
                 semesterId,
                 comparisonSemesterId,
+                semesterSurveyId,
                 cancellationToken);
             return report is null ? Results.NotFound() : Results.Ok(report);
+        });
+
+        group.MapGet("/question-ranking", async (
+            int semesterId,
+            int? semesterSurveyId,
+            int? count,
+            bool? lowest,
+            IReportService reportService,
+            CancellationToken cancellationToken) =>
+        {
+            var questions = await reportService.GetQuestionRankingAsync(
+                semesterId,
+                semesterSurveyId,
+                count ?? 5,
+                lowest ?? true,
+                cancellationToken);
+            return Results.Ok(questions);
         });
 
         group.MapGet("/results", async (

@@ -282,9 +282,8 @@ public sealed record DashboardFacultyScoreDto(
     decimal AverageScore);
 
 /// <summary>
-/// Số liệu của màn hình tổng quan. Bốn chỉ số đầu là chỉ số TIẾN ĐỘ nên đếm mọi
-/// lớp và mọi phiếu thu được; điểm và các bảng bên dưới là chỉ số CHẤT LƯỢNG nên
-/// chỉ tính trên phiếu hợp lệ.
+/// Số liệu của màn hình tổng quan. Số lớp và số phiếu thu được đếm mọi lượt nộp;
+/// tỷ lệ hoàn thành, điểm và các bảng bên dưới chỉ tính trên phiếu hợp lệ.
 /// </summary>
 public sealed record SemesterSurveyDashboardDto(
     int SemesterSurveyId,
@@ -292,7 +291,11 @@ public sealed record SemesterSurveyDashboardDto(
     string SemesterName,
     string AcademicYearName,
     int SectionCount,
+    /// <summary>Mọi lượt nộp, kể cả phiếu bị bộ lọc nhiễu loại.</summary>
     int TotalResponseCount,
+    /// <summary>Phiếu qua được bộ lọc — mẫu số của tiến độ và của mọi số liệu chất lượng.</summary>
+    int ValidResponseCount,
+    /// <summary>Phiếu hợp lệ trên tổng sĩ số các lớp của đợt.</summary>
     decimal AverageCompletionRate,
     /// <summary>Null khi chưa lớp nào thu được phiếu hợp lệ.</summary>
     decimal? OverallScore,

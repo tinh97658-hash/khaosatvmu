@@ -2150,6 +2150,10 @@ public sealed class EfSurveyService(
         var allCssIds = allSectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
         var totalResponseCount = await db.SurveyResponses.AsNoTracking()
             .CountAsync(x => allCssIds.Contains(x.CourseSectionSurveyId), cancellationToken);
+        // Tiến độ tính trên phiếu hợp lệ: phiếu bị bộ lọc nhiễu loại vẫn là một
+        // lượt nộp nhưng không dùng được vào kết quả nào.
+        var validResponseCount = await db.SurveyResponses.AsNoTracking()
+            .CountAsync(x => allCssIds.Contains(x.CourseSectionSurveyId) && x.IsValid, cancellationToken);
 
         var sections = await LoadAnalysedSectionsAsync(semesterSurveyId, cancellationToken);
 
@@ -2203,9 +2207,10 @@ public sealed class EfSurveyService(
             header.AcademicYearName,
             allSectionSurveys.Count,
             totalResponseCount,
+            validResponseCount,
             totalClassSize == 0
                 ? 0m
-                : Math.Round((decimal)totalResponseCount / totalClassSize * 100, 1),
+                : Math.Round((decimal)validResponseCount / totalClassSize * 100, 1),
             sections.Count == 0 ? null : Math.Round(sections.Average(x => x.AverageScore), 2),
             sections.Count,
             questions,

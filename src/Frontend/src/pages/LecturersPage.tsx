@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { LecturerImportDialog } from '../components/LecturerImportDialog';
 import { ApiError } from '../services/apiClient';
 import {
@@ -416,33 +417,29 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
           <div className="catalog-form-grid catalog-form-grid--2">
             <div className="form-group">
               <label htmlFor="lecturer-faculty">Khoa viện</label>
-              <select
+              <SearchableSelect
                 id="lecturer-faculty"
                 value={form.facultyId}
-                onChange={(event) => updateForm({ facultyId: event.target.value, departmentId: '' })}
-              >
-                <option value="">Chưa phân công</option>
-                {faculties.map((faculty) => (
-                  <option key={faculty.facultyId} value={String(faculty.facultyId)}>
-                    {faculty.facultyName}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => updateForm({ facultyId: value, departmentId: '' })}
+                emptyLabel="Chưa phân công"
+                options={faculties.map((faculty) => ({
+                  value: String(faculty.facultyId),
+                  label: faculty.facultyName,
+                }))}
+              />
             </div>
             <div className="form-group">
               <label htmlFor="lecturer-department">Bộ môn</label>
-              <select
+              <SearchableSelect
                 id="lecturer-department"
                 value={form.departmentId}
-                onChange={(event) => updateForm({ departmentId: event.target.value })}
-              >
-                <option value="">Chưa phân công</option>
-                {availableDepartments.map((department) => (
-                  <option key={department.departmentId} value={String(department.departmentId)}>
-                    {department.departmentName}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => updateForm({ departmentId: value })}
+                emptyLabel="Chưa phân công"
+                options={availableDepartments.map((department) => ({
+                  value: String(department.departmentId),
+                  label: department.departmentName,
+                }))}
+              />
             </div>
           </div>
           <div className="catalog-form-grid catalog-form-grid--2">
@@ -470,18 +467,16 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
           </div>
           <div className="form-group">
             <label htmlFor="lecturer-position">Chức vụ</label>
-            <select
+            <SearchableSelect
               id="lecturer-position"
               value={form.positionId}
-              onChange={(event) => updateForm({ positionId: event.target.value })}
-            >
-              <option value="">Chưa phân công</option>
-              {positions.map((position) => (
-                <option key={position.positionId} value={String(position.positionId)}>
-                  {position.positionName}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => updateForm({ positionId: value })}
+              emptyLabel="Chưa phân công"
+              options={positions.map((position) => ({
+                value: String(position.positionId),
+                label: position.positionName,
+              }))}
+            />
           </div>
           <div className="modal-footer catalog-form-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>

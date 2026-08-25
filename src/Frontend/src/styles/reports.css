@@ -20,35 +20,43 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 14px 20px;
+  padding: 8px 20px;
   background: var(--reports-muted-surface, #f7f9fa);
   border-bottom: 1px solid var(--reports-border);
 }
 
-.reports-eyebrow {
+.reports-title {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--reports-primary);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.reports-title {
-  margin: 4px 0 0;
-  font-size: 20px;
+  margin: 0;
+  font-size: 17px;
   font-weight: 700;
   color: var(--reports-text);
   letter-spacing: 0;
+}
+
+.reports-title .operation-icon {
+  color: var(--reports-primary);
+}
+
+.reports-scope-fields {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .reports-semester-field {
   min-width: 260px;
 }
 
-.reports-semester-field select {
+.reports-campaign-field {
+  min-width: 280px;
+}
+
+.reports-semester-field select,
+.reports-campaign-field select {
   width: 100%;
 }
 
@@ -131,143 +139,101 @@
 }
 
 /* ---------- Dải tóm tắt (giảng viên / đơn vị) ---------- */
+/* Dải tóm tắt một dòng, cùng kiểu với trang chi tiết bài khảo sát. */
 .reports-summary-band {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
-  background: #ffffff;
+  gap: 6px 16px;
+  background: var(--reports-muted-surface);
   border: 1px solid var(--reports-border);
   border-radius: 4px;
-  padding: 16px 20px;
+  padding: 7px 12px;
   min-width: 0;
   max-width: 100%;
 }
 
 .reports-summary-main {
-  flex: 1 1 280px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   min-width: 0;
 }
 
-.reports-summary-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.reports-summary-main .operation-icon {
+  color: var(--reports-primary);
 }
 
-.reports-summary-title h2 {
+.reports-summary-main h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--reports-text);
   letter-spacing: 0;
 }
 
-.reports-summary-title .operation-icon {
-  color: var(--reports-primary);
-}
-
 .reports-summary-main p {
-  margin: 4px 0 0;
+  margin: 0;
   font-size: 12px;
   color: var(--reports-text-muted);
 }
 
 .reports-summary-metrics {
   display: flex;
-  align-items: stretch;
-  gap: 0;
-  border: 1px solid var(--reports-border);
-  border-radius: 4px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  min-width: 0;
   max-width: 100%;
 }
 
-.reports-summary-metrics > div {
-  min-width: 132px;
-  padding: 10px 16px;
-  background: var(--reports-muted-surface);
+.reports-summary-metrics .reports-exec-stat + .reports-exec-stat {
+  padding-left: 14px;
   border-left: 1px solid var(--reports-border);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.reports-summary-metrics > div:first-child {
-  border-left: 0;
-}
-
-.reports-summary-metrics span {
-  font-size: 11px;
-  color: var(--reports-text-muted);
-  font-weight: 600;
-}
-
-.reports-summary-metrics strong {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--reports-text);
-  line-height: 1.1;
-}
-
-.reports-summary-metrics strong small {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--reports-text-muted);
-  margin-left: 2px;
 }
 
 /* ---------- KPI cấp 1 ---------- */
-.reports-kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-}
-
-.reports-kpi {
+/* Dải KPI mỏng một hàng: các con số vẫn đọc được ngay mà không đẩy bảng xuống. */
+.reports-kpi-band {
   display: flex;
   align-items: center;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 8px 14px;
   background: #ffffff;
   border: 1px solid var(--reports-border);
   border-radius: 4px;
-  padding: 14px 16px;
 }
 
-.reports-kpi-icon {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
-  border-radius: 4px;
-  display: grid;
-  place-items: center;
-}
-
-.reports-kpi > div {
+.reports-kpi-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
-}
-
-.reports-kpi span {
-  display: block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--reports-text-muted);
+  white-space: nowrap;
 }
 
-.reports-kpi strong {
-  display: block;
-  font-size: 20px;
+.reports-kpi-item + .reports-kpi-item {
+  padding-left: 16px;
+  border-left: 1px solid var(--reports-border);
+}
+
+.reports-kpi-item .operation-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.reports-kpi-item strong {
+  font-size: 16px;
   font-weight: 700;
   color: var(--reports-text);
   line-height: 1.2;
-}
-
-.reports-kpi small {
-  display: block;
-  font-size: 11px;
-  color: var(--reports-text-muted);
 }
 
 /* ---------- Bảng Khoa / Bộ môn ---------- */
@@ -395,7 +361,7 @@
   background: #ffffff;
   border: 1px solid var(--reports-border);
   border-radius: 6px;
-  padding: 20px;
+  padding: 12px 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   min-width: 0;
   max-width: 100%;
@@ -406,10 +372,10 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
-  padding-bottom: 14px;
+  gap: 8px 14px;
+  padding-bottom: 8px;
   border-bottom: 1px solid #f1f5f9;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .section-analysis-heading {
@@ -421,7 +387,7 @@
 
 .section-analysis-heading h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   color: #1e293b;
   letter-spacing: -0.01em;
@@ -430,8 +396,8 @@
 
 .section-analysis-heading .operation-icon {
   color: var(--reports-primary);
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
 }
 
 .section-analysis-meta {
@@ -454,8 +420,21 @@
 }
 
 .analysis-meta-count strong,
+.analysis-meta-avg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .analysis-meta-avg strong {
   font-weight: 700;
+}
+
+/* Mẫu nét đứt, nói cho biết đường ngang trong biểu đồ là con số nào. */
+.analysis-meta-dash {
+  width: 18px;
+  height: 0;
+  border-top: 2px dashed #0284c7;
 }
 
 /* Legend bar & guide hint */
@@ -476,8 +455,9 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 12px;
-  font-size: 12px;
+  gap: 4px 6px;
+  margin-right: auto;
+  font-size: 11px;
 }
 
 .analysis-legend-label {
@@ -489,10 +469,10 @@
 .analysis-legend-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
+  gap: 5px;
+  padding: 1px 6px;
   border-radius: 4px;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 500;
   color: #334155;
   background: #ffffff;
@@ -529,7 +509,7 @@
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  margin-bottom: 24px;
+  margin-bottom: 10px;
   background: #ffffff;
   border-radius: 6px;
   padding: 4px 0;
@@ -718,11 +698,15 @@
   min-width: 0;
   max-width: 100%;
   border-top: 1px solid #f1f5f9;
-  padding-top: 18px;
+  padding-top: 10px;
 }
 
 .distribution-table-header {
-  margin-bottom: 12px;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 6px;
 }
 
 /* Câu hỏi tự nhập: liệt kê nội dung thay cho bảng phân bố mức. */
@@ -785,6 +769,21 @@
   width: 100%;
 }
 
+/* Bảng này dài bằng số câu hỏi của bộ đề nên bóp sát chiều cao dòng. */
+.analysis-detail-table td,
+.analysis-detail-table th {
+  height: 30px;
+  padding: 3px 8px;
+}
+
+.analysis-question-cell {
+  max-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .analysis-table-code-col {
   width: 56px;
   text-align: center;
@@ -833,6 +832,7 @@
 
 .section-analysis-question-col {
   min-width: 280px;
+  width: 45%;
 }
 
 .section-analysis-option-col {
@@ -889,8 +889,8 @@
 .reports-workspace-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  padding: 6px;
+  gap: 6px;
+  padding: 4px;
   background: #ffffff;
   border: 1px solid var(--reports-border);
   border-radius: 4px;
@@ -899,9 +899,10 @@
 .reports-workspace-tab {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 8px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 6px 12px;
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
@@ -928,29 +929,16 @@
 }
 
 .reports-workspace-tab .operation-icon {
-  flex: 0 0 20px;
-  width: 20px;
-  height: 20px;
-}
-
-.reports-workspace-tab span,
-.reports-workspace-tab strong,
-.reports-workspace-tab small {
-  display: block;
-  min-width: 0;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
 }
 
 .reports-workspace-tab strong {
+  min-width: 0;
+  overflow: hidden;
   font-size: 13px;
   color: inherit;
-}
-
-.reports-workspace-tab small {
-  margin-top: 2px;
-  overflow: hidden;
-  color: var(--reports-text-muted);
-  font-size: 11px;
-  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -959,22 +947,43 @@
   scroll-margin-top: 16px;
 }
 
-.reports-filter-bar {
-  background: #ffffff;
+/* Chip phạm vi khi bảng bị khoanh vùng từ drill-down của tab Tổng quan. */
+.reports-scope-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reports-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
   border: 1px solid var(--reports-border);
-  border-radius: 4px;
-  padding: 12px 16px;
+  border-radius: 13px;
+  background: var(--reports-muted-surface, #f7f9fa);
+  color: var(--reports-text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
-.reports-filter-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-  align-items: end;
+.reports-scope-chip:hover {
+  border-color: var(--reports-primary);
+  color: var(--reports-primary);
 }
 
-.reports-filter-grid .operations-field {
-  margin: 0;
+.reports-scope-chip svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Nút trong dòng bảng: giữ trên một dòng, đừng gãy chữ làm cao cả hàng. */
+.reports-row-action {
+  white-space: nowrap;
 }
 
 .reports-search-box {
@@ -995,25 +1004,61 @@
   padding-left: 34px;
 }
 
-.reports-filter-actions {
-  display: flex;
-  align-items: flex-end;
-}
 
 /* ---------- Xếp hạng Khoa / Bộ môn ---------- */
 .reports-rank-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+  align-items: stretch;
 }
 
+/* Khung cao cố định theo đúng một trang 10 dòng: lọc còn 1-2 dòng thì thẻ vẫn
+   giữ nguyên kích thước, hai bên không so le và trang không nhảy. */
 .reports-rank {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 616px;
   overflow: hidden;
   background: #ffffff;
   border: 1px solid var(--reports-border);
   border-radius: 4px;
   padding: 14px 16px;
+}
+
+.reports-rank .catalog-table-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  border-bottom: 0;
+}
+
+.reports-rank .catalog-table-scroll {
+  flex: 1 1 auto;
+}
+
+/* Bảng nằm trong khung nửa màn hình nên hạ trần rộng tối thiểu xuống, nếu không
+   nó cuộn ngang ngay cả khi màn hình còn thừa chỗ. */
+.reports-rank .catalog-table {
+  min-width: 560px;
+}
+
+.reports-rank .catalog-toolbar {
+  min-height: 0;
+  padding: 0 0 8px;
+}
+
+/* Ô đơn vị và ô tiến độ đều là hai dòng; ép chúng không xuống dòng thêm để mọi
+   hàng cao bằng nhau, thay vì bên hai dòng bên ba dòng. */
+.reports-rank .catalog-table td {
+  height: 46px;
+}
+
+.reports-rank .catalog-cell-primary,
+.reports-rank .catalog-secondary-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reports-rank-header {
@@ -1047,88 +1092,6 @@
   color: var(--reports-text-muted);
 }
 
-.reports-rank-empty {
-  padding: 20px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--reports-text-muted);
-  border: 1px dashed var(--reports-border);
-  border-radius: 4px;
-}
-
-.reports-rank-table {
-  min-width: 620px;
-}
-
-.reports-rank-table-wrap {
-  width: 100%;
-  min-width: 0;
-  overflow-x: auto;
-}
-
-.reports-rank-table th {
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.reports-rank-col {
-  width: 52px;
-}
-
-.reports-rank-num-col {
-  width: 70px;
-  text-align: right;
-}
-
-.reports-rank-completion-col {
-  width: 150px;
-}
-
-.reports-rank-medal {
-  text-align: center;
-}
-
-.reports-rank-place {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  background: var(--reports-muted-surface);
-  color: var(--reports-text-muted);
-  font-weight: 700;
-  font-size: 12px;
-}
-
-.reports-rank-place.is-top1 {
-  background: #b86216;
-  color: #ffffff;
-}
-
-.reports-rank-place.is-top2 {
-  background: #68737d;
-  color: #ffffff;
-}
-
-.reports-rank-place.is-top3 {
-  background: #8a6d3b;
-  color: #ffffff;
-}
-
-.reports-rank-name {
-  min-width: 160px;
-}
-
-.reports-rank-completion {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
 .reports-rank-score {
   display: inline-flex;
   align-items: center;
@@ -1138,13 +1101,11 @@
   white-space: nowrap;
 }
 
-.reports-rank .reports-sort-button.is-numeric {
-  justify-content: flex-end;
-}
-
-.reports-rank > .catalog-pagination {
-  margin: 10px -16px -14px;
-  padding: 10px 16px;
+/* Nằm gọn trong thẻ, không thò ra ngoài mép rồi bị bo góc cắt mất. */
+.reports-rank .catalog-pagination {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 8px 0 0;
 }
 
 /* ---------- Thanh tiến độ hoàn thành ---------- */
@@ -1168,6 +1129,19 @@
   align-items: center;
   gap: 8px;
   width: 100%;
+}
+
+/* Phiếu lỗi chỉ cần đỏ là đủ nhận ra, khỏi cần khung với chấm. */
+.reports-invalid-count {
+  color: #b52d2d;
+  font-weight: 700;
+}
+
+/* Dòng "x/y hợp lệ" dưới thanh tiến độ: luôn một dòng để các hàng cao bằng nhau. */
+.reports-progress-sub {
+  display: block;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- Liên kết giảng viên trong bảng ---------- */
@@ -1218,16 +1192,15 @@
     min-width: 0;
   }
 
-  .reports-semester-field {
+  .reports-scope-fields {
     width: 100%;
   }
 
-  .reports-filter-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .reports-filter-actions {
-    grid-column: 1 / -1;
+  .reports-semester-field,
+  .reports-campaign-field {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
   }
 
   .reports-rank-grid {
@@ -1254,14 +1227,6 @@
 
   .reports-workspace-tab strong {
     font-size: 11px;
-  }
-
-  .reports-workspace-tab small {
-    display: none;
-  }
-
-  .reports-filter-grid {
-    grid-template-columns: 1fr;
   }
 }
 
@@ -1397,10 +1362,51 @@
 }
 
 /* ---------- Hàng KPI ---------- */
-.reports-exec-kpis {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+/* Dải KPI mỏng của bảng tổng quan toàn trường. */
+.reports-exec-band {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 8px 14px;
+  background: #ffffff;
+  border: 1px solid var(--reports-border);
+  border-radius: 4px;
+}
+
+.reports-exec-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--reports-text-muted);
+  white-space: nowrap;
+}
+
+.reports-exec-stat + .reports-exec-stat {
+  padding-left: 14px;
+  border-left: 1px solid var(--reports-border);
+}
+
+.reports-exec-stat .operation-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.reports-exec-stat strong {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--reports-text);
+  line-height: 1.2;
+}
+
+.reports-exec-stat small {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--reports-text-muted);
 }
 
 /* Một nhóm phân tích tại một thời điểm, tránh bốn biểu đồ và một bảng nối dài trang. */
@@ -1691,6 +1697,42 @@
   color: var(--reports-text-muted);
   font-weight: 500;
   white-space: nowrap;
+}
+
+/* Chọn số lượng và đầu bảng cho khối xếp hạng tiêu chí. */
+.reports-question-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--reports-text-muted);
+}
+
+.reports-question-controls label {
+  font-weight: 600;
+}
+
+.reports-question-controls input,
+.reports-question-controls select {
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--reports-border);
+  border-radius: 3px;
+  background: #ffffff;
+  color: var(--reports-text);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.reports-question-controls input {
+  width: 64px;
+  text-align: right;
+}
+
+.reports-question-body.is-loading {
+  opacity: 0.55;
+  transition: opacity 120ms ease;
 }
 
 .reports-chart {
@@ -2054,12 +2096,6 @@
   height: 15px;
 }
 
-.reports-chart-pagination {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid #eef1f4;
-}
-
 /* ---------- Trạng thái rỗng ---------- */
 .reports-exec-empty {
   display: flex;
@@ -2092,8 +2128,9 @@
 
 /* ---------- Responsive tổng quan ---------- */
 @media (max-width: 1100px) {
-  .reports-exec-kpis {
-    grid-template-columns: 1fr;
+  .reports-exec-stat + .reports-exec-stat {
+    padding-left: 0;
+    border-left: 0;
   }
 }
 

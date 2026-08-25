@@ -48,6 +48,7 @@
 
 .statistics-summary {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px 20px;
   margin-bottom: 12px;
@@ -57,6 +58,11 @@
   color: #40505a;
   font-size: 12px;
   flex: 0 0 auto;
+}
+
+/* Nút chú thích luôn nằm sát mép phải của dải tiêu đề. */
+.statistics-summary .note-modal-button {
+  margin-left: auto;
 }
 
 .survey-statistics-page .admin-alert,
@@ -130,6 +136,27 @@
   color: #404a52;
   font-size: 11px;
   font-weight: 650;
+}
+
+/* Menu lọc kiểu Excel trên tiêu đề, dùng chung với các bảng của DataTable. */
+.statistics-table thead th .catalog-th-filterable {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.statistics-table thead th .catalog-th-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: auto;
+}
+
+.statistics-table thead th .catalog-th-label > svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: #0788b8;
 }
 
 .statistics-table tbody tr:hover td {
@@ -257,11 +284,25 @@
   box-shadow: inset 0 2px 0 #0788b8;
 }
 
+/* Gợi ý của tab bên trái, nút chú thích của tab dồn sang phải cùng một hàng. */
+.analysis-hint-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+  flex: 0 0 auto;
+}
+
+.analysis-hint-row .note-modal-button {
+  margin-left: auto;
+}
+
 .analysis-hint {
-  margin: 0 0 12px;
+  margin: 0;
+  min-width: 0;
   color: #68737d;
   font-size: 12px;
-  flex: 0 0 auto;
 }
 
 /* Bảng nhóm khoa/viện đứng riêng phía trên, không cần cuộn. */

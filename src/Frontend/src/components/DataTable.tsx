@@ -15,6 +15,11 @@ export interface Column<T> {
    * nên lọc không gom nhóm được gì.
    */
   filterValue?: (item: T) => string;
+  /**
+   * Dòng lọc nhanh trong menu lọc, gom các giá trị lẻ thành nhóm có nghĩa —
+   * ví dụ cột tỷ lệ gom theo mức tiến độ thay vì bắt tích từng con số.
+   */
+  quickFilters?: { label: string; match: (value: string) => boolean }[];
   /** Đặt true cho cột số để sắp xếp danh sách giá trị theo trị số. */
   numeric?: boolean;
   width?: string;
@@ -36,6 +41,13 @@ interface DataTableProps<T> {
   toolbarActions?: ReactNode;
   emptyMessage?: string;
   keyExtractor: (item: T) => string;
+  /**
+   * Báo ra ngoài những dòng còn lại sau bộ lọc cột, để một bảng khác bám theo.
+   * Hàm truyền vào phải ổn định (useCallback), nếu không sẽ gọi lại mỗi lần render.
+   */
+  onVisibleDataChange?: (rows: T[]) => void;
+  /** Cột STT. Tắt khi bảng đã đủ rộng và số thứ tự không nói lên điều gì. */
+  showIndex?: boolean;
   /** Số dòng mỗi trang. Mặc định 20 để các trang mới không vô tình hiển thị toàn bộ dữ liệu. */
   pageSize?: number;
   sortKey?: string;
@@ -57,6 +69,8 @@ export function DataTable<T>({
   toolbarActions,
   emptyMessage = 'Chưa có dữ liệu trong danh mục này.',
   keyExtractor,
+  onVisibleDataChange,
+  showIndex = true,
   pageSize = 20,
   sortKey,
   sortDirection = 'asc',
@@ -135,6 +149,10 @@ export function DataTable<T>({
       return result * direction;
     });
   }, [columns, filteredData, activeSortDirection, activeSortKey]);
+
+  useEffect(() => {
+    onVisibleDataChange?.(filteredData);
+  }, [filteredData, onVisibleDataChange]);
 
   const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize));
 
@@ -242,11 +260,16 @@ export function DataTable<T>({
         <table className="catalog-table">
           <thead>
             <tr>
-              <th className="catalog-table__index" scope="col">STT</th>
-              {columns.map((column) => (
+              {showIndex && <th className="catalog-table__index" scope="col">STT</th>}
+              {columns.map((column) => {
+                const filterValues = column.filterValue ? valuesFor(column) : [];
+
+                return (
                 <th key={column.key} scope="col" style={{ width: column.width }}>
                   <span className={column.filterValue ? 'catalog-th-filterable' : undefined}>
-                    {column.sortValue ? (
+                    {/* Cột nào có menu lọc thì sắp xếp nằm sẵn trong menu đó, khỏi
+                        cần thêm nút mũi tên; chỉ giữ dấu chỉ hướng đang sắp xếp. */}
+                    {column.sortValue && !column.filterValue ? (
                       <button
                         type="button"
                         className="catalog-sort-button catalog-th-label"
@@ -261,13 +284,24 @@ export function DataTable<T>({
                             : <ArrowDown aria-hidden="true" />}
                       </button>
                     ) : (
-                      <span className="catalog-th-label">{column.header}</span>
+                      <span className="catalog-th-label">
+                        {column.header}
+                        {activeSortKey === column.key && (
+                          activeSortDirection === 'asc'
+                            ? <ArrowUp aria-hidden="true" />
+                            : <ArrowDown aria-hidden="true" />
+                        )}
+                      </span>
                     )}
                     {column.filterValue && (
                       <ColumnFilterMenu
                         label={column.header}
-                        values={valuesFor(column)}
+                        values={filterValues}
                         selected={columnFilters[column.key] ?? null}
+                        quickFilters={column.quickFilters?.map((quick) => ({
+                          label: quick.label,
+                          values: filterValues.filter(quick.match),
+                        }))}
                         // Sắp xếp vẫn đi qua một đường duy nhất của bảng, dù là
                         // sắp xếp nội bộ hay do trang điều khiển.
                         sortDirection={activeSortKey === column.key ? activeSortDirection : null}
@@ -277,13 +311,14 @@ export function DataTable<T>({
                     )}
                   </span>
                 </th>
-              ))}
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {visibleRows.length === 0 ? (
               <tr>
-                <td className="catalog-empty" colSpan={columns.length + 1}>
+                <td className="catalog-empty" colSpan={columns.length + (showIndex ? 1 : 0)}>
                   <Inbox aria-hidden="true" size={24} />
                   <strong>{hasQuery ? 'Không tìm thấy kết quả phù hợp' : emptyMessage}</strong>
                   {hasQuery && <span>Thử thay đổi từ khóa hoặc bộ lọc hiện tại.</span>}
@@ -292,7 +327,9 @@ export function DataTable<T>({
             ) : (
               visibleRows.map((item, index) => (
                 <tr key={keyExtractor(item)}>
-                  <td className="catalog-table__index">{firstIndex + index + 1}</td>
+                  {showIndex && (
+                    <td className="catalog-table__index">{firstIndex + index + 1}</td>
+                  )}
                   {columns.map((column) => (
                     <td key={column.key}>
                       {column.render

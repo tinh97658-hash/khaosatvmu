@@ -576,7 +576,6 @@ function DashboardApp() {
             {currentTab === 'overview' && (
               isUnrestrictedRole(auth.activeProfile?.roleCode) ? (
                 <DashboardOverview
-                  stats={stats}
                   campaigns={campaigns}
                   onOpenQR={handleOpenCampaignQR}
                   permissions={permissions}

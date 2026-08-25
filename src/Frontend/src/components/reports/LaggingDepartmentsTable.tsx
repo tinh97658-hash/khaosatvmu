@@ -85,7 +85,7 @@ export const LaggingDepartmentsTable: React.FC<LaggingDepartmentsTableProps> = (
   if (sortedDepartments.length === 0) {
     return (
       <div className="reports-chart-empty">
-        Không có Bộ môn nào chậm tiến độ dưới 40%.
+        Không có Bộ môn nào chậm tiến độ dưới 20%.
       </div>
     );
   }

@@ -1522,30 +1522,40 @@
 }
 
 .section-responses-back {
-  margin-bottom: 12px;
+  min-height: 26px !important;
+  padding: 3px 7px !important;
 }
 
 .section-responses-summary {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 10px 16px;
-  margin-bottom: 12px;
-  padding: 12px;
+  gap: 6px 16px;
+  margin-bottom: 10px;
+  padding: 7px 10px;
   border: 1px solid var(--operations-border);
   background: var(--operations-muted);
+}
+
+/* Tên lớp và thông tin phụ nằm cùng một dòng cho gọn. */
+.section-responses-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
 }
 
 .section-responses-heading h2 {
   margin: 0;
   color: var(--operations-text);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .section-responses-heading p {
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--operations-text-muted);
   font-size: 12px;
 }
@@ -1573,23 +1583,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Chỉ là con số, khoanh tròn quanh từng ô chỉ làm bảng rối và cao thêm. */
 .response-count {
   display: inline-block;
-  min-width: 26px;
-  padding: 1px 6px;
-  border: 1px solid #d7e7ed;
-  border-radius: 999px;
-  background: #f2f8fa;
   color: var(--operations-text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  text-align: center;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
 .response-count.is-zero {
-  border-color: var(--operations-border);
-  background: #ffffff;
   color: var(--operations-text-muted);
   font-weight: 500;
 }
@@ -1630,12 +1634,40 @@
   color: #b42318;
 }
 
-.response-reason-list {
-  margin: 0;
-  padding-left: 16px;
+.response-reasons {
+  display: block;
+  overflow: hidden;
   color: #b42318;
   font-size: 11px;
-  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Bảng phiếu trả lời rất dài nên bóp sát chiều cao dòng: mỗi ô đúng một dòng,
+   nội dung đầy đủ nằm trong tooltip. */
+.section-responses-page .catalog-table td {
+  height: 30px;
+  padding: 2px 8px;
+}
+
+.section-responses-page .catalog-table th {
+  height: 30px;
+  padding: 3px 8px;
+}
+
+.section-responses-page .response-comment {
+  display: block;
+  overflow: hidden;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.response-row-action {
+  min-height: 26px !important;
+  padding: 3px 8px !important;
+  white-space: nowrap;
 }
 
 .section-responses-stat--warning {
@@ -1728,4 +1760,58 @@
 
 .section-survey-pagination {
   border-top: 1px solid var(--operations-border);
+}
+
+/* ---------------------------------------------------------------------------
+   Nút mở hộp thoại chú thích. Các bảng phân tích có công thức và bảng quy ước
+   dài; để nguyên dưới chân trang thì phải cuộn hết mới đọc được, mà lần nào
+   cũng chiếm chỗ dù người dùng đã thuộc.
+   --------------------------------------------------------------------------- */
+.note-modal-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 1px solid #cfd7dc;
+  border-radius: 3px;
+  background: #ffffff;
+  color: #40505a;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.note-modal-button:hover {
+  border-color: #0788b8;
+  background: #f0f7fa;
+  color: #036e99;
+}
+
+.note-modal-button:focus-visible {
+  outline: 2px solid #0788b8;
+  outline-offset: 1px;
+}
+
+.note-modal-button svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  color: #0788b8;
+}
+
+.note-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.note-modal-body .z-legend {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }

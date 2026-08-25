@@ -266,7 +266,11 @@ export interface SemesterSurveyDashboard {
   semesterName: string;
   academicYearName: string;
   sectionCount: number;
+  /** Mọi lượt nộp, kể cả phiếu bị bộ lọc nhiễu loại. */
   totalResponseCount: number;
+  /** Phiếu qua được bộ lọc — mẫu số của tiến độ và mọi số liệu chất lượng. */
+  validResponseCount: number;
+  /** Phiếu hợp lệ trên tổng sĩ số các lớp của đợt. */
   averageCompletionRate: number;
   /** Null khi chưa lớp nào thu được phiếu hợp lệ. */
   overallScore: number | null;
