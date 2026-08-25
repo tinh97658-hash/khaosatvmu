@@ -200,6 +200,10 @@ export function UsersAdminPage() {
   const { access } = useAuth();
   const permissions = access?.permissions;
   const canViewTab = (tabId: AdminView) => canAccessTab(permissions, 'users-admin', tabId);
+  const canViewUsers = canViewTab('users');
+  const canViewAudit = canViewTab('audit');
+  const canViewPermissions = canViewTab('permissions');
+  const canLoadRoles = canViewUsers || canViewPermissions;
 
   useEffect(() => {
     if (canViewTab(view)) return;
@@ -262,18 +266,19 @@ export function UsersAdminPage() {
   }, []);
 
   useEffect(() => {
+    if (!canLoadRoles) return;
     void loadRoles();
-  }, [loadRoles]);
+  }, [canLoadRoles, loadRoles]);
 
   useEffect(() => {
-    if (view !== 'users') return;
+    if (view !== 'users' || !canViewUsers) return;
     const timer = window.setTimeout(() => void loadUsers(), 250);
     return () => window.clearTimeout(timer);
-  }, [loadUsers, view]);
+  }, [canViewUsers, loadUsers, view]);
 
   useEffect(() => {
-    if (view === 'audit') void loadAudit();
-  }, [loadAudit, view]);
+    if (view === 'audit' && canViewAudit) void loadAudit();
+  }, [canViewAudit, loadAudit, view]);
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil((usersPage?.totalCount ?? 0) / (usersPage?.pageSize ?? 20))),
