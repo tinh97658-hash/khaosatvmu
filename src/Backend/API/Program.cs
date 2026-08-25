@@ -1,6 +1,7 @@
 using API.Auth;
 using API.Catalog;
 using API.Configuration;
+using API.GraduationAnalytics;
 using API.Middleware;
 using API.Reports;
 using API.Surveys;
@@ -8,11 +9,13 @@ using API.UserAdministration;
 using Application.Auth;
 using Application.Catalog;
 using Application.Common.Interfaces;
+using Application.GraduationAnalytics;
 using Application.Reports;
 using Application.Surveys;
 using Application.UserAdministration;
 using Infrastructure.Auth;
 using Infrastructure.Catalog;
+using Infrastructure.GraduationAnalytics;
 using Infrastructure.Persistence;
 using Infrastructure.Reports;
 using Infrastructure.Services;
@@ -129,6 +132,7 @@ builder.Services.AddAuthorization(options =>
     AddPermissionPolicy(AuthPolicies.SurveyDashboardAccess, "SURVEY_DASHBOARD_ACCESS");
     AddPermissionPolicy(AuthPolicies.SurveyStatisticsAccess, "SURVEY_STATISTICS_ACCESS");
     AddPermissionPolicy(AuthPolicies.SurveyAnalysisAccess, "SURVEY_ANALYSIS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.GraduationAnalyticsAccess, "GRADUATION_ANALYTICS_ACCESS");
 
     // Quyền cấp tab: chặn ngay tại endpoint của từng tab.
     AddPermissionPolicy(AuthPolicies.ReportsOverviewAccess, "REPORTS_OVERVIEW_ACCESS");
@@ -200,6 +204,7 @@ builder.Services.AddSingleton(_ =>
     return new SurveyStartTicket(signingKey);
 });
 builder.Services.AddScoped<IReportService, EfReportService>();
+builder.Services.AddScoped<IGraduationAnalyticsService, EfGraduationAnalyticsService>();
 builder.Services.AddScoped<ApplicationCookieEvents>();
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, AnyPermissionAuthorizationHandler>();
@@ -238,6 +243,7 @@ app.MapUserAdministrationEndpoints();
 app.MapCatalogEndpoints();
 app.MapSurveyEndpoints();
 app.MapReportEndpoints();
+app.MapGraduationAnalyticsEndpoints();
 
 app.MapHealthChecks("/healthz");
 app.MapHealthChecks("/api/health");

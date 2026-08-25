@@ -13,12 +13,12 @@ public static class ReportEndpoints
         // Nhóm riêng cho từng tab của module Thống kê & Báo cáo. Vào được module
         // chưa đủ: mỗi tab đòi thêm đúng quyền của tab đó.
         var overviewTabGroup = app.MapGroup("/api/v1/reports")
-            .RequireAuthorization(AuthPolicies.ReportsOverviewAccess);
+            .RequireAuthorization(AuthPolicies.ReportsAccess, AuthPolicies.ReportsOverviewAccess);
 
         // Tra cứu chi tiết và Tổng hợp đơn vị đọc chung một tập kết quả nên nhận
         // một trong hai quyền; không có quyền nào thì chặn.
         var resultsTabGroup = app.MapGroup("/api/v1/reports")
-            .RequireAuthorization(AuthPolicies.ReportsResultsRead);
+            .RequireAuthorization(AuthPolicies.ReportsAccess, AuthPolicies.ReportsResultsRead);
 
         group.MapGet("/operational-progress", async (
             int semesterId,

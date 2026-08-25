@@ -27,6 +27,7 @@ public static class AuthPolicies
     public const string SurveyDashboardAccess = "PERMISSION_SURVEY_DASHBOARD_ACCESS";
     public const string SurveyStatisticsAccess = "PERMISSION_SURVEY_STATISTICS_ACCESS";
     public const string SurveyAnalysisAccess = "PERMISSION_SURVEY_ANALYSIS_ACCESS";
+    public const string GraduationAnalyticsAccess = "PERMISSION_GRADUATION_ANALYTICS_ACCESS";
 
     // Quyền cấp TAB. Vào được module chưa chắc đã xem được mọi tab bên trong,
     // nên mỗi endpoint của một tab đòi đúng quyền của tab đó chứ không dựa vào

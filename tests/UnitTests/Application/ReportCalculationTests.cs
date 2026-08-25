@@ -54,8 +54,11 @@ public class ReportCalculationTests
     [Fact]
     public void LecturerPerformanceReportDto_CalculatesAveragesCorrectly()
     {
-        var section1 = new LecturerSectionSummaryDto(1, "19783", "Kỹ thuật lập trình", "N01", 60, 50, 4.8m);
-        var section2 = new LecturerSectionSummaryDto(2, "19784", "Cơ sở dữ liệu", "N02", 50, 40, 4.4m);
+        // 50 lượt nộp thì 48 phiếu hợp lệ; tiến độ và điểm đều tính trên phiếu hợp lệ.
+        var section1 = new LecturerSectionSummaryDto(
+            1, "19783", "Kỹ thuật lập trình", "N01", 60, 50, 48, 2, 80.0m, 4.8m);
+        var section2 = new LecturerSectionSummaryDto(
+            2, "19784", "Cơ sở dữ liệu", "N02", 50, 40, 39, 1, 78.0m, 4.4m);
 
         var totalResponses = section1.ResponseCount + section2.ResponseCount;
         var weightedAvg = Math.Round(((section1.AverageScore * section1.ResponseCount) + (section2.AverageScore * section2.ResponseCount)) / totalResponses, 2);

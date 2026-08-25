@@ -35,19 +35,27 @@ public static class SurveyEndpoints
         // tab nào thì gọi thẳng endpoint của tab đó cũng nhận 403.
         var analysisNormalizationGroup = endpoints
             .MapGroup("/api/surveys")
-            .RequireAuthorization(AuthPolicies.SurveyAnalysisNormalizationAccess);
+            .RequireAuthorization(
+                AuthPolicies.SurveyAnalysisAccess,
+                AuthPolicies.SurveyAnalysisNormalizationAccess);
 
         var analysisDepartmentsGroup = endpoints
             .MapGroup("/api/surveys")
-            .RequireAuthorization(AuthPolicies.SurveyAnalysisDepartmentsAccess);
+            .RequireAuthorization(
+                AuthPolicies.SurveyAnalysisAccess,
+                AuthPolicies.SurveyAnalysisDepartmentsAccess);
 
         var analysisCoursesGroup = endpoints
             .MapGroup("/api/surveys")
-            .RequireAuthorization(AuthPolicies.SurveyAnalysisCoursesAccess);
+            .RequireAuthorization(
+                AuthPolicies.SurveyAnalysisAccess,
+                AuthPolicies.SurveyAnalysisCoursesAccess);
 
         var analysisLecturerGroup = endpoints
             .MapGroup("/api/surveys")
-            .RequireAuthorization(AuthPolicies.SurveyAnalysisLecturerAccess);
+            .RequireAuthorization(
+                AuthPolicies.SurveyAnalysisAccess,
+                AuthPolicies.SurveyAnalysisLecturerAccess);
         // Endpoint dùng chung cho bảng điều khiển, mở cho mọi quyền nhóm Báo cáo.
         var reportingReadGroup = endpoints
             .MapGroup("/api/surveys")

@@ -13,21 +13,29 @@ public static class UserAdministrationEndpoints
         // gọi được endpoint nào của module này.
         var accountsGroup = endpoints
             .MapGroup("/api/admin")
-            .RequireAuthorization(AuthPolicies.UserAdminAccountsAccess);
+            .RequireAuthorization(
+                AuthPolicies.UserAdminAccess,
+                AuthPolicies.UserAdminAccountsAccess);
 
         var auditGroup = endpoints
             .MapGroup("/api/admin")
-            .RequireAuthorization(AuthPolicies.UserAdminAuditAccess);
+            .RequireAuthorization(
+                AuthPolicies.UserAdminAccess,
+                AuthPolicies.UserAdminAuditAccess);
 
         var permissionsGroup = endpoints
             .MapGroup("/api/admin")
-            .RequireAuthorization(AuthPolicies.UserAdminPermissionsAccess);
+            .RequireAuthorization(
+                AuthPolicies.UserAdminAccess,
+                AuthPolicies.UserAdminPermissionsAccess);
 
         // Danh sách vai trò dùng ở cả tab tài khoản (gán vai trò cho hồ sơ) lẫn
         // tab phân quyền, nên nhận một trong hai quyền.
         var rolesReadGroup = endpoints
             .MapGroup("/api/admin")
-            .RequireAuthorization(AuthPolicies.UserAdminRolesRead);
+            .RequireAuthorization(
+                AuthPolicies.UserAdminAccess,
+                AuthPolicies.UserAdminRolesRead);
 
         accountsGroup.MapGet("/users", async (
             string? search,
