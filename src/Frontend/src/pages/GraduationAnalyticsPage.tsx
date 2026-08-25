@@ -299,7 +299,6 @@ export function GraduationAnalyticsPage() {
   const compositionTotal = compositionMetrics.reduce(
     (sum, item) => sum + (composition[item.id] ?? 0), 0,
   );
-  const compositionData = [{ name: 'Kết quả', ...composition }];
   const availablePrograms = facets?.programs.filter((item) =>
     !faculty || item.facultyName === faculty) ?? [];
 
@@ -405,15 +404,11 @@ export function GraduationAnalyticsPage() {
         {compositionTotal > 0 ? (
           <>
             <div className="graduation-composition__chart" role="img" aria-label="Biểu đồ cơ cấu xếp loại và chuyển VHVL">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={compositionData} layout="vertical" margin={{ top: 5, right: 4, bottom: 5, left: 4 }}>
-                  <XAxis type="number" hide /><YAxis type="category" dataKey="name" hide />
-                  <Tooltip formatter={(value) => formatValue(Number(value), 'count')} />
-                  {compositionMetrics.map((item) => (
-                    <Bar key={item.id} dataKey={item.id} name={item.label} stackId="result" fill={item.color} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+              {compositionMetrics.map((item) => {
+                const value = composition[item.id] ?? 0;
+                if (value <= 0) return null;
+                return <span key={item.id} style={{ width: `${(value / compositionTotal) * 100}%`, background: item.color }} title={`${item.label}: ${formatValue(value, 'count')}`} />;
+              })}
             </div>
             <div className="graduation-composition__legend">
               {compositionMetrics.map((item) => {
@@ -479,9 +474,9 @@ export function GraduationAnalyticsPage() {
                 ) : chartType === 'column' ? (
                   <BarChart data={displayChartData} margin={{ top: showLabels ? 24 : 5 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={displayChartData.length > 6 ? -25 : 0} textAnchor={displayChartData.length > 6 ? 'end' : 'middle'} height={displayChartData.length > 6 ? 76 : 42} /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} />{chartModel.series.length > 1 && <Legend />}{chartModel.series.map((item, index) => <Bar key={item.key} dataKey={item.key} name={item.label} fill={chartColors[index % chartColors.length]} radius={[2, 2, 0, 0]}>{showLabels && <LabelList dataKey={item.key} position="top" formatter={(value) => formatValue(Number(value), metric?.unit)} />}</Bar>)}</BarChart>
                 ) : chartType === 'line' ? (
-                  <LineChart data={displayChartData} margin={{ top: showLabels ? 24 : 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} />{chartModel.series.length > 1 && <Legend />}{chartModel.series.map((item, index) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartColors[index % chartColors.length]} strokeWidth={2} dot={{ r: 3 }}>{showLabels && <LabelList dataKey={item.key} position="top" formatter={(value) => formatValue(Number(value), metric?.unit)} />}</Line>)}</LineChart>
+                  <LineChart data={displayChartData} margin={{ top: showLabels ? 24 : 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} />{chartModel.series.length > 1 && <Legend />}{chartModel.series.map((item, index) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartColors[index % chartColors.length]} strokeWidth={2} dot={{ r: 3 }} label={showLabels ? { position: 'top', formatter: (value: unknown) => formatValue(Number(value), metric?.unit) } : false} />)}</LineChart>
                 ) : (
-                  <AreaChart data={displayChartData} margin={{ top: showLabels ? 24 : 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} />{chartModel.series.length > 1 && <Legend />}{chartModel.series.map((item, index) => <Area key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartColors[index % chartColors.length]} fill={chartColors[index % chartColors.length]} fillOpacity={0.12}>{showLabels && <LabelList dataKey={item.key} position="top" formatter={(value) => formatValue(Number(value), metric?.unit)} />}</Area>)}</AreaChart>
+                  <AreaChart data={displayChartData} margin={{ top: showLabels ? 24 : 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} />{chartModel.series.length > 1 && <Legend />}{chartModel.series.map((item, index) => <Area key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartColors[index % chartColors.length]} fill={chartColors[index % chartColors.length]} fillOpacity={0.12} label={showLabels ? { position: 'top', formatter: (value: unknown) => formatValue(Number(value), metric?.unit) } : false} />)}</AreaChart>
                 )}
               </ResponsiveContainer>
             </div>

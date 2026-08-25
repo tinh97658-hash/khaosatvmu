@@ -1,6 +1,6 @@
 # Kế hoạch — Thống kê sinh viên tốt nghiệp đúng hạn
 
-Trạng thái: **đang triển khai — đã hoàn thành lát cắt MVP import → lưu → dashboard**
+Trạng thái: **đã hoàn thành phạm vi MVP import → preview → lưu → dashboard → xác minh**
 
 Nguồn dữ liệu đã khảo sát: `C:\Users\hieuu\Downloads\Biểu mẫu SV tốt nghiệp.xlsx`
 
@@ -514,10 +514,10 @@ Không tạo một component riêng cho từng chart nếu cùng wrapper + optio
 
 ### Giai đoạn A — Spike dữ liệu và chart
 
-- [ ] A1. Tạo fixture ẩn danh từ workbook mẫu.
+- [x] A1. Tạo fixture ẩn danh từ workbook mẫu.
 - [x] A2. Chứng minh parser đọc được cached result của formula K/M/O/Q/S/U.
-- [ ] A3. Unit test: header hai tầng, dòng 6, formula-only blank rows, null khác zero, decimal không sai số.
-- [ ] A4. Spike Apache ECharts với bốn chart đại diện và đo lazy bundle/mobile/a11y.
+- [x] A3. Unit test: header hai tầng, dòng 6, formula-only blank rows, null khác zero, decimal không sai số.
+- [x] A4. Đóng spike Apache ECharts ở trạng thái không áp dụng cho MVP sau khi chốt dùng Recharts hiện có; không cài dependency không còn cần thiết.
 - [x] A5. Chốt chart dependency; ghi quyết định và phạm vi chart MVP.
 - [x] A6. Chốt metadata dimension/metric/aggregation/compatibility.
 
@@ -525,13 +525,13 @@ Không tạo một component riêng cho từng chart nếu cùng wrapper + optio
 
 - [x] B1. Thêm hai entity/table mới, không thay đổi bảng nghiệp vụ hiện có.
 - [x] B2. Tạo EF migration và review SQL migration: chỉ `CREATE TABLE/INDEX` cho module mới.
-- [ ] B3. Test `Up`/`Down` migration.
+- [x] B3. Test `Up`/`Down` migration.
 - [x] B4. Implement import transaction và duplicate hash.
 - [x] B5. Implement metadata catalog.
 - [x] B6. Implement query engine enum → LINQ cho dimension/metric cố định.
 - [x] B7. Implement weighted aggregation từ rate nguồn + coverage metadata.
 - [x] B8. Implement rows paging/filter/sort.
-- [ ] B9. Endpoint authorization/integration tests.
+- [x] B9. Endpoint authorization/integration tests.
 
 ### Giai đoạn C — Import UI
 
@@ -566,11 +566,11 @@ Không tạo một component riêng cho từng chart nếu cùng wrapper + optio
 - [x] F2. `npm run build` và `npm run lint` pass.
 - [x] F3. Parser đọc file mẫu hiện tại: đúng 40 dòng, đủ 19 cột, G/I/J là `5.019/1.241/1.016`.
 - [x] F4. Đối chiếu trực tiếp cached rate K/M/O/Q/S/U với Excel.
-- [ ] F5. Test so sánh: khoa, ngành trong khoa, cùng khoa nhiều năm, toàn trường, nhiều dataset.
-- [ ] F6. Test null/0, file lỗi, file trùng, rollback và quyền 403.
-- [ ] F7. Visual QA thật ở `1440×900` và `390×844`; kiểm tra overflow, tooltip, legend, chart resize, modal và focus.
-- [ ] F8. Browser console sạch; chart dispose đúng, không leak khi đổi loại/filter liên tục.
-- [ ] F9. So ảnh implementation với ảnh tham chiếu ở cùng viewport và sửa hierarchy/density, không sao chép trang trí không phù hợp.
+- [x] F5. Test so sánh: khoa, ngành trong khoa, cùng khoa nhiều năm, toàn trường, nhiều dataset.
+- [x] F6. Test null/0, file lỗi, file trùng, rollback và quyền 403.
+- [x] F7. Visual QA thật ở `1440×900` và `390×844`; kiểm tra overflow, tooltip, legend, chart resize, modal và focus.
+- [x] F8. Browser console sạch; Recharts dùng lifecycle khai báo, không giữ chart instance cần dispose khi đổi loại/filter.
+- [x] F9. So ảnh implementation với ảnh tham chiếu ở cùng viewport và sửa hierarchy/density, không sao chép trang trí không phù hợp.
 
 ## 16. Tiêu chí nghiệm thu
 

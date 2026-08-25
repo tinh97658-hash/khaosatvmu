@@ -103,6 +103,13 @@ export async function parseGraduationImportFile(file: File): Promise<GraduationP
     throw new GraduationImportFileError('READ_FAILED');
   }
 
+  return parseGraduationSheet(sheet);
+}
+
+export function parseGraduationSheet(
+  sheet: readonly (readonly (CellValue | null)[])[],
+): GraduationParsedFile {
+
   const headerStart = sheet.findIndex((row) =>
     row.some((cell) => normalize(cellText(cell)) === 'ten khoa'));
   if (headerStart < 0) throw new GraduationImportFileError('SHEET_STRUCTURE_INVALID');
