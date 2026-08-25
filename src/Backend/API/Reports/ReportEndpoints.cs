@@ -10,16 +10,6 @@ public static class ReportEndpoints
         var group = app.MapGroup("/api/v1/reports")
             .RequireAuthorization(AuthPolicies.ReportsAccess);
 
-        // Nhóm riêng cho từng tab của module Thống kê & Báo cáo. Vào được module
-        // chưa đủ: mỗi tab đòi thêm đúng quyền của tab đó.
-        var overviewTabGroup = app.MapGroup("/api/v1/reports")
-            .RequireAuthorization(AuthPolicies.ReportsAccess, AuthPolicies.ReportsOverviewAccess);
-
-        // Tra cứu chi tiết và Tổng hợp đơn vị đọc chung một tập kết quả nên nhận
-        // một trong hai quyền; không có quyền nào thì chặn.
-        var resultsTabGroup = app.MapGroup("/api/v1/reports")
-            .RequireAuthorization(AuthPolicies.ReportsAccess, AuthPolicies.ReportsResultsRead);
-
         group.MapGet("/operational-progress", async (
             int semesterId,
             IReportService reportService,
@@ -77,7 +67,7 @@ public static class ReportEndpoints
             return report is null ? Results.NotFound() : Results.Ok(report);
         });
 
-        overviewTabGroup.MapGet("/school-overview", async (
+        group.MapGet("/school-overview", async (
             int semesterId,
             int? comparisonSemesterId,
             int? semesterSurveyId,
@@ -92,7 +82,7 @@ public static class ReportEndpoints
             return report is null ? Results.NotFound() : Results.Ok(report);
         });
 
-        overviewTabGroup.MapGet("/question-ranking", async (
+        group.MapGet("/question-ranking", async (
             int semesterId,
             int? semesterSurveyId,
             int? count,
@@ -109,7 +99,7 @@ public static class ReportEndpoints
             return Results.Ok(questions);
         });
 
-        resultsTabGroup.MapGet("/results", async (
+        group.MapGet("/results", async (
             int? semesterId,
             int? facultyId,
             int? departmentId,

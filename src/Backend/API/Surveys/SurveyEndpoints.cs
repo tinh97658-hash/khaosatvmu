@@ -30,32 +30,6 @@ public static class SurveyEndpoints
         var surveyAnalysisGroup = endpoints
             .MapGroup("/api/surveys")
             .RequireAuthorization(AuthPolicies.SurveyAnalysisAccess);
-
-        // Mỗi tab của module phân tích chuyên sâu có nhóm riêng: ai bị tắt quyền
-        // tab nào thì gọi thẳng endpoint của tab đó cũng nhận 403.
-        var analysisNormalizationGroup = endpoints
-            .MapGroup("/api/surveys")
-            .RequireAuthorization(
-                AuthPolicies.SurveyAnalysisAccess,
-                AuthPolicies.SurveyAnalysisNormalizationAccess);
-
-        var analysisDepartmentsGroup = endpoints
-            .MapGroup("/api/surveys")
-            .RequireAuthorization(
-                AuthPolicies.SurveyAnalysisAccess,
-                AuthPolicies.SurveyAnalysisDepartmentsAccess);
-
-        var analysisCoursesGroup = endpoints
-            .MapGroup("/api/surveys")
-            .RequireAuthorization(
-                AuthPolicies.SurveyAnalysisAccess,
-                AuthPolicies.SurveyAnalysisCoursesAccess);
-
-        var analysisLecturerGroup = endpoints
-            .MapGroup("/api/surveys")
-            .RequireAuthorization(
-                AuthPolicies.SurveyAnalysisAccess,
-                AuthPolicies.SurveyAnalysisLecturerAccess);
         // Endpoint dùng chung cho bảng điều khiển, mở cho mọi quyền nhóm Báo cáo.
         var reportingReadGroup = endpoints
             .MapGroup("/api/surveys")
@@ -198,13 +172,13 @@ public static class SurveyEndpoints
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSemesterSurveyStatisticsAsync(semesterSurveyId, cancellationToken)));
 
-        analysisNormalizationGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/normalization", async (
+        surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/normalization", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSemesterSurveyNormalizationAsync(semesterSurveyId, cancellationToken)));
 
-        analysisDepartmentsGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/department-summary", async (
+        surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/department-summary", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
@@ -224,19 +198,19 @@ public static class SurveyEndpoints
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSemesterSurveyDashboardAsync(semesterSurveyId, cancellationToken)));
 
-        analysisCoursesGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/course-diagnosis", async (
+        surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/course-diagnosis", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSemesterSurveyCourseDiagnosisAsync(semesterSurveyId, cancellationToken)));
 
-        analysisLecturerGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/lecturers", async (
+        surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/lecturers", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSemesterSurveyLecturersAsync(semesterSurveyId, cancellationToken)));
 
-        analysisLecturerGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/lecturers/{lecturerId:int}", async (
+        surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/lecturers/{lecturerId:int}", async (
             int semesterSurveyId,
             int lecturerId,
             ISurveyService service,

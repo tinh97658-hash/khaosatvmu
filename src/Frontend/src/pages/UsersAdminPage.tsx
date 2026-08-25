@@ -25,8 +25,6 @@ import { Modal } from '../components/Modal';
 import { RolePermissionEditor } from '../components/RolePermissionEditor';
 import { UserImportDialog } from '../components/UserImportDialog';
 import { adminApi } from '../services/adminApi';
-import { useAuth } from '../auth/authContext';
-import { canAccessTab, firstAllowedTab } from '../auth/modulePermissions';
 import { ApiError } from '../services/apiClient';
 import type {
   AdminAuditLog,
@@ -39,9 +37,6 @@ import type {
 import '../styles/auth-admin.css';
 
 type AdminView = 'users' | 'audit' | 'permissions';
-
-/** Thứ tự tab, cũng là thứ tự tìm tab thay thế khi tab đang chọn bị tắt quyền. */
-const adminViews: AdminView[] = ['users', 'audit', 'permissions'];
 type StatusConfirmation =
   | { type: 'user'; item: AdminUser }
   | { type: 'profile'; item: AdminProfile }
@@ -195,22 +190,6 @@ function messageFrom(error: unknown): string {
 
 export function UsersAdminPage() {
   const [view, setView] = useState<AdminView>('users');
-
-  // Mỗi tab một quyền riêng; backend cũng chặn tại endpoint của từng tab.
-  const { access } = useAuth();
-  const permissions = access?.permissions;
-  const canViewTab = (tabId: AdminView) => canAccessTab(permissions, 'users-admin', tabId);
-  const canViewUsers = canViewTab('users');
-  const canViewAudit = canViewTab('audit');
-  const canViewPermissions = canViewTab('permissions');
-  const canLoadRoles = canViewUsers || canViewPermissions;
-
-  useEffect(() => {
-    if (canViewTab(view)) return;
-    const fallback = firstAllowedTab(permissions, 'users-admin', adminViews);
-    if (fallback) setView(fallback);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [permissions, view]);
   const [usersPage, setUsersPage] = useState<AdminPage<AdminUser> | null>(null);
   const [auditPage, setAuditPage] = useState<AdminPage<AdminAuditLog> | null>(null);
   const [roles, setRoles] = useState<AdminRole[]>([]);
@@ -266,19 +245,18 @@ export function UsersAdminPage() {
   }, []);
 
   useEffect(() => {
-    if (!canLoadRoles) return;
     void loadRoles();
-  }, [canLoadRoles, loadRoles]);
+  }, [loadRoles]);
 
   useEffect(() => {
-    if (view !== 'users' || !canViewUsers) return;
+    if (view !== 'users') return;
     const timer = window.setTimeout(() => void loadUsers(), 250);
     return () => window.clearTimeout(timer);
-  }, [canViewUsers, loadUsers, view]);
+  }, [loadUsers, view]);
 
   useEffect(() => {
-    if (view === 'audit' && canViewAudit) void loadAudit();
-  }, [canViewAudit, loadAudit, view]);
+    if (view === 'audit') void loadAudit();
+  }, [loadAudit, view]);
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil((usersPage?.totalCount ?? 0) / (usersPage?.pageSize ?? 20))),
@@ -414,7 +392,6 @@ export function UsersAdminPage() {
     <div className="admin-users-page">
       <div className="admin-view-tabs-bar">
         <div className="admin-view-tabs" role="tablist" aria-label="Chế độ quản trị người dùng">
-          {canViewTab('users') && (
           <button
             id="admin-users-tab"
             type="button"
@@ -427,8 +404,6 @@ export function UsersAdminPage() {
             <UsersRound aria-hidden="true" />
             Tài khoản và hồ sơ
           </button>
-          )}
-          {canViewTab('audit') && (
           <button
             id="admin-audit-tab"
             type="button"
@@ -441,8 +416,6 @@ export function UsersAdminPage() {
             <FileClock aria-hidden="true" />
             Nhật ký hệ thống
           </button>
-          )}
-          {canViewTab('permissions') && (
           <button
             id="admin-permissions-tab"
             type="button"
@@ -455,7 +428,6 @@ export function UsersAdminPage() {
             <ShieldCheck aria-hidden="true" />
             Phân quyền Module
           </button>
-          )}
         </div>
 
         {view === 'users' && (

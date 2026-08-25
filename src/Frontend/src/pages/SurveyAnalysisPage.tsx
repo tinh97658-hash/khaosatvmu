@@ -1,12 +1,10 @@
 import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { ChevronDown, CircleAlert, LoaderCircle, RefreshCw, Search, ShieldAlert } from 'lucide-react';
+import { ChevronDown, CircleAlert, LoaderCircle, RefreshCw, Search } from 'lucide-react';
 import { useSemester } from '../context/semesterContext';
 import { TablePagination } from '../components/TablePagination';
 import { usePaginatedItems } from '../hooks/usePaginatedItems';
 import { useColumnFilters, type FilterableColumn } from '../hooks/useColumnFilters';
 import { NoteModalButton } from '../components/NoteModalButton';
-import { useAuth } from '../auth/authContext';
-import { canAccessTab, firstAllowedTab } from '../auth/modulePermissions';
 import { ApiError } from '../services/apiClient';
 import {
   courseDiagnosisDescriptions,
@@ -215,18 +213,6 @@ export const SurveyAnalysisPage: React.FC = () => {
   const { academicYears, activeSemesterId } = useSemester();
 
   const [tab, setTab] = useState<TabId>('normalization');
-
-  // Mỗi tab một quyền riêng. Backend cũng chặn tại endpoint của từng tab, phần
-  // này chỉ để không bày ra thứ bấm vào là 403.
-  const { access } = useAuth();
-  const permissions = access?.permissions;
-  const visibleTabs = tabs.filter((item) => canAccessTab(permissions, 'survey-analysis', item.id));
-
-  useEffect(() => {
-    if (canAccessTab(permissions, 'survey-analysis', tab)) return;
-    const fallback = firstAllowedTab(permissions, 'survey-analysis', tabs.map((item) => item.id));
-    if (fallback) setTab(fallback);
-  }, [permissions, tab]);
   const [semesterId, setSemesterId] = useState<string>(() =>
     activeSemesterId ? String(activeSemesterId) : ''
   );
@@ -318,7 +304,6 @@ export const SurveyAnalysisPage: React.FC = () => {
   );
 
   const activeTab = tabs.find((x) => x.id === tab)!;
-  const canViewActiveTab = canAccessTab(permissions, 'survey-analysis', tab);
   const flipCount = normalization?.sections.filter((x) => x.verdict === 'CONCLUSION_FLIPS').length ?? 0;
 
   return (
@@ -366,7 +351,7 @@ export const SurveyAnalysisPage: React.FC = () => {
       </section>
 
       <nav className="analysis-tabs" aria-label="Chọn bảng phân tích">
-        {visibleTabs.map((item) => (
+        {tabs.map((item) => (
           <button
             key={item.id}
             type="button"
@@ -391,13 +376,7 @@ export const SurveyAnalysisPage: React.FC = () => {
         </div>
       )}
 
-      {!canViewActiveTab ? (
-        <div className="operations-empty" role="status">
-          <ShieldAlert className="operation-icon" aria-hidden="true" />
-          <strong>Bạn không có quyền xem mục này</strong>
-          <span>Liên hệ quản trị viên nếu cần mở quyền.</span>
-        </div>
-      ) : loading ? (
+      {loading ? (
         <div className="operations-empty" role="status">
           <LoaderCircle className="operation-icon auth-spin" aria-hidden="true" />
           <strong>Đang tính toán...</strong>

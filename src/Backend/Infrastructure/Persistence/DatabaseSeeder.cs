@@ -78,18 +78,6 @@ public static class DatabaseSeeder
             (Code: "PROGRAM_CAMPAIGNS_ACCESS",    Name: "Đợt khảo sát chương trình đào tạo", Description: "Truy cập module đợt khảo sát chương trình đào tạo",     Category: "Khảo sát chương trình"),
             (Code: "PROGRAM_CRITERIA_ACCESS",     Name: "Tiêu chí chương trình đào tạo",     Description: "Truy cập module tiêu chí chương trình đào tạo",        Category: "Khảo sát chương trình"),
             (Code: "USER_ADMIN_ACCESS",           Name: "Người dùng và phân quyền",          Description: "Truy cập module quản trị người dùng và phân quyền",    Category: "Quản trị hệ thống"),
-
-            // Quyền cấp TAB: vào được module rồi vẫn có thể bị chặn từng tab bên trong.
-            (Code: "REPORTS_OVERVIEW_ACCESS",     Name: "Báo cáo · tab Tổng quan",           Description: "Xem tab Tổng quan trong Thống kê và báo cáo",           Category: "Báo cáo"),
-            (Code: "REPORTS_DETAILS_ACCESS",      Name: "Báo cáo · tab Tra cứu chi tiết",    Description: "Xem tab Tra cứu chi tiết trong Thống kê và báo cáo",    Category: "Báo cáo"),
-            (Code: "REPORTS_RANKINGS_ACCESS",     Name: "Báo cáo · tab Tổng hợp đơn vị",     Description: "Xem tab Tổng hợp đơn vị trong Thống kê và báo cáo",     Category: "Báo cáo"),
-            (Code: "SURVEY_ANALYSIS_NORMALIZATION_ACCESS", Name: "Phân tích · tab chuẩn hoá điểm", Description: "Xem hai tab mặt bằng khoa/viện và phân tích theo lớp", Category: "Báo cáo"),
-            (Code: "SURVEY_ANALYSIS_DEPARTMENTS_ACCESS",   Name: "Phân tích · tab Tổng hợp theo bộ môn", Description: "Xem tab tổng hợp theo bộ môn trong phân tích chuyên sâu", Category: "Báo cáo"),
-            (Code: "SURVEY_ANALYSIS_COURSES_ACCESS",       Name: "Phân tích · tab Đánh giá học phần",    Description: "Xem tab đánh giá học phần trong phân tích chuyên sâu",    Category: "Báo cáo"),
-            (Code: "SURVEY_ANALYSIS_LECTURER_ACCESS",      Name: "Phân tích · tab Báo cáo giảng viên",   Description: "Xem tab báo cáo cá nhân giảng viên trong phân tích chuyên sâu", Category: "Báo cáo"),
-            (Code: "USER_ADMIN_ACCOUNTS_ACCESS",  Name: "Quản trị · tab Tài khoản và hồ sơ", Description: "Xem và sửa tài khoản, hồ sơ người dùng",                Category: "Quản trị hệ thống"),
-            (Code: "USER_ADMIN_AUDIT_ACCESS",     Name: "Quản trị · tab Nhật ký hệ thống",   Description: "Xem nhật ký đăng nhập và nhật ký thay đổi dữ liệu",     Category: "Quản trị hệ thống"),
-            (Code: "USER_ADMIN_PERMISSIONS_ACCESS", Name: "Quản trị · tab Phân quyền Module", Description: "Xem và sửa ma trận phân quyền của các vai trò",         Category: "Quản trị hệ thống"),
         };
 
         var permissions = new Dictionary<string, Permission>(StringComparer.OrdinalIgnoreCase);
@@ -142,16 +130,6 @@ public static class DatabaseSeeder
             (RoleCode: "ADMIN", PermissionCode: "PROGRAM_CAMPAIGNS_ACCESS"),
             (RoleCode: "ADMIN", PermissionCode: "PROGRAM_CRITERIA_ACCESS"),
             (RoleCode: "ADMIN", PermissionCode: "USER_ADMIN_ACCESS"),
-            (RoleCode: "ADMIN", PermissionCode: "REPORTS_OVERVIEW_ACCESS"),
-            (RoleCode: "ADMIN", PermissionCode: "REPORTS_DETAILS_ACCESS"),
-            (RoleCode: "ADMIN", PermissionCode: "REPORTS_RANKINGS_ACCESS"),
-            (RoleCode: "ADMIN", PermissionCode: "SURVEY_ANALYSIS_NORMALIZATION_ACCESS"),
-            (RoleCode: "ADMIN", PermissionCode: "SURVEY_ANALYSIS_DEPARTMENTS_ACCESS"),
-            (RoleCode: "ADMIN", PermissionCode: "SURVEY_ANALYSIS_COURSES_ACCESS"),
-            (RoleCode: "ADMIN", PermissionCode: "SURVEY_ANALYSIS_LECTURER_ACCESS"),
-            (RoleCode: "ADMIN", PermissionCode: "USER_ADMIN_ACCOUNTS_ACCESS"),
-            (RoleCode: "ADMIN", PermissionCode: "USER_ADMIN_AUDIT_ACCESS"),
-            (RoleCode: "ADMIN", PermissionCode: "USER_ADMIN_PERMISSIONS_ACCESS"),
 
             // SURVEY_ADMIN: toàn bộ module nghiệp vụ, không có quản trị người dùng.
             (RoleCode: "SURVEY_ADMIN", PermissionCode: "PROGRESS_ACCESS"),
@@ -170,13 +148,6 @@ public static class DatabaseSeeder
             (RoleCode: "SURVEY_ADMIN", PermissionCode: "COURSE_CAMPAIGNS_ACCESS"),
             (RoleCode: "SURVEY_ADMIN", PermissionCode: "PROGRAM_CAMPAIGNS_ACCESS"),
             (RoleCode: "SURVEY_ADMIN", PermissionCode: "PROGRAM_CRITERIA_ACCESS"),
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "REPORTS_OVERVIEW_ACCESS"),
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "REPORTS_DETAILS_ACCESS"),
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "REPORTS_RANKINGS_ACCESS"),
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "SURVEY_ANALYSIS_NORMALIZATION_ACCESS"),
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "SURVEY_ANALYSIS_DEPARTMENTS_ACCESS"),
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "SURVEY_ANALYSIS_COURSES_ACCESS"),
-            (RoleCode: "SURVEY_ADMIN", PermissionCode: "SURVEY_ANALYSIS_LECTURER_ACCESS"),
 
             // DEPARTMENT_MANAGER: chỉ tiến độ và báo cáo trong Phase 2.
             (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "PROGRESS_ACCESS"),
@@ -184,13 +155,6 @@ public static class DatabaseSeeder
             (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "REPORTS_ACCESS"),
             (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "SURVEY_STATISTICS_ACCESS"),
             (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "SURVEY_ANALYSIS_ACCESS"),
-            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "REPORTS_OVERVIEW_ACCESS"),
-            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "REPORTS_DETAILS_ACCESS"),
-            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "REPORTS_RANKINGS_ACCESS"),
-            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "SURVEY_ANALYSIS_NORMALIZATION_ACCESS"),
-            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "SURVEY_ANALYSIS_DEPARTMENTS_ACCESS"),
-            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "SURVEY_ANALYSIS_COURSES_ACCESS"),
-            (RoleCode: "DEPARTMENT_MANAGER", PermissionCode: "SURVEY_ANALYSIS_LECTURER_ACCESS"),
         };
 
         foreach (var definition in definitions)

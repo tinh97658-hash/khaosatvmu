@@ -18,7 +18,6 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../auth/authContext';
-import { canAccessTab, firstAllowedTab } from '../auth/modulePermissions';
 import { useSemester } from '../context/semesterContext';
 import { DataTable, type Column, type DataTableSortDirection } from '../components/DataTable';
 import { QuestionAnalysisChart } from '../components/QuestionAnalysisChart';
@@ -225,13 +224,6 @@ export const ReportsOverviewPage: React.FC = () => {
   }, [activeSemesterId]);
 
   const canViewReports = access?.permissions.includes('REPORTS_ACCESS') === true;
-
-  // Mỗi tab một quyền riêng; backend cũng chặn tại endpoint của từng tab.
-  const permissions = access?.permissions;
-  const canViewTab = useCallback(
-    (tabId: ReportWorkspace) => canAccessTab(permissions, 'reports', tabId),
-    [permissions],
-  );
   const canLoadCatalog = canViewReports;
 
   // Danh sách lựa chọn bộ lọc.
@@ -402,16 +394,6 @@ export const ReportsOverviewPage: React.FC = () => {
     },
     [navigateToRoute, routeFromState],
   );
-
-  useEffect(() => {
-    if (canViewTab(workspace)) return;
-    const fallback = firstAllowedTab<ReportWorkspace>(
-      permissions,
-      'reports',
-      ['overview', 'details', 'rankings'],
-    );
-    if (fallback) navigateToWorkspace(fallback);
-  }, [canViewTab, navigateToWorkspace, permissions, workspace]);
 
   useEffect(() => {
     const applyHashRoute = () => {
@@ -1221,7 +1203,6 @@ export const ReportsOverviewPage: React.FC = () => {
       {!isLecturerMode && !isSurveyMode && (
         <div className="reports-overview">
           <nav className="reports-workspace-tabs" aria-label="Chế độ xem báo cáo" role="tablist">
-            {canViewTab('overview') && (
             <button
               type="button"
               role="tab"
@@ -1233,8 +1214,6 @@ export const ReportsOverviewPage: React.FC = () => {
               <LayoutDashboard className="operation-icon" aria-hidden="true" />
               <strong>Tổng quan</strong>
             </button>
-            )}
-            {canViewTab('details') && (
             <button
               type="button"
               role="tab"
@@ -1246,8 +1225,6 @@ export const ReportsOverviewPage: React.FC = () => {
               <ListFilter className="operation-icon" aria-hidden="true" />
               <strong>Tra cứu chi tiết</strong>
             </button>
-            )}
-            {canViewTab('rankings') && (
             <button
               type="button"
               role="tab"
@@ -1259,19 +1236,10 @@ export const ReportsOverviewPage: React.FC = () => {
               <Building2 className="operation-icon" aria-hidden="true" />
               <strong>Tổng hợp đơn vị</strong>
             </button>
-            )}
           </nav>
 
-          {!canViewTab('overview') && !canViewTab('details') && !canViewTab('rankings') && (
-            <div className="operations-empty" role="status">
-              <ShieldAlert className="operation-icon" aria-hidden="true" />
-              <strong>Bạn chưa được mở quyền xem mục nào trong báo cáo</strong>
-              <span>Liên hệ quản trị viên nếu cần mở quyền.</span>
-            </div>
-          )}
-
           {/* Bảng tổng quan toàn trường (executive dashboard) */}
-          {workspace === 'overview' && canViewTab('overview') && selectedSemesterId !== undefined && (
+          {workspace === 'overview' && selectedSemesterId !== undefined && (
             <SchoolSurveyOverview
               key={selectedSemesterId}
               semesterId={selectedSemesterId}
@@ -1283,7 +1251,7 @@ export const ReportsOverviewPage: React.FC = () => {
           )}
 
           {/* KPI — một dải mỏng, phần giải thích đưa vào tooltip để nhường chỗ cho bảng. */}
-          {workspace === 'details' && canViewTab('details') && (
+          {workspace === 'details' && (
           <div id="reports-detail-workspace" className="reports-kpi-band" aria-label="Tổng quan kết quả đang lọc">
             <span className="reports-kpi-item" title="Sinh viên trong danh sách">
               <Users className="operation-icon" style={{ color: '#0788b8' }} aria-hidden="true" />
@@ -1309,7 +1277,7 @@ export const ReportsOverviewPage: React.FC = () => {
           )}
 
           {/* Tổng hợp kết quả theo Khoa / Viện và Bộ môn */}
-          {workspace === 'rankings' && canViewTab('rankings') && (
+          {workspace === 'rankings' && (
           <div className="reports-rank-grid reports-workspace-panel" role="tabpanel">
             <RankedUnitTable
               title="Kết quả theo Khoa/Viện"
@@ -1328,7 +1296,7 @@ export const ReportsOverviewPage: React.FC = () => {
           )}
 
           {/* Bảng kết quả chi tiết */}
-          {workspace === 'details' && canViewTab('details') && (
+          {workspace === 'details' && (
           <section
             className="reports-table-section"
             id="reports-results"

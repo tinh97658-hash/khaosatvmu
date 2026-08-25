@@ -8,36 +8,11 @@ public static class UserAdministrationEndpoints
 {
     public static IEndpointRouteBuilder MapUserAdministrationEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        // Ba tab của module quản trị, mỗi tab một nhóm quyền riêng. Không còn
-        // nhóm dùng chung: vào được module mà không có quyền tab nào thì không
-        // gọi được endpoint nào của module này.
-        var accountsGroup = endpoints
+        var group = endpoints
             .MapGroup("/api/admin")
-            .RequireAuthorization(
-                AuthPolicies.UserAdminAccess,
-                AuthPolicies.UserAdminAccountsAccess);
+            .RequireAuthorization(AuthPolicies.UserAdminAccess);
 
-        var auditGroup = endpoints
-            .MapGroup("/api/admin")
-            .RequireAuthorization(
-                AuthPolicies.UserAdminAccess,
-                AuthPolicies.UserAdminAuditAccess);
-
-        var permissionsGroup = endpoints
-            .MapGroup("/api/admin")
-            .RequireAuthorization(
-                AuthPolicies.UserAdminAccess,
-                AuthPolicies.UserAdminPermissionsAccess);
-
-        // Danh sách vai trò dùng ở cả tab tài khoản (gán vai trò cho hồ sơ) lẫn
-        // tab phân quyền, nên nhận một trong hai quyền.
-        var rolesReadGroup = endpoints
-            .MapGroup("/api/admin")
-            .RequireAuthorization(
-                AuthPolicies.UserAdminAccess,
-                AuthPolicies.UserAdminRolesRead);
-
-        accountsGroup.MapGet("/users", async (
+        group.MapGet("/users", async (
             string? search,
             bool? isActive,
             int page,
@@ -46,7 +21,7 @@ public static class UserAdministrationEndpoints
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetUsersAsync(search, isActive, page, pageSize, cancellationToken)));
 
-        accountsGroup.MapPost("/users", async (
+        group.MapPost("/users", async (
             CreateUserRequest request,
             ClaimsPrincipal principal,
             IUserAdministrationService service,
@@ -60,7 +35,7 @@ public static class UserAdministrationEndpoints
             return ToResult(result);
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        accountsGroup.MapPost("/users/import", async (
+        group.MapPost("/users/import", async (
             ImportUsersRequest request,
             ClaimsPrincipal principal,
             IUserAdministrationService service,
@@ -76,7 +51,7 @@ public static class UserAdministrationEndpoints
             return ToResult(result);
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        accountsGroup.MapPatch("/users/{userId:guid}/status", async (
+        group.MapPatch("/users/{userId:guid}/status", async (
             Guid userId,
             SetStatusRequest request,
             ClaimsPrincipal principal,
@@ -91,7 +66,7 @@ public static class UserAdministrationEndpoints
             return ToResult(result);
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        accountsGroup.MapPost("/users/{userId:guid}/profiles", async (
+        group.MapPost("/users/{userId:guid}/profiles", async (
             Guid userId,
             SaveProfileRequest request,
             ClaimsPrincipal principal,
@@ -106,7 +81,7 @@ public static class UserAdministrationEndpoints
             return ToResult(result);
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        accountsGroup.MapPut("/users/{userId:guid}/profiles/{profileId:guid}", async (
+        group.MapPut("/users/{userId:guid}/profiles/{profileId:guid}", async (
             Guid userId,
             Guid profileId,
             SaveProfileRequest request,
@@ -124,7 +99,7 @@ public static class UserAdministrationEndpoints
             return ToResult(result);
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        accountsGroup.MapPatch("/users/{userId:guid}/profiles/{profileId:guid}/status", async (
+        group.MapPatch("/users/{userId:guid}/profiles/{profileId:guid}/status", async (
             Guid userId,
             Guid profileId,
             SetStatusRequest request,
@@ -142,12 +117,12 @@ public static class UserAdministrationEndpoints
             return ToResult(result);
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        rolesReadGroup.MapGet("/roles", async (
+        group.MapGet("/roles", async (
             IUserAdministrationService service,
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetRolesAsync(cancellationToken)));
 
-        auditGroup.MapGet("/audit-logs", async (
+        group.MapGet("/audit-logs", async (
             Guid? userId,
             int page,
             int pageSize,
@@ -155,17 +130,17 @@ public static class UserAdministrationEndpoints
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetAuditLogsAsync(userId, page, pageSize, cancellationToken)));
 
-        permissionsGroup.MapGet("/permissions", async (
+        group.MapGet("/permissions", async (
             IUserAdministrationService service,
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetPermissionsAsync(cancellationToken)));
 
-        permissionsGroup.MapGet("/role-permissions", async (
+        group.MapGet("/role-permissions", async (
             IUserAdministrationService service,
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetRolePermissionMatrixAsync(cancellationToken)));
 
-        permissionsGroup.MapGet("/roles/{roleId:guid}/permissions", async (
+        group.MapGet("/roles/{roleId:guid}/permissions", async (
             Guid roleId,
             IUserAdministrationService service,
             CancellationToken cancellationToken) =>
@@ -174,7 +149,7 @@ public static class UserAdministrationEndpoints
             return result is null ? Results.NotFound() : Results.Ok(result);
         });
 
-        permissionsGroup.MapPut("/roles/{roleId:guid}/permissions", async (
+        group.MapPut("/roles/{roleId:guid}/permissions", async (
             Guid roleId,
             UpdateRolePermissionsRequest request,
             IUserAdministrationService service,
@@ -187,7 +162,7 @@ public static class UserAdministrationEndpoints
             return Results.NoContent();
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        auditGroup.MapGet("/change-audit-logs", async (
+        group.MapGet("/change-audit-logs", async (
             string? tableName,
             string? recordId,
             int page,
