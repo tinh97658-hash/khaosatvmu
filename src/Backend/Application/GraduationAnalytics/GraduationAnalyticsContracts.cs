@@ -55,6 +55,17 @@ public sealed record GraduationDatasetDto(
 
 public sealed record GraduationImportResultDto(GraduationDatasetDto Dataset);
 
+public sealed record GraduationProgramOptionDto(
+    string Value,
+    string Label,
+    string FacultyName);
+
+public sealed record GraduationAnalyticsFacetsDto(
+    IReadOnlyList<string> Faculties,
+    IReadOnlyList<GraduationProgramOptionDto> Programs,
+    IReadOnlyList<string> Cohorts,
+    IReadOnlyList<int> ReviewYears);
+
 public sealed record GraduationAnalyticsRowDto(
     long RowId,
     long DatasetId,
@@ -139,6 +150,9 @@ public sealed record GraduationAnalyticsMetadataDto(
 public interface IGraduationAnalyticsService
 {
     Task<IReadOnlyList<GraduationDatasetDto>> GetDatasetsAsync(CancellationToken cancellationToken);
+    Task<GraduationAnalyticsFacetsDto> GetFacetsAsync(
+        long datasetId,
+        CancellationToken cancellationToken);
     Task<GraduationImportResultDto> ImportDatasetAsync(
         ImportGraduationDatasetCommand command,
         CancellationToken cancellationToken);

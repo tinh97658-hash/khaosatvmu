@@ -4,6 +4,8 @@ Trạng thái: **đang triển khai — đã hoàn thành lát cắt MVP import 
 
 Nguồn dữ liệu đã khảo sát: `C:\Users\hieuu\Downloads\Biểu mẫu SV tốt nghiệp.xlsx`
 
+File trên **chỉ là tài liệu tham chiếu khi phát triển**: không đóng gói vào ứng dụng, không seed vào database và không được backend/frontend tự đọc. Khi chưa có dataset, người dùng bắt buộc tự chọn file và hoàn thành bước preview → xác nhận import.
+
 Phạm vi: một module thống kê độc lập, import Excel → preview → lưu nguyên dữ liệu đã tính → trực quan hóa và so sánh đa chiều.
 
 > **Yêu cầu bắt buộc:** phải bám sát vào rulesforai, giao diện phải thật mượt mà, thân thiện, không quá cầu kì, nhưng mà phải đẹp.
@@ -541,18 +543,18 @@ Không tạo một component riêng cho từng chart nếu cùng wrapper + optio
 
 ### Giai đoạn D — Dashboard mặc định
 
-- [ ] D1. Dataset picker + filter khoa/CTĐT/khóa/thời gian.
+- [x] D1. Dataset picker + filter khoa/CTĐT/khóa/năm xét.
 - [x] D2. KPI strip từ dữ liệu nguồn/tổng hợp có chú thích.
-- [ ] D3. So sánh khoa.
-- [ ] D4. So sánh CTĐT trong khoa.
+- [x] D3. So sánh khoa.
+- [x] D4. So sánh CTĐT trong khoa.
 - [ ] D5. Cơ cấu kết quả.
-- [ ] D6. Xu hướng nhiều năm/thời điểm xét.
+- [x] D6. Xu hướng nhiều năm/thời điểm xét.
 - [x] D7. Bảng nguồn C–U và lịch sử dataset.
 
 ### Giai đoạn E — Chart builder có kiểm soát
 
 - [x] E1. Chọn metric I–U/G.
-- [ ] E2. Chọn dimension và series.
+- [x] E2. Chọn dimension và series.
 - [x] E3. Compatibility engine chỉ hiện chart phù hợp trong phạm vi MVP.
 - [x] E4. Chart type picker theo ảnh tham chiếu, responsive và keyboard.
 - [ ] E5. Sort/top N/label/legend/source note.
@@ -573,19 +575,20 @@ Không tạo một component riêng cho từng chart nếu cùng wrapper + optio
 ## 16. Tiêu chí nghiệm thu
 
 1. Migration chỉ tạo `GraduationAnalyticsDatasets` và `GraduationAnalyticsRows` cùng index/FK nội bộ; không alter bảng nghiệp vụ hiện có.
-2. File mẫu preview đủ dữ liệu C–U theo phiên bản file tại thời điểm import; dòng formula trống không bị nhận nhầm.
-3. K/M/O/Q/S/U lưu đúng cached result từ Excel, không bị hệ thống tính lại.
-4. Null và zero được giữ khác nhau từ Excel → request → DB → API → table/chart.
-5. Trước khi xác nhận import, database không thay đổi; lỗi lưu rollback toàn bộ.
-6. Dashboard mặc định sinh được ngay sau import, không buộc người dùng cấu hình chart.
-7. Chọn được mọi chỉ tiêu I–U làm metric; G là metric phụ.
-8. So sánh được giữa khoa, ngành trong một khoa, khóa, năm/thời điểm, toàn trường và dataset.
-9. Chart picker chỉ hiện loại hợp lệ và tự chuyển về loại mặc định nếu thay dimension làm chart cũ không còn phù hợp.
-10. Điểm tổng hợp ghi rõ `source/sum/weighted-average` và coverage; không âm thầm biến giá trị tổng hợp thành dữ liệu Excel gốc.
-11. Bất kỳ điểm chart nào cũng xem được tooltip và bảng nguồn tương ứng.
-12. Không có dữ liệu nào được gửi sang dịch vụ chart bên ngoài.
-13. Tài khoản thiếu `GRADUATION_ANALYTICS_ACCESS` không thấy menu và nhận `403` khi gọi API trực tiếp.
-14. UI đạt loading/empty/error/no-results, keyboard, reduced motion, desktop/mobile theo `rules/.rulesforai`.
+2. Hệ thống không có dữ liệu mẫu tự động; database rỗng phải hiển thị lời mời import và không sinh dashboard cho đến khi người dùng xác nhận file.
+3. File mẫu preview đủ dữ liệu C–U theo phiên bản file tại thời điểm import; dòng formula trống không bị nhận nhầm.
+4. K/M/O/Q/S/U lưu đúng cached result từ Excel, không bị hệ thống tính lại.
+5. Null và zero được giữ khác nhau từ Excel → request → DB → API → table/chart.
+6. Trước khi xác nhận import, database không thay đổi; lỗi lưu rollback toàn bộ.
+7. Dashboard mặc định sinh được ngay sau import, không buộc người dùng cấu hình chart.
+8. Chọn được mọi chỉ tiêu I–U làm metric; G là metric phụ.
+9. So sánh được giữa khoa, ngành trong một khoa, khóa, năm/thời điểm, toàn trường và dataset.
+10. Chart picker chỉ hiện loại hợp lệ và tự chuyển về loại mặc định nếu thay dimension làm chart cũ không còn phù hợp.
+11. Điểm tổng hợp ghi rõ `source/sum/weighted-average` và coverage; không âm thầm biến giá trị tổng hợp thành dữ liệu Excel gốc.
+12. Bất kỳ điểm chart nào cũng xem được tooltip và bảng nguồn tương ứng.
+13. Không có dữ liệu nào được gửi sang dịch vụ chart bên ngoài.
+14. Tài khoản thiếu `GRADUATION_ANALYTICS_ACCESS` không thấy menu và nhận `403` khi gọi API trực tiếp.
+15. UI đạt loading/empty/error/no-results, keyboard, reduced motion, desktop/mobile theo `rules/.rulesforai`.
 
 ## 17. Quyết định không còn để ngỏ
 

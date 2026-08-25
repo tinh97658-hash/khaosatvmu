@@ -64,6 +64,63 @@ public sealed partial class EfGraduationAnalyticsService(
             .Select(x => ToDatasetDto(x))
             .ToListAsync(cancellationToken);
 
+    public async Task<GraduationAnalyticsFacetsDto> GetFacetsAsync(
+        long datasetId,
+        CancellationToken cancellationToken)
+    {
+        if (!await db.GraduationAnalyticsDatasets
+                .AsNoTracking()
+                .AnyAsync(x => x.DatasetId == datasetId, cancellationToken))
+        {
+            throw new GraduationAnalyticsException(
+                GraduationAnalyticsErrorCodes.DatasetNotFound,
+                "Không tìm thấy bộ dữ liệu.");
+        }
+
+        var source = await db.GraduationAnalyticsRows
+            .AsNoTracking()
+            .Where(x => x.DatasetId == datasetId)
+            .Select(x => new
+            {
+                x.FacultyName,
+                x.ProgramCode,
+                x.ProgramName,
+                x.Cohort,
+                x.ReviewYear,
+            })
+            .ToListAsync(cancellationToken);
+
+        var faculties = source
+            .Select(x => x.FacultyName)
+            .Distinct(StringComparer.CurrentCultureIgnoreCase)
+            .OrderBy(x => x, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        var programs = source
+            .GroupBy(x => new { x.FacultyName, x.ProgramCode, x.ProgramName })
+            .Select(x => new GraduationProgramOptionDto(
+                string.IsNullOrWhiteSpace(x.Key.ProgramCode) ? x.Key.ProgramName : x.Key.ProgramCode,
+                string.IsNullOrWhiteSpace(x.Key.ProgramCode)
+                    ? x.Key.ProgramName
+                    : $"{x.Key.ProgramCode} · {x.Key.ProgramName}",
+                x.Key.FacultyName))
+            .OrderBy(x => x.FacultyName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(x => x.Label, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        var cohorts = source
+            .Select(x => x.Cohort)
+            .Distinct(StringComparer.CurrentCultureIgnoreCase)
+            .OrderBy(x => x, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        var years = source
+            .Where(x => x.ReviewYear.HasValue)
+            .Select(x => x.ReviewYear!.Value)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
+
+        return new GraduationAnalyticsFacetsDto(faculties, programs, cohorts, years);
+    }
+
     public async Task<GraduationImportResultDto> ImportDatasetAsync(
         ImportGraduationDatasetCommand command,
         CancellationToken cancellationToken)
@@ -198,6 +255,13 @@ public sealed partial class EfGraduationAnalyticsService(
         }
         ValidateDimension(command.GroupBy);
         if (!string.IsNullOrWhiteSpace(command.SeriesBy)) ValidateDimension(command.SeriesBy);
+        if (!string.IsNullOrWhiteSpace(command.SeriesBy)
+            && command.GroupBy.Equals(command.SeriesBy, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new GraduationAnalyticsException(
+                GraduationAnalyticsErrorCodes.InvalidQuery,
+                "Chiều so sánh và chiều phân chuỗi phải khác nhau.");
+        }
 
         var datasets = await db.GraduationAnalyticsDatasets
             .AsNoTracking()
@@ -223,13 +287,23 @@ public sealed partial class EfGraduationAnalyticsService(
             .GroupBy(x => new
             {
                 Group = DimensionValue(x, command.GroupBy, datasets),
+                GroupSort = DimensionSortValue(x, command.GroupBy, datasets),
                 Series = string.IsNullOrWhiteSpace(command.SeriesBy)
                     ? null
                     : DimensionValue(x, command.SeriesBy, datasets),
+                SeriesSort = string.IsNullOrWhiteSpace(command.SeriesBy)
+                    ? null
+                    : DimensionSortValue(x, command.SeriesBy, datasets),
             })
-            .Select(group => Aggregate(group.Key.Group, group.Key.Series, command.MetricId, metric, group))
-            .OrderBy(x => x.Group, StringComparer.CurrentCultureIgnoreCase)
-            .ThenBy(x => x.Series, StringComparer.CurrentCultureIgnoreCase)
+            .Select(group => new
+            {
+                Point = Aggregate(group.Key.Group, group.Key.Series, command.MetricId, metric, group),
+                group.Key.GroupSort,
+                group.Key.SeriesSort,
+            })
+            .OrderBy(x => x.GroupSort, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(x => x.SeriesSort, StringComparer.CurrentCultureIgnoreCase)
+            .Select(x => x.Point)
             .ToList();
 
         return new GraduationAnalyticsQueryResultDto(
@@ -350,6 +424,19 @@ public sealed partial class EfGraduationAnalyticsService(
             _ => throw new GraduationAnalyticsException(
                 GraduationAnalyticsErrorCodes.InvalidQuery,
                 "Chiều phân tích không hợp lệ."),
+        };
+
+    private static string DimensionSortValue(
+        GraduationAnalyticsRow row,
+        string dimension,
+        IReadOnlyDictionary<long, string> datasetNames) =>
+        dimension.ToLowerInvariant() switch
+        {
+            "reviewyear" => row.ReviewYear?.ToString("D4", CultureInfo.InvariantCulture) ?? "9999",
+            "reviewperiod" => row.ReviewYear.HasValue && row.ReviewMonth.HasValue
+                ? $"{row.ReviewYear:D4}-{row.ReviewMonth:D2}"
+                : "9999-99",
+            _ => DimensionValue(row, dimension, datasetNames),
         };
 
     private static void ValidateDimension(string dimension)

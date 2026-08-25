@@ -14,6 +14,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -27,6 +28,7 @@ import { graduationAnalyticsApi } from '../services/graduationAnalyticsApi';
 import type {
   GraduationChartType,
   GraduationDataset,
+  GraduationFacets,
   GraduationMetadata,
   GraduationQueryResult,
   GraduationRow,
@@ -45,6 +47,9 @@ const chartOptions: Array<{
 ];
 
 const metricDefaults = ['initialEnrollment', 'eligible', 'onTimeCount', 'onTimeRate'];
+const chartColors = ['#0788b8', '#e07a2d', '#5b8f3c', '#7557a5', '#c24f6d', '#526d82'];
+const isTimeDimension = (dimension: string) =>
+  dimension === 'reviewYear' || dimension === 'reviewPeriod';
 
 const formatValue = (value: number | null | undefined, unit?: 'count' | 'percent') => {
   if (value === null || value === undefined) return '—';
@@ -59,10 +64,16 @@ const sourceCell = (value: string | number | null, percent = false) => {
 export function GraduationAnalyticsPage() {
   const [datasets, setDatasets] = useState<GraduationDataset[]>([]);
   const [metadata, setMetadata] = useState<GraduationMetadata | null>(null);
+  const [facets, setFacets] = useState<GraduationFacets | null>(null);
   const [selectedDatasetId, setSelectedDatasetId] = useState<number | null>(null);
   const [metricId, setMetricId] = useState('onTimeRate');
   const [groupBy, setGroupBy] = useState('faculty');
+  const [seriesBy, setSeriesBy] = useState('');
   const [chartType, setChartType] = useState<GraduationChartType>('bar');
+  const [faculty, setFaculty] = useState('');
+  const [program, setProgram] = useState('');
+  const [cohort, setCohort] = useState('');
+  const [reviewYear, setReviewYear] = useState('');
   const [result, setResult] = useState<GraduationQueryResult | null>(null);
   const [kpis, setKpis] = useState<Record<string, number | null>>({});
   const [rows, setRows] = useState<GraduationRow[]>([]);
@@ -97,15 +108,36 @@ export function GraduationAnalyticsPage() {
 
   useEffect(() => {
     if (!selectedDatasetId) {
+      setFacets(null);
+      return;
+    }
+    let cancelled = false;
+    graduationAnalyticsApi.facets(selectedDatasetId)
+      .then((nextFacets) => { if (!cancelled) setFacets(nextFacets); })
+      .catch(() => { if (!cancelled) toast.error('Không tải được danh mục bộ lọc'); });
+    return () => { cancelled = true; };
+  }, [selectedDatasetId]);
+
+  useEffect(() => {
+    if (!selectedDatasetId) {
       setResult(null);
       setKpis({});
       return;
     }
     let cancelled = false;
     setQueryLoading(true);
-    const base = { datasetIds: [selectedDatasetId], groupBy: 'all' };
+    const filters = {
+      faculty: faculty || null,
+      program: program || null,
+      cohort: cohort || null,
+      reviewYear: reviewYear ? Number(reviewYear) : null,
+    };
+    const base = { datasetIds: [selectedDatasetId], groupBy: 'all', ...filters };
     Promise.all([
-      graduationAnalyticsApi.query({ datasetIds: [selectedDatasetId], metricId, groupBy }),
+      graduationAnalyticsApi.query({
+        datasetIds: [selectedDatasetId], metricId, groupBy,
+        seriesBy: seriesBy || null, ...filters,
+      }),
       ...metricDefaults.map((id) => graduationAnalyticsApi.query({ ...base, metricId: id })),
     ]).then(([nextResult, ...kpiResults]) => {
       if (cancelled) return;
@@ -118,12 +150,17 @@ export function GraduationAnalyticsPage() {
       if (!cancelled) setQueryLoading(false);
     });
     return () => { cancelled = true; };
-  }, [selectedDatasetId, metricId, groupBy]);
+  }, [selectedDatasetId, metricId, groupBy, seriesBy, faculty, program, cohort, reviewYear]);
 
   useEffect(() => {
     if (!selectedDatasetId) return;
     let cancelled = false;
-    graduationAnalyticsApi.rows(selectedDatasetId, rowPage, 25, search)
+    graduationAnalyticsApi.rows(selectedDatasetId, rowPage, 25, search, {
+      faculty: faculty || undefined,
+      program: program || undefined,
+      cohort: cohort || undefined,
+      reviewYear: reviewYear ? Number(reviewYear) : undefined,
+    })
       .then((page) => {
         if (cancelled) return;
         setRows(page.items);
@@ -131,17 +168,48 @@ export function GraduationAnalyticsPage() {
       })
       .catch(() => { if (!cancelled) toast.error('Không tải được bảng dữ liệu nguồn'); });
     return () => { cancelled = true; };
-  }, [selectedDatasetId, rowPage, search]);
+  }, [selectedDatasetId, rowPage, search, faculty, program, cohort, reviewYear]);
 
   const metric = metadata?.metrics.find((item) => item.id === metricId);
-  const chartData = useMemo(() => result?.points.map((point) => ({
-    name: point.group,
-    value: point.value,
-    coverage: `${point.includedRows}/${point.totalRows}`,
-    aggregation: point.aggregation,
-  })) ?? [], [result]);
+  const chartModel = useMemo(() => {
+    if (!result) return { data: [], series: [{ key: 'value', label: metric?.label ?? 'Giá trị' }] };
+    const seriesLabels = [...new Set(result.points.map((point) => point.series).filter(Boolean))] as string[];
+    if (seriesLabels.length === 0) {
+      return {
+        data: result.points.map((point) => ({ name: point.group, value: point.value })),
+        series: [{ key: 'value', label: metric?.label ?? 'Giá trị' }],
+      };
+    }
+    const series = seriesLabels.map((label, index) => ({ key: `series${index}`, label }));
+    const keyByLabel = new Map(series.map((item) => [item.label, item.key]));
+    const grouped = new Map<string, Record<string, string | number | null>>();
+    result.points.forEach((point) => {
+      const row = grouped.get(point.group) ?? { name: point.group };
+      const key = point.series ? keyByLabel.get(point.series) : undefined;
+      if (key) row[key] = point.value;
+      grouped.set(point.group, row);
+    });
+    return { data: [...grouped.values()], series };
+  }, [result, metric?.label]);
+  const chartData = chartModel.data;
   const selectedDataset = datasets.find((item) => item.datasetId === selectedDatasetId);
   const rowPageCount = Math.max(1, Math.ceil(rowTotal / 25));
+  const availablePrograms = facets?.programs.filter((item) =>
+    !faculty || item.facultyName === faculty) ?? [];
+
+  const resetFilters = () => {
+    setFaculty('');
+    setProgram('');
+    setCohort('');
+    setReviewYear('');
+    setRowPage(1);
+  };
+
+  const selectDataset = (datasetId: number) => {
+    setSelectedDatasetId(datasetId);
+    setSeriesBy('');
+    resetFilters();
+  };
 
   const handleImport = async (payload: Parameters<typeof graduationAnalyticsApi.importDataset>[0]) => {
     const imported = await graduationAnalyticsApi.importDataset(payload);
@@ -186,13 +254,33 @@ export function GraduationAnalyticsPage() {
       </header>
 
       <section className="graduation-context" aria-label="Phạm vi dữ liệu">
-        <label>Bộ dữ liệu<select value={selectedDatasetId ?? ''} onChange={(event) => { setSelectedDatasetId(Number(event.target.value)); setRowPage(1); }}>
+        <label>Bộ dữ liệu<select value={selectedDatasetId ?? ''} onChange={(event) => selectDataset(Number(event.target.value))}>
           {datasets.map((item) => <option key={item.datasetId} value={item.datasetId}>{item.datasetName}</option>)}
         </select></label>
         {selectedDataset && <div className="graduation-context__meta"><strong>{selectedDataset.rowCount} dòng</strong><span>{selectedDataset.originalFileName} · {new Date(selectedDataset.importedAtUtc).toLocaleString('vi-VN')}</span></div>}
       </section>
 
       {error && <div className="graduation-alert" role="alert">{error}</div>}
+
+      <section className="graduation-filters" aria-label="Bộ lọc dashboard">
+        <label>Khoa<select value={faculty} onChange={(event) => { setFaculty(event.target.value); setProgram(''); setRowPage(1); }}>
+          <option value="">Toàn trường</option>
+          {facets?.faculties.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select></label>
+        <label>Ngành / CTĐT<select value={program} onChange={(event) => { setProgram(event.target.value); setRowPage(1); }}>
+          <option value="">Tất cả ngành</option>
+          {availablePrograms.map((item) => <option key={`${item.facultyName}-${item.value}-${item.label}`} value={item.value}>{item.label}</option>)}
+        </select></label>
+        <label>Khóa<select value={cohort} onChange={(event) => { setCohort(event.target.value); setRowPage(1); }}>
+          <option value="">Tất cả khóa</option>
+          {facets?.cohorts.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select></label>
+        <label>Năm xét<select value={reviewYear} onChange={(event) => { setReviewYear(event.target.value); setRowPage(1); }}>
+          <option value="">Tất cả năm</option>
+          {facets?.reviewYears.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select></label>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={resetFilters} disabled={!faculty && !program && !cohort && !reviewYear}>Xóa lọc</button>
+      </section>
 
       <section className="graduation-kpis" aria-label="Chỉ số tổng quan">
         {[
@@ -209,13 +297,23 @@ export function GraduationAnalyticsPage() {
           <label>Chỉ tiêu<select value={metricId} onChange={(event) => setMetricId(event.target.value)}>
             {metadata?.metrics.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select></label>
-          <label>So sánh theo<select value={groupBy} onChange={(event) => setGroupBy(event.target.value)}>
+          <label>So sánh theo<select value={groupBy} onChange={(event) => {
+            const nextGroup = event.target.value;
+            setGroupBy(nextGroup);
+            if (seriesBy === nextGroup) setSeriesBy('');
+            if (!isTimeDimension(nextGroup) && (chartType === 'line' || chartType === 'area')) setChartType('bar');
+          }}>
             {metadata?.dimensions.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+          </select></label>
+          <label>Phân chuỗi<select value={seriesBy} onChange={(event) => setSeriesBy(event.target.value)}>
+            <option value="">Không phân chuỗi</option>
+            {metadata?.dimensions.filter((item) => item.id !== 'all' && item.id !== groupBy && item.id !== 'dataset').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select></label>
           <fieldset><legend>Loại biểu đồ</legend><div className="graduation-chart-types">
             {chartOptions.map((option) => {
               const Icon = option.icon;
-              const compatible = metric?.chartTypes.includes(option.id) ?? false;
+              const compatible = (metric?.chartTypes.includes(option.id) ?? false)
+                && (!['line', 'area'].includes(option.id) || isTimeDimension(groupBy));
               return <button key={option.id} type="button" className={chartType === option.id ? 'is-selected' : ''} disabled={!compatible} onClick={() => setChartType(option.id)}><Icon aria-hidden="true" /><span>{option.label}</span></button>;
             })}
           </div></fieldset>
@@ -227,13 +325,13 @@ export function GraduationAnalyticsPage() {
             <div className="graduation-chart" role="img" aria-label={`${metric?.label} theo ${groupBy}`}>
               <ResponsiveContainer width="100%" height="100%">
                 {chartType === 'bar' ? (
-                  <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 28 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 12 }} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} /><Bar dataKey="value" fill="#0788B8" radius={[0, 2, 2, 0]} /></BarChart>
+                  <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 28 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 12 }} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} />{chartModel.series.length > 1 && <Legend />}{chartModel.series.map((item, index) => <Bar key={item.key} dataKey={item.key} name={item.label} fill={chartColors[index % chartColors.length]} radius={[0, 2, 2, 0]} />)}</BarChart>
                 ) : chartType === 'column' ? (
-                  <BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={chartData.length > 6 ? -25 : 0} textAnchor={chartData.length > 6 ? 'end' : 'middle'} height={chartData.length > 6 ? 76 : 42} /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} /><Bar dataKey="value" fill="#0788B8" radius={[2, 2, 0, 0]} /></BarChart>
+                  <BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={chartData.length > 6 ? -25 : 0} textAnchor={chartData.length > 6 ? 'end' : 'middle'} height={chartData.length > 6 ? 76 : 42} /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} />{chartModel.series.length > 1 && <Legend />}{chartModel.series.map((item, index) => <Bar key={item.key} dataKey={item.key} name={item.label} fill={chartColors[index % chartColors.length]} radius={[2, 2, 0, 0]} />)}</BarChart>
                 ) : chartType === 'line' ? (
-                  <LineChart data={chartData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} /><Line type="monotone" dataKey="value" stroke="#0788B8" strokeWidth={2} dot={{ r: 3 }} /></LineChart>
+                  <LineChart data={chartData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} />{chartModel.series.length > 1 && <Legend />}{chartModel.series.map((item, index) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartColors[index % chartColors.length]} strokeWidth={2} dot={{ r: 3 }} />)}</LineChart>
                 ) : (
-                  <AreaChart data={chartData}><defs><linearGradient id="graduationArea" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#0788B8" stopOpacity={0.25} /><stop offset="95%" stopColor="#0788B8" stopOpacity={0.02} /></linearGradient></defs><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} /><Area type="monotone" dataKey="value" stroke="#0788B8" fill="url(#graduationArea)" /></AreaChart>
+                  <AreaChart data={chartData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} />{chartModel.series.length > 1 && <Legend />}{chartModel.series.map((item, index) => <Area key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartColors[index % chartColors.length]} fill={chartColors[index % chartColors.length]} fillOpacity={0.12} />)}</AreaChart>
                 )}
               </ResponsiveContainer>
             </div>

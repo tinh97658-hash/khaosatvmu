@@ -16,6 +16,15 @@ public static class GraduationAnalyticsEndpoints
         group.MapGet("/metadata", (IGraduationAnalyticsService service) =>
             Results.Ok(service.GetMetadata()));
 
+        group.MapGet("/datasets/{datasetId:long}/facets", async (
+            long datasetId,
+            IGraduationAnalyticsService service,
+            CancellationToken ct) =>
+        {
+            try { return Results.Ok(await service.GetFacetsAsync(datasetId, ct)); }
+            catch (GraduationAnalyticsException exception) { return ToError(exception); }
+        });
+
         group.MapPost("/datasets", async (
             ImportGraduationDatasetRequest request,
             IGraduationAnalyticsService service,

@@ -34,6 +34,19 @@ export interface GraduationDataset {
 
 export interface GraduationImportResult { dataset: GraduationDataset }
 
+export interface GraduationProgramOption {
+  value: string;
+  label: string;
+  facultyName: string;
+}
+
+export interface GraduationFacets {
+  faculties: string[];
+  programs: GraduationProgramOption[];
+  cohorts: string[];
+  reviewYears: number[];
+}
+
 export interface GraduationDimension {
   id: string;
   label: string;

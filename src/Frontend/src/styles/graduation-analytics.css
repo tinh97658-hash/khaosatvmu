@@ -39,6 +39,7 @@
 
 .graduation-context select { min-width: 280px; }
 .graduation-context select,
+.graduation-filters select,
 .graduation-builder select,
 .graduation-import__summary input,
 .graduation-table-section input {
@@ -53,6 +54,20 @@
 
 .graduation-context__meta { display: grid; justify-items: end; gap: 2px; font-size: 12px; }
 .graduation-context__meta span { color: #68737d; }
+
+.graduation-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) auto;
+  align-items: end;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid #dfe4e8;
+  background: #f7f9fa;
+}
+.graduation-filters label { display: grid; gap: 5px; color: #68737d; font-size: 12px; font-weight: 600; }
+.graduation-filters select { width: 100%; height: 36px; border: 1px solid #cfd6db; border-radius: 3px; background: #fff; color: #20262c; padding: 0 9px; font: inherit; }
+.graduation-filters button { height: 36px; }
 
 .graduation-kpis {
   display: grid;
@@ -155,6 +170,8 @@
   .graduation-page { padding: 10px 9px 20px; }
   .graduation-page__header, .graduation-context, .graduation-table-section > header { align-items: stretch; flex-direction: column; }
   .graduation-context select, .graduation-table-section > header input { width: 100%; min-width: 0; }
+  .graduation-filters { grid-template-columns: 1fr 1fr; }
+  .graduation-filters button { width: 100%; }
   .graduation-context__meta { justify-items: start; }
   .graduation-kpis { grid-template-columns: 1fr 1fr; }
   .graduation-kpis > div:nth-child(2) { border-right: 0; }
@@ -166,4 +183,8 @@
   .graduation-import__picker { align-items: flex-start; flex-direction: column; }
   .graduation-import__summary { grid-template-columns: 1fr 1fr; }
   .graduation-import__summary > div { padding-left: 0; border-left: 0; }
+}
+
+@media (max-width: 560px) {
+  .graduation-filters { grid-template-columns: 1fr; }
 }
