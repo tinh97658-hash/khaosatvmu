@@ -281,13 +281,15 @@ Mỗi metric khai báo:
 Mở ra là có ngay các góc nhìn hữu ích:
 
 1. Dải KPI từ G, I, J, K theo phạm vi lọc.
-2. Tỷ lệ tốt nghiệp đúng hạn theo khoa.
-3. So sánh CTĐT trong khoa đang chọn.
-4. Cơ cấu Xuất sắc/Giỏi/Khá/Trung bình/Chuyển VHVL.
-5. Diễn biến theo năm/thời điểm xét.
+2. Cột nhóm tỷ lệ đúng hạn theo khoa qua các năm, kèm đường trung bình của phạm vi.
+3. Biểu đồ nhiều đường cho toàn bộ khoa qua các năm; không giới hạn số đường và cho phép bật/tắt bằng legend.
+4. Thanh ngang chồng Đúng hạn/Chưa đúng hạn theo khoa; phần Chưa đúng hạn là giá trị trình bày `I - J`, không ghi vào dữ liệu nguồn.
+5. Cơ cấu Xuất sắc/Giỏi/Khá/Trung bình/Chuyển VHVL.
 6. Bảng nguồn chi tiết C–U.
 
 Dashboard mặc định không cần người dùng cấu hình chart trước.
+
+Hai chế độ được chuyển bằng segmented switch `Tổng quan | Khám phá chi tiết`, dùng chung bộ lọc và giữ lựa chọn trong URL qua `gaView`. Sau import mặc định mở Tổng quan; cấu hình chart khám phá được giữ nguyên khi chuyển chế độ.
 
 #### Khám phá/Tùy chỉnh biểu đồ
 
@@ -533,6 +535,8 @@ Không tạo một component riêng cho từng chart nếu cùng wrapper + optio
 - [x] D5. Cơ cấu kết quả.
 - [x] D6. Xu hướng nhiều năm/thời điểm xét.
 - [x] D7. Bảng nguồn C–U và lịch sử dataset.
+- [x] D8. Switch Tổng quan/Khám phá chi tiết, đồng bộ `gaView` vào URL.
+- [x] D9. Cột nhóm theo năm + đường trung bình, nhiều đường không giới hạn khoa và thanh chồng Đúng hạn/Chưa đúng hạn.
 
 ### Giai đoạn E — Chart builder có kiểm soát
 

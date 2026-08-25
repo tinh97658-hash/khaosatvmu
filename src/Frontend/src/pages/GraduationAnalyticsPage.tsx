@@ -15,6 +15,10 @@ import {
 import { toast } from 'sonner';
 import { GraduationEChart } from '../components/graduation/GraduationEChart';
 import { GraduationImportDialog } from '../components/graduation/GraduationImportDialog';
+import {
+  GraduationOverview,
+  type GraduationOverviewChartModel,
+} from '../components/graduation/GraduationOverview';
 import { graduationAnalyticsApi } from '../services/graduationAnalyticsApi';
 import type {
   GraduationChartType,
@@ -52,6 +56,7 @@ const compositionMetrics = [
 const isTimeDimension = (dimension: string) =>
   dimension === 'reviewYear' || dimension === 'reviewPeriod';
 type ChartSort = 'auto' | 'value-desc' | 'value-asc' | 'label-asc';
+type GraduationView = 'overview' | 'explore';
 const queryValue = (key: string) => new URLSearchParams(window.location.search).get(key) ?? '';
 const initialChartType = (): GraduationChartType => {
   const value = queryValue('gaChart');
@@ -72,6 +77,30 @@ const formatValue = (value: number | null | undefined, unit?: 'count' | 'percent
 const sourceCell = (value: string | number | null, percent = false) => {
   if (value === null || value === '') return '—';
   return percent ? `${Number(value).toLocaleString('vi-VN', { maximumFractionDigits: 4 })}%` : value;
+};
+
+const toChartModel = (
+  result: GraduationQueryResult | null,
+  fallbackLabel: string,
+): GraduationOverviewChartModel => {
+  if (!result) return { data: [], series: [{ key: 'value', label: fallbackLabel }] };
+  const seriesLabels = [...new Set(result.points.map((point) => point.series).filter(Boolean))] as string[];
+  if (seriesLabels.length === 0) {
+    return {
+      data: result.points.map((point) => ({ name: point.group, value: point.value })),
+      series: [{ key: 'value', label: fallbackLabel }],
+    };
+  }
+  const series = seriesLabels.map((label, index) => ({ key: `series${index}`, label }));
+  const keyByLabel = new Map(series.map((item) => [item.label, item.key]));
+  const grouped = new Map<string, Record<string, string | number | null>>();
+  result.points.forEach((point) => {
+    const row = grouped.get(point.group) ?? { name: point.group };
+    const key = point.series ? keyByLabel.get(point.series) : undefined;
+    if (key) row[key] = point.value;
+    grouped.set(point.group, row);
+  });
+  return { data: [...grouped.values()], series };
 };
 
 export function GraduationAnalyticsPage() {
@@ -108,6 +137,15 @@ export function GraduationAnalyticsPage() {
   const [queryLoading, setQueryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [view, setView] = useState<GraduationView>(() => queryValue('gaView') === 'explore' ? 'explore' : 'overview');
+  const [overviewResults, setOverviewResults] = useState<{
+    groupedRate: GraduationQueryResult | null;
+    trendRate: GraduationQueryResult | null;
+    eligible: GraduationQueryResult | null;
+    onTime: GraduationQueryResult | null;
+  }>({ groupedRate: null, trendRate: null, eligible: null, onTime: null });
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
 
   const loadInitial = async (preferredDatasetId?: number) => {
     setLoading(true);
@@ -143,6 +181,7 @@ export function GraduationAnalyticsPage() {
       else query.set(key, String(value));
     };
     setOrDelete('gaDataset', selectedDatasetId);
+    setOrDelete('gaView', view === 'overview' ? '' : view);
     setOrDelete('gaMetric', metricId === 'onTimeRate' ? '' : metricId);
     setOrDelete('gaGroup', groupBy === 'faculty' ? '' : groupBy);
     setOrDelete('gaSeries', seriesBy);
@@ -156,7 +195,7 @@ export function GraduationAnalyticsPage() {
     setOrDelete('gaYear', reviewYear);
     const nextUrl = `${window.location.pathname}${query.size ? `?${query}` : ''}${window.location.hash}`;
     window.history.replaceState(window.history.state, '', nextUrl);
-  }, [selectedDatasetId, metricId, groupBy, seriesBy, chartType, chartSort, topN, showLabels, faculty, program, cohort, reviewYear]);
+  }, [selectedDatasetId, view, metricId, groupBy, seriesBy, chartType, chartSort, topN, showLabels, faculty, program, cohort, reviewYear]);
 
   useEffect(() => {
     if (!selectedDatasetId) {
@@ -172,12 +211,10 @@ export function GraduationAnalyticsPage() {
 
   useEffect(() => {
     if (!selectedDatasetId) {
-      setResult(null);
       setKpis({});
       return;
     }
     let cancelled = false;
-    setQueryLoading(true);
     const filters = {
       faculty: faculty || null,
       program: program || null,
@@ -185,30 +222,52 @@ export function GraduationAnalyticsPage() {
       reviewYear: reviewYear ? Number(reviewYear) : null,
     };
     const base = { datasetIds: [selectedDatasetId], groupBy: 'all', ...filters };
-    Promise.all([
-      graduationAnalyticsApi.query({
-        datasetIds: [selectedDatasetId], metricId, groupBy,
-        seriesBy: seriesBy || null, ...filters,
-      }),
-      ...metricDefaults.map((id) => graduationAnalyticsApi.query({ ...base, metricId: id })),
-    ]).then(([nextResult, ...kpiResults]) => {
+    Promise.all(metricDefaults.map((id) => graduationAnalyticsApi.query({ ...base, metricId: id }))).then((kpiResults) => {
       if (cancelled) return;
       setError(null);
-      setResult(nextResult);
       setKpis(Object.fromEntries(metricDefaults.map((id, index) => [id, kpiResults[index].points[0]?.value ?? null])));
+    }).catch(() => {
+      if (!cancelled) setError('Không tải được các chỉ số tổng quan. Hãy thử lại.');
+    });
+    return () => { cancelled = true; };
+  }, [selectedDatasetId, faculty, program, cohort, reviewYear]);
+
+  useEffect(() => {
+    if (!selectedDatasetId) {
+      setResult(null);
+      return;
+    }
+    if (view !== 'explore') return;
+    let cancelled = false;
+    setQueryLoading(true);
+    graduationAnalyticsApi.query({
+      datasetIds: [selectedDatasetId],
+      metricId,
+      groupBy,
+      seriesBy: seriesBy || null,
+      faculty: faculty || null,
+      program: program || null,
+      cohort: cohort || null,
+      reviewYear: reviewYear ? Number(reviewYear) : null,
+    }).then((nextResult) => {
+      if (!cancelled) {
+        setError(null);
+        setResult(nextResult);
+      }
     }).catch(() => {
       if (!cancelled) setError('Không tải được dữ liệu biểu đồ. Hãy thử lại.');
     }).finally(() => {
       if (!cancelled) setQueryLoading(false);
     });
     return () => { cancelled = true; };
-  }, [selectedDatasetId, metricId, groupBy, seriesBy, faculty, program, cohort, reviewYear]);
+  }, [selectedDatasetId, view, metricId, groupBy, seriesBy, faculty, program, cohort, reviewYear]);
 
   useEffect(() => {
     if (!selectedDatasetId) {
       setComposition({});
       return;
     }
+    if (view !== 'overview') return;
     let cancelled = false;
     setCompositionLoading(true);
     const filters = {
@@ -231,7 +290,34 @@ export function GraduationAnalyticsPage() {
       if (!cancelled) setCompositionLoading(false);
     });
     return () => { cancelled = true; };
-  }, [selectedDatasetId, faculty, program, cohort, reviewYear]);
+  }, [selectedDatasetId, view, faculty, program, cohort, reviewYear]);
+
+  useEffect(() => {
+    if (!selectedDatasetId || view !== 'overview') return;
+    let cancelled = false;
+    setOverviewLoading(true);
+    setOverviewError(null);
+    const filters = {
+      faculty: faculty || null,
+      program: program || null,
+      cohort: cohort || null,
+      reviewYear: reviewYear ? Number(reviewYear) : null,
+    };
+    const base = { datasetIds: [selectedDatasetId], ...filters };
+    Promise.all([
+      graduationAnalyticsApi.query({ ...base, metricId: 'onTimeRate', groupBy: 'faculty', seriesBy: 'reviewYear' }),
+      graduationAnalyticsApi.query({ ...base, metricId: 'onTimeRate', groupBy: 'reviewYear', seriesBy: 'faculty' }),
+      graduationAnalyticsApi.query({ ...base, metricId: 'eligible', groupBy: 'faculty' }),
+      graduationAnalyticsApi.query({ ...base, metricId: 'onTimeCount', groupBy: 'faculty' }),
+    ]).then(([groupedRate, trendRate, eligible, onTime]) => {
+      if (!cancelled) setOverviewResults({ groupedRate, trendRate, eligible, onTime });
+    }).catch(() => {
+      if (!cancelled) setOverviewError('Không tải được các biểu đồ tổng quan. Hãy thử lại hoặc chuyển sang Khám phá chi tiết.');
+    }).finally(() => {
+      if (!cancelled) setOverviewLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [selectedDatasetId, view, faculty, program, cohort, reviewYear]);
 
   useEffect(() => {
     if (!selectedDatasetId) return;
@@ -252,29 +338,10 @@ export function GraduationAnalyticsPage() {
   }, [selectedDatasetId, rowPage, search, faculty, program, cohort, reviewYear]);
 
   const metric = metadata?.metrics.find((item) => item.id === metricId);
-  const chartModel = useMemo<{
-    data: Array<Record<string, string | number | null>>;
-    series: Array<{ key: string; label: string }>;
-  }>(() => {
-    if (!result) return { data: [], series: [{ key: 'value', label: metric?.label ?? 'Giá trị' }] };
-    const seriesLabels = [...new Set(result.points.map((point) => point.series).filter(Boolean))] as string[];
-    if (seriesLabels.length === 0) {
-      return {
-        data: result.points.map((point) => ({ name: point.group, value: point.value })),
-        series: [{ key: 'value', label: metric?.label ?? 'Giá trị' }],
-      };
-    }
-    const series = seriesLabels.map((label, index) => ({ key: `series${index}`, label }));
-    const keyByLabel = new Map(series.map((item) => [item.label, item.key]));
-    const grouped = new Map<string, Record<string, string | number | null>>();
-    result.points.forEach((point) => {
-      const row = grouped.get(point.group) ?? { name: point.group };
-      const key = point.series ? keyByLabel.get(point.series) : undefined;
-      if (key) row[key] = point.value;
-      grouped.set(point.group, row);
-    });
-    return { data: [...grouped.values()], series };
-  }, [result, metric?.label]);
+  const chartModel = useMemo(
+    () => toChartModel(result, metric?.label ?? 'Giá trị'),
+    [result, metric?.label],
+  );
   const chartData = chartModel.data;
   const displayChartData = useMemo(() => {
     const next = [...chartData];
@@ -289,6 +356,45 @@ export function GraduationAnalyticsPage() {
     else if (effectiveSort === 'label-asc') next.sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
     return topN > 0 ? next.slice(0, topN) : next;
   }, [chartData, chartModel.series, chartSort, groupBy, topN]);
+  const overviewGroupedRate = useMemo(
+    () => toChartModel(overviewResults.groupedRate, 'Tỷ lệ đúng hạn'),
+    [overviewResults.groupedRate],
+  );
+  const overviewTrendRate = useMemo(
+    () => toChartModel(overviewResults.trendRate, 'Tỷ lệ đúng hạn'),
+    [overviewResults.trendRate],
+  );
+  const overviewCompletion = useMemo(() => {
+    const eligibleByGroup = new Map(overviewResults.eligible?.points.map((point) => [point.group, point.value]) ?? []);
+    const onTimeByGroup = new Map(overviewResults.onTime?.points.map((point) => [point.group, point.value]) ?? []);
+    const groups = [...new Set([
+      ...(overviewResults.eligible?.points.map((point) => point.group) ?? []),
+      ...(overviewResults.onTime?.points.map((point) => point.group) ?? []),
+    ])];
+    let hasInvalid = false;
+    const data = groups.map((name) => {
+      const eligible = eligibleByGroup.get(name);
+      const onTime = onTimeByGroup.get(name);
+      const comparable = typeof eligible === 'number' && typeof onTime === 'number';
+      const invalid = comparable && onTime > eligible;
+      if (invalid) hasInvalid = true;
+      return {
+        name,
+        onTime: typeof onTime === 'number' ? onTime : null,
+        notOnTime: comparable && !invalid ? eligible - onTime : null,
+      };
+    });
+    return {
+      model: {
+        data,
+        series: [
+          { key: 'onTime', label: 'Đúng hạn' },
+          { key: 'notOnTime', label: 'Chưa đúng hạn' },
+        ],
+      } satisfies GraduationOverviewChartModel,
+      hasInvalid,
+    };
+  }, [overviewResults.eligible, overviewResults.onTime]);
   const selectedDataset = datasets.find((item) => item.datasetId === selectedDatasetId);
   const rowPageCount = Math.max(1, Math.ceil(rowTotal / 25));
   const compositionTotal = compositionMetrics.reduce(
@@ -398,6 +504,16 @@ export function GraduationAnalyticsPage() {
         <button type="button" className="btn btn-secondary btn-sm" onClick={resetFilters} disabled={!faculty && !program && !cohort && !reviewYear}>Xóa lọc</button>
       </section>
 
+      <nav className="graduation-view-switch" aria-label="Chế độ xem dashboard">
+        <button type="button" className={view === 'overview' ? 'is-selected' : ''} aria-pressed={view === 'overview'} onClick={() => setView('overview')}>
+          Tổng quan
+        </button>
+        <button type="button" className={view === 'explore' ? 'is-selected' : ''} aria-pressed={view === 'explore'} onClick={() => setView('explore')}>
+          Khám phá chi tiết
+        </button>
+      </nav>
+
+      {view === 'overview' ? <>
       <section className="graduation-kpis" aria-label="Chỉ số tổng quan">
         {[
           ['initialEnrollment', 'Sinh viên nhập học'],
@@ -432,6 +548,16 @@ export function GraduationAnalyticsPage() {
         ) : <div className="graduation-composition__empty">Không có số liệu cơ cấu trong phạm vi này.</div>}
       </section>
 
+      {overviewError && <div className="graduation-alert" role="alert">{overviewError}</div>}
+      <GraduationOverview
+        groupedRate={overviewGroupedRate}
+        trendRate={overviewTrendRate}
+        completion={overviewCompletion.model}
+        averageRate={typeof kpis.onTimeRate === 'number' ? kpis.onTimeRate : null}
+        loading={overviewLoading}
+        hasInvalidCompletion={overviewCompletion.hasInvalid}
+      />
+      </> : (
       <section className="graduation-workspace">
         <aside className="graduation-builder" aria-label="Tùy chỉnh biểu đồ">
           <h2>Tùy chỉnh biểu đồ</h2>
@@ -504,6 +630,7 @@ export function GraduationAnalyticsPage() {
           )}
         </div>
       </section>
+      )}
 
       <section className="graduation-table-section">
         <header><div><h2>Dữ liệu nguồn C–U</h2><span>{rowTotal} dòng</span></div><input type="search" placeholder="Tìm khoa, mã/tên CTĐT, khóa..." value={search} onChange={(event) => { setSearch(event.target.value); setRowPage(1); }} /></header>

@@ -5,6 +5,7 @@ import {
   AriaComponent,
   GridComponent,
   LegendComponent,
+  MarkLineComponent,
   TooltipComponent,
 } from 'echarts/components';
 import { LabelLayout } from 'echarts/features';
@@ -19,6 +20,7 @@ echarts.use([
   AriaComponent,
   GridComponent,
   LegendComponent,
+  MarkLineComponent,
   TooltipComponent,
   LabelLayout,
   CanvasRenderer,
@@ -30,6 +32,8 @@ interface GraduationEChartProps {
   series: Array<{ key: string; label: string }>;
   unit?: 'count' | 'percent';
   showLabels: boolean;
+  colors?: string[];
+  referenceLine?: { value: number; label: string };
 }
 
 const colors = ['#0788b8', '#e07a2d', '#5b8f3c', '#7557a5', '#c24f6d', '#526d82', '#38a3a5', '#d49b28'];
@@ -40,9 +44,18 @@ const formatValue = (value: unknown, unit?: 'count' | 'percent') => {
   return `${numeric.toLocaleString('vi-VN', { maximumFractionDigits: unit === 'percent' ? 1 : 0 })}${unit === 'percent' ? '%' : ''}`;
 };
 
-export function GraduationEChart({ type, data, series, unit, showLabels }: GraduationEChartProps) {
+export function GraduationEChart({
+  type,
+  data,
+  series,
+  unit,
+  showLabels,
+  colors: customColors,
+  referenceLine,
+}: GraduationEChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const option = useMemo<EChartsOption>(() => {
+    const palette = customColors?.length ? customColors : colors;
     const categories = data.map((row) => String(row.name ?? ''));
     const isHorizontal = type === 'bar' || type === 'stacked-bar';
     const isStacked = type === 'stacked-bar' || type === 'stacked-column';
@@ -71,7 +84,7 @@ export function GraduationEChart({ type, data, series, unit, showLabels }: Gradu
     if (isPie) {
       const selected = series[0];
       return {
-        color: colors,
+        color: palette,
         animationDuration: 350,
         aria: { enabled: true },
         tooltip: {
@@ -104,7 +117,7 @@ export function GraduationEChart({ type, data, series, unit, showLabels }: Gradu
       symbolSize: 7,
       showSymbol: data.length <= 30,
       areaStyle: type === 'area' ? { opacity: 0.14 } : undefined,
-      itemStyle: { color: colors[index % colors.length] },
+      itemStyle: { color: palette[index % palette.length] },
       lineStyle: { width: 2 },
       barMaxWidth: 52,
       label: {
@@ -115,10 +128,26 @@ export function GraduationEChart({ type, data, series, unit, showLabels }: Gradu
         fontSize: 11,
       },
       emphasis: { focus: 'series' as const },
+      markLine: index === 0 && referenceLine ? {
+        silent: true,
+        symbol: 'none',
+        lineStyle: { color: '#df3d35', type: 'dashed' as const, width: 1.5 },
+        label: {
+          show: true,
+          formatter: referenceLine.label,
+          position: 'insideEndTop' as const,
+          color: '#fff',
+          backgroundColor: '#df3d35',
+          padding: [3, 5],
+          fontSize: 11,
+          fontWeight: 700,
+        },
+        data: [{ yAxis: referenceLine.value }],
+      } : undefined,
     }));
 
     return {
-      color: colors,
+      color: palette,
       animationDuration: 350,
       aria: { enabled: true },
       tooltip: {
@@ -138,7 +167,7 @@ export function GraduationEChart({ type, data, series, unit, showLabels }: Gradu
       yAxis: isHorizontal ? categoryAxis : valueAxis,
       series: chartSeries,
     };
-  }, [data, series, showLabels, type, unit]);
+  }, [customColors, data, referenceLine, series, showLabels, type, unit]);
 
   useEffect(() => {
     const host = hostRef.current;
