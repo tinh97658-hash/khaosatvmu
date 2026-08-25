@@ -8,7 +8,7 @@ interface ModalProps {
   children: React.ReactNode;
   onSubmit?: () => void;
   submitText?: string;
-  size?: 'workspace' | 'compact';
+  size?: 'workspace' | 'compact' | 'data-preview';
 }
 
 interface ConfirmDialogProps {

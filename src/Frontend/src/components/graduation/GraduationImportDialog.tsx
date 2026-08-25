@@ -104,7 +104,7 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Import dữ liệu tốt nghiệp">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Import dữ liệu tốt nghiệp" size="data-preview">
       <div className="graduation-import" aria-busy={parsing || importing}>
         <div className="graduation-import__picker">
           <label htmlFor={inputId} className="btn btn-secondary">

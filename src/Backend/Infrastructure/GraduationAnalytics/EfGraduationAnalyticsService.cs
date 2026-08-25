@@ -47,14 +47,15 @@ public sealed partial class EfGraduationAnalyticsService(
     private static MetricDefinition Count(
         string label,
         Func<GraduationAnalyticsRow, int?> selector) =>
-        new(label, "count", "sum", x => selector(x), null, ["bar", "column", "line", "area"]);
+        new(label, "count", "sum", x => selector(x), null,
+            ["bar", "column", "stacked-bar", "stacked-column", "line", "area", "pie", "donut"]);
 
     private static MetricDefinition Rate(
         string label,
         Func<GraduationAnalyticsRow, decimal?> selector,
         Func<GraduationAnalyticsRow, int?> weightSelector) =>
         new(label, "percent", "weighted-average", x => selector(x), x => weightSelector(x),
-            ["bar", "column", "line", "area"]);
+            ["bar", "column", "stacked-bar", "stacked-column", "line", "area", "pie", "donut"]);
 
     public async Task<IReadOnlyList<GraduationDatasetDto>> GetDatasetsAsync(
         CancellationToken cancellationToken) =>

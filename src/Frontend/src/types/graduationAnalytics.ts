@@ -61,7 +61,15 @@ export interface GraduationMetric {
   chartTypes: GraduationChartType[];
 }
 
-export type GraduationChartType = 'bar' | 'column' | 'line' | 'area';
+export type GraduationChartType =
+  | 'bar'
+  | 'column'
+  | 'stacked-bar'
+  | 'stacked-column'
+  | 'line'
+  | 'area'
+  | 'pie'
+  | 'donut';
 
 export interface GraduationMetadata {
   dimensions: GraduationDimension[];

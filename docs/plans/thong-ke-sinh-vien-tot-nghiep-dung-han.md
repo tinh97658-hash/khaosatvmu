@@ -308,7 +308,7 @@ Tùy chọn nâng cao gọn:
 - top N khi danh mục quá dài;
 - chuyển bảng dữ liệu tương ứng.
 
-Không cho chọn cấu hình vô nghĩa. Ví dụ pie chart bị ẩn khi có nhiều mốc thời gian; line chart bị ẩn khi không chọn chiều thời gian.
+Không cho chọn cấu hình vô nghĩa. Pie/donut chỉ dùng khi có một series và tối đa 12 nhóm; biểu đồ chồng chỉ bật sau khi chọn phân chuỗi. Line/area vẫn dùng được với trục category để không giới hạn việc so sánh ngành/khoa, đồng thời ưu tiên chúng khi trục là thời gian.
 
 ### 8.3. Các phạm vi so sánh phải hỗ trợ
 
@@ -368,13 +368,9 @@ Quy tắc trình bày:
 
 ## 10. Lựa chọn thư viện biểu đồ
 
-### Quyết định MVP: dùng Recharts hiện có qua lớp chart riêng của module
+### Quyết định triển khai: Apache ECharts cho module tốt nghiệp
 
-Lát cắt MVP dùng `recharts` đã có trong project cho bar ngang, column, line và area. Quyết định này giữ bundle/dependency gọn trong giai đoạn đầu, đồng thời component chart nằm riêng trong module để có thể thay bằng Apache ECharts khi cần scatter, range, small multiples hoặc cấu hình nâng cao.
-
-### Phương án mở rộng: Apache ECharts
-
-`recharts` vẫn giữ nguyên cho các trang khảo sát đang chạy; module này có thể dùng `echarts` trực tiếp vì cần chart picker, nhiều loại chart và mapping dữ liệu đa chiều.
+Module tốt nghiệp dùng `echarts` 6.1 qua wrapper nội bộ `GraduationEChart`; `recharts` vẫn giữ nguyên cho các trang khảo sát đang chạy. Dependency được import theo module từ `echarts/core`, không dùng wrapper React thứ ba và không nhận raw option từ API/người dùng.
 
 Lý do chọn để spike:
 
@@ -390,20 +386,7 @@ Tài liệu tham chiếu chính thức:
 - [Apache ECharts — Dataset](https://echarts.apache.org/handbook/en/concepts/dataset/)
 - [Apache ECharts — ARIA accessibility](https://echarts.apache.org/handbook/en/best-practices/aria/)
 
-Quyết định cài dependency chỉ thực hiện sau spike A4:
-
-- thử bar + multiple line + stacked + scatter trên fixture file mẫu;
-- kiểm tra TypeScript, resize, tooltip, dispose instance, keyboard/ARIA;
-- đo bundle của lazy chunk và render mobile;
-- nếu ECharts không đạt, giữ Recharts và giảm danh sách chart MVP thay vì cài nhiều thư viện chồng chéo.
-
-Nếu chọn ECharts:
-
-- chỉ thêm `echarts`, không mặc định thêm wrapper React thứ ba;
-- tạo một wrapper nội bộ nhỏ quản lý init/resize/dispose;
-- modular import đúng chart/component đang dùng;
-- bật `AriaComponent` và `aria.show`;
-- không nhận raw ECharts option từ API/người dùng để tránh option không an toàn.
+Phạm vi chart đã triển khai gồm bar ngang, column, stacked bar, stacked column, line, area, pie và donut. Wrapper quản lý `init/ResizeObserver/dispose`, dùng Canvas renderer, bật `AriaComponent`, tooltip và bảng dữ liệu tương đương. Gallery luôn hiển thị đủ lựa chọn; loại chưa tương thích bị vô hiệu hóa kèm lý do cụ thể.
 
 ## 11. API riêng
 
@@ -517,8 +500,8 @@ Không tạo một component riêng cho từng chart nếu cùng wrapper + optio
 - [x] A1. Tạo fixture ẩn danh từ workbook mẫu.
 - [x] A2. Chứng minh parser đọc được cached result của formula K/M/O/Q/S/U.
 - [x] A3. Unit test: header hai tầng, dòng 6, formula-only blank rows, null khác zero, decimal không sai số.
-- [x] A4. Đóng spike Apache ECharts ở trạng thái không áp dụng cho MVP sau khi chốt dùng Recharts hiện có; không cài dependency không còn cần thiết.
-- [x] A5. Chốt chart dependency; ghi quyết định và phạm vi chart MVP.
+- [x] A4. Spike và tích hợp Apache ECharts 6.1 bằng modular import; kiểm tra TypeScript, resize và dispose instance.
+- [x] A5. Chốt ECharts riêng cho module tốt nghiệp; giữ Recharts cho các trang hiện hữu.
 - [x] A6. Chốt metadata dimension/metric/aggregation/compatibility.
 
 ### Giai đoạn B — Bảng mới và backend độc lập
@@ -569,7 +552,7 @@ Không tạo một component riêng cho từng chart nếu cùng wrapper + optio
 - [x] F5. Test so sánh: khoa, ngành trong khoa, cùng khoa nhiều năm, toàn trường, nhiều dataset.
 - [x] F6. Test null/0, file lỗi, file trùng, rollback và quyền 403.
 - [x] F7. Visual QA thật ở `1440×900` và `390×844`; kiểm tra overflow, tooltip, legend, chart resize, modal và focus.
-- [x] F8. Browser console sạch; Recharts dùng lifecycle khai báo, không giữ chart instance cần dispose khi đổi loại/filter.
+- [x] F8. Browser console sạch; wrapper ECharts quản lý init, resize và dispose khi đổi loại/filter hoặc unmount.
 - [x] F9. So ảnh implementation với ảnh tham chiếu ở cùng viewport và sửa hierarchy/density, không sao chép trang trí không phù hợp.
 
 ## 16. Tiêu chí nghiệm thu

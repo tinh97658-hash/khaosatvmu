@@ -1,29 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AreaChart as AreaChartIcon,
   BarChart3,
+  ChartBarStacked,
   ChartColumn,
+  ChartColumnStacked,
+  Donut,
   FileSpreadsheet,
   LineChart as LineChartIcon,
+  PieChart,
   RefreshCw,
   Upload,
 } from 'lucide-react';
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  LabelList,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 import { toast } from 'sonner';
+import { GraduationEChart } from '../components/graduation/GraduationEChart';
 import { GraduationImportDialog } from '../components/graduation/GraduationImportDialog';
 import { graduationAnalyticsApi } from '../services/graduationAnalyticsApi';
 import type {
@@ -43,12 +33,15 @@ const chartOptions: Array<{
 }> = [
   { id: 'bar', label: 'Thanh ngang', icon: BarChart3 },
   { id: 'column', label: 'Cột', icon: ChartColumn },
+  { id: 'stacked-bar', label: 'Thanh chồng', icon: ChartBarStacked },
+  { id: 'stacked-column', label: 'Cột chồng', icon: ChartColumnStacked },
   { id: 'line', label: 'Đường', icon: LineChartIcon },
   { id: 'area', label: 'Miền', icon: AreaChartIcon },
+  { id: 'pie', label: 'Tròn', icon: PieChart },
+  { id: 'donut', label: 'Donut', icon: Donut },
 ];
 
 const metricDefaults = ['initialEnrollment', 'eligible', 'onTimeCount', 'onTimeRate'];
-const chartColors = ['#0788b8', '#e07a2d', '#5b8f3c', '#7557a5', '#c24f6d', '#526d82'];
 const compositionMetrics = [
   { id: 'excellentCount', label: 'Xuất sắc', color: '#0788b8' },
   { id: 'veryGoodCount', label: 'Giỏi', color: '#38a3a5' },
@@ -62,7 +55,9 @@ type ChartSort = 'auto' | 'value-desc' | 'value-asc' | 'label-asc';
 const queryValue = (key: string) => new URLSearchParams(window.location.search).get(key) ?? '';
 const initialChartType = (): GraduationChartType => {
   const value = queryValue('gaChart');
-  return ['bar', 'column', 'line', 'area'].includes(value) ? value as GraduationChartType : 'bar';
+  return ['bar', 'column', 'stacked-bar', 'stacked-column', 'line', 'area', 'pie', 'donut'].includes(value)
+    ? value as GraduationChartType
+    : 'bar';
 };
 const initialTopN = () => {
   const value = Number(queryValue('gaTop'));
@@ -301,6 +296,22 @@ export function GraduationAnalyticsPage() {
   );
   const availablePrograms = facets?.programs.filter((item) =>
     !faculty || item.facultyName === faculty) ?? [];
+  const chartUnavailableReason = useCallback((type: GraduationChartType) =>
+    !(metric?.chartTypes.includes(type) ?? false)
+      ? 'Chỉ tiêu này không hỗ trợ loại biểu đồ'
+      : ['stacked-bar', 'stacked-column'].includes(type) && chartModel.series.length < 2
+        ? 'Chọn Phân chuỗi để dùng biểu đồ chồng'
+        : ['pie', 'donut'].includes(type) && chartModel.series.length !== 1
+          ? 'Biểu đồ tròn chỉ dùng khi không phân chuỗi'
+          : ['pie', 'donut'].includes(type) && displayChartData.length > 12
+            ? 'Giới hạn tối đa 12 nhóm để biểu đồ dễ đọc'
+            : '', [metric?.chartTypes, chartModel.series.length, displayChartData.length]);
+
+  useEffect(() => {
+    if (metric && chartUnavailableReason(chartType)) {
+      setChartType(chartModel.series.length > 1 ? 'column' : 'bar');
+    }
+  }, [chartType, chartModel.series.length, chartUnavailableReason, metric]);
 
   const resetFilters = () => {
     setFaculty('');
@@ -431,7 +442,6 @@ export function GraduationAnalyticsPage() {
             const nextGroup = event.target.value;
             setGroupBy(nextGroup);
             if (seriesBy === nextGroup) setSeriesBy('');
-            if (!isTimeDimension(nextGroup) && (chartType === 'line' || chartType === 'area')) setChartType('bar');
           }}>
             {metadata?.dimensions.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select></label>
@@ -457,28 +467,30 @@ export function GraduationAnalyticsPage() {
           <fieldset><legend>Loại biểu đồ</legend><div className="graduation-chart-types">
             {chartOptions.map((option) => {
               const Icon = option.icon;
-              const compatible = (metric?.chartTypes.includes(option.id) ?? false)
-                && (!['line', 'area'].includes(option.id) || isTimeDimension(groupBy));
-              return <button key={option.id} type="button" className={chartType === option.id ? 'is-selected' : ''} disabled={!compatible} onClick={() => setChartType(option.id)}><Icon aria-hidden="true" /><span>{option.label}</span></button>;
+              const unavailableReason = chartUnavailableReason(option.id);
+              return <button
+                key={option.id}
+                type="button"
+                className={chartType === option.id ? 'is-selected' : ''}
+                disabled={Boolean(unavailableReason)}
+                title={unavailableReason || option.label}
+                onClick={() => setChartType(option.id)}
+              ><Icon aria-hidden="true" /><span>{option.label}</span></button>;
             })}
-          </div></fieldset>
+          </div><p className="graduation-chart-types__hint">Apache ECharts · rê chuột vào lựa chọn bị mờ để xem điều kiện.</p></fieldset>
         </aside>
 
         <div className="graduation-chart-panel">
           <header><div><h2>{metric?.label}</h2><p>So sánh theo {metadata?.dimensions.find((item) => item.id === groupBy)?.label.toLowerCase()}</p></div><span>{queryLoading ? 'Đang cập nhật...' : `${displayChartData.length}${displayChartData.length < chartData.length ? `/${chartData.length}` : ''} nhóm`}</span></header>
           {displayChartData.length === 0 ? <div className="graduation-chart-empty">Không có dữ liệu phù hợp với lựa chọn hiện tại.</div> : (
             <div className="graduation-chart" role="img" aria-label={`${metric?.label} theo ${groupBy}`}>
-              <ResponsiveContainer width="100%" height="100%">
-                {chartType === 'bar' ? (
-                  <BarChart data={displayChartData} layout="vertical" margin={{ left: 20, right: showLabels ? 62 : 28 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 12 }} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} />{chartModel.series.length > 1 && <Legend />}{chartModel.series.map((item, index) => <Bar key={item.key} dataKey={item.key} name={item.label} fill={chartColors[index % chartColors.length]} radius={[0, 2, 2, 0]}>{showLabels && <LabelList dataKey={item.key} position="right" formatter={(value) => formatValue(Number(value), metric?.unit)} />}</Bar>)}</BarChart>
-                ) : chartType === 'column' ? (
-                  <BarChart data={displayChartData} margin={{ top: showLabels ? 24 : 5 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={displayChartData.length > 6 ? -25 : 0} textAnchor={displayChartData.length > 6 ? 'end' : 'middle'} height={displayChartData.length > 6 ? 76 : 42} /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} />{chartModel.series.length > 1 && <Legend />}{chartModel.series.map((item, index) => <Bar key={item.key} dataKey={item.key} name={item.label} fill={chartColors[index % chartColors.length]} radius={[2, 2, 0, 0]}>{showLabels && <LabelList dataKey={item.key} position="top" formatter={(value) => formatValue(Number(value), metric?.unit)} />}</Bar>)}</BarChart>
-                ) : chartType === 'line' ? (
-                  <LineChart data={displayChartData} margin={{ top: showLabels ? 24 : 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} />{chartModel.series.length > 1 && <Legend />}{chartModel.series.map((item, index) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartColors[index % chartColors.length]} strokeWidth={2} dot={{ r: 3 }} label={showLabels ? { position: 'top', formatter: (value: unknown) => formatValue(Number(value), metric?.unit) } : false} />)}</LineChart>
-                ) : (
-                  <AreaChart data={displayChartData} margin={{ top: showLabels ? 24 : 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={metric?.unit === 'percent' ? [0, 100] : ['auto', 'auto']} /><Tooltip formatter={(value) => formatValue(Number(value), metric?.unit)} />{chartModel.series.length > 1 && <Legend />}{chartModel.series.map((item, index) => <Area key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartColors[index % chartColors.length]} fill={chartColors[index % chartColors.length]} fillOpacity={0.12} label={showLabels ? { position: 'top', formatter: (value: unknown) => formatValue(Number(value), metric?.unit) } : false} />)}</AreaChart>
-                )}
-              </ResponsiveContainer>
+              <GraduationEChart
+                type={chartType}
+                data={displayChartData}
+                series={chartModel.series}
+                unit={metric?.unit}
+                showLabels={showLabels}
+              />
             </div>
           )}
           <footer>Giá trị nguồn được giữ nguyên; điểm có nhiều dòng dùng phép {metric?.aggregation === 'weighted-average' ? 'trung bình có trọng số' : 'cộng'} chỉ để hiển thị biểu đồ.</footer>

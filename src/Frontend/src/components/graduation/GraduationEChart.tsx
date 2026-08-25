@@ -1,0 +1,157 @@
+import { useEffect, useMemo, useRef } from 'react';
+import * as echarts from 'echarts/core';
+import { BarChart, LineChart, PieChart } from 'echarts/charts';
+import {
+  AriaComponent,
+  GridComponent,
+  LegendComponent,
+  TooltipComponent,
+} from 'echarts/components';
+import { LabelLayout } from 'echarts/features';
+import { CanvasRenderer } from 'echarts/renderers';
+import type { EChartsOption } from 'echarts';
+import type { GraduationChartType } from '../../types/graduationAnalytics';
+
+echarts.use([
+  BarChart,
+  LineChart,
+  PieChart,
+  AriaComponent,
+  GridComponent,
+  LegendComponent,
+  TooltipComponent,
+  LabelLayout,
+  CanvasRenderer,
+]);
+
+interface GraduationEChartProps {
+  type: GraduationChartType;
+  data: Array<Record<string, string | number | null>>;
+  series: Array<{ key: string; label: string }>;
+  unit?: 'count' | 'percent';
+  showLabels: boolean;
+}
+
+const colors = ['#0788b8', '#e07a2d', '#5b8f3c', '#7557a5', '#c24f6d', '#526d82', '#38a3a5', '#d49b28'];
+
+const formatValue = (value: unknown, unit?: 'count' | 'percent') => {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) return '—';
+  return `${numeric.toLocaleString('vi-VN', { maximumFractionDigits: unit === 'percent' ? 1 : 0 })}${unit === 'percent' ? '%' : ''}`;
+};
+
+export function GraduationEChart({ type, data, series, unit, showLabels }: GraduationEChartProps) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const option = useMemo<EChartsOption>(() => {
+    const categories = data.map((row) => String(row.name ?? ''));
+    const isHorizontal = type === 'bar' || type === 'stacked-bar';
+    const isStacked = type === 'stacked-bar' || type === 'stacked-column';
+    const isPie = type === 'pie' || type === 'donut';
+    const valueAxis = {
+      type: 'value' as const,
+      min: 0,
+      max: unit === 'percent' ? 100 : undefined,
+      axisLabel: { formatter: (value: number) => formatValue(value, unit) },
+      splitLine: { lineStyle: { color: '#d9dfe3', type: 'dashed' as const } },
+    };
+    const categoryAxis = {
+      type: 'category' as const,
+      data: categories,
+      axisTick: { alignWithLabel: true },
+      axisLabel: {
+        color: '#59636c',
+        fontSize: 11,
+        interval: 0,
+        rotate: !isHorizontal && categories.length > 6 ? 25 : 0,
+        width: isHorizontal ? 170 : 115,
+        overflow: 'truncate' as const,
+      },
+    };
+
+    if (isPie) {
+      const selected = series[0];
+      return {
+        color: colors,
+        animationDuration: 350,
+        aria: { enabled: true },
+        tooltip: {
+          trigger: 'item',
+          valueFormatter: (value) => formatValue(value, unit),
+        },
+        legend: { type: 'scroll', orient: 'vertical', right: 8, top: 'middle', bottom: 8 },
+        series: [{
+          name: selected?.label ?? 'Giá trị',
+          type: 'pie',
+          radius: type === 'donut' ? ['46%', '70%'] : ['0%', '70%'],
+          center: ['39%', '50%'],
+          avoidLabelOverlap: true,
+          itemStyle: { borderColor: '#fff', borderWidth: 2 },
+          label: {
+            show: showLabels,
+            formatter: (params) => `${params.name}\n${formatValue(params.value, unit)}`,
+          },
+          data: data.map((row) => ({ name: String(row.name ?? ''), value: Number(row[selected?.key] ?? 0) })),
+        }],
+      };
+    }
+
+    const chartSeries = series.map((item, index) => ({
+      name: item.label,
+      type: type === 'line' || type === 'area' ? 'line' as const : 'bar' as const,
+      data: data.map((row) => typeof row[item.key] === 'number' ? row[item.key] : null),
+      stack: isStacked ? 'total' : undefined,
+      smooth: type === 'line' || type === 'area',
+      symbolSize: 7,
+      showSymbol: data.length <= 30,
+      areaStyle: type === 'area' ? { opacity: 0.14 } : undefined,
+      itemStyle: { color: colors[index % colors.length] },
+      lineStyle: { width: 2 },
+      barMaxWidth: 52,
+      label: {
+        show: showLabels,
+        position: isHorizontal ? 'right' as const : 'top' as const,
+        formatter: (params: { value?: unknown }) => formatValue(params.value, unit),
+        color: '#4d5962',
+        fontSize: 11,
+      },
+      emphasis: { focus: 'series' as const },
+    }));
+
+    return {
+      color: colors,
+      animationDuration: 350,
+      aria: { enabled: true },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        valueFormatter: (value) => formatValue(value, unit),
+      },
+      legend: { show: series.length > 1, type: 'scroll', top: 0 },
+      grid: {
+        top: series.length > 1 ? 46 : 20,
+        left: isHorizontal ? 184 : 52,
+        right: showLabels ? 70 : 24,
+        bottom: !isHorizontal && categories.length > 6 ? 94 : 54,
+        containLabel: false,
+      },
+      xAxis: isHorizontal ? valueAxis : categoryAxis,
+      yAxis: isHorizontal ? categoryAxis : valueAxis,
+      series: chartSeries,
+    };
+  }, [data, series, showLabels, type, unit]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const chart = echarts.init(host, undefined, { renderer: 'canvas' });
+    chart.setOption(option, { notMerge: true });
+    const observer = new ResizeObserver(() => chart.resize());
+    observer.observe(host);
+    return () => {
+      observer.disconnect();
+      chart.dispose();
+    };
+  }, [option]);
+
+  return <div ref={hostRef} className="graduation-echart" />;
+}
