@@ -27,6 +27,27 @@ public static class AuthPolicies
     public const string SurveyDashboardAccess = "PERMISSION_SURVEY_DASHBOARD_ACCESS";
     public const string SurveyStatisticsAccess = "PERMISSION_SURVEY_STATISTICS_ACCESS";
     public const string SurveyAnalysisAccess = "PERMISSION_SURVEY_ANALYSIS_ACCESS";
+
+    // Quyền cấp TAB. Vào được module chưa chắc đã xem được mọi tab bên trong,
+    // nên mỗi endpoint của một tab đòi đúng quyền của tab đó chứ không dựa vào
+    // việc giao diện đã ẩn nút.
+    public const string ReportsOverviewAccess = "PERMISSION_REPORTS_OVERVIEW_ACCESS";
+    public const string ReportsDetailsAccess = "PERMISSION_REPORTS_DETAILS_ACCESS";
+    /// <summary>
+    /// Hai tab "Tra cứu chi tiết" và "Tổng hợp đơn vị" đọc chung một tập kết quả
+    /// khảo sát, nên endpoint /results nhận một trong hai quyền. Không có quyền
+    /// nào thì bị chặn.
+    /// </summary>
+    public const string ReportsResultsRead = "PERMISSION_REPORTS_RESULTS_READ";
+    public const string SurveyAnalysisNormalizationAccess = "PERMISSION_SURVEY_ANALYSIS_NORMALIZATION_ACCESS";
+    public const string SurveyAnalysisDepartmentsAccess = "PERMISSION_SURVEY_ANALYSIS_DEPARTMENTS_ACCESS";
+    public const string SurveyAnalysisCoursesAccess = "PERMISSION_SURVEY_ANALYSIS_COURSES_ACCESS";
+    public const string SurveyAnalysisLecturerAccess = "PERMISSION_SURVEY_ANALYSIS_LECTURER_ACCESS";
+    public const string UserAdminAccountsAccess = "PERMISSION_USER_ADMIN_ACCOUNTS_ACCESS";
+    public const string UserAdminAuditAccess = "PERMISSION_USER_ADMIN_AUDIT_ACCESS";
+    public const string UserAdminPermissionsAccess = "PERMISSION_USER_ADMIN_PERMISSIONS_ACCESS";
+    /// <summary>Danh sách vai trò dùng ở cả tab tài khoản lẫn tab phân quyền.</summary>
+    public const string UserAdminRolesRead = "PERMISSION_USER_ADMIN_ROLES_READ";
     /// <summary>Bất kỳ quyền nào trong nhóm Báo cáo, cho các endpoint dùng chung.</summary>
     public const string ReportingRead = "PERMISSION_REPORTING_READ";
     public const string SurveyOperationalRead = "PERMISSION_SURVEY_OPERATIONAL_READ";

@@ -129,6 +129,25 @@ builder.Services.AddAuthorization(options =>
     AddPermissionPolicy(AuthPolicies.SurveyDashboardAccess, "SURVEY_DASHBOARD_ACCESS");
     AddPermissionPolicy(AuthPolicies.SurveyStatisticsAccess, "SURVEY_STATISTICS_ACCESS");
     AddPermissionPolicy(AuthPolicies.SurveyAnalysisAccess, "SURVEY_ANALYSIS_ACCESS");
+
+    // Quyền cấp tab: chặn ngay tại endpoint của từng tab.
+    AddPermissionPolicy(AuthPolicies.ReportsOverviewAccess, "REPORTS_OVERVIEW_ACCESS");
+    AddPermissionPolicy(AuthPolicies.ReportsDetailsAccess, "REPORTS_DETAILS_ACCESS");
+    AddAnyPermissionPolicy(AuthPolicies.ReportsResultsRead,
+        "REPORTS_DETAILS_ACCESS", "REPORTS_RANKINGS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.SurveyAnalysisNormalizationAccess,
+        "SURVEY_ANALYSIS_NORMALIZATION_ACCESS");
+    AddPermissionPolicy(AuthPolicies.SurveyAnalysisDepartmentsAccess,
+        "SURVEY_ANALYSIS_DEPARTMENTS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.SurveyAnalysisCoursesAccess,
+        "SURVEY_ANALYSIS_COURSES_ACCESS");
+    AddPermissionPolicy(AuthPolicies.SurveyAnalysisLecturerAccess,
+        "SURVEY_ANALYSIS_LECTURER_ACCESS");
+    AddPermissionPolicy(AuthPolicies.UserAdminAccountsAccess, "USER_ADMIN_ACCOUNTS_ACCESS");
+    AddPermissionPolicy(AuthPolicies.UserAdminAuditAccess, "USER_ADMIN_AUDIT_ACCESS");
+    AddPermissionPolicy(AuthPolicies.UserAdminPermissionsAccess, "USER_ADMIN_PERMISSIONS_ACCESS");
+    AddAnyPermissionPolicy(AuthPolicies.UserAdminRolesRead,
+        "USER_ADMIN_ACCOUNTS_ACCESS", "USER_ADMIN_PERMISSIONS_ACCESS");
     AddAnyPermissionPolicy(AuthPolicies.ReportingRead,
         "REPORTS_ACCESS", "SURVEY_DASHBOARD_ACCESS", "SURVEY_STATISTICS_ACCESS",
         "SURVEY_ANALYSIS_ACCESS");
