@@ -440,6 +440,7 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
         ["REPORTS_ACCESS"] = 2,
         ["SURVEY_STATISTICS_ACCESS"] = 3,
         ["SURVEY_ANALYSIS_ACCESS"] = 4,
+        ["GRADUATION_ANALYTICS_ACCESS"] = 5,
         ["FACULTIES_ACCESS"] = 1,
         ["DEPARTMENTS_ACCESS"] = 2,
         ["LECTURERS_ACCESS"] = 3,

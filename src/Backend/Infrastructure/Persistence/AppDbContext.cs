@@ -31,6 +31,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         Set<CourseSectionSurveyQuestionScore>();
     public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
     public DbSet<SurveyResponseAnswer> SurveyResponseAnswers => Set<SurveyResponseAnswer>();
+    public DbSet<GraduationAnalyticsDataset> GraduationAnalyticsDatasets =>
+        Set<GraduationAnalyticsDataset>();
+    public DbSet<GraduationAnalyticsRow> GraduationAnalyticsRows => Set<GraduationAnalyticsRow>();
     public DbSet<ChangeAuditLog> ChangeAuditLogs => Set<ChangeAuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -428,6 +431,46 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany()
                 .HasForeignKey(x => x.QuestionId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Module thống kê tốt nghiệp độc lập: chỉ liên hệ giữa hai bảng mới, không nối FK vào
+        // danh mục/khảo sát hiện tại để giữ nguyên snapshot của file nguồn.
+        modelBuilder.Entity<GraduationAnalyticsDataset>(entity =>
+        {
+            entity.ToTable("GraduationAnalyticsDatasets");
+            entity.HasKey(x => x.DatasetId);
+            entity.Property(x => x.DatasetName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.OriginalFileName).HasMaxLength(255).IsRequired();
+            entity.Property(x => x.ContentHash).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.Property(x => x.ImportedByName).HasMaxLength(320).IsRequired();
+            entity.HasIndex(x => x.ContentHash).IsUnique();
+            entity.HasIndex(x => x.ImportedAtUtc);
+        });
+
+        modelBuilder.Entity<GraduationAnalyticsRow>(entity =>
+        {
+            entity.ToTable("GraduationAnalyticsRows");
+            entity.HasKey(x => x.RowId);
+            entity.Property(x => x.SourceSheetName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.FacultyName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.ProgramCode).HasMaxLength(100);
+            entity.Property(x => x.ProgramName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Cohort).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.ReviewPeriodText).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.OnTimeGraduateRate).HasColumnType("numeric(9,4)");
+            entity.Property(x => x.ExcellentRate).HasColumnType("numeric(9,4)");
+            entity.Property(x => x.VeryGoodRate).HasColumnType("numeric(9,4)");
+            entity.Property(x => x.GoodRate).HasColumnType("numeric(9,4)");
+            entity.Property(x => x.AverageRate).HasColumnType("numeric(9,4)");
+            entity.Property(x => x.WorkStudyTransferRate).HasColumnType("numeric(9,4)");
+            entity.HasIndex(x => new { x.DatasetId, x.SourceSheetName, x.SourceRowNumber }).IsUnique();
+            entity.HasIndex(x => new { x.DatasetId, x.FacultyName });
+            entity.HasIndex(x => new { x.DatasetId, x.ProgramCode, x.ProgramName });
+            entity.HasIndex(x => new { x.DatasetId, x.ReviewYear, x.ReviewMonth });
+            entity.HasOne<GraduationAnalyticsDataset>()
+                .WithMany()
+                .HasForeignKey(x => x.DatasetId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ChangeAuditLog>(entity =>

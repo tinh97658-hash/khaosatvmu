@@ -1,6 +1,6 @@
 # Kế hoạch — Thống kê sinh viên tốt nghiệp đúng hạn
 
-Trạng thái: **bản thiết kế đã review theo yêu cầu mới**
+Trạng thái: **đang triển khai — đã hoàn thành lát cắt MVP import → lưu → dashboard**
 
 Nguồn dữ liệu đã khảo sát: `C:\Users\hieuu\Downloads\Biểu mẫu SV tốt nghiệp.xlsx`
 
@@ -71,7 +71,7 @@ Không tự map `CNTT` trong file vào một `FacultyId`, cũng không đoán `T
 
 ## 4. Cấu trúc file Excel đã xác nhận
 
-Workbook mẫu có một sheet `Sheet1`, vùng `C4:U19`:
+Workbook mẫu có một sheet `Sheet1`, vùng hiện tại `C4:U46`:
 
 - dòng 4–5: tiêu đề hai tầng, `I4:U4` là ô gộp “Thông số xác định trong thời điểm (đợt) xét tốt nghiệp”;
 - dòng 6: số thứ tự 1–19, không phải dữ liệu;
@@ -120,11 +120,11 @@ Quy tắc nguồn:
 
 ### 4.3. Số liệu đối chiếu parser
 
-File mẫu hiện có 9 dòng dữ liệu. Ba tổng số đếm dùng để kiểm tra parser đọc đủ dòng/cột:
+File mẫu là tài liệu đang được cập nhật. Tại lần đối chiếu gần nhất file có **40 dòng dữ liệu**. Ba tổng số đếm dùng để kiểm tra parser đọc đủ dòng/cột:
 
-- G — số nhập học ban đầu: **788**;
-- I — số được xét: **188**;
-- J — số tốt nghiệp đúng hạn: **133**.
+- G — số nhập học ban đầu: **5.019**;
+- I — số được xét: **1.241**;
+- J — số tốt nghiệp đúng hạn: **1.016**.
 
 Các tổng trên chỉ là test đọc file, **không thay thế hoặc xác nhận lại các cột tỷ lệ Excel**.
 
@@ -366,7 +366,11 @@ Quy tắc trình bày:
 
 ## 10. Lựa chọn thư viện biểu đồ
 
-### Đề xuất: Apache ECharts cho module mới
+### Quyết định MVP: dùng Recharts hiện có qua lớp chart riêng của module
+
+Lát cắt MVP dùng `recharts` đã có trong project cho bar ngang, column, line và area. Quyết định này giữ bundle/dependency gọn trong giai đoạn đầu, đồng thời component chart nằm riêng trong module để có thể thay bằng Apache ECharts khi cần scatter, range, small multiples hoặc cấu hình nâng cao.
+
+### Phương án mở rộng: Apache ECharts
 
 `recharts` vẫn giữ nguyên cho các trang khảo sát đang chạy; module này có thể dùng `echarts` trực tiếp vì cần chart picker, nhiều loại chart và mapping dữ liệu đa chiều.
 
@@ -509,57 +513,57 @@ Không tạo một component riêng cho từng chart nếu cùng wrapper + optio
 ### Giai đoạn A — Spike dữ liệu và chart
 
 - [ ] A1. Tạo fixture ẩn danh từ workbook mẫu.
-- [ ] A2. Chứng minh parser đọc được cached result của formula K/M/O/Q/S/U.
+- [x] A2. Chứng minh parser đọc được cached result của formula K/M/O/Q/S/U.
 - [ ] A3. Unit test: header hai tầng, dòng 6, formula-only blank rows, null khác zero, decimal không sai số.
 - [ ] A4. Spike Apache ECharts với bốn chart đại diện và đo lazy bundle/mobile/a11y.
-- [ ] A5. Chốt chart dependency; ghi quyết định và phạm vi chart MVP.
-- [ ] A6. Chốt metadata dimension/metric/aggregation/compatibility.
+- [x] A5. Chốt chart dependency; ghi quyết định và phạm vi chart MVP.
+- [x] A6. Chốt metadata dimension/metric/aggregation/compatibility.
 
 ### Giai đoạn B — Bảng mới và backend độc lập
 
-- [ ] B1. Thêm hai entity/table mới, không thay đổi bảng nghiệp vụ hiện có.
-- [ ] B2. Tạo EF migration và review SQL migration: chỉ `CREATE TABLE/INDEX` cho module mới.
+- [x] B1. Thêm hai entity/table mới, không thay đổi bảng nghiệp vụ hiện có.
+- [x] B2. Tạo EF migration và review SQL migration: chỉ `CREATE TABLE/INDEX` cho module mới.
 - [ ] B3. Test `Up`/`Down` migration.
-- [ ] B4. Implement import transaction và duplicate hash.
-- [ ] B5. Implement metadata catalog.
-- [ ] B6. Implement query engine enum → LINQ cho dimension/metric cố định.
-- [ ] B7. Implement weighted aggregation từ rate nguồn + coverage metadata.
-- [ ] B8. Implement rows paging/filter/sort.
+- [x] B4. Implement import transaction và duplicate hash.
+- [x] B5. Implement metadata catalog.
+- [x] B6. Implement query engine enum → LINQ cho dimension/metric cố định.
+- [x] B7. Implement weighted aggregation từ rate nguồn + coverage metadata.
+- [x] B8. Implement rows paging/filter/sort.
 - [ ] B9. Endpoint authorization/integration tests.
 
 ### Giai đoạn C — Import UI
 
-- [ ] C1. Parser và typed service.
-- [ ] C2. Modal chọn file → preview C–U → xác nhận.
+- [x] C1. Parser và typed service.
+- [x] C2. Modal chọn file → preview C–U → xác nhận.
 - [ ] C3. Sticky grouped header, toggle nhóm cột, null/zero/percent đúng.
 - [ ] C4. Retry không mất preview; duplicate dataset có thông báo rõ.
-- [ ] C5. Thành công điều hướng đến dataset vừa import.
+- [x] C5. Thành công điều hướng đến dataset vừa import.
 
 ### Giai đoạn D — Dashboard mặc định
 
 - [ ] D1. Dataset picker + filter khoa/CTĐT/khóa/thời gian.
-- [ ] D2. KPI strip từ dữ liệu nguồn/tổng hợp có chú thích.
+- [x] D2. KPI strip từ dữ liệu nguồn/tổng hợp có chú thích.
 - [ ] D3. So sánh khoa.
 - [ ] D4. So sánh CTĐT trong khoa.
 - [ ] D5. Cơ cấu kết quả.
 - [ ] D6. Xu hướng nhiều năm/thời điểm xét.
-- [ ] D7. Bảng nguồn C–U và lịch sử dataset.
+- [x] D7. Bảng nguồn C–U và lịch sử dataset.
 
 ### Giai đoạn E — Chart builder có kiểm soát
 
-- [ ] E1. Chọn metric I–U/G.
+- [x] E1. Chọn metric I–U/G.
 - [ ] E2. Chọn dimension và series.
-- [ ] E3. Compatibility engine chỉ hiện chart phù hợp.
-- [ ] E4. Chart type picker theo ảnh tham chiếu, responsive và keyboard.
+- [x] E3. Compatibility engine chỉ hiện chart phù hợp trong phạm vi MVP.
+- [x] E4. Chart type picker theo ảnh tham chiếu, responsive và keyboard.
 - [ ] E5. Sort/top N/label/legend/source note.
 - [ ] E6. Đồng bộ cấu hình vào URL và data table tương đương.
 
 ### Giai đoạn F — Xác minh
 
-- [ ] F1. `dotnet build` và toàn bộ `dotnet test` pass.
-- [ ] F2. `npm run build` và `npm run lint` pass.
-- [ ] F3. Import file mẫu: đúng 9 dòng, đủ 19 cột, G/I/J là `788/188/133`.
-- [ ] F4. Đối chiếu trực tiếp từng cached rate K/M/O/Q/S/U với Excel.
+- [x] F1. `dotnet build` và toàn bộ `dotnet test` pass.
+- [x] F2. `npm run build` và `npm run lint` pass.
+- [x] F3. Parser đọc file mẫu hiện tại: đúng 40 dòng, đủ 19 cột, G/I/J là `5.019/1.241/1.016`.
+- [x] F4. Đối chiếu trực tiếp cached rate K/M/O/Q/S/U với Excel.
 - [ ] F5. Test so sánh: khoa, ngành trong khoa, cùng khoa nhiều năm, toàn trường, nhiều dataset.
 - [ ] F6. Test null/0, file lỗi, file trùng, rollback và quyền 403.
 - [ ] F7. Visual QA thật ở `1440×900` và `390×844`; kiểm tra overflow, tooltip, legend, chart resize, modal và focus.
@@ -569,7 +573,7 @@ Không tạo một component riêng cho từng chart nếu cùng wrapper + optio
 ## 16. Tiêu chí nghiệm thu
 
 1. Migration chỉ tạo `GraduationAnalyticsDatasets` và `GraduationAnalyticsRows` cùng index/FK nội bộ; không alter bảng nghiệp vụ hiện có.
-2. File mẫu preview đúng 9 dòng và đủ C–U; dòng formula trống không bị nhận nhầm.
+2. File mẫu preview đủ dữ liệu C–U theo phiên bản file tại thời điểm import; dòng formula trống không bị nhận nhầm.
 3. K/M/O/Q/S/U lưu đúng cached result từ Excel, không bị hệ thống tính lại.
 4. Null và zero được giữ khác nhau từ Excel → request → DB → API → table/chart.
 5. Trước khi xác nhận import, database không thay đổi; lỗi lưu rollback toàn bộ.

@@ -1,11 +1,13 @@
 using System.Security.Claims;
 using API.Auth;
 using API.Catalog;
+using API.GraduationAnalytics;
 using API.Reports;
 using API.Surveys;
 using API.UserAdministration;
 using Application.Auth;
 using Application.Catalog;
+using Application.GraduationAnalytics;
 using Application.Reports;
 using Application.Surveys;
 using Application.UserAdministration;
@@ -54,15 +56,18 @@ public sealed class EndpointAuthorizationTests
     [Theory]
     [InlineData("/api/admin", AuthPolicies.UserAdminAccess)]
     [InlineData("/api/v1/reports", AuthPolicies.ReportsAccess)]
+    [InlineData("/api/v1/graduation-analytics", AuthPolicies.GraduationAnalyticsAccess)]
     public void ModuleEndpoints_RequireTheirModulePermission(string routePrefix, string expectedPolicy)
     {
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddAuthorization();
         builder.Services.AddSingleton(Mock.Of<IUserAdministrationService>());
         builder.Services.AddSingleton(Mock.Of<IReportService>());
+        builder.Services.AddSingleton(Mock.Of<IGraduationAnalyticsService>());
         var app = builder.Build();
         app.MapUserAdministrationEndpoints();
         app.MapReportEndpoints();
+        app.MapGraduationAnalyticsEndpoints();
 
         var endpoints = ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(source => source.Endpoints)

@@ -72,6 +72,7 @@ export function Sidebar({
         { id: 'reports', label: 'Thống kê & Báo cáo', icon: BarChart3 },
         { id: 'survey-statistics', label: 'Bảng dữ liệu khảo sát', icon: Table2 },
         { id: 'survey-analysis', label: 'Phân tích chuyên sâu', icon: Sigma },
+        { id: 'graduation-analytics', label: 'Thống kê tốt nghiệp', icon: GraduationCap },
       ],
     },
     {
