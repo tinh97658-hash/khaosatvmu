@@ -226,6 +226,16 @@
   border: 1px solid #cfd7dc;
   border-radius: 4px !important;
 }
+.catalog-modal-card--import.modal-card {
+  width: min(680px, calc(100vw - 32px));
+  max-width: 680px;
+  height: auto;
+  max-height: calc(100dvh - 32px);
+}
+.catalog-modal-card--import .catalog-modal-body.modal-body {
+  flex: 0 1 auto;
+  padding: 20px;
+}
 .catalog-modal-card--data-preview .catalog-modal-body.modal-body {
   box-sizing: border-box;
   width: 100%;
@@ -237,10 +247,32 @@
   overflow: hidden;
 }
 .graduation-import { display: flex; min-width: 0; height: 100%; flex-direction: column; gap: 12px; }
-.graduation-import__picker { display: flex; align-items: center; gap: 10px; }
+.graduation-import__picker {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d9e1e5;
+  border-radius: 4px;
+  background: #f7f9fa;
+}
+.graduation-import__picker.has-file { border-color: #b9d4de; background: #f2f9fb; }
 .graduation-import__picker input[type='file'] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .graduation-import__picker label { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
-.graduation-import__picker > span { color: #68737d; font-size: 12px; }
+.graduation-import__file-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #c7dce4;
+  border-radius: 4px;
+  background: #fff;
+  color: #087fa9;
+}
+.graduation-import__file-copy { display: grid; min-width: 0; gap: 3px; }
+.graduation-import__file-copy strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.graduation-import__file-copy span { color: #68737d; font-size: 11px; }
 .graduation-import__summary { display: grid; grid-template-columns: minmax(180px, 1.6fr) repeat(3, minmax(70px, 1fr)); gap: 8px; min-width: 0; padding: 10px; border: 1px solid #dfe4e8; background: #f7f9fa; }
 .graduation-import__summary > * { min-width: 0; }
 .graduation-import__summary > div { display: grid; align-content: center; gap: 2px; padding-left: 10px; border-left: 1px solid #dfe4e8; }
@@ -282,7 +314,8 @@
   .graduation-builder { border-right: 0; border-bottom: 1px solid #dfe4e8; }
   .graduation-chart-types { grid-template-columns: repeat(4, minmax(70px, 1fr)); overflow-x: auto; }
   .graduation-chart { height: 330px; }
-  .graduation-import__picker { align-items: flex-start; flex-direction: column; }
+  .graduation-import__picker { grid-template-columns: auto minmax(0, 1fr); }
+  .graduation-import__picker label { grid-column: 1 / -1; width: 100%; justify-content: center; }
   .graduation-import__summary { grid-template-columns: 1fr 1fr; }
   .graduation-import__summary > div { padding-left: 0; border-left: 0; }
   .catalog-modal-card--data-preview.modal-card { width: 100%; height: 100dvh; max-height: 100dvh; border: 0; }
@@ -298,4 +331,6 @@
   .graduation-overview__heading { align-items: flex-start; flex-direction: column; }
   .graduation-overview-card { padding-inline: 10px; }
   .graduation-overview-chart, .graduation-overview-chart--wide { height: 330px; }
+  .catalog-modal-card--import.modal-card { width: 100%; max-height: 100dvh; border: 0; }
+  .catalog-modal-card--import .catalog-modal-body.modal-body { padding: 14px; }
 }

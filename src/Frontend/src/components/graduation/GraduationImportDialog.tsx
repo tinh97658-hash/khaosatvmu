@@ -104,12 +104,23 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Import dữ liệu tốt nghiệp" size="data-preview">
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Import dữ liệu tốt nghiệp"
+      size={parsed ? 'data-preview' : 'import'}
+    >
       <div className="graduation-import" aria-busy={parsing || importing}>
-        <div className="graduation-import__picker">
+        <div className={`graduation-import__picker${fileName ? ' has-file' : ''}`}>
+          <div className="graduation-import__file-icon" aria-hidden="true">
+            <FileSpreadsheet size={24} />
+          </div>
+          <div className="graduation-import__file-copy">
+            <strong>{fileName || 'Chọn file dữ liệu tốt nghiệp'}</strong>
+            <span>Excel .xlsx · tối đa 5 MB · đọc đủ 19 cột C–U</span>
+          </div>
           <label htmlFor={inputId} className="btn btn-secondary">
-            <FileSpreadsheet aria-hidden="true" size={17} />
-            {fileName || 'Chọn file Excel'}
+            {fileName ? 'Chọn file khác' : 'Chọn file Excel'}
           </label>
           <input
             ref={inputRef}
@@ -119,7 +130,6 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
             onChange={(event) => void handleFile(event.target.files?.[0])}
             disabled={parsing || importing}
           />
-          <span>Định dạng .xlsx · tối đa 5 MB · đọc đủ các cột C–U</span>
         </div>
 
         {parsing && <div className="graduation-state"><LoaderCircle className="spin" /> Đang đọc file...</div>}

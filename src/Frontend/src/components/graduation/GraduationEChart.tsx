@@ -3,6 +3,7 @@ import * as echarts from 'echarts/core';
 import { BarChart, LineChart, PieChart } from 'echarts/charts';
 import {
   AriaComponent,
+  DataZoomComponent,
   GridComponent,
   LegendComponent,
   MarkLineComponent,
@@ -18,6 +19,7 @@ echarts.use([
   LineChart,
   PieChart,
   AriaComponent,
+  DataZoomComponent,
   GridComponent,
   LegendComponent,
   MarkLineComponent,
@@ -60,6 +62,9 @@ export function GraduationEChart({
     const isHorizontal = type === 'bar' || type === 'stacked-bar';
     const isStacked = type === 'stacked-bar' || type === 'stacked-column';
     const isPie = type === 'pie' || type === 'donut';
+    const visibleCategoryCount = isHorizontal ? 14 : 12;
+    const needsCategoryZoom = categories.length > visibleCategoryCount;
+    const categoryZoomEnd = Math.min(100, (visibleCategoryCount / categories.length) * 100);
     const valueAxis = {
       type: 'value' as const,
       min: 0,
@@ -75,9 +80,14 @@ export function GraduationEChart({
         color: '#59636c',
         fontSize: 11,
         interval: 0,
-        rotate: !isHorizontal && categories.length > 6 ? 25 : 0,
+        rotate: !isHorizontal && categories.length > 6 ? 28 : 0,
         width: isHorizontal ? 170 : 115,
         overflow: 'truncate' as const,
+        hideOverlap: true,
+        formatter: (value: string) => {
+          const limit = isHorizontal ? 28 : 22;
+          return value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
+        },
       },
     };
 
@@ -156,11 +166,24 @@ export function GraduationEChart({
         valueFormatter: (value) => formatValue(value, unit),
       },
       legend: { show: series.length > 1, type: 'scroll', top: 0 },
+      dataZoom: needsCategoryZoom ? (isHorizontal ? [
+        { type: 'inside', yAxisIndex: 0, start: 0, end: categoryZoomEnd },
+        {
+          type: 'slider', yAxisIndex: 0, start: 0, end: categoryZoomEnd,
+          right: 5, top: 44, bottom: 24, width: 14, showDetail: false, brushSelect: false,
+        },
+      ] : [
+        { type: 'inside', xAxisIndex: 0, start: 0, end: categoryZoomEnd },
+        {
+          type: 'slider', xAxisIndex: 0, start: 0, end: categoryZoomEnd,
+          left: 52, right: 24, bottom: 4, height: 18, showDetail: false, brushSelect: false,
+        },
+      ]) : undefined,
       grid: {
         top: series.length > 1 ? 46 : 20,
         left: isHorizontal ? 184 : 52,
-        right: showLabels ? 70 : 24,
-        bottom: !isHorizontal && categories.length > 6 ? 94 : 54,
+        right: isHorizontal && needsCategoryZoom ? 34 : showLabels ? 70 : 24,
+        bottom: !isHorizontal && needsCategoryZoom ? 108 : !isHorizontal && categories.length > 6 ? 94 : 54,
         containLabel: false,
       },
       xAxis: isHorizontal ? valueAxis : categoryAxis,
