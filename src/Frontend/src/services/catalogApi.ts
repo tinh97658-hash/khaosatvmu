@@ -269,7 +269,6 @@ export interface SaveCoursePayload {
 /** Thông báo tiếng Việt cho mã lỗi của API danh mục. */
 export const catalogErrorMessages: Record<string, string> = {
   CATALOG_INVALID_REQUEST: 'Dữ liệu gửi lên không hợp lệ.',
-  CATALOG_IMPORT_TOO_MANY_ROWS: 'Mỗi lần chỉ được import tối đa 500 dòng.',
   CATALOG_FACULTY_NOT_FOUND: 'Không tìm thấy khoa viện.',
   CATALOG_FACULTY_NAME_REQUIRED: 'Thiếu tên khoa viện.',
   CATALOG_FACULTY_NAME_EXISTS: 'Tên khoa viện đã tồn tại.',

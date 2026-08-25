@@ -32,7 +32,6 @@ const fileErrorMessages: Record<FacultyImportFileErrorCode, string> = {
   FILE_EMPTY: 'Tệp Excel không có dữ liệu.',
   NAME_HEADER_MISSING: 'Không tìm thấy cột "Tên khoa viện" trong hàng tiêu đề.',
   NO_DATA_ROWS: 'Tệp Excel chưa có dòng khoa / viện nào.',
-  TOO_MANY_ROWS: 'Mỗi lần chỉ được import tối đa 500 khoa / viện.',
   READ_FAILED: 'Không thể đọc tệp Excel. Hãy kiểm tra tệp không bị hỏng hoặc đặt mật khẩu.',
 };
 
@@ -119,7 +118,7 @@ export function FacultyImportDialog({ isOpen, onClose, onImport }: FacultyImport
           <FileSpreadsheet aria-hidden="true" />
           <p>
             Hàng đầu tiên cần có cột <strong>Tên khoa viện</strong>. Mỗi dòng tiếp theo là một
-            khoa / viện. Tối đa 500 dòng.
+            khoa / viện.
           </p>
         </div>
 

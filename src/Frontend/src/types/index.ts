@@ -191,6 +191,8 @@ export interface SemesterSurvey {
   endTime: string;
   sectionSurveyCount: number;
   responseCount: number;
+  /** Lớp của kỳ chưa có bài khảo sát trong đợt, do được thêm vào sau lúc tạo đợt. */
+  missingSectionCount: number;
 }
 
 /** Bảng "CourseSectionSurveys": bài khảo sát riêng của một lớp học phần. */
@@ -206,8 +208,17 @@ export interface CourseSectionSurvey {
   courseName: string;
   sectionName: string;
   lecturerName: string;
+  /** Bộ môn của lớp: theo học phần, thiếu thì lấy của giảng viên. */
+  departmentName: string;
+  /** Khoa của lớp: theo học phần, rồi khoa của bộ môn, rồi của giảng viên. */
+  facultyName: string;
   classSize: number;
+  /** Mọi lượt nộp, kể cả phiếu bị bộ lọc nhiễu loại. */
   responseCount: number;
+  /** Số phiếu qua được bộ lọc — phần duy nhất được tính vào tiến độ. */
+  validResponseCount: number;
+  /** Số phiếu bị bộ lọc loại. */
+  invalidResponseCount: number;
 }
 
 /** Số câu đã chọn ở một mức trả lời trong cùng một phiếu. */
@@ -507,6 +518,8 @@ export interface OptionCount {
 
 export interface QuestionRating {
   questionId: number;
+  /** Số thứ tự câu trong bộ đề (C1, C2...), đánh trên cả câu bẫy và câu tự nhập. */
+  questionOrder: number;
   questionText: string;
   /** Chỉ có ý nghĩa với câu thuộc thang `Options`. */
   averageScore: number;
@@ -525,7 +538,13 @@ export interface LecturerSectionSummary {
   courseName: string;
   sectionName: string;
   classSize: number;
+  /** Mọi lượt nộp, kể cả phiếu bị bộ lọc nhiễu loại. */
   responseCount: number;
+  /** Phiếu qua được bộ lọc — mẫu số của mọi số liệu chất lượng. */
+  validResponseCount: number;
+  invalidResponseCount: number;
+  /** Tính trên phiếu hợp lệ so với sĩ số. */
+  completionRate: number;
   averageScore: number;
 }
 
@@ -601,7 +620,12 @@ export interface SurveyResultDetail {
   courseName: string;
   sectionName: string;
   classSize: number;
+  /** Mọi lượt nộp, kể cả phiếu bị bộ lọc nhiễu loại. */
   responseCount: number;
+  /** Phiếu qua được bộ lọc — mẫu số của mọi số liệu chất lượng. */
+  validResponseCount: number;
+  invalidResponseCount: number;
+  /** Tính trên phiếu hợp lệ so với sĩ số. */
   completionRate: number;
   averageScore: number;
 }

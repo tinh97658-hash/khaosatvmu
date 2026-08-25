@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   Bar,
   BarChart,
@@ -15,9 +15,6 @@ import type { FacultyOverview } from '../../types';
 import { completionColor } from './theme';
 import { FacultyNameAxisTick } from './FacultyNameAxisTick';
 import { wrapFacultyName } from './facultyChartLabels';
-import { ChartPagination } from './ChartPagination';
-
-const PAGE_SIZE = 10;
 
 interface FacultyCompletionChartProps {
   faculties: FacultyOverview[];
@@ -52,23 +49,18 @@ export const FacultyCompletionChart: React.FC<FacultyCompletionChartProps> = ({
   faculties,
   onSelect,
 }) => {
-  const [page, setPage] = useState(1);
   const data = useMemo(
     () => [...faculties]
       .sort((a, b) => a.completionRate - b.completionRate)
       .map((f) => ({ ...f, name: f.facultyName })),
     [faculties],
   );
-  const pageCount = Math.max(1, Math.ceil(data.length / PAGE_SIZE));
-  const pageData = data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  useEffect(() => {
-    setPage((current) => Math.min(current, pageCount));
-  }, [pageCount]);
-
+  // Vẽ hết mọi Khoa trong một biểu đồ: cắt trang một biểu đồ so sánh thì mất
+  // luôn cái để so sánh. Khung cao dần theo số Khoa, thẻ tự dài ra theo.
   const chartHeight = Math.max(
     250,
-    pageData.reduce(
+    data.reduce(
       (height, item) => height + 40 + (wrapFacultyName(item.name).length - 1) * 14,
       70,
     ),
@@ -82,11 +74,11 @@ export const FacultyCompletionChart: React.FC<FacultyCompletionChartProps> = ({
     <div className="reports-chart" aria-label="Tỷ lệ hoàn thành thu phiếu theo Khoa">
       <ResponsiveContainer width="100%" height={chartHeight}>
         <BarChart
-          data={pageData}
+          data={data}
           layout="vertical"
           margin={{ top: 12, right: 56, left: 8, bottom: 8 }}
         >
-          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#eef2f6" />
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#b6c2cd" />
           <XAxis
             type="number"
             domain={[0, 100]}
@@ -114,7 +106,7 @@ export const FacultyCompletionChart: React.FC<FacultyCompletionChartProps> = ({
             }}
             cursor={onSelect ? 'pointer' : 'default'}
           >
-            {pageData.map((entry) => (
+            {data.map((entry) => (
               <Cell key={entry.facultyId} fill={completionColor(entry.completionRate)} />
             ))}
             <LabelList
@@ -128,16 +120,8 @@ export const FacultyCompletionChart: React.FC<FacultyCompletionChartProps> = ({
       </ResponsiveContainer>
       <div className="reports-chart-note">
         <Timer className="operation-icon" aria-hidden="true" />
-        <span>≥80% hoàn thành · 40–80% đang thu · &lt;40% chậm tiến độ.</span>
+        <span>≥80% hoàn thành · 20–80% đang thu · &lt;20% chậm tiến độ.</span>
       </div>
-      <ChartPagination
-        page={page}
-        pageCount={pageCount}
-        pageSize={PAGE_SIZE}
-        totalItems={data.length}
-        itemLabel="Khoa/Viện"
-        onPageChange={setPage}
-      />
     </div>
   );
 };

@@ -2,7 +2,6 @@ import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
 
 const maximumFileSize = 5 * 1024 * 1024;
-const maximumRows = 500;
 const departmentIdHeaders = new Set([
   'ma bo mon',
   'ma',
@@ -42,7 +41,6 @@ export type DepartmentImportFileErrorCode =
   | 'NAME_HEADER_MISSING'
   | 'FACULTY_HEADER_MISSING'
   | 'NO_DATA_ROWS'
-  | 'TOO_MANY_ROWS'
   | 'READ_FAILED';
 
 export class DepartmentImportFileError extends Error {
@@ -170,9 +168,6 @@ export async function parseDepartmentImportFile(file: File): Promise<ImportDepar
 
   if (rows.length === 0) {
     throw new DepartmentImportFileError('NO_DATA_ROWS');
-  }
-  if (rows.length > maximumRows) {
-    throw new DepartmentImportFileError('TOO_MANY_ROWS');
   }
 
   return rows;

@@ -34,7 +34,6 @@ const fileErrorMessages: Record<LecturerImportFileErrorCode, string> = {
   NAME_HEADER_MISSING: 'Không tìm thấy cột "Họ và tên" trong hàng tiêu đề.',
   EMAIL_HEADER_MISSING: 'Không tìm thấy cột "Email" trong hàng tiêu đề.',
   NO_DATA_ROWS: 'Tệp Excel chưa có dòng giảng viên nào.',
-  TOO_MANY_ROWS: 'Mỗi lần chỉ được import tối đa 500 giảng viên.',
   READ_FAILED: 'Không thể đọc tệp Excel. Hãy kiểm tra tệp không bị hỏng hoặc đặt mật khẩu.',
 };
 
@@ -123,7 +122,7 @@ export function LecturerImportDialog({ isOpen, onClose, onImport }: LecturerImpo
             Hàng đầu tiên cần có cột <strong>Họ và tên</strong>. Các cột Email, Số điện thoại, Tên
             khoa viện, Tên bộ môn, Chức vụ là tùy chọn; tên khoa viện, bộ môn và chức vụ được tra
             ngược ra id. Dòng nào bỏ trống cột <strong>Chức vụ</strong> sẽ mặc định là{' '}
-            <strong>{defaultPositionName}</strong>. Tối đa 500 dòng.
+            <strong>{defaultPositionName}</strong>.
           </p>
         </div>
 

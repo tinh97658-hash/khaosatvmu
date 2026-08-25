@@ -2,23 +2,20 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
-  CheckCircle2,
   CircleAlert,
   Clock4,
   LoaderCircle,
-  Minus,
+  Star,
   Target,
   Timer,
-  TrendingDown,
-  TrendingUp,
 } from 'lucide-react';
 import { reportApi } from '../../services/reportApi';
-import type { SchoolSurveyOverview as SchoolSurveyOverviewData } from '../../types';
-import { CompletionGauge } from './CompletionGauge';
-import { SatisfactionGauge } from './SatisfactionGauge';
+import type {
+  QuestionRating,
+  SchoolSurveyOverview as SchoolSurveyOverviewData,
+} from '../../types';
 import { FacultyScoreChart } from './FacultyScoreChart';
 import { FacultyCompletionChart } from './FacultyCompletionChart';
-import { ScoreDistributionDonut } from './ScoreDistributionDonut';
 import { WeakestQuestionsPanel } from './WeakestQuestionsPanel';
 import { LaggingDepartmentsTable } from './LaggingDepartmentsTable';
 import { formatNumber } from './theme';
@@ -31,51 +28,95 @@ export interface SchoolOverviewDrillDown {
 
 interface SchoolSurveyOverviewProps {
   semesterId: number;
-  comparisonOptions: Array<{ semesterId: number; label: string }>;
+  /** Chỉ phân tích một bài khảo sát của kỳ; bỏ trống là gộp cả kỳ. */
+  semesterSurveyId?: number;
   analysisView: ReportAnalysisView;
-  comparisonSemesterId?: number;
   onAnalysisViewChange: (view: ReportAnalysisView) => void;
-  onComparisonSemesterChange: (semesterId?: number) => void;
   onDrillDown?: (filter: SchoolOverviewDrillDown) => void;
 }
 
-const deltaClass = (delta: number): string => {
-  if (delta > 0.005) return 'is-up';
-  if (delta < -0.005) return 'is-down';
-  return 'is-flat';
-};
+/** Dưới ngưỡng này thì một đơn vị bị coi là chậm tiến độ thu phiếu. */
+const laggingThreshold = 20;
+
+/** Số tiêu chí mặc định của bảng xếp hạng câu hỏi. */
+const defaultQuestionCount = 5;
+
+/** Trần số tiêu chí, khớp với giới hạn phía API. */
+const maxQuestionCount = 50;
 
 /** Bảng tổng quan toàn trường — executive dashboard đặt đầu trang Thống kê & Báo cáo. */
 export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
   semesterId,
-  comparisonOptions,
+  semesterSurveyId,
   analysisView,
-  comparisonSemesterId,
   onAnalysisViewChange,
-  onComparisonSemesterChange,
   onDrillDown,
 }) => {
   const [data, setData] = useState<SchoolSurveyOverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Bảng xếp hạng tiêu chí tự gọi API riêng: đổi số lượng hay đổi đầu bảng thì
+  // chỉ nạp lại đúng khối đó, không dựng lại cả trang tổng quan.
+  const [questionCount, setQuestionCount] = useState(defaultQuestionCount);
+  const [questionInput, setQuestionInput] = useState(String(defaultQuestionCount));
+  const [questionLowest, setQuestionLowest] = useState(true);
+  const [rankedQuestions, setRankedQuestions] = useState<QuestionRating[] | null>(null);
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+
   const load = useCallback(async () => {
     if (!semesterId) return;
     setLoading(true);
     setError(null);
     try {
-      const overview = await reportApi.schoolOverview(semesterId, comparisonSemesterId);
+      const overview = await reportApi.schoolOverview(semesterId, undefined, semesterSurveyId);
       setData(overview);
     } catch {
       setError('Không thể tải bảng tổng quan kết quả khảo sát toàn trường.');
     } finally {
       setLoading(false);
     }
-  }, [semesterId, comparisonSemesterId]);
+  }, [semesterId, semesterSurveyId]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Chỉ tải khi tab chất lượng đang mở, và bỏ luôn lần gọi thừa khi người dùng
+  // còn đang gõ dở số lượng.
+  useEffect(() => {
+    if (analysisView !== 'quality' || !semesterId) return;
+    let cancelled = false;
+    setQuestionsLoading(true);
+    reportApi
+      .questionRanking({
+        semesterId,
+        semesterSurveyId,
+        count: questionCount,
+        lowest: questionLowest,
+      })
+      .then((questions) => {
+        if (!cancelled) setRankedQuestions(questions);
+      })
+      .catch(() => {
+        if (!cancelled) setRankedQuestions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setQuestionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [analysisView, semesterId, semesterSurveyId, questionCount, questionLowest]);
+
+  /** Ô số nhận mọi thao tác gõ, nhưng chỉ chốt lại khi giá trị nằm trong khoảng hợp lệ. */
+  const changeQuestionCount = (value: string) => {
+    setQuestionInput(value);
+    const parsed = Number(value);
+    if (Number.isInteger(parsed) && parsed >= 1 && parsed <= maxQuestionCount) {
+      setQuestionCount(parsed);
+    }
+  };
 
   if (loading) {
     return (
@@ -103,9 +144,8 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
   }
 
   const hasData = data.totalSections > 0;
-  const comparison = data.semesterComparison;
   const laggingDepartments = data.departments.filter(
-    (department) => department.completionRate < 40,
+    (department) => department.completionRate < laggingThreshold,
   );
   const laggingDepartmentCount = laggingDepartments.length;
 
@@ -121,43 +161,6 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
             </p>
           </div>
         </div>
-        <div
-          className="reports-exec-compare"
-          aria-label={comparison ? `So sánh với ${comparison.comparisonSemesterName}` : 'Chọn học kỳ so sánh'}
-        >
-          <label className="reports-exec-compare-label" htmlFor="reports-comparison-semester">
-            So sánh với
-          </label>
-          <select
-            id="reports-comparison-semester"
-            value={comparisonSemesterId ?? ''}
-            onChange={(event) => {
-              const value = event.target.value;
-              onComparisonSemesterChange(value ? Number(value) : undefined);
-            }}
-          >
-            <option value="">Học kỳ liền trước (mặc định)</option>
-            {comparisonOptions
-              .filter((option) => option.semesterId !== semesterId)
-              .map((option) => (
-                <option key={option.semesterId} value={option.semesterId}>
-                  {option.label}
-                </option>
-              ))}
-          </select>
-          {comparison && (
-            <div className="reports-exec-compare-deltas">
-            <span className={`reports-exec-delta ${deltaClass(comparison.completionRateDelta)}`}>
-              {comparison.completionRateDelta > 0.005 ? <TrendingUp aria-hidden="true" /> : comparison.completionRateDelta < -0.005 ? <TrendingDown aria-hidden="true" /> : <Minus aria-hidden="true" />}
-              Tiến độ {comparison.completionRateDelta > 0 ? '+' : ''}{comparison.completionRateDelta.toFixed(1)}%
-            </span>
-            <span className={`reports-exec-delta ${deltaClass(comparison.averageScoreDelta)}`}>
-              {comparison.averageScoreDelta > 0.005 ? <TrendingUp aria-hidden="true" /> : comparison.averageScoreDelta < -0.005 ? <TrendingDown aria-hidden="true" /> : <Minus aria-hidden="true" />}
-              Điểm TB {comparison.averageScoreDelta > 0 ? '+' : ''}{comparison.averageScoreDelta.toFixed(2)}
-            </span>
-            </div>
-          )}
-        </div>
       </header>
 
       {!hasData ? (
@@ -168,64 +171,48 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
         </div>
       ) : (
         <>
-          {/* Hàng KPI: tiến độ + điểm hài lòng + trạng thái lớp */}
-          <div className="reports-exec-kpis">
-            <div className="reports-exec-kpi reports-exec-kpi--gauge">
-              <CompletionGauge
-                value={data.completionRate}
-                collected={data.totalResponses}
-                target={data.totalTargetResponses}
-              />
-              <div className="reports-exec-kpi-copy">
-                <span>Tiến độ thu phiếu</span>
-                <strong>{data.completionRate.toFixed(1)}%</strong>
-                <small>
-                  {formatNumber(data.totalResponses)} / {formatNumber(data.totalTargetResponses)} phiếu
-                </small>
-              </div>
-            </div>
-
-            <div className="reports-exec-kpi">
-              <SatisfactionGauge score={data.overallAverageScore} label="Điểm hài lòng toàn trường" />
-            </div>
-
-            <div className="reports-exec-kpi reports-exec-kpi--status">
-              <span className="reports-exec-kpi-label">Trạng thái các lớp khảo sát</span>
-              <div className="reports-exec-statusbar" aria-hidden="true">
-                <span
-                  className="reports-exec-statusbar-seg is-complete"
-                  style={{ width: `${data.totalSections > 0 ? (data.completedSectionCount / data.totalSections) * 100 : 0}%` }}
-                  title={`Hoàn thành: ${data.completedSectionCount}`}
-                />
-                <span
-                  className="reports-exec-statusbar-seg is-progress"
-                  style={{ width: `${data.totalSections > 0 ? (data.inProgressSectionCount / data.totalSections) * 100 : 0}%` }}
-                  title={`Đang thu: ${data.inProgressSectionCount}`}
-                />
-                <span
-                  className="reports-exec-statusbar-seg is-lagging"
-                  style={{ width: `${data.totalSections > 0 ? (data.laggingSectionCount / data.totalSections) * 100 : 0}%` }}
-                  title={`Chậm tiến độ: ${data.laggingSectionCount}`}
-                />
-              </div>
-              <ul className="reports-exec-statuslegend">
-                <li>
-                  <span className="legend-dot" style={{ background: '#137b3b' }} />
-                  Hoàn thành <strong>{data.completedSectionCount}</strong>
-                </li>
-                <li>
-                  <span className="legend-dot" style={{ background: '#0788b8' }} />
-                  Đang thu <strong>{data.inProgressSectionCount}</strong>
-                </li>
-                <li>
-                  <span className="legend-dot" style={{ background: '#b86216' }} />
-                  Chậm tiến độ <strong>{data.laggingSectionCount}</strong>
-                </li>
-              </ul>
-              <small className="reports-exec-kpi-sub">
-                Tổng <strong>{data.totalSections}</strong> lớp đã phát phiếu
+          {/* Một dải KPI mỏng thay cho ba thẻ cao: cùng chừng ấy con số nhưng
+              không đẩy phần phân tích xuống dưới màn hình. */}
+          <div className="reports-exec-band">
+            <span className="reports-exec-stat" title="Phiếu hợp lệ trên tổng chỉ tiêu">
+              <Timer className="operation-icon" style={{ color: '#0788b8' }} aria-hidden="true" />
+              Tiến độ thu phiếu
+              <strong>{data.completionRate.toFixed(1)}%</strong>
+              <small>
+                {formatNumber(data.totalResponses)} / {formatNumber(data.totalTargetResponses)} phiếu hợp lệ
               </small>
-            </div>
+            </span>
+
+            <span className="reports-exec-stat" title="Điểm hài lòng toàn trường">
+              <Star className="operation-icon" style={{ color: '#b86216' }} aria-hidden="true" />
+              Điểm hài lòng
+              <strong>{data.overallAverageScore.toFixed(2)}</strong>
+              <small>/ 5.0</small>
+            </span>
+
+            <span className="reports-exec-stat" title="Lớp đạt từ 80% phiếu hợp lệ">
+              <span className="legend-dot" style={{ background: '#137b3b' }} />
+              Hoàn thành
+              <strong>{data.completedSectionCount}</strong>
+            </span>
+
+            <span className="reports-exec-stat" title="Lớp đạt 20-80% phiếu hợp lệ">
+              <span className="legend-dot" style={{ background: '#0788b8' }} />
+              Đang thu
+              <strong>{data.inProgressSectionCount}</strong>
+            </span>
+
+            <span className="reports-exec-stat" title="Lớp dưới 20% phiếu hợp lệ">
+              <span className="legend-dot" style={{ background: '#b86216' }} />
+              Chậm tiến độ
+              <strong>{data.laggingSectionCount}</strong>
+            </span>
+
+            <span className="reports-exec-stat" title="Tổng số lớp đã phát phiếu">
+              <Target className="operation-icon" style={{ color: '#20262c' }} aria-hidden="true" />
+              Tổng lớp
+              <strong>{formatNumber(data.totalSections)}</strong>
+            </span>
           </div>
 
           <div className="reports-analysis-tabs" role="tablist" aria-label="Chọn nhóm phân tích">
@@ -288,28 +275,45 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
           </div>
           )}
 
-          {/* Hàng thứ 2: tiêu chí yếu nhất + phân bố điểm */}
+          {/* Hàng thứ 2: xếp hạng tiêu chí, số lượng và đầu bảng do người dùng chọn */}
           {analysisView === 'quality' && (
-          <div className="reports-exec-grid reports-analysis-panel" role="tabpanel">
-            <div className="reports-exec-card">
-              <header className="reports-exec-card-head">
-                <AlertTriangle className="operation-icon" aria-hidden="true" />
-                <h3>Tiêu chí cần cải tiến (điểm thấp nhất)</h3>
-              </header>
+          <div className="reports-exec-card reports-analysis-panel" role="tabpanel">
+            <header className="reports-exec-card-head">
+              <AlertTriangle className="operation-icon" aria-hidden="true" />
+              <h3>{questionLowest ? 'Tiêu chí cần cải tiến' : 'Tiêu chí được đánh giá cao'}</h3>
+              <div className="reports-question-controls">
+                <label htmlFor="reports-question-count">Hiển thị</label>
+                <input
+                  id="reports-question-count"
+                  type="number"
+                  min={1}
+                  max={maxQuestionCount}
+                  value={questionInput}
+                  onChange={(event) => changeQuestionCount(event.target.value)}
+                  onBlur={() => setQuestionInput(String(questionCount))}
+                />
+                <label className="catalog-sr-only" htmlFor="reports-question-order">
+                  Đầu bảng điểm
+                </label>
+                <select
+                  id="reports-question-order"
+                  value={questionLowest ? 'lowest' : 'highest'}
+                  onChange={(event) => setQuestionLowest(event.target.value === 'lowest')}
+                >
+                  <option value="lowest">tiêu chí điểm thấp nhất</option>
+                  <option value="highest">tiêu chí điểm cao nhất</option>
+                </select>
+              </div>
+            </header>
+            {/* Giữ nguyên danh sách đang xem trong lúc nạp, chỉ làm mờ đi cho biết. */}
+            <div
+              className={questionsLoading ? 'reports-question-body is-loading' : 'reports-question-body'}
+              aria-busy={questionsLoading}
+            >
               <WeakestQuestionsPanel
-                questions={data.weakestQuestions}
+                questions={rankedQuestions ?? data.weakestQuestions}
                 totalResponses={data.totalResponses}
-              />
-            </div>
-
-            <div className="reports-exec-card">
-              <header className="reports-exec-card-head">
-                <CheckCircle2 className="operation-icon" aria-hidden="true" />
-                <h3>Phân bố điểm toàn trường</h3>
-              </header>
-              <ScoreDistributionDonut
-                scoreDistribution={data.scoreDistribution}
-                totalResponses={data.totalResponses}
+                lowestFirst={questionLowest}
               />
             </div>
           </div>
@@ -321,7 +325,9 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
             <header className="reports-exec-card-head">
               <Clock4 className="operation-icon" aria-hidden="true" />
               <h3>Bộ môn chậm tiến độ thu phiếu</h3>
-              <span className="reports-exec-card-note">Đầy đủ Bộ môn dưới 40% · sắp xếp tại tiêu đề cột</span>
+              <span className="reports-exec-card-note">
+                Đầy đủ Bộ môn dưới {laggingThreshold}% · sắp xếp tại tiêu đề cột
+              </span>
             </header>
             <LaggingDepartmentsTable
               departments={laggingDepartments}

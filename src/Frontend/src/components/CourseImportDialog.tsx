@@ -33,7 +33,6 @@ const fileErrorMessages: Record<CourseImportFileErrorCode, string> = {
   CODE_HEADER_MISSING: 'Không tìm thấy cột "Mã học phần" trong hàng tiêu đề.',
   NAME_HEADER_MISSING: 'Không tìm thấy cột "Tên học phần" trong hàng tiêu đề.',
   NO_DATA_ROWS: 'Tệp Excel chưa có dòng học phần nào.',
-  TOO_MANY_ROWS: 'Mỗi lần chỉ được import tối đa 500 học phần.',
   READ_FAILED: 'Không thể đọc tệp Excel. Hãy kiểm tra tệp không bị hỏng hoặc đặt mật khẩu.',
 };
 
@@ -121,7 +120,7 @@ export function CourseImportDialog({ isOpen, onClose, onImport }: CourseImportDi
           <p>
             Hàng đầu tiên cần có cột <strong>Mã học phần</strong> và <strong>Tên học phần</strong>.
             Các cột Số tín chỉ, Loại học phần, Tên khoa viện, Tên bộ môn, Mã học phần tiên quyết là
-            tùy chọn; tên khoa viện và bộ môn được tra ngược ra id. Tối đa 500 dòng.
+            tùy chọn; tên khoa viện và bộ môn được tra ngược ra id.
           </p>
         </div>
 

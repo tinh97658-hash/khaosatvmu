@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { CourseImportDialog } from '../components/CourseImportDialog';
 import {
   catalogErrorMessage,
@@ -358,69 +359,62 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
             </div>
             <div className="form-group">
               <label htmlFor="course-type">Loại học phần</label>
-              <select
+              <SearchableSelect
                 id="course-type"
                 value={form.courseType}
-                onChange={(event) =>
-                  updateForm({ courseType: event.target.value as CourseType | '' })
-                }
-              >
-                <option value="">Chưa xác định</option>
-                <option value="Required">Required — Bắt buộc</option>
-                <option value="Elective">Elective — Tự chọn</option>
-              </select>
+                onChange={(value) => updateForm({ courseType: value as CourseType | '' })}
+                emptyLabel="Chưa xác định"
+                options={[
+                  { value: 'Required', label: 'Required — Bắt buộc' },
+                  { value: 'Elective', label: 'Elective — Tự chọn' },
+                ]}
+              />
             </div>
           </div>
 
           <div className="catalog-form-grid catalog-form-grid--2">
             <div className="form-group">
               <label htmlFor="course-faculty">Khoa viện</label>
-              <select
+              <SearchableSelect
                 id="course-faculty"
                 value={form.facultyId}
-                onChange={(event) => updateForm({ facultyId: event.target.value, departmentId: '' })}
-              >
-                <option value="">Chưa gán khoa viện</option>
-                {faculties.map((faculty) => (
-                  <option key={faculty.facultyId} value={String(faculty.facultyId)}>
-                    {faculty.facultyName}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => updateForm({ facultyId: value, departmentId: '' })}
+                emptyLabel="Chưa gán khoa viện"
+                options={faculties.map((faculty) => ({
+                  value: String(faculty.facultyId),
+                  label: faculty.facultyName,
+                }))}
+              />
             </div>
             <div className="form-group">
               <label htmlFor="course-department">Bộ môn</label>
-              <select
+              <SearchableSelect
                 id="course-department"
                 value={form.departmentId}
-                onChange={(event) => updateForm({ departmentId: event.target.value })}
-              >
-                <option value="">Chưa gán bộ môn</option>
-                {availableDepartments.map((department) => (
-                  <option key={department.departmentId} value={String(department.departmentId)}>
-                    {department.departmentName}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => updateForm({ departmentId: value })}
+                emptyLabel="Chưa gán bộ môn"
+                options={availableDepartments.map((department) => ({
+                  value: String(department.departmentId),
+                  label: department.departmentName,
+                }))}
+              />
             </div>
           </div>
 
           <div className="form-group">
             <label htmlFor="course-prerequisite">Học phần tiên quyết</label>
-            <select
+            <SearchableSelect
               id="course-prerequisite"
               value={form.prerequisiteCourseId}
-              onChange={(event) => updateForm({ prerequisiteCourseId: event.target.value })}
-            >
-              <option value="">Không có</option>
-              {courses
+              onChange={(value) => updateForm({ prerequisiteCourseId: value })}
+              emptyLabel="Không có"
+              options={courses
                 .filter((course) => course.courseId !== editing?.courseId)
-                .map((course) => (
-                  <option key={course.courseId} value={String(course.courseId)}>
-                    [{course.courseCode}] {course.courseName}
-                  </option>
-                ))}
-            </select>
+                .map((course) => ({
+                  value: String(course.courseId),
+                  label: `[${course.courseCode}] ${course.courseName}`,
+                }))}
+            />
           </div>
 
           <div className="modal-footer catalog-form-actions">

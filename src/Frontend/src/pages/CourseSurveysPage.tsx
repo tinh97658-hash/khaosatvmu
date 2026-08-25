@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../auth/authContext';
 import { isReadOnlyRole } from '../auth/roles';
 import { ConfirmDialog, Modal } from '../components/Modal';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { QRCodeModal } from '../components/QRCodeModal';
 import { useSemester } from '../context/semesterContext';
 import { ApiError } from '../services/apiClient';
@@ -123,6 +124,10 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
 
   const [deleting, setDeleting] = useState<SemesterSurvey | null>(null);
   const [qrTarget, setQrTarget] = useState<CourseSectionSurvey | null>(null);
+
+  // Bù bài khảo sát cho lớp thêm vào kỳ sau khi đợt đã tạo.
+  const [backfillTarget, setBackfillTarget] = useState<SemesterSurvey | null>(null);
+  const [backfillingId, setBackfillingId] = useState<number | null>(null);
 
   // Nạp danh sách template khảo sát. Bộ câu hỏi thuộc quyền
   // COURSE_QUESTION_SETS_ACCESS mà vai trò chỉ đọc không có, nên gọi vào là 403 và
@@ -267,6 +272,31 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
     }
   };
 
+  const handleBackfill = async () => {
+    if (!backfillTarget) return;
+    const { semesterSurveyId, templateName } = backfillTarget;
+    setBackfillTarget(null);
+    setBackfillingId(semesterSurveyId);
+    try {
+      const result = await surveyApi.backfillSemesterSurveySections(semesterSurveyId);
+      await loadSemesterSurveys(semesterId);
+      // Bảng lớp đang mở phải nạp lại thì mới thấy link và mã QR của lớp vừa bù.
+      if (expanded[semesterSurveyId]) {
+        await loadSections(semesterSurveyId);
+      }
+      toast.success('Đã tạo bù bài khảo sát', {
+        description: `${templateName} · ${result.createdSectionCount} lớp · ${formatRange(
+          result.startTime,
+          result.endTime
+        )}`,
+      });
+    } catch (error) {
+      toast.error('Không thể tạo bù bài khảo sát', { description: messageFrom(error) });
+    } finally {
+      setBackfillingId(null);
+    }
+  };
+
   const handleCopyLink = async (linkToken: string) => {
     try {
       await navigator.clipboard.writeText(surveyLinkOf(linkToken));
@@ -405,6 +435,31 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
                   {survey.responseCount} lượt trả lời
                 </span>
                 <span>{survey.questionCount} câu hỏi</span>
+                {/* Lớp nhập bổ sung sau khi đã tạo đợt thì chưa có bài khảo sát nào. */}
+                {!readOnly && survey.missingSectionCount > 0 && (
+                  <span className="semester-survey-missing">
+                    <CircleAlert className="operation-icon" aria-hidden="true" />
+                    {survey.missingSectionCount} lớp chưa có bài khảo sát
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setBackfillTarget(survey)}
+                      disabled={backfillingId === survey.semesterSurveyId}
+                    >
+                      {backfillingId === survey.semesterSurveyId ? (
+                        <>
+                          <LoaderCircle className="operation-icon auth-spin" aria-hidden="true" />
+                          Đang tạo...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="operation-icon" aria-hidden="true" />
+                          Xác nhận tạo thêm
+                        </>
+                      )}
+                    </button>
+                  </span>
+                )}
                 {!readOnly && (
                   <button
                     type="button"
@@ -609,19 +664,17 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
 
           <div className="form-group">
             <label htmlFor="create-survey-template">Bộ câu hỏi khảo sát</label>
-            <select
+            <SearchableSelect
               id="create-survey-template"
               value={createTemplateId}
-              onChange={(event) => setCreateTemplateId(event.target.value)}
+              onChange={setCreateTemplateId}
               required
-            >
-              <option value="">Chọn bộ câu hỏi</option>
-              {templates.map((template) => (
-                <option key={template.surveyTemplateId} value={String(template.surveyTemplateId)}>
-                  {template.templateName} ({template.questions.length} câu)
-                </option>
-              ))}
-            </select>
+              placeholder="Chọn bộ câu hỏi"
+              options={templates.map((template) => ({
+                value: String(template.surveyTemplateId),
+                label: `${template.templateName} (${template.questions.length} câu)`,
+              }))}
+            />
           </div>
 
           <div className="catalog-form-grid catalog-form-grid--2">
@@ -761,6 +814,31 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
         title="Xóa đợt khảo sát"
         recordName={deleting ? `${deleting.templateName} - ${deleting.semesterName}` : ''}
         warning="Toàn bộ bài khảo sát của các lớp trong đợt sẽ bị xóa theo."
+      />
+
+      <ConfirmDialog
+        isOpen={backfillTarget !== null}
+        onClose={() => setBackfillTarget(null)}
+        onConfirm={() => void handleBackfill()}
+        title="Tạo bù bài khảo sát"
+        recordName={
+          backfillTarget ? `${backfillTarget.templateName} - ${backfillTarget.semesterName}` : ''
+        }
+        confirmText="Tạo thêm"
+        confirmVariant="primary"
+        message={
+          backfillTarget
+            ? `Tạo thêm bài khảo sát cho ${backfillTarget.missingSectionCount} lớp học phần chưa có bài trong đợt này?`
+            : ''
+        }
+        warning={
+          backfillTarget
+            ? `Mỗi lớp được một đường dẫn và mã QR riêng. Thời gian mở lấy đúng theo các bài đã có: ${formatRange(
+                backfillTarget.startTime,
+                backfillTarget.endTime
+              )}. Các bài khảo sát đã có không bị đụng tới.`
+            : ''
+        }
       />
     </div>
   );

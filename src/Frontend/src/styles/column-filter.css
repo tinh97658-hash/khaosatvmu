@@ -82,6 +82,15 @@
   color: #40505a;
 }
 
+.column-filter-item:disabled {
+  color: #9aa6ae;
+  cursor: default;
+}
+
+.column-filter-item:disabled:hover {
+  background: transparent;
+}
+
 .column-filter-item--current {
   font-weight: 700;
 }

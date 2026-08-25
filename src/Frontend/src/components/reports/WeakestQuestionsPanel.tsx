@@ -6,6 +6,8 @@ import { scoreColor } from './theme';
 interface WeakestQuestionsPanelProps {
   questions: QuestionRating[];
   totalResponses: number;
+  /** true là bảng điểm thấp nhất, false là bảng điểm cao nhất. */
+  lowestFirst?: boolean;
 }
 
 const ratingLabel = (score: number): string => {
@@ -16,15 +18,16 @@ const ratingLabel = (score: number): string => {
   return 'Chưa có điểm';
 };
 
-/** Top tiêu chí (câu hỏi) yếu nhất toàn trường — gợi ý ưu tiên cải tiến. */
+/** Bảng xếp hạng tiêu chí (câu hỏi) toàn trường theo điểm, xem từ đầu thấp hoặc đầu cao. */
 export const WeakestQuestionsPanel: React.FC<WeakestQuestionsPanelProps> = ({
   questions,
   totalResponses,
+  lowestFirst = true,
 }) => {
   if (questions.length === 0) {
     return (
       <div className="reports-chart-empty">
-        Chưa đủ dữ liệu để xác định tiêu chí yếu nhất (cần ≥ 10 phiếu trả lời/câu).
+        Chưa đủ dữ liệu để xếp hạng tiêu chí (cần ≥ 10 phiếu trả lời/câu).
       </div>
     );
   }
@@ -34,7 +37,9 @@ export const WeakestQuestionsPanel: React.FC<WeakestQuestionsPanelProps> = ({
       <div className="reports-weakest-hint">
         <AlertTriangle className="operation-icon" aria-hidden="true" />
         <span>
-          Gộp từ {totalResponses.toLocaleString('vi-VN')} phiếu — ưu tiên cải tiến các tiêu chí có điểm thấp nhất.
+          Gộp từ {totalResponses.toLocaleString('vi-VN')} phiếu — {lowestFirst
+            ? 'ưu tiên cải tiến các tiêu chí có điểm thấp nhất.'
+            : 'các tiêu chí đang được đánh giá cao nhất.'}
         </span>
       </div>
       <ol className="reports-weakest-list">

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   Bar,
   BarChart,
@@ -15,9 +15,6 @@ import type { FacultyOverview } from '../../types';
 import { scoreColor } from './theme';
 import { FacultyNameAxisTick } from './FacultyNameAxisTick';
 import { wrapFacultyName } from './facultyChartLabels';
-import { ChartPagination } from './ChartPagination';
-
-const PAGE_SIZE = 10;
 
 interface FacultyScoreChartProps {
   faculties: FacultyOverview[];
@@ -53,23 +50,18 @@ export const FacultyScoreChart: React.FC<FacultyScoreChartProps> = ({
   schoolAverage,
   onSelect,
 }) => {
-  const [page, setPage] = useState(1);
   const data = useMemo(
     () => [...faculties]
       .sort((a, b) => a.averageScore - b.averageScore)
       .map((f) => ({ ...f, name: f.facultyName })),
     [faculties],
   );
-  const pageCount = Math.max(1, Math.ceil(data.length / PAGE_SIZE));
-  const pageData = data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  useEffect(() => {
-    setPage((current) => Math.min(current, pageCount));
-  }, [pageCount]);
-
+  // Vẽ hết mọi Khoa trong một biểu đồ: cắt trang một biểu đồ so sánh thì mất
+  // luôn cái để so sánh. Khung cao dần theo số Khoa, thẻ tự dài ra theo.
   const chartHeight = Math.max(
     250,
-    pageData.reduce(
+    data.reduce(
       (height, item) => height + 40 + (wrapFacultyName(item.name).length - 1) * 14,
       90,
     ),
@@ -85,11 +77,11 @@ export const FacultyScoreChart: React.FC<FacultyScoreChartProps> = ({
     <div className="reports-chart" aria-label="Điểm trung bình theo Khoa">
       <ResponsiveContainer width="100%" height={chartHeight}>
         <BarChart
-          data={pageData}
+          data={data}
           layout="vertical"
           margin={{ top: 32, right: 48, left: 8, bottom: 8 }}
         >
-          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#eef2f6" />
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#b6c2cd" />
           <XAxis
             type="number"
             domain={[0, 5]}
@@ -110,13 +102,16 @@ export const FacultyScoreChart: React.FC<FacultyScoreChartProps> = ({
           {schoolAverage > 0 && (
             <ReferenceLine
               x={schoolAverage}
-              stroke="#68737d"
-              strokeDasharray="4 4"
+              stroke="#1f2937"
+              strokeWidth={2}
+              strokeDasharray="6 4"
+              ifOverflow="extendDomain"
               label={{
                 value: `Toàn trường ${schoolAverage.toFixed(2)}`,
                 position: 'top',
-                fill: '#68737d',
-                fontSize: 11,
+                fill: '#1f2937',
+                fontSize: 12,
+                fontWeight: 700,
               }}
             />
           )}
@@ -130,7 +125,7 @@ export const FacultyScoreChart: React.FC<FacultyScoreChartProps> = ({
             }}
             cursor={onSelect ? 'pointer' : 'default'}
           >
-            {pageData.map((entry) => (
+            {data.map((entry) => (
               <Cell
                 key={entry.facultyId}
                 fill={scoreColor(entry.averageScore)}
@@ -143,14 +138,6 @@ export const FacultyScoreChart: React.FC<FacultyScoreChartProps> = ({
         <Building2 className="operation-icon" aria-hidden="true" />
         <span>Click vào cột để lọc chi tiết theo Khoa.</span>
       </div>
-      <ChartPagination
-        page={page}
-        pageCount={pageCount}
-        pageSize={PAGE_SIZE}
-        totalItems={data.length}
-        itemLabel="Khoa/Viện"
-        onPageChange={setPage}
-      />
     </div>
   );
 };

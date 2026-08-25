@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownAZ, ArrowDownZA, Search } from 'lucide-react';
+import { ArrowDownAZ, ArrowDownZA, ListFilter, Search } from 'lucide-react';
 import '../styles/column-filter.css';
 
 export type SortDirection = 'asc' | 'desc';
@@ -14,6 +14,11 @@ interface ColumnFilterMenuProps {
   values: string[];
   /** null nghĩa là chưa lọc, tức mọi giá trị đều được chọn. */
   selected: string[] | null;
+  /**
+   * Dòng lọc nhanh đặt ngay dưới hai nút sắp xếp: bấm là chọn đúng nhóm giá trị
+   * đó rồi áp luôn, khỏi phải tự tích từng con số trong danh sách.
+   */
+  quickFilters?: { label: string; values: string[] }[];
   sortDirection: SortDirection | null;
   onApply: (selected: string[] | null) => void;
   onSort: (direction: SortDirection) => void;
@@ -27,6 +32,7 @@ export const ColumnFilterMenu: React.FC<ColumnFilterMenuProps> = ({
   label,
   values,
   selected,
+  quickFilters,
   sortDirection,
   onApply,
   onSort,
@@ -127,12 +133,13 @@ export const ColumnFilterMenu: React.FC<ColumnFilterMenuProps> = ({
     });
   };
 
-  const apply = () => {
-    // Chọn đủ mọi giá trị thì coi như bỏ lọc, để dấu hiệu "đang lọc" không bật oan.
-    const isEverything = values.every((value) => draft.includes(value));
-    onApply(isEverything ? null : draft);
+  /** Chọn đủ mọi giá trị thì coi như bỏ lọc, để dấu hiệu "đang lọc" không bật oan. */
+  const applySelection = (next: string[]) => {
+    onApply(values.every((value) => next.includes(value)) ? null : next);
     setIsOpen(false);
   };
+
+  const apply = () => applySelection(draft);
 
   return (
     <>
@@ -189,6 +196,24 @@ export const ColumnFilterMenu: React.FC<ColumnFilterMenuProps> = ({
             <ArrowDownZA aria-hidden="true" />
             Sort Z to A
           </button>
+
+          {quickFilters && quickFilters.length > 0 && (
+            <>
+              <div className="column-filter-divider" />
+              {quickFilters.map((quick) => (
+                <button
+                  key={quick.label}
+                  type="button"
+                  className="column-filter-item"
+                  disabled={quick.values.length === 0}
+                  onClick={() => applySelection(quick.values)}
+                >
+                  <ListFilter aria-hidden="true" />
+                  {quick.label}
+                </button>
+              ))}
+            </>
+          )}
 
           <div className="column-filter-divider" />
 

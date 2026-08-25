@@ -2,7 +2,6 @@ import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
 
 const maximumFileSize = 5 * 1024 * 1024;
-const maximumRows = 500;
 const majorNameHeaders = new Set([
   'ten nganh hoc',
   'ten nganh',
@@ -34,7 +33,6 @@ export type MajorImportFileErrorCode =
   | 'NAME_HEADER_MISSING'
   | 'FACULTY_HEADER_MISSING'
   | 'NO_DATA_ROWS'
-  | 'TOO_MANY_ROWS'
   | 'READ_FAILED';
 
 export class MajorImportFileError extends Error {
@@ -141,9 +139,6 @@ export async function parseMajorImportFile(file: File): Promise<ImportMajorRow[]
 
   if (rows.length === 0) {
     throw new MajorImportFileError('NO_DATA_ROWS');
-  }
-  if (rows.length > maximumRows) {
-    throw new MajorImportFileError('TOO_MANY_ROWS');
   }
 
   return rows;

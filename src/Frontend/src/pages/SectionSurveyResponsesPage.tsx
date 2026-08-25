@@ -48,6 +48,13 @@ const dateTimeFormatter = new Intl.DateTimeFormat('vi-VN', {
 
 const formatDateTime = (value: string) => dateTimeFormatter.format(new Date(value));
 
+const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short' });
+
+const formatDate = (value: string) => dateFormatter.format(new Date(value));
+
+const countOfValue = (item: SurveyResponseSummary, value: number) =>
+  item.valueCounts.find((entry) => entry.value === value)?.count ?? 0;
+
 export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProps> = ({
   courseSectionSurveyId,
   onBack,
@@ -59,8 +66,6 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  /** '' xem hết, 'valid' chỉ phiếu hợp lệ, 'invalid' chỉ phiếu bị lọc nhiễu. */
-  const [validityFilter, setValidityFilter] = useState('');
 
   const [analysis, setAnalysis] = useState<SectionSurveyAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(showAnalysis);
@@ -135,29 +140,34 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
 
   const invalidCount = responses.filter((response) => !response.isValid).length;
 
+  // Ý kiến của phiếu bị lọc không dùng được vào kết quả nào nên không đếm.
+  const commentedCount = validResponses.filter((response) => response.additionalComments).length;
+
   const normalized = search.trim().toLowerCase();
-  const filtered = responses.filter((response) => {
-    const matchesSearch =
+  const filtered = responses.filter(
+    (response) =>
       !normalized ||
       String(response.responseId).includes(normalized) ||
-      (response.additionalComments ?? '').toLowerCase().includes(normalized);
-    const matchesValidity =
-      validityFilter === ''
-      || (validityFilter === 'invalid' ? !response.isValid : response.isValid);
-    return matchesSearch && matchesValidity;
-  });
+      (response.additionalComments ?? '').toLowerCase().includes(normalized)
+  );
 
+  // Mọi cột đều có menu lọc trên tiêu đề, thay cho ô lọc riêng phía trên bảng.
   const columns: Column<SurveyResponseSummary>[] = [
     {
       key: 'responseId',
       header: 'Mã phiếu',
-      width: '90px',
+      width: '86px',
+      sortValue: (item) => item.responseId,
+      filterValue: (item) => `#${item.responseId}`,
       render: (item) => <span className="catalog-code">#{item.responseId}</span>,
     },
     {
       key: 'submittedAt',
       header: 'Thời gian nộp',
-      width: '140px',
+      width: '132px',
+      sortValue: (item) => item.submittedAt,
+      // Lọc theo ngày: lọc tới từng phút thì mỗi phiếu một giá trị, gom được gì.
+      filterValue: (item) => formatDate(item.submittedAt),
       render: (item) => (
         <span className="catalog-cell-primary">{formatDateTime(item.submittedAt)}</span>
       ),
@@ -165,13 +175,16 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
     {
       key: 'score',
       header: 'Điểm',
-      width: '80px',
+      width: '72px',
+      numeric: true,
+      sortValue: (item) => item.score,
+      filterValue: (item) => item.score.toFixed(2),
       render: (item) => <span className="response-score">{item.score.toFixed(2)}</span>,
     },
     {
       key: 'isValid',
       header: 'Trạng thái',
-      width: '110px',
+      width: '104px',
       filterValue: (item) => (item.isValid ? 'Hợp lệ' : 'Bị lọc'),
       render: (item) =>
         item.isValid ? (
@@ -186,27 +199,29 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
     {
       key: 'rejectionReasons',
       header: 'Lý do bị lọc',
-      width: '230px',
+      width: '220px',
       // Dịch mã sang tiếng Việt, không phơi TOO_FAST ra màn hình.
-      filterValue: (item) => rejectionReasonTexts(item.rejectionReasons).join(', ') || '—',
+      filterValue: (item) => rejectionReasonTexts(item.rejectionReasons).join(' · ') || '—',
       render: (item) => {
         const reasons = rejectionReasonTexts(item.rejectionReasons);
         if (reasons.length === 0) return <span className="response-comment is-empty">—</span>;
+        // Gộp một dòng, đủ lý do nằm trong tooltip — bảng này rất dài.
         return (
-          <ul className="response-reason-list">
-            {reasons.map((reason) => (
-              <li key={reason}>{reason}</li>
-            ))}
-          </ul>
+          <span className="response-reasons" title={reasons.join(' · ')}>
+            {reasons.join(' · ')}
+          </span>
         );
       },
     },
     ...scaleValues.map((option) => ({
       key: `value-${option.value}`,
       header: `Mức ${option.value}`,
-      width: '80px',
+      width: '72px',
+      numeric: true,
+      sortValue: (item: SurveyResponseSummary) => countOfValue(item, option.value),
+      filterValue: (item: SurveyResponseSummary) => String(countOfValue(item, option.value)),
       render: (item: SurveyResponseSummary) => {
-        const count = item.valueCounts.find((x) => x.value === option.value)?.count ?? 0;
+        const count = countOfValue(item, option.value);
         return (
           <span className={count > 0 ? 'response-count' : 'response-count is-zero'}>{count}</span>
         );
@@ -215,26 +230,29 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
     {
       key: 'additionalComments',
       header: 'Ý kiến khác',
+      filterValue: (item) => (item.additionalComments ? 'Có ý kiến' : 'Không có'),
       render: (item) =>
         item.additionalComments ? (
-          <span className="response-comment">{item.additionalComments}</span>
+          <span className="response-comment" title={item.additionalComments}>
+            {item.additionalComments}
+          </span>
         ) : (
           <span className="response-comment is-empty">Không có</span>
         ),
     },
     {
       key: 'actions',
-      header: 'Theo dõi chi tiết',
-      width: '130px',
+      header: 'Chi tiết',
+      width: '92px',
       render: (item) => (
         <button
           type="button"
-          className="btn btn-secondary btn-sm"
+          className="btn btn-secondary btn-sm response-row-action"
           onClick={() => void openDetail(item.responseId)}
           disabled={detailLoading}
         >
           <Eye className="operation-icon" aria-hidden="true" />
-          Chi tiết
+          Xem
         </button>
       ),
     },
@@ -242,13 +260,6 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
 
   return (
     <div className="survey-operations-page section-responses-page">
-      <div className="section-responses-back">
-        <button type="button" className="btn btn-secondary btn-sm" onClick={onBack}>
-          <ArrowLeft className="operation-icon" aria-hidden="true" />
-          {backLabel}
-        </button>
-      </div>
-
       {loadError && (
         <div className="operations-feedback operations-feedback--error" role="alert">
           <CircleAlert aria-hidden="true" />
@@ -258,7 +269,16 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
 
       {sectionSurvey && (
         <section className="section-responses-summary" aria-label="Thông tin bài khảo sát">
+          {/* Nút quay lại nằm cùng hàng với tên lớp, đỡ một băng riêng phía trên. */}
           <div className="section-responses-heading">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm section-responses-back"
+              onClick={onBack}
+              title={backLabel}
+            >
+              <ArrowLeft className="operation-icon" aria-hidden="true" />
+            </button>
             <h2>
               {sectionSurvey.courseCode} - {sectionSurvey.courseName}
             </h2>
@@ -278,7 +298,7 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
             </span>
             <span>
               <MessageSquare className="operation-icon" aria-hidden="true" />
-              {responses.filter((response) => response.additionalComments).length} phiếu có ý kiến
+              {commentedCount} phiếu hợp lệ có ý kiến
             </span>
             <span className={invalidCount > 0 ? 'section-responses-stat--warning' : undefined}>
               <TriangleAlert className="operation-icon" aria-hidden="true" />
@@ -302,7 +322,6 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
       {showAnalysis && !analysisLoading && analysis && (
         <QuestionAnalysisChart
           questions={analysis.questions}
-          templateName={analysis.templateName}
           overallAverageScore={analysis.averageScore}
           responseCount={analysis.responseCount}
           title="Phân tích kết quả theo câu hỏi"
@@ -316,15 +335,9 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm theo mã phiếu hoặc ý kiến..."
-        filterOptions={[
-          { label: 'Tất cả phiếu', value: '' },
-          { label: `Bị lọc nhiễu (${invalidCount})`, value: 'invalid' },
-          { label: `Hợp lệ (${responses.length - invalidCount})`, value: 'valid' },
-        ]}
-        currentFilter={validityFilter}
-        onFilterChange={setValidityFilter}
         emptyMessage={loading ? 'Đang tải phiếu trả lời...' : 'Lớp này chưa có phiếu trả lời nào.'}
         keyExtractor={(item) => String(item.responseId)}
+        showIndex={false}
         pageSize={20}
       />
 

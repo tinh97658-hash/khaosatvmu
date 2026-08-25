@@ -10,6 +10,16 @@ public static class ReportEndpoints
         var group = app.MapGroup("/api/v1/reports")
             .RequireAuthorization(AuthPolicies.ReportsAccess);
 
+        // Nhóm riêng cho từng tab của module Thống kê & Báo cáo. Vào được module
+        // chưa đủ: mỗi tab đòi thêm đúng quyền của tab đó.
+        var overviewTabGroup = app.MapGroup("/api/v1/reports")
+            .RequireAuthorization(AuthPolicies.ReportsAccess, AuthPolicies.ReportsOverviewAccess);
+
+        // Tra cứu chi tiết và Tổng hợp đơn vị đọc chung một tập kết quả nên nhận
+        // một trong hai quyền; không có quyền nào thì chặn.
+        var resultsTabGroup = app.MapGroup("/api/v1/reports")
+            .RequireAuthorization(AuthPolicies.ReportsAccess, AuthPolicies.ReportsResultsRead);
+
         group.MapGet("/operational-progress", async (
             int semesterId,
             IReportService reportService,
@@ -67,20 +77,39 @@ public static class ReportEndpoints
             return report is null ? Results.NotFound() : Results.Ok(report);
         });
 
-        group.MapGet("/school-overview", async (
+        overviewTabGroup.MapGet("/school-overview", async (
             int semesterId,
             int? comparisonSemesterId,
+            int? semesterSurveyId,
             IReportService reportService,
             CancellationToken cancellationToken) =>
         {
             var report = await reportService.GetSchoolSurveyOverviewAsync(
                 semesterId,
                 comparisonSemesterId,
+                semesterSurveyId,
                 cancellationToken);
             return report is null ? Results.NotFound() : Results.Ok(report);
         });
 
-        group.MapGet("/results", async (
+        overviewTabGroup.MapGet("/question-ranking", async (
+            int semesterId,
+            int? semesterSurveyId,
+            int? count,
+            bool? lowest,
+            IReportService reportService,
+            CancellationToken cancellationToken) =>
+        {
+            var questions = await reportService.GetQuestionRankingAsync(
+                semesterId,
+                semesterSurveyId,
+                count ?? 5,
+                lowest ?? true,
+                cancellationToken);
+            return Results.Ok(questions);
+        });
+
+        resultsTabGroup.MapGet("/results", async (
             int? semesterId,
             int? facultyId,
             int? departmentId,

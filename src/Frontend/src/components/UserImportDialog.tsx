@@ -29,13 +29,11 @@ const fileErrorMessages: Record<UserImportFileErrorCode, string> = {
   FILE_EMPTY: 'Tệp Excel không có dữ liệu.',
   EMAIL_HEADER_MISSING: 'Không tìm thấy cột Email trong hàng tiêu đề.',
   NO_DATA_ROWS: 'Tệp Excel chưa có dòng người dùng nào.',
-  TOO_MANY_ROWS: 'Mỗi lần chỉ được import tối đa 500 người dùng.',
   READ_FAILED: 'Không thể đọc tệp Excel. Hãy kiểm tra tệp không bị hỏng hoặc đặt mật khẩu.',
 };
 
 const importErrorMessages: Record<string, string> = {
   ADMIN_INVALID_REQUEST: 'Danh sách import không hợp lệ.',
-  ADMIN_IMPORT_TOO_MANY_ROWS: 'Danh sách vượt quá giới hạn 500 người dùng.',
   ADMIN_IMPORT_EMAIL_REQUIRED: 'Thiếu email',
   ADMIN_IMPORT_EMAIL_INVALID: 'Email không hợp lệ',
   ADMIN_IMPORT_DISPLAY_NAME_INVALID: 'Họ và tên vượt quá 200 ký tự',
@@ -117,7 +115,7 @@ export function UserImportDialog({ isOpen, onClose, onImported }: UserImportDial
       <div className="admin-import-dialog" aria-busy={parsing || importing}>
         <div className="admin-form-intro">
           <FileSpreadsheet aria-hidden="true" />
-          <p>Hàng đầu tiên cần có cột <strong>Email</strong>; cột <strong>Họ và tên</strong> là tùy chọn. Tối đa 500 dòng.</p>
+          <p>Hàng đầu tiên cần có cột <strong>Email</strong>; cột <strong>Họ và tên</strong> là tùy chọn.</p>
         </div>
 
         {!result && (

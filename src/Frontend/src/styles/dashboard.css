@@ -274,8 +274,9 @@
   background: #edf7fa;
 }
 
+/* Bảng rỗng không cần chiếm nguyên một màn hình. */
 .dashboard-empty-cell {
-  height: 176px !important;
+  height: 92px !important;
   color: #68737d;
   text-align: center;
 }
@@ -288,9 +289,9 @@
 }
 
 .dashboard-empty-cell svg {
-  width: 25px;
-  height: 25px;
-  margin-bottom: 8px;
+  width: 20px;
+  height: 20px;
+  margin-bottom: 4px;
   color: #84939b;
 }
 
@@ -471,11 +472,6 @@
 .executive-context-notice,
 .executive-data-warning,
 .executive-empty-state,
-.executive-trust-strip {
-  background: #ffffff;
-  border: 1px solid #dfe4e8;
-}
-
 .executive-context-notice {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -503,31 +499,6 @@
   font: inherit;
   font-weight: 700;
   cursor: pointer;
-}
-
-.executive-trust-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
-  color: #52616d;
-  font-size: 11px;
-}
-
-.executive-trust-strip > span {
-  min-width: 0;
-  padding: 8px 12px;
-  border-right: 1px solid #e2e8f0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.executive-trust-strip > span:last-child {
-  border-right: 0;
-}
-
-.executive-trust-strip strong {
-  color: #334155;
 }
 
 .executive-data-warning {
@@ -782,101 +753,49 @@
 }
 
 /* AI Executive Brief Panel */
-.executive-ai-brief {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-top: 3px solid #0284c7;
-  padding: 14px 18px;
-}
-
-.executive-ai-header {
+/* Dải điểm tin: một dòng duy nhất, thay cho bốn thẻ chữ dài trùng nội dung
+   với các thẻ số ngay bên dưới. */
+.executive-brief-strip {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 9px 16px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-left: 3px solid #0284c7;
 }
 
-.executive-ai-tag {
+.executive-brief-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: #0369a1;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  gap: 7px;
+  min-width: 0;
+  color: #475569;
+  font-size: 13px;
 }
 
-.executive-ai-tag svg {
+.executive-brief-item svg {
   width: 16px;
   height: 16px;
+  flex: 0 0 16px;
   color: #0284c7;
 }
 
-.executive-ai-timestamp {
-  color: #94a3b8;
-  font-size: 11px;
-}
-
-.executive-ai-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
-
-.executive-ai-card {
-  padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-left: 3px solid #cbd5e1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.executive-ai-card.is-highlight {
-  border-left-color: #0284c7;
-  background: #f0f9ff;
-}
-
-.executive-ai-card.is-success {
-  border-left-color: #10b981;
-  background: #f0fdf4;
-}
-
-.executive-ai-card.is-warning {
-  border-left-color: #f59e0b;
-  background: #fffbeb;
-}
-
-.executive-ai-card.is-danger {
-  border-left-color: #ef4444;
-  background: #fef2f2;
-}
-
-.executive-ai-label {
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.executive-ai-label svg {
-  width: 14px;
-  height: 14px;
-}
-
-.executive-ai-text {
-  color: #1e293b;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.executive-ai-text strong {
-  font-weight: 700;
+.executive-brief-item strong {
+  overflow: hidden;
+  max-width: 46vw;
   color: #0f172a;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.executive-brief-time {
+  margin-left: auto;
+  color: #64748b;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 /* 4-Card Macro KPIs Grid */
@@ -889,26 +808,25 @@
 .executive-kpi-box {
   background: #ffffff;
   border: 1px solid #dfe4e8;
-  padding: 16px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 140px;
+  gap: 6px;
 }
 
 .executive-kpi-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 8px;
 }
 
 .executive-kpi-title {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
 }
 
 .executive-kpi-body {
@@ -919,7 +837,7 @@
 }
 
 .executive-kpi-main-number {
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 800;
   line-height: 1.1;
   color: #0f172a;
@@ -927,15 +845,15 @@
 }
 
 .executive-kpi-unit {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: #64748b;
-  margin-left: 2px;
+  margin-left: 4px;
 }
 
 .executive-kpi-desc {
-  color: #64748b;
-  font-size: 11px;
+  color: #475569;
+  font-size: 13px;
   margin-top: 4px;
   line-height: 1.35;
 }
@@ -972,7 +890,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  font-size: 11px;
+  font-size: 12.5px;
   color: #475569;
   margin-top: 4px;
 }
@@ -1127,7 +1045,7 @@
 .executive-grid-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 13px;
   text-align: left;
 }
 
@@ -1135,15 +1053,15 @@
   background: #f1f5f9;
   color: #475569;
   font-weight: 700;
-  font-size: 11px;
-  text-transform: uppercase;
-  padding: 10px 12px;
+  font-size: 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid #cbd5e1;
-  letter-spacing: 0.3px;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .executive-grid-table td {
-  padding: 10px 12px;
+  padding: 6px 12px;
   border-bottom: 1px solid #e2e8f0;
   color: #1e293b;
 }
@@ -1174,11 +1092,11 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 6px;
-  font-size: 10px;
+  padding: 2px 8px;
+  font-size: 12px;
   font-weight: 600;
   border-radius: 2px;
-  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .executive-status-pill.is-good {
@@ -1199,7 +1117,7 @@
 .executive-action-link {
   color: #0788b8;
   font-weight: 600;
-  font-size: 11px;
+  font-size: 12.5px;
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -1216,27 +1134,7 @@
 
 /* Responsive adjustments */
 @media (max-width: 1200px) {
-  .executive-trust-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .executive-trust-strip > span:nth-child(2) {
-    border-right: 0;
-  }
-  .executive-trust-strip > span:nth-child(-n + 2) {
-    border-bottom: 1px solid #e2e8f0;
-  }
-  .executive-ai-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .executive-kpis-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .executive-charts-row {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 768px) {
+  @media (max-width: 768px) {
   .executive-dashboard {
     padding: 10px;
     gap: 12px;
@@ -1255,35 +1153,7 @@
     width: 100%;
     justify-content: space-between;
   }
-  .executive-trust-strip {
-    grid-template-columns: 1fr;
-  }
-  .executive-trust-strip > span,
-  .executive-trust-strip > span:nth-child(2) {
-    border-right: 0;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  .executive-trust-strip > span:last-child {
-    border-bottom: 0;
-  }
-  .executive-context-notice {
-    grid-template-columns: auto 1fr;
-  }
-  .executive-context-notice button {
-    grid-column: 2;
-    justify-self: start;
-    padding: 0;
-  }
-  .executive-empty-state {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-  .executive-empty-state > div {
-    min-width: calc(100% - 38px);
-  }
-}
-
-/* ---------------------------------------------------------------------------
+  /* ---------------------------------------------------------------------------
    Bảng điều khiển riêng của trưởng bộ môn. Dùng lại khung `dashboard-block` và
    hàng thẻ `dashboard-quick-*` của bản quản trị để hai trang trông là một hệ,
    chỉ thêm dải chỉ số và bảng việc cần làm.

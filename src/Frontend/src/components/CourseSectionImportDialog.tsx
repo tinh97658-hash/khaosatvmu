@@ -35,7 +35,6 @@ const fileErrorMessages: Record<CourseSectionImportFileErrorCode, string> = {
   CODE_HEADER_MISSING: 'Không tìm thấy cột "Mã HP" trong hàng tiêu đề.',
   SECTION_HEADER_MISSING: 'Không tìm thấy cột "Nhóm" trong hàng tiêu đề.',
   NO_DATA_ROWS: 'Tệp Excel chưa có dòng lớp học phần nào.',
-  TOO_MANY_ROWS: 'Mỗi lần chỉ được import tối đa 500 lớp học phần.',
   READ_FAILED: 'Không thể đọc tệp Excel. Hãy kiểm tra tệp không bị hỏng hoặc đặt mật khẩu.',
 };
 
@@ -151,7 +150,7 @@ export function CourseSectionImportDialog({
             có trong danh mục sẽ được <strong>tạo tự động</strong> từ cột Học phần và TCHT. Giảng
             viên tra theo <strong>Email</strong>: chưa có thì tạo mới với chức vụ Giảng viên, bỏ
             trống email thì lớp vẫn được tạo nhưng để trống mã giảng viên. Bộ môn tra theo{' '}
-            <strong>Mã BM</strong>, trống mới tra theo tên. Tối đa 500 dòng.
+            <strong>Mã BM</strong>, trống mới tra theo tên.
           </p>
         </div>
 

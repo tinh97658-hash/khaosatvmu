@@ -458,7 +458,6 @@ public interface ICatalogService
 public static class CatalogErrorCodes
 {
     public const string InvalidRequest = "CATALOG_INVALID_REQUEST";
-    public const string ImportTooManyRows = "CATALOG_IMPORT_TOO_MANY_ROWS";
 
     public const string FacultyNotFound = "CATALOG_FACULTY_NOT_FOUND";
     public const string FacultyNameRequired = "CATALOG_FACULTY_NAME_REQUIRED";

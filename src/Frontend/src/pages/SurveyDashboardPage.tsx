@@ -12,6 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { useSemester } from '../context/semesterContext';
+import { NoteModalButton } from '../components/NoteModalButton';
 import { ApiError } from '../services/apiClient';
 import { surveyApi, surveyErrorMessage } from '../services/surveyApi';
 import type {
@@ -28,7 +29,7 @@ function messageFrom(error: unknown): string {
   return error instanceof ApiError ? surveyErrorMessage(error.errorCode) : surveyErrorMessage(null);
 }
 
-/** Khớp ReportThresholds.LowScore ở backend. */
+/** Mốc tô màu biểu đồ. Không phải mốc cảnh báo — mốc đó backend tính theo Z-Score. */
 const lowScore = 3.2;
 
 /** Thang màu cột biểu đồ, dùng chung ngưỡng với bảng để hai chỗ không nói ngược nhau. */
@@ -203,6 +204,21 @@ const DashboardReport: React.FC<{ data: SemesterSurveyDashboard }> = ({ data }) 
         Tổng quan khảo sát — {data.semesterName} năm học {data.academicYearName}
       </span>
       <span>{data.templateName}</span>
+      <NoteModalButton title="Lưu ý khi sử dụng số liệu">
+        <ul className="dashboard-notes">
+          {usageNotes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+        <p className="dashboard-report-note">
+          Số lớp và tổng phiếu đếm mọi lượt nộp. Tỷ lệ hoàn thành và điểm chỉ tính trên phiếu
+          hợp lệ, hiện có <strong>{data.scoredSectionCount}</strong> lớp đủ điều kiện tính điểm.
+        </p>
+        <p className="dashboard-report-note">
+          Học phần cần rà soát: mọi lớp đều thấp thì nguyên nhân thuộc giáo trình / đề cương,
+          không thuộc giảng viên.
+        </p>
+      </NoteModalButton>
     </section>
 
     <div className="dashboard-report-grid">
@@ -216,15 +232,6 @@ const DashboardReport: React.FC<{ data: SemesterSurveyDashboard }> = ({ data }) 
       <CourseReview data={data} />
       <FacultyChart faculties={data.faculties} overallScore={data.overallScore} />
     </div>
-
-    <section className="dashboard-report-block">
-      <h3 className="dashboard-report-title">Lưu ý khi sử dụng số liệu</h3>
-      <ul className="dashboard-notes">
-        {usageNotes.map((note) => (
-          <li key={note}>{note}</li>
-        ))}
-      </ul>
-    </section>
   </div>
 );
 
@@ -243,7 +250,11 @@ const MainIndicators: React.FC<{ data: SemesterSurveyDashboard }> = ({ data }) =
         <dd>{data.totalResponseCount.toLocaleString('vi-VN')}</dd>
       </div>
       <div className="dashboard-kpi">
-        <dt>Tỷ lệ phản hồi bình quân</dt>
+        <dt>Số phiếu hợp lệ</dt>
+        <dd>{data.validResponseCount.toLocaleString('vi-VN')}</dd>
+      </div>
+      <div className="dashboard-kpi">
+        <dt>Tỷ lệ hoàn thành</dt>
         <dd>{data.averageCompletionRate.toFixed(1)}%</dd>
       </div>
       <div className="dashboard-kpi">
@@ -251,10 +262,6 @@ const MainIndicators: React.FC<{ data: SemesterSurveyDashboard }> = ({ data }) =
         <dd>{data.overallScore === null ? '—' : data.overallScore.toFixed(2)}</dd>
       </div>
     </dl>
-    <p className="dashboard-report-note">
-      Số lớp và số phiếu đếm toàn bộ phiếu thu được. Điểm chỉ tính trên phiếu hợp lệ, hiện có{' '}
-      <strong>{data.scoredSectionCount}</strong> lớp đủ điều kiện tính điểm.
-    </p>
   </section>
 );
 
@@ -277,7 +284,10 @@ const QuestionTooltip: React.FC<{ active?: boolean; payload?: ChartTooltipItem[]
       <span style={{ color: barColor(item.averageScore) }}>
         Điểm TB: {item.averageScore.toFixed(2)} / 5.0
       </span>
-      <span>{item.sectionsBelowThreshold} lớp dưới {lowScore.toFixed(2)}</span>
+      <span>
+        {item.sectionsBelowThreshold} lớp chấm câu này thấp hơn trung bình của chính câu đó từ 1
+        độ lệch chuẩn trở lên
+      </span>
     </div>
   );
 };
@@ -353,7 +363,12 @@ const WeakestQuestions: React.FC<{ rows: DashboardQuestionScore[] }> = ({ rows }
               <th scope="col">Câu</th>
               <th scope="col">Nội dung</th>
               <th scope="col">Điểm TB</th>
-              <th scope="col">Số lớp &lt; {lowScore.toFixed(2)}</th>
+              <th
+                scope="col"
+                title="Lớp chấm câu này thấp hơn trung bình của chính câu đó từ 1 độ lệch chuẩn trở lên"
+              >
+                Lớp cảnh báo
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -379,9 +394,6 @@ const WeakestQuestions: React.FC<{ rows: DashboardQuestionScore[] }> = ({ rows }
 const CourseReview: React.FC<{ data: SemesterSurveyDashboard }> = ({ data }) => (
   <section className="dashboard-report-block">
     <h3 className="dashboard-report-title">Học phần cần rà soát ở cấp học phần</h3>
-    <p className="dashboard-report-note">
-      Mọi lớp đều thấp thì nguyên nhân thuộc giáo trình / đề cương, không thuộc giảng viên.
-    </p>
     <dl className="dashboard-kpi-list dashboard-kpi-list--warning">
       <div className="dashboard-kpi">
         <dt>Số học phần mọi lớp đều dưới ngưỡng</dt>

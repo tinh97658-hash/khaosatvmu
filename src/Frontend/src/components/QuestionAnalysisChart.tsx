@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   BarChart3,
-  Info,
   Star,
 } from 'lucide-react';
 import {
@@ -20,7 +19,6 @@ import type { QuestionRating } from '../types';
 
 export interface QuestionAnalysisChartProps {
   questions: QuestionRating[];
-  templateName?: string;
   overallAverageScore?: number;
   responseCount?: number;
   title?: string;
@@ -130,7 +128,6 @@ const CustomQuestionTooltip: React.FC<CustomTooltipProps> = ({ active, payload }
 
 export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
   questions,
-  templateName,
   overallAverageScore,
   responseCount,
   title = 'Phân tích kết quả theo câu hỏi',
@@ -149,11 +146,13 @@ export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
     );
   }
 
-  // Mã C1, C2... đánh theo thứ tự câu trong bộ để khớp với phiếu khảo sát.
+  // Mã C1, C2... lấy đúng số thứ tự câu trong bộ đề do API trả về. Đánh lại theo
+  // vị trí trong mảng thì sai: câu bẫy đã bị loại nên các câu sau bị lùi một bậc,
+  // C16 ở trang bảng dữ liệu khảo sát sẽ thành C15 ở đây.
   const coded: ChartDataItem[] = questions.map((q, idx) => ({
     ...q,
-    code: `C${idx + 1}`,
-    index: idx + 1,
+    code: `C${q.questionOrder || idx + 1}`,
+    index: q.questionOrder || idx + 1,
   }));
 
   // Câu tự nhập không có điểm nên tách khỏi biểu đồ và bảng phân bố.
@@ -187,15 +186,31 @@ export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
           <h3>{title}</h3>
         </div>
 
+        {/* Chú thích thang điểm nằm luôn trên hàng tiêu đề, đỡ tốn một băng riêng. */}
+        <div className="analysis-legend-items" aria-label="Thang đánh giá">
+          <span className="analysis-legend-chip">
+            <span className="legend-dot" style={{ backgroundColor: '#10b981' }} />≥ 4.5
+          </span>
+          <span className="analysis-legend-chip">
+            <span className="legend-dot" style={{ backgroundColor: '#0284c7' }} />4.0 - 4.49
+          </span>
+          <span className="analysis-legend-chip">
+            <span className="legend-dot" style={{ backgroundColor: '#f59e0b' }} />3.0 - 3.99
+          </span>
+          <span className="analysis-legend-chip">
+            <span className="legend-dot" style={{ backgroundColor: '#ef4444' }} />&lt; 3.0
+          </span>
+        </div>
+
         <div className="section-analysis-meta">
-          {templateName && <span className="analysis-meta-template">{templateName}</span>}
           {responseCount !== undefined && (
             <span className="analysis-meta-count">
-              <strong>{responseCount}</strong> phiếu đã thu
+              <strong>{responseCount}</strong> phiếu hợp lệ
             </span>
           )}
           <span className="analysis-meta-avg">
-            Điểm trung bình toàn bài:{' '}
+            <span className="analysis-meta-dash" aria-hidden="true" />
+            ĐTB toàn bài:{' '}
             <strong style={{ color: getScoreColor(computedAverage) }}>
               {computedAverage > 0 ? computedAverage.toFixed(2) : '—'} / 5.0
             </strong>
@@ -203,36 +218,12 @@ export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
         </div>
       </header>
 
-      {/* Thanh chú thích thang điểm (Legend) & Hướng dẫn */}
-      <div className="analysis-legend-bar">
-        <div className="analysis-legend-items">
-          <span className="analysis-legend-label">Thang đánh giá:</span>
-          <span className="analysis-legend-chip chip-excellent">
-            <span className="legend-dot" style={{ backgroundColor: '#10b981' }} />
-            ≥ 4.5: Xuất sắc
-          </span>
-          <span className="analysis-legend-chip chip-good">
-            <span className="legend-dot" style={{ backgroundColor: '#0284c7' }} />
-            4.0 - 4.49: Tốt
-          </span>
-          <span className="analysis-legend-chip chip-fair">
-            <span className="legend-dot" style={{ backgroundColor: '#f59e0b' }} />
-            3.0 - 3.99: Trung bình
-          </span>
-          <span className="analysis-legend-chip chip-poor">
-            <span className="legend-dot" style={{ backgroundColor: '#ef4444' }} />
-            &lt; 3.0: Cần cải thiện
-          </span>
-        </div>
-        <div className="analysis-guide-hint">
-          <Info className="guide-icon" aria-hidden="true" />
-          <span>Rê chuột vào các cột <strong>C1, C2...</strong> để xem câu hỏi thực tế</span>
-        </div>
-      </div>
-
       {/* Khu vực Biểu đồ cột đứng. Bộ chỉ toàn câu tự nhập thì không có gì để vẽ. */}
       {chartData.length > 0 && (
-      <div className="section-analysis-chart-container">
+      <div
+        className="section-analysis-chart-container"
+        title="Rê chuột vào các cột C1, C2... để xem câu hỏi thực tế"
+      >
         <div
           className="section-analysis-chart-scroll"
           style={needsScroll ? { paddingBottom: '8px' } : undefined}
@@ -304,19 +295,13 @@ export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
                   isAnimationActive={false}
                 />
                 {computedAverage > 0 && (
+                  /* Không gắn nhãn lên đường: dù đặt ở mép nào nó cũng đè lên một
+                     cột. Con số đã nằm ở phần chú thích trên tiêu đề. */
                   <ReferenceLine
                     y={computedAverage}
                     stroke="#0284c7"
                     strokeDasharray="4 4"
                     strokeWidth={1.5}
-                    label={{
-                      value: `ĐTB: ${computedAverage.toFixed(2)}`,
-                      position: 'insideTopRight',
-                      fill: '#0284c7',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      offset: 6,
-                    }}
                   />
                 )}
                 <Bar
@@ -413,11 +398,13 @@ export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
                             {question.code}
                           </span>
                         </td>
-                        <td className="campaign-primary-cell">
-                          <span className="campaign-primary-value">{question.questionText}</span>
-                          <span className="campaign-secondary-value">
-                            {question.totalAnswers} lượt trả lời
-                          </span>
+                        {/* Một dòng cho gọn; nội dung đầy đủ và số lượt trả lời
+                            nằm trong tooltip vì bảng này rất dài. */}
+                        <td
+                          className="campaign-primary-cell analysis-question-cell"
+                          title={`${question.questionText} — ${question.totalAnswers} lượt trả lời`}
+                        >
+                          {question.questionText}
                         </td>
                         {options.map((column) => {
                           const cell = question.optionDistribution?.find(

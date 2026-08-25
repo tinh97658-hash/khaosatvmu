@@ -2,7 +2,6 @@ import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
 
 const maximumFileSize = 5 * 1024 * 1024;
-const maximumRows = 500;
 const facultyNameHeaders = new Set([
   'ten khoa vien',
   'ten khoa/vien',
@@ -24,7 +23,6 @@ export type FacultyImportFileErrorCode =
   | 'FILE_EMPTY'
   | 'NAME_HEADER_MISSING'
   | 'NO_DATA_ROWS'
-  | 'TOO_MANY_ROWS'
   | 'READ_FAILED';
 
 export class FacultyImportFileError extends Error {
@@ -114,9 +112,6 @@ export async function parseFacultyImportFile(file: File): Promise<ImportFacultyR
 
   if (rows.length === 0) {
     throw new FacultyImportFileError('NO_DATA_ROWS');
-  }
-  if (rows.length > maximumRows) {
-    throw new FacultyImportFileError('TOO_MANY_ROWS');
   }
 
   return rows;

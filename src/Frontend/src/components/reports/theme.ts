@@ -7,9 +7,9 @@
 export const scoreColor = (score: number): string =>
   score >= 4.5 ? '#137b3b' : score >= 4.0 ? '#0788b8' : '#b86216';
 
-/** Màu theo tỷ lệ hoàn thành: ≥80% xanh lá, ≥40% xanh dương, còn lại cam. */
+/** Màu theo tỷ lệ hoàn thành: ≥80% xanh lá, ≥20% xanh dương, còn lại cam. */
 export const completionColor = (rate: number): string =>
-  rate >= 80 ? '#137b3b' : rate >= 40 ? '#0788b8' : '#b86216';
+  rate >= 80 ? '#137b3b' : rate >= 20 ? '#0788b8' : '#b86216';
 
 /** Màu cho từng nhóm điểm trong phân bố (band 5..2). */
 export const bandColor = (band: number): string => {

@@ -20,6 +20,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     /// <summary>Số câu hỏi yếu nhất hiển thị trong bảng tổng quan.</summary>
     private const int WeakQuestionCount = 5;
 
+    /// <summary>Trần số tiêu chí trả về khi người dùng tự chọn số lượng, chặn truy vấn quá rộng.</summary>
+    private const int MaxQuestionRankingCount = 50;
+
     /// <summary>Trần số câu trả lời tự nhập trả kèm mỗi câu hỏi, tránh payload quá lớn.</summary>
     private const int MaxTextAnswersPerQuestion = 200;
 
@@ -240,7 +243,8 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 .ToList();
             var lecSectionById = lecSections.ToDictionary(x => x.CourseSectionId);
 
-            // Số lượt nộp đếm hết (tiến độ); điểm chỉ gộp phiếu hợp lệ (chất lượng).
+            // Mọi con số hiển thị đều tính trên phiếu hợp lệ; phiếu bị bộ lọc nhiễu
+            // loại không dùng được vào kết quả nào nên cũng không tính là đã thu.
             int totalResponses = 0;
             int validResponses = 0;
             decimal validScoreSum = 0;
@@ -257,13 +261,17 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 validResponses += tally.ValidCount;
                 validScoreSum += tally.ValidTotalScore;
 
+                int classSize = sec?.ClassSize ?? 0;
                 sectionSummaries.Add(new LecturerSectionSummaryDto(
                     css.CourseSectionSurveyId,
                     crs?.CourseCode ?? string.Empty,
                     crs?.CourseName ?? string.Empty,
                     sec?.SectionName ?? string.Empty,
-                    sec?.ClassSize ?? 0,
+                    classSize,
                     tally.TotalCount,
+                    tally.ValidCount,
+                    tally.TotalCount - tally.ValidCount,
+                    classSize > 0 ? Math.Round((decimal)tally.ValidCount / classSize * 100, 1) : 0,
                     tally.AverageScore
                 ));
             }
@@ -276,7 +284,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 lec.DepartmentId.HasValue && departments.TryGetValue(lec.DepartmentId.Value, out var dName) ? dName : "Chưa thuộc bộ môn",
                 lec.FacultyId.HasValue && faculties.TryGetValue(lec.FacultyId.Value, out var fName) ? fName : "Chưa thuộc khoa",
                 avgScore,
-                totalResponses,
+                validResponses,
                 lecSections.Count,
                 avgScore,
                 avgScore,
@@ -327,16 +335,18 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .ToListAsync(cancellationToken);
         var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
         var answersByQuestionId = answers.ToLookup(x => x.QuestionId);
+        var questionOrders = await QuestionOrdersAsync(questionIds, cancellationToken);
 
         var questionRatings = questions
             .Select(question => BuildQuestionRating(
                 question.QuestionId,
+                questionOrders.GetValueOrDefault(question.QuestionId),
                 question.QuestionText,
                 answersByQuestionId[question.QuestionId].ToList(),
                 scaleByQuestion.GetValueOrDefault(question.QuestionId)))
             .ToList();
 
-        return report with { QuestionRatings = questionRatings.OrderBy(x => x.QuestionId).ToList() };
+        return report with { QuestionRatings = questionRatings.OrderBy(x => x.QuestionOrder).ToList() };
     }
 
     public async Task<IReadOnlyList<FacultyDepartmentReportDto>> GetFacultyDepartmentReportsAsync(
@@ -464,6 +474,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .Where(x => x.SurveyTemplateId == template.SurveyTemplateId && x.AttentionCheckValue == null)
             .OrderBy(x => x.QuestionId)
             .ToListAsync(cancellationToken);
+        var questionOrders = await TemplateQuestionOrdersAsync(
+            template.SurveyTemplateId,
+            cancellationToken);
 
         var sectionSurveys = await db.CourseSectionSurveys.AsNoTracking()
             .Where(x => x.SemesterSurveyId == semesterSurveyId)
@@ -484,7 +497,15 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 template.TemplateName,
                 0,
                 0,
-                questions.Select(q => new QuestionRatingDto(q.QuestionId, q.QuestionText, 0, 0, [])).ToList()
+                questions
+                    .Select(q => new QuestionRatingDto(
+                        q.QuestionId,
+                        questionOrders.GetValueOrDefault(q.QuestionId),
+                        q.QuestionText,
+                        0,
+                        0,
+                        []))
+                    .ToList()
             );
         }
 
@@ -502,6 +523,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         var questionRatings = questions
             .Select(q => BuildQuestionRating(
                 q.QuestionId,
+                questionOrders.GetValueOrDefault(q.QuestionId),
                 q.QuestionText,
                 answersByQuestionId[q.QuestionId].ToList(),
                 scaleByQuestion.GetValueOrDefault(q.QuestionId)))
@@ -557,6 +579,10 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .Select(x => x.ResponseId)
             .ToListAsync(cancellationToken);
 
+        var questionOrders = template is null
+            ? []
+            : await TemplateQuestionOrdersAsync(template.SurveyTemplateId, cancellationToken);
+
         var questionRatings = new List<QuestionRatingDto>();
 
         if (responseIds.Count > 0 && questions.Count > 0)
@@ -569,14 +595,20 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
             questionRatings.AddRange(questions.Select(q => BuildQuestionRating(
                 q.QuestionId,
+                questionOrders.GetValueOrDefault(q.QuestionId),
                 q.QuestionText,
                 answersByQuestionId[q.QuestionId].ToList(),
                 scaleByQuestion.GetValueOrDefault(q.QuestionId))));
         }
         else
         {
-            questionRatings.AddRange(questions.Select(q =>
-                new QuestionRatingDto(q.QuestionId, q.QuestionText, 0, 0, [])));
+            questionRatings.AddRange(questions.Select(q => new QuestionRatingDto(
+                q.QuestionId,
+                questionOrders.GetValueOrDefault(q.QuestionId),
+                q.QuestionText,
+                0,
+                0,
+                [])));
         }
 
         var responseCount = responseIds.Count;
@@ -723,8 +755,11 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             var cnt = tally.TotalCount;
 
             int classSize = sec?.ClassSize ?? 0;
-            // Tỷ lệ hoàn thành đếm hết lượt nộp; điểm chỉ gộp phiếu hợp lệ.
-            decimal completionRate = classSize > 0 ? Math.Round((decimal)cnt / classSize * 100, 1) : 0;
+            // Bảng tra cứu chi tiết đọc theo phiếu hợp lệ: phiếu bị lọc vẫn là một
+            // lượt nộp nhưng không dùng được vào kết quả nào.
+            decimal completionRate = classSize > 0
+                ? Math.Round((decimal)tally.ValidCount / classSize * 100, 1)
+                : 0;
             decimal averageScore = tally.AverageScore;
 
             results.Add(new SurveyResultDetailDto(
@@ -744,6 +779,8 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 sectionName,
                 classSize,
                 cnt,
+                tally.ValidCount,
+                cnt - tally.ValidCount,
                 completionRate,
                 averageScore));
         }
@@ -764,9 +801,12 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     public async Task<SchoolSurveyOverviewDto?> GetSchoolSurveyOverviewAsync(
         int semesterId,
         int? comparisonSemesterId = null,
+        int? semesterSurveyId = null,
         CancellationToken cancellationToken = default)
     {
-        string cacheKey = $"{SchoolOverviewCachePrefix}{semesterId}:compare:{comparisonSemesterId?.ToString() ?? "previous"}";
+        string cacheKey = $"{SchoolOverviewCachePrefix}{semesterId}"
+            + $":survey:{semesterSurveyId?.ToString() ?? "all"}"
+            + $":compare:{comparisonSemesterId?.ToString() ?? "previous"}";
         if (cache.TryGetValue(cacheKey, out SchoolSurveyOverviewDto? cached) && cached is not null)
         {
             return cached;
@@ -775,6 +815,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         var overview = await BuildSchoolSurveyOverviewAsync(
             semesterId,
             comparisonSemesterId,
+            semesterSurveyId,
             cancellationToken);
         if (overview is not null)
         {
@@ -787,6 +828,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     private async Task<SchoolSurveyOverviewDto?> BuildSchoolSurveyOverviewAsync(
         int semesterId,
         int? comparisonSemesterId,
+        int? semesterSurveyId,
         CancellationToken cancellationToken)
     {
         var semester = await db.Semesters
@@ -798,11 +840,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.AcademicYearId == semester.AcademicYearId, cancellationToken);
 
-        var semesterSurveyIds = await db.SemesterSurveys
-            .AsNoTracking()
-            .Where(x => x.SemesterId == semesterId)
-            .Select(x => x.SemesterSurveyId)
-            .ToListAsync(cancellationToken);
+        var semesterSurveyIds = await SemesterSurveyIdsAsync(semesterId, semesterSurveyId, cancellationToken);
 
         // Kỳ chưa phát đợt khảo sát nào → trả bảng tổng quan rỗng để UI dựng được khung.
         if (semesterSurveyIds.Count == 0)
@@ -909,13 +947,14 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             }
             reportFacultyId ??= lec?.FacultyId;
             var tally = responseStats.GetValueOrDefault(ss.CourseSectionSurveyId, ResponseTally.Empty);
-            var cnt = tally.TotalCount;
+            var cnt = tally.ValidCount;
             int classSize = sec?.ClassSize ?? 0;
-            // Tỷ lệ hoàn thành là số liệu tiến độ nên đếm cả phiếu bị lọc.
+            // Tiến độ tính trên phiếu hợp lệ: phiếu bị bộ lọc nhiễu loại vẫn là một
+            // lượt nộp nhưng không dùng được vào kết quả nào.
             decimal rate = classSize > 0 ? Math.Round((decimal)cnt / classSize * 100, 2) : 0;
 
             if (rate >= 80) completedCount++;
-            else if (rate >= 40) inProgressCount++;
+            else if (rate >= 20) inProgressCount++;
             else laggingCount++;
 
             if (reportFacultyId is { } fId)
@@ -1009,12 +1048,26 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         }
 
         // Tiêu chí yếu nhất toàn trường.
-        var weakestQuestions = await BuildWeakestQuestionsAsync(cssIds, cancellationToken);
+        var weakestQuestions = await BuildQuestionRankingAsync(
+            cssIds,
+            WeakQuestionCount,
+            lowestFirst: true,
+            cancellationToken);
+
+        // Khi khoanh vào một bài khảo sát thì kỳ đối chiếu cũng phải khoanh theo
+        // đúng bộ câu hỏi đó, nếu không là đem một bài so với cả kỳ.
+        int? comparisonTemplateId = semesterSurveyId is { } scopedSurveyId
+            ? await db.SemesterSurveys.AsNoTracking()
+                .Where(x => x.SemesterSurveyId == scopedSurveyId)
+                .Select(x => (int?)x.SurveyTemplateId)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
 
         // Xu hướng so với học kỳ được chọn; nếu không chọn thì dùng học kỳ liền trước.
         var semesterComparison = await GetSemesterComparisonAsync(
             semesterId,
             comparisonSemesterId,
+            comparisonTemplateId,
             totalResponses,
             totalTarget,
             overallAvg,
@@ -1040,16 +1093,52 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             semesterComparison);
     }
 
-    /// <summary>Gộp các câu hỏi yếu nhất toàn trường theo số lượt trả lời của kỳ.</summary>
-    private async Task<IReadOnlyList<QuestionRatingDto>> BuildWeakestQuestionsAsync(
+    /// <summary>Danh sách bài khảo sát của kỳ, thu hẹp còn một bài khi người dùng chọn.</summary>
+    private async Task<List<int>> SemesterSurveyIdsAsync(
+        int semesterId,
+        int? semesterSurveyId,
+        CancellationToken cancellationToken) =>
+        await db.SemesterSurveys
+            .AsNoTracking()
+            .Where(x => x.SemesterId == semesterId
+                        && (semesterSurveyId == null || x.SemesterSurveyId == semesterSurveyId))
+            .Select(x => x.SemesterSurveyId)
+            .ToListAsync(cancellationToken);
+
+    /// <summary>Xếp hạng tiêu chí theo điểm trung bình cho một học kỳ / bài khảo sát.</summary>
+    public async Task<IReadOnlyList<QuestionRatingDto>> GetQuestionRankingAsync(
+        int semesterId,
+        int? semesterSurveyId,
+        int count,
+        bool lowestFirst,
+        CancellationToken cancellationToken = default)
+    {
+        var semesterSurveyIds = await SemesterSurveyIdsAsync(semesterId, semesterSurveyId, cancellationToken);
+        if (semesterSurveyIds.Count == 0) return [];
+
+        var cssIds = await db.CourseSectionSurveys
+            .AsNoTracking()
+            .Where(x => semesterSurveyIds.Contains(x.SemesterSurveyId))
+            .Select(x => x.CourseSectionSurveyId)
+            .ToListAsync(cancellationToken);
+
+        return await BuildQuestionRankingAsync(cssIds, count, lowestFirst, cancellationToken);
+    }
+
+    /// <summary>Gộp các câu hỏi ở hai đầu bảng điểm theo số lượt trả lời của kỳ.</summary>
+    private async Task<IReadOnlyList<QuestionRatingDto>> BuildQuestionRankingAsync(
         List<int> cssIds,
+        int count,
+        bool lowestFirst,
         CancellationToken cancellationToken)
     {
         if (cssIds.Count == 0) return [];
 
+        int take = Math.Clamp(count, 1, MaxQuestionRankingCount);
+
         // Xếp hạng trước trên bảng điểm đã gộp theo lớp. Nhờ vậy truy vấn raw answers
         // bên dưới chỉ đụng tới đúng các câu sẽ hiển thị, thay vì quét mọi câu của kỳ.
-        var candidates = await db.CourseSectionSurveyQuestionScores.AsNoTracking()
+        var ranked = db.CourseSectionSurveyQuestionScores.AsNoTracking()
             .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
             .GroupBy(x => x.QuestionId)
             .Select(group => new
@@ -1058,10 +1147,13 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 TotalAnswers = group.Sum(x => x.AnswerCount),
                 WeightedScore = group.Sum(x => (double)x.AverageScore * x.AnswerCount)
             })
-            .Where(x => x.TotalAnswers >= WeakQuestionMinAnswers)
-            .OrderBy(x => x.WeightedScore / x.TotalAnswers)
+            .Where(x => x.TotalAnswers >= WeakQuestionMinAnswers);
+
+        var candidates = await (lowestFirst
+                ? ranked.OrderBy(x => x.WeightedScore / x.TotalAnswers)
+                : ranked.OrderByDescending(x => x.WeightedScore / x.TotalAnswers))
             .ThenByDescending(x => x.TotalAnswers)
-            .Take(WeakQuestionCount)
+            .Take(take)
             .ToListAsync(cancellationToken);
 
         if (candidates.Count == 0) return [];
@@ -1088,6 +1180,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .ToListAsync(cancellationToken);
         var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
         var textById = questions.ToDictionary(x => x.QuestionId, x => x.QuestionText);
+        var questionOrders = await QuestionOrdersAsync(candidateQuestionIds, cancellationToken);
 
         var ratings = new List<QuestionRatingDto>();
         foreach (var group in valueCounts.GroupBy(x => x.QuestionId))
@@ -1122,6 +1215,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
             ratings.Add(new QuestionRatingDto(
                 qId,
+                questionOrders.GetValueOrDefault(qId),
                 textById.TryGetValue(qId, out var txt) ? txt : $"Câu hỏi #{qId}",
                 Math.Round(sum / scored, 2),
                 total,
@@ -1130,10 +1224,11 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 scale.AnswerScaleName));
         }
 
-        return ratings
-            .OrderBy(x => x.AverageScore) // yếu nhất trước
+        return (lowestFirst
+                ? ratings.OrderBy(x => x.AverageScore) // yếu nhất trước
+                : ratings.OrderByDescending(x => x.AverageScore))
             .ThenByDescending(x => x.TotalAnswers)
-            .Take(WeakQuestionCount)
+            .Take(take)
             .ToList();
     }
 
@@ -1141,6 +1236,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     private async Task<SemesterComparisonDto?> GetSemesterComparisonAsync(
         int semesterId,
         int? comparisonSemesterId,
+        int? comparisonTemplateId,
         int currentResponses,
         int currentTarget,
         decimal currentAvg,
@@ -1169,6 +1265,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
         var (comparisonTarget, comparisonResponses, comparisonAvg) = await ComputeSemesterCoreStatsAsync(
             comparisonSemester.SemesterId,
+            comparisonTemplateId,
             cancellationToken);
         // Một kỳ không có chỉ tiêu hoặc không có phiếu không phải đường cơ sở
         // hợp lệ. Trả null để UI không hiển thị biến động dương giả tạo.
@@ -1196,10 +1293,12 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     /// <summary>Chỉ số lõi (chỉ tiêu / phiếu thu / điểm TB) của một học kỳ, dùng cho so sánh.</summary>
     private async Task<(int Target, int Responses, decimal AverageScore)> ComputeSemesterCoreStatsAsync(
         int semesterId,
+        int? templateId,
         CancellationToken cancellationToken)
     {
         var ssIds = await db.SemesterSurveys.AsNoTracking()
-            .Where(x => x.SemesterId == semesterId)
+            .Where(x => x.SemesterId == semesterId
+                        && (templateId == null || x.SurveyTemplateId == templateId))
             .Select(x => x.SemesterSurveyId)
             .ToListAsync(cancellationToken);
         if (ssIds.Count == 0) return (0, 0, 0m);
@@ -1293,8 +1392,60 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     /// Thống kê một câu hỏi. Câu thang 'Options' ra điểm trung bình và phân bố các
     /// mức của chính thang đó; câu thang 'Text' ra danh sách nội dung người học gõ.
     /// </summary>
+    /// <summary>
+    /// Số thứ tự hiển thị (C1, C2...) của mọi câu trong một bộ đề. Đánh trên toàn
+    /// bộ câu kể cả câu bẫy và câu tự nhập, để mã câu khớp với trang bảng dữ liệu
+    /// khảo sát — bỏ câu bẫy ra rồi mới đánh số thì các câu sau bị lùi một bậc.
+    /// </summary>
+    private async Task<Dictionary<int, int>> TemplateQuestionOrdersAsync(
+        int surveyTemplateId,
+        CancellationToken cancellationToken)
+    {
+        var questionIds = await db.SurveyQuestions.AsNoTracking()
+            .Where(x => x.SurveyTemplateId == surveyTemplateId)
+            .OrderBy(x => x.QuestionId)
+            .Select(x => x.QuestionId)
+            .ToListAsync(cancellationToken);
+
+        return questionIds
+            .Select((questionId, index) => (questionId, order: index + 1))
+            .ToDictionary(x => x.questionId, x => x.order);
+    }
+
+    /// <summary>Như trên nhưng cho một nhúm câu có thể thuộc nhiều bộ đề khác nhau.</summary>
+    private async Task<Dictionary<int, int>> QuestionOrdersAsync(
+        IReadOnlyCollection<int> questionIds,
+        CancellationToken cancellationToken)
+    {
+        if (questionIds.Count == 0) return [];
+
+        var templateIds = await db.SurveyQuestions.AsNoTracking()
+            .Where(x => questionIds.Contains(x.QuestionId))
+            .Select(x => x.SurveyTemplateId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        if (templateIds.Count == 0) return [];
+
+        var all = await db.SurveyQuestions.AsNoTracking()
+            .Where(x => templateIds.Contains(x.SurveyTemplateId))
+            .Select(x => new { x.QuestionId, x.SurveyTemplateId })
+            .ToListAsync(cancellationToken);
+
+        var orders = new Dictionary<int, int>();
+        foreach (var group in all.GroupBy(x => x.SurveyTemplateId))
+        {
+            int order = 0;
+            foreach (var question in group.OrderBy(x => x.QuestionId))
+            {
+                orders[question.QuestionId] = ++order;
+            }
+        }
+        return orders;
+    }
+
     private static QuestionRatingDto BuildQuestionRating(
         int questionId,
+        int questionOrder,
         string questionText,
         IReadOnlyList<SurveyResponseAnswer> answers,
         ScaleInfo? scale)
@@ -1303,7 +1454,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
         if (scale is null)
         {
-            return new QuestionRatingDto(questionId, questionText, 0, total, []);
+            return new QuestionRatingDto(questionId, questionOrder, questionText, 0, total, []);
         }
 
         if (scale.IsText)
@@ -1316,6 +1467,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
             return new QuestionRatingDto(
                 questionId,
+                questionOrder,
                 questionText,
                 0,
                 total,
@@ -1347,6 +1499,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
         return new QuestionRatingDto(
             questionId,
+            questionOrder,
             questionText,
             average,
             total,

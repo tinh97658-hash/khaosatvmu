@@ -1,11 +1,22 @@
 export type ReportWorkspace = 'overview' | 'details' | 'rankings';
 export type ReportAnalysisView = 'faculties' | 'quality' | 'progress';
 export type ReportScreen = ReportWorkspace | 'lecturer' | 'survey';
-export type ReportResultSortKey =
-  | 'classSize'
-  | 'responseCount'
-  | 'completionRate'
-  | 'averageScore';
+/** Khóa sắp xếp của bảng tra cứu chi tiết — đúng bằng key các cột sắp xếp được. */
+export const reportResultSortKeys = [
+  'courseCode',
+  'courseName',
+  'sectionName',
+  'facultyName',
+  'departmentName',
+  'lecturerName',
+  'classSize',
+  'responseCount',
+  'invalidResponseCount',
+  'completionRate',
+  'averageScore',
+] as const;
+
+export type ReportResultSortKey = (typeof reportResultSortKeys)[number];
 
 export interface ReportRouteState {
   screen: ReportScreen;
@@ -60,13 +71,7 @@ export const parseReportRoute = (hash = window.location.hash): ReportRouteState 
       ? analysis
       : undefined;
   const sort = query.get('sort');
-  const resultSortKey: ReportResultSortKey | undefined =
-    sort === 'classSize'
-    || sort === 'responseCount'
-    || sort === 'completionRate'
-    || sort === 'averageScore'
-      ? sort
-      : undefined;
+  const resultSortKey = reportResultSortKeys.find((key) => key === sort);
 
   return {
     screen,

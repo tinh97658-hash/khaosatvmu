@@ -2,6 +2,7 @@ import type {
   FacultyDepartmentReport,
   LecturerPerformanceReport,
   OperationalProgressReport,
+  QuestionRating,
   SchoolSurveyOverview,
   SectionSurveyAnalysis,
   SurveyQuestionSummaryReport,
@@ -15,12 +16,33 @@ export const reportApi = {
       `/api/v1/reports/operational-progress?semesterId=${semesterId}`,
     ),
 
-  schoolOverview: (semesterId: number, comparisonSemesterId?: number) => {
+  schoolOverview: (
+    semesterId: number,
+    comparisonSemesterId?: number,
+    semesterSurveyId?: number,
+  ) => {
     const query = new URLSearchParams({ semesterId: String(semesterId) });
     if (comparisonSemesterId) query.append('comparisonSemesterId', String(comparisonSemesterId));
+    if (semesterSurveyId) query.append('semesterSurveyId', String(semesterSurveyId));
     return apiRequest<SchoolSurveyOverview>(
       `/api/v1/reports/school-overview?${query.toString()}`,
     );
+  },
+
+  /** Xếp hạng tiêu chí theo điểm: `lowest` = true lấy nhóm thấp nhất, false lấy cao nhất. */
+  questionRanking: (params: {
+    semesterId: number;
+    semesterSurveyId?: number;
+    count: number;
+    lowest: boolean;
+  }) => {
+    const query = new URLSearchParams({
+      semesterId: String(params.semesterId),
+      count: String(params.count),
+      lowest: String(params.lowest),
+    });
+    if (params.semesterSurveyId) query.append('semesterSurveyId', String(params.semesterSurveyId));
+    return apiRequest<QuestionRating[]>(`/api/v1/reports/question-ranking?${query.toString()}`);
   },
 
   lecturers: (params?: { facultyId?: number; departmentId?: number; semesterId?: number }) => {
