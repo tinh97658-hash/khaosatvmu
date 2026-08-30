@@ -2,8 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   CalendarDays,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ChevronUp,
   CircleAlert,
   ClipboardList,
@@ -23,6 +21,7 @@ import { isReadOnlyRole } from '../auth/roles';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { QRCodeModal } from '../components/QRCodeModal';
+import { TablePagination } from '../components/TablePagination';
 import { useSemester } from '../context/semesterContext';
 import { ApiError } from '../services/apiClient';
 import { surveyApi, surveyErrorMessage, surveyLinkOf } from '../services/surveyApi';
@@ -31,6 +30,7 @@ import type {
   SemesterSurvey,
   SurveyTemplate,
 } from '../types';
+import '../styles/catalogs.css';
 import '../styles/survey-operations.css';
 
 interface ScheduleForm {
@@ -79,9 +79,14 @@ const defaultSchedule = (): ScheduleForm => {
 interface CourseSurveysPageProps {
   /** Chuyển sang màn Thống kê & Báo cáo để xem kết quả chi tiết của một bài khảo sát. */
   onOpenSurveyReport?: (courseSectionSurveyId: number) => void;
+  /** Báo cho ứng dụng biết danh sách đợt khảo sát vừa thay đổi để cập nhật số liệu ngay lập tức. */
+  onSurveysChanged?: () => void;
 }
 
-export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurveyReport }) => {
+export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
+  onOpenSurveyReport,
+  onSurveysChanged,
+}) => {
   const {
     academicYears,
     activeSemesterId,
@@ -221,6 +226,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
       await loadSemesterSurveys(semesterId);
       setExpanded((prev) => ({ ...prev, [created.semesterSurveyId]: true }));
       await loadSections(created.semesterSurveyId);
+      onSurveysChanged?.();
       toast.success('Đã tạo bài khảo sát cho các lớp học phần', {
         description: `${created.templateName} · ${created.sectionSurveyCount} lớp`,
       });
@@ -249,6 +255,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
       });
       await loadSections(editingSection.semesterSurveyId);
       await loadSemesterSurveys(semesterId);
+      onSurveysChanged?.();
       toast.success('Đã cập nhật thời gian mở khảo sát');
       setEditingSection(null);
       setEditError(null);
@@ -264,6 +271,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
     try {
       await surveyApi.deleteSemesterSurvey(deleting.semesterSurveyId);
       await loadSemesterSurveys(semesterId);
+      onSurveysChanged?.();
       toast.success('Đã xóa đợt khảo sát', { description: deleting.templateName });
     } catch (error) {
       toast.error('Không thể xóa đợt khảo sát', { description: messageFrom(error) });
@@ -284,6 +292,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
       if (expanded[semesterSurveyId]) {
         await loadSections(semesterSurveyId);
       }
+      onSurveysChanged?.();
       toast.success('Đã tạo bù bài khảo sát', {
         description: `${templateName} · ${result.createdSectionCount} lớp · ${formatRange(
           result.startTime,
@@ -607,37 +616,15 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({ onOpenSurv
             )}
 
             {isExpanded && sections.length > 0 && (
-              <footer className="catalog-pagination section-survey-pagination">
-                <span>
-                  Hiển thị <strong>{firstIndex + 1}</strong>–
-                  <strong>{Math.min(firstIndex + sectionPageSize, sections.length)}</strong> trên{' '}
-                  <strong>{sections.length}</strong> lớp học phần
-                </span>
-                <div className="catalog-pagination__controls" aria-label="Phân trang lớp học phần">
-                  <button
-                    type="button"
-                    className="catalog-page-button"
-                    disabled={page <= 1}
-                    onClick={() => changePage(page - 1)}
-                    aria-label="Trang trước"
-                    title="Trang trước"
-                  >
-                    <ChevronLeft aria-hidden="true" size={16} />
-                  </button>
-                  <span className="catalog-page-number" aria-current="page">{page}</span>
-                  {totalPages > 1 && <span className="catalog-page-total">/ {totalPages}</span>}
-                  <button
-                    type="button"
-                    className="catalog-page-button"
-                    disabled={page >= totalPages}
-                    onClick={() => changePage(page + 1)}
-                    aria-label="Trang sau"
-                    title="Trang sau"
-                  >
-                    <ChevronRight aria-hidden="true" size={16} />
-                  </button>
-                </div>
-              </footer>
+              <div className="section-survey-pagination">
+                <TablePagination
+                  page={page}
+                  pageSize={sectionPageSize}
+                  totalItems={sections.length}
+                  itemLabel="lớp học phần"
+                  onPageChange={changePage}
+                />
+              </div>
             )}
           </section>
         );

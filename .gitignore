@@ -91,6 +91,9 @@ khaosatvmu_dump.sql
 *_dump.sql
 pgadmin-servers.json
 
+# Local source/import workbooks can contain student or lecturer data.
+dulieu/
+
 # ==========================================
 # 5. Docker & Orchestration
 # ==========================================

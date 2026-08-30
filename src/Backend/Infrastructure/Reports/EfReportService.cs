@@ -187,15 +187,30 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         );
     }
 
-    public async Task<IReadOnlyList<LecturerPerformanceReportDto>> GetLecturerPerformanceReportsAsync(
+    public Task<IReadOnlyList<LecturerPerformanceReportDto>> GetLecturerPerformanceReportsAsync(
         int? facultyId,
         int? departmentId,
         int? semesterId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        GetLecturerPerformanceReportsCoreAsync(facultyId, departmentId, semesterId, null, cancellationToken);
+
+    private async Task<IReadOnlyList<LecturerPerformanceReportDto>> GetLecturerPerformanceReportsCoreAsync(
+        int? facultyId,
+        int? departmentId,
+        int? semesterId,
+        int? specificLecturerId,
+        CancellationToken cancellationToken)
     {
         var query = db.Lecturers.AsNoTracking().AsQueryable();
-        if (facultyId is { } fId) query = query.Where(x => x.FacultyId == fId);
-        if (departmentId is { } dId) query = query.Where(x => x.DepartmentId == dId);
+        if (specificLecturerId is { } lId)
+        {
+            query = query.Where(x => x.LecturerId == lId);
+        }
+        else
+        {
+            if (facultyId is { } fId) query = query.Where(x => x.FacultyId == fId);
+            if (departmentId is { } dId) query = query.Where(x => x.DepartmentId == dId);
+        }
 
         var lecturers = await query.ToListAsync(cancellationToken);
         if (lecturers.Count == 0) return [];
@@ -301,49 +316,101 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         int? semesterId,
         CancellationToken cancellationToken = default)
     {
-        var reports = await GetLecturerPerformanceReportsAsync(null, null, semesterId, cancellationToken);
+        var reports = await GetLecturerPerformanceReportsCoreAsync(null, null, semesterId, lecturerId, cancellationToken);
         var report = reports.FirstOrDefault(x => x.LecturerId == lecturerId);
         if (report is null) return null;
 
-        var sections = await db.CourseSections.AsNoTracking()
-            .Where(x => x.LecturerId == lecturerId)
-            .ToListAsync(cancellationToken);
+        var sectionQuery = db.CourseSections.AsNoTracking()
+            .Where(x => x.LecturerId == lecturerId);
+        if (semesterId is { } semId)
+        {
+            sectionQuery = sectionQuery.Where(x => x.SemesterId == semId);
+        }
+        var sections = await sectionQuery.ToListAsync(cancellationToken);
         var sectionIds = sections.Select(x => x.CourseSectionId).ToList();
 
         var sectionSurveys = await db.CourseSectionSurveys.AsNoTracking()
             .Where(x => sectionIds.Contains(x.CourseSectionId))
             .ToListAsync(cancellationToken);
         var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
+        if (cssIds.Count == 0) return report;
 
         // Điểm từng câu của giảng viên là số liệu chất lượng: chỉ gộp phiếu hợp lệ.
-        var responseIds = await db.SurveyResponses.AsNoTracking()
+        var validResponseIds = db.SurveyResponses.AsNoTracking()
             .Where(x => cssIds.Contains(x.CourseSectionSurveyId) && x.IsValid)
-            .Select(x => x.ResponseId)
+            .Select(x => x.ResponseId);
+
+        var validAnswersQuery = db.SurveyResponseAnswers.AsNoTracking()
+            .Where(x => validResponseIds.Contains(x.ResponseId));
+
+        var questionIds = await validAnswersQuery
+            .Select(x => x.QuestionId)
+            .Distinct()
             .ToListAsync(cancellationToken);
 
-        if (responseIds.Count == 0) return report;
+        if (questionIds.Count == 0) return report;
 
-        var answers = await db.SurveyResponseAnswers.AsNoTracking()
-            .Where(x => responseIds.Contains(x.ResponseId))
-            .ToListAsync(cancellationToken);
-
-        var questionIds = answers.Select(x => x.QuestionId).Distinct().ToList();
         // Câu bẫy ép chọn một mức cố định nên điểm của nó vô nghĩa: bỏ hẳn khỏi
         // phân tích theo câu hỏi, không chỉ khỏi phép trung bình.
         var questions = await db.SurveyQuestions.AsNoTracking()
             .Where(x => questionIds.Contains(x.QuestionId) && x.AttentionCheckValue == null)
             .ToListAsync(cancellationToken);
         var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
-        var answersByQuestionId = answers.ToLookup(x => x.QuestionId);
         var questionOrders = await QuestionOrdersAsync(questionIds, cancellationToken);
 
+        var textQuestionIds = questions
+            .Where(q => scaleByQuestion.TryGetValue(q.QuestionId, out var s) && s?.IsText == true)
+            .Select(q => q.QuestionId)
+            .ToList();
+
+        var numericQuestionIds = questions
+            .Where(q => !textQuestionIds.Contains(q.QuestionId))
+            .Select(q => q.QuestionId)
+            .ToList();
+
+        // Tổng hợp phân bố điểm trực tiếp trong SQL, không tải toàn bộ câu trả lời thô vào RAM
+        var numericAggregates = numericQuestionIds.Count == 0 ? [] : await validAnswersQuery
+            .Where(x => numericQuestionIds.Contains(x.QuestionId))
+            .GroupBy(x => new { x.QuestionId, x.AnswerValue })
+            .Select(g => new { g.Key.QuestionId, g.Key.AnswerValue, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var numericLookup = numericAggregates
+            .GroupBy(x => x.QuestionId)
+            .ToDictionary(g => g.Key, g => g.Select(x => (x.AnswerValue, x.Count)).ToList());
+
+        var textCounts = textQuestionIds.Count == 0 ? [] : await validAnswersQuery
+            .Where(x => textQuestionIds.Contains(x.QuestionId) && x.AnswerValue != null && x.AnswerValue != "")
+            .GroupBy(x => x.QuestionId)
+            .Select(g => new { QuestionId = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var textCountLookup = textCounts.ToDictionary(x => x.QuestionId, x => x.Count);
+
+        var textSamples = textQuestionIds.Count == 0
+            ? []
+            : await db.SurveyQuestions.AsNoTracking()
+                .Where(q => textQuestionIds.Contains(q.QuestionId))
+                .SelectMany(q => validAnswersQuery
+                    .Where(x => x.QuestionId == q.QuestionId && x.AnswerValue != null && x.AnswerValue != "")
+                    .OrderByDescending(x => x.ResponseId)
+                    .Take(MaxTextAnswersPerQuestion)
+                    .Select(x => new { q.QuestionId, x.AnswerValue }))
+                .ToListAsync(cancellationToken);
+
+        var textSamplesByQuestion = textSamples
+            .GroupBy(x => x.QuestionId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.AnswerValue!).ToList());
+
         var questionRatings = questions
-            .Select(question => BuildQuestionRating(
-                question.QuestionId,
-                questionOrders.GetValueOrDefault(question.QuestionId),
-                question.QuestionText,
-                answersByQuestionId[question.QuestionId].ToList(),
-                scaleByQuestion.GetValueOrDefault(question.QuestionId)))
+            .Select(q => BuildQuestionRatingFromAggregate(
+                q.QuestionId,
+                questionOrders.GetValueOrDefault(q.QuestionId),
+                q.QuestionText,
+                numericLookup.GetValueOrDefault(q.QuestionId) ?? [],
+                scaleByQuestion.GetValueOrDefault(q.QuestionId),
+                textSamplesByQuestion.GetValueOrDefault(q.QuestionId),
+                textCountLookup.GetValueOrDefault(q.QuestionId)))
             .ToList();
 
         return report with { QuestionRatings = questionRatings.OrderBy(x => x.QuestionOrder).ToList() };
@@ -484,12 +551,11 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
 
         // Báo cáo chất lượng nên chỉ gộp phiếu qua bộ lọc nhiễu.
-        var responseIds = await db.SurveyResponses.AsNoTracking()
-            .Where(x => cssIds.Contains(x.CourseSectionSurveyId) && x.IsValid)
-            .Select(x => x.ResponseId)
-            .ToListAsync(cancellationToken);
+        var validResponsesQuery = db.SurveyResponses.AsNoTracking()
+            .Where(x => cssIds.Contains(x.CourseSectionSurveyId) && x.IsValid);
 
-        if (responseIds.Count == 0)
+        var responsesCount = await validResponsesQuery.CountAsync(cancellationToken);
+        if (responsesCount == 0)
         {
             return new SurveyQuestionSummaryReportDto(
                 semesterSurveyId,
@@ -509,24 +575,66 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             );
         }
 
-        var responsesCount = responseIds.Count;
-        var overallAvgScore = await db.SurveyResponses.AsNoTracking()
-            .Where(x => cssIds.Contains(x.CourseSectionSurveyId) && x.IsValid)
-            .AverageAsync(x => x.Score, cancellationToken);
+        var overallAvgScore = await validResponsesQuery.AverageAsync(x => x.Score, cancellationToken);
 
-        var answers = await db.SurveyResponseAnswers.AsNoTracking()
-            .Where(x => responseIds.Contains(x.ResponseId))
-            .ToListAsync(cancellationToken);
         var scaleByQuestion = await LoadScalesByQuestionAsync(questions, cancellationToken);
-        var answersByQuestionId = answers.ToLookup(x => x.QuestionId);
+        var validResponseIds = validResponsesQuery.Select(x => x.ResponseId);
+        var validAnswersQuery = db.SurveyResponseAnswers.AsNoTracking()
+            .Where(x => validResponseIds.Contains(x.ResponseId));
+
+        var textQuestionIds = questions
+            .Where(q => scaleByQuestion.TryGetValue(q.QuestionId, out var s) && s?.IsText == true)
+            .Select(q => q.QuestionId)
+            .ToList();
+
+        var numericQuestionIds = questions
+            .Where(q => !textQuestionIds.Contains(q.QuestionId))
+            .Select(q => q.QuestionId)
+            .ToList();
+
+        // Tổng hợp phân bố điểm trực tiếp trong SQL, không tải toàn bộ câu trả lời thô vào RAM
+        var numericAggregates = numericQuestionIds.Count == 0 ? [] : await validAnswersQuery
+            .Where(x => numericQuestionIds.Contains(x.QuestionId))
+            .GroupBy(x => new { x.QuestionId, x.AnswerValue })
+            .Select(g => new { g.Key.QuestionId, g.Key.AnswerValue, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var numericLookup = numericAggregates
+            .GroupBy(x => x.QuestionId)
+            .ToDictionary(g => g.Key, g => g.Select(x => (x.AnswerValue, x.Count)).ToList());
+
+        var textCounts = textQuestionIds.Count == 0 ? [] : await validAnswersQuery
+            .Where(x => textQuestionIds.Contains(x.QuestionId) && x.AnswerValue != null && x.AnswerValue != "")
+            .GroupBy(x => x.QuestionId)
+            .Select(g => new { QuestionId = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var textCountLookup = textCounts.ToDictionary(x => x.QuestionId, x => x.Count);
+
+        var textSamples = textQuestionIds.Count == 0
+            ? []
+            : await db.SurveyQuestions.AsNoTracking()
+                .Where(q => textQuestionIds.Contains(q.QuestionId))
+                .SelectMany(q => validAnswersQuery
+                    .Where(x => x.QuestionId == q.QuestionId && x.AnswerValue != null && x.AnswerValue != "")
+                    .OrderByDescending(x => x.ResponseId)
+                    .Take(MaxTextAnswersPerQuestion)
+                    .Select(x => new { q.QuestionId, x.AnswerValue }))
+                .ToListAsync(cancellationToken);
+
+        var textSamplesByQuestion = textSamples
+            .GroupBy(x => x.QuestionId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.AnswerValue!).ToList());
 
         var questionRatings = questions
-            .Select(q => BuildQuestionRating(
+            .Select(q => BuildQuestionRatingFromAggregate(
                 q.QuestionId,
                 questionOrders.GetValueOrDefault(q.QuestionId),
                 q.QuestionText,
-                answersByQuestionId[q.QuestionId].ToList(),
-                scaleByQuestion.GetValueOrDefault(q.QuestionId)))
+                numericLookup.GetValueOrDefault(q.QuestionId) ?? [],
+                scaleByQuestion.GetValueOrDefault(q.QuestionId),
+                textSamplesByQuestion.GetValueOrDefault(q.QuestionId),
+                textCountLookup.GetValueOrDefault(q.QuestionId)))
             .ToList();
 
         return new SurveyQuestionSummaryReportDto(
@@ -797,16 +905,38 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     // BẢNG TỔNG QUAN TOÀN TRƯỜNG (EXECUTIVE SURVEY DASHBOARD)
     // -----------------------------------------------------------------------
 
+    public async Task<IReadOnlyList<SchoolOverviewComparisonOptionDto>> GetSchoolOverviewComparisonOptionsAsync(
+        CancellationToken cancellationToken = default) =>
+        await (from survey in db.SemesterSurveys.AsNoTracking()
+               join semester in db.Semesters.AsNoTracking()
+                   on survey.SemesterId equals semester.SemesterId
+               join year in db.AcademicYears.AsNoTracking()
+                   on semester.AcademicYearId equals year.AcademicYearId
+               join template in db.SurveyTemplates.AsNoTracking()
+                   on survey.SurveyTemplateId equals template.SurveyTemplateId
+               orderby survey.SemesterSurveyId descending
+               select new SchoolOverviewComparisonOptionDto(
+                   survey.SemesterSurveyId,
+                   semester.SemesterId,
+                   semester.SemesterName,
+                   year.AcademicYearName,
+                   template.SurveyTemplateId,
+                   template.TemplateName,
+                   survey.CreatedAt))
+            .ToListAsync(cancellationToken);
+
     /// <summary>Bảng tổng quan toàn trường theo học kỳ, có cache TTL ngắn.</summary>
     public async Task<SchoolSurveyOverviewDto?> GetSchoolSurveyOverviewAsync(
         int semesterId,
         int? comparisonSemesterId = null,
         int? semesterSurveyId = null,
+        int? comparisonSemesterSurveyId = null,
         CancellationToken cancellationToken = default)
     {
         string cacheKey = $"{SchoolOverviewCachePrefix}{semesterId}"
             + $":survey:{semesterSurveyId?.ToString() ?? "all"}"
-            + $":compare:{comparisonSemesterId?.ToString() ?? "previous"}";
+            + $":compare-semester:{comparisonSemesterId?.ToString() ?? "auto"}"
+            + $":compare-survey:{comparisonSemesterSurveyId?.ToString() ?? "auto"}";
         if (cache.TryGetValue(cacheKey, out SchoolSurveyOverviewDto? cached) && cached is not null)
         {
             return cached;
@@ -816,6 +946,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             semesterId,
             comparisonSemesterId,
             semesterSurveyId,
+            comparisonSemesterSurveyId,
             cancellationToken);
         if (overview is not null)
         {
@@ -829,6 +960,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         int semesterId,
         int? comparisonSemesterId,
         int? semesterSurveyId,
+        int? comparisonSemesterSurveyId,
         CancellationToken cancellationToken)
     {
         var semester = await db.Semesters
@@ -1027,14 +1159,17 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 avg));
         }
 
-        // Tổng hợp toàn trường.
-        int totalTarget = facultyStats.Values.Sum(x => x.Target);
-        int totalResponses = facultyStats.Values.Sum(x => x.Responses);
-        int totalValidResponses = facultyStats.Values.Sum(x => x.ValidResponses);
-        decimal totalScoreSum = facultyStats.Values.Sum(x => x.ScoreSum);
+        // Tổng hợp trực tiếp từ toàn bộ bài khảo sát lớp. Không cộng ngược từ Khoa vì các lớp
+        // chưa ánh xạ đơn vị vẫn phải nằm trong mẫu số và điểm micro-average cấp trường.
+        int totalTarget = sectionSurveys.Sum(x =>
+            sectionById.TryGetValue(x.CourseSectionId, out var section) ? section.ClassSize : 0);
+        int totalResponses = sectionSurveys.Sum(x =>
+            responseStats.GetValueOrDefault(x.CourseSectionSurveyId, ResponseTally.Empty).ValidCount);
+        decimal totalScoreSum = sectionSurveys.Sum(x =>
+            responseStats.GetValueOrDefault(x.CourseSectionSurveyId, ResponseTally.Empty).ValidTotalScore);
         decimal overallCompletion = totalTarget > 0 ? Math.Round((decimal)totalResponses / totalTarget * 100, 2) : 0;
-        decimal overallAvg = totalValidResponses > 0
-            ? Math.Round(totalScoreSum / totalValidResponses, 2)
+        decimal overallAvg = totalResponses > 0
+            ? Math.Round(totalScoreSum / totalResponses, 2)
             : 0;
 
         var scoreDistribution = new List<ScoreBandDto>();
@@ -1067,6 +1202,8 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         var semesterComparison = await GetSemesterComparisonAsync(
             semesterId,
             comparisonSemesterId,
+            semesterSurveyId,
+            comparisonSemesterSurveyId,
             comparisonTemplateId,
             totalResponses,
             totalTarget,
@@ -1232,10 +1369,12 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .ToList();
     }
 
-    /// <summary>So sánh học kỳ hiện tại với kỳ được chọn; mặc định là kỳ liền trước.</summary>
+    /// <summary>So sánh phạm vi hiện tại với một đợt hoặc học kỳ; mặc định chọn mốc phù hợp gần nhất.</summary>
     private async Task<SemesterComparisonDto?> GetSemesterComparisonAsync(
         int semesterId,
         int? comparisonSemesterId,
+        int? semesterSurveyId,
+        int? comparisonSemesterSurveyId,
         int? comparisonTemplateId,
         int currentResponses,
         int currentTarget,
@@ -1244,28 +1383,76 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     {
         // Không công bố xu hướng khi kỳ hiện tại chưa có phản hồi: chênh lệch
         // điểm khi đó chỉ là phép trừ với 0 và không có ý nghĩa điều hành.
-        if (comparisonSemesterId == semesterId || currentResponses <= 0 || currentTarget <= 0)
+        if (currentResponses <= 0 || currentTarget <= 0
+            || (comparisonSemesterId == semesterId && comparisonSemesterSurveyId is null)
+            || comparisonSemesterSurveyId == semesterSurveyId)
+        {
+            return null;
+        }
+
+        int? resolvedSurveyId = comparisonSemesterSurveyId;
+        if (resolvedSurveyId is null && comparisonSemesterId is null && semesterSurveyId is not null)
+        {
+            // Khi đang xem một đợt, mốc tự động là đợt trước dùng cùng bộ câu hỏi.
+            resolvedSurveyId = await db.SemesterSurveys.AsNoTracking()
+                .Where(x => x.SurveyTemplateId == comparisonTemplateId
+                            && x.SemesterSurveyId < semesterSurveyId.Value)
+                .OrderByDescending(x => x.SemesterSurveyId)
+                .Select(x => (int?)x.SemesterSurveyId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (resolvedSurveyId is null)
+            {
+                return null;
+            }
+        }
+
+        var comparisonSurvey = resolvedSurveyId is { } surveyId
+            ? await db.SemesterSurveys.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.SemesterSurveyId == surveyId, cancellationToken)
+            : null;
+        if (comparisonSemesterSurveyId is not null && comparisonSurvey is null)
+        {
+            return null;
+        }
+
+        // Không cho so sánh hai đợt dùng bộ câu hỏi khác nhau vì thang đo có thể không tương đương.
+        if (comparisonSurvey is not null
+            && comparisonTemplateId is not null
+            && comparisonSurvey.SurveyTemplateId != comparisonTemplateId)
         {
             return null;
         }
 
         var comparisonSemesterQuery = db.Semesters.AsNoTracking();
-        var comparisonSemester = comparisonSemesterId.HasValue
+        var comparisonSemester = comparisonSurvey is not null
             ? await comparisonSemesterQuery.FirstOrDefaultAsync(
-                x => x.SemesterId == comparisonSemesterId.Value,
+                x => x.SemesterId == comparisonSurvey.SemesterId,
                 cancellationToken)
-            : await comparisonSemesterQuery
-                .Where(x => x.SemesterId < semesterId)
-                .OrderByDescending(x => x.SemesterId)
-                .FirstOrDefaultAsync(cancellationToken);
+            : comparisonSemesterId.HasValue
+                ? await comparisonSemesterQuery.FirstOrDefaultAsync(
+                    x => x.SemesterId == comparisonSemesterId.Value,
+                    cancellationToken)
+                : await comparisonSemesterQuery
+                    .Where(x => x.SemesterId < semesterId)
+                    .OrderByDescending(x => x.SemesterId)
+                    .FirstOrDefaultAsync(cancellationToken);
         if (comparisonSemester is null) return null;
 
         var comparisonYear = await db.AcademicYears.AsNoTracking()
             .FirstOrDefaultAsync(x => x.AcademicYearId == comparisonSemester.AcademicYearId, cancellationToken);
 
-        var (comparisonTarget, comparisonResponses, comparisonAvg) = await ComputeSemesterCoreStatsAsync(
+        int? resolvedTemplateId = comparisonSurvey?.SurveyTemplateId ?? comparisonTemplateId;
+        var comparisonTemplateName = resolvedTemplateId is null
+            ? null
+            : await db.SurveyTemplates.AsNoTracking()
+                .Where(x => x.SurveyTemplateId == resolvedTemplateId.Value)
+                .Select(x => x.TemplateName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+        var (comparisonSections, comparisonTarget, comparisonResponses, comparisonAvg) = await ComputeSemesterCoreStatsAsync(
             comparisonSemester.SemesterId,
             comparisonTemplateId,
+            comparisonSurvey?.SemesterSurveyId,
             cancellationToken);
         // Một kỳ không có chỉ tiêu hoặc không có phiếu không phải đường cơ sở
         // hợp lệ. Trả null để UI không hiển thị biến động dương giả tạo.
@@ -1281,9 +1468,15 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         decimal currentCompletion = currentTarget > 0 ? Math.Round((decimal)currentResponses / currentTarget * 100, 2) : 0;
 
         return new SemesterComparisonDto(
+            comparisonSurvey is null ? "semester" : "campaign",
             comparisonSemester.SemesterId,
+            comparisonSurvey?.SemesterSurveyId,
             comparisonSemester.SemesterName,
             comparisonYear?.AcademicYearName ?? string.Empty,
+            comparisonTemplateName,
+            comparisonSections,
+            comparisonTarget,
+            comparisonResponses,
             comparisonCompletion,
             comparisonAvg,
             Math.Round(currentCompletion - comparisonCompletion, 2),
@@ -1291,23 +1484,25 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
     }
 
     /// <summary>Chỉ số lõi (chỉ tiêu / phiếu thu / điểm TB) của một học kỳ, dùng cho so sánh.</summary>
-    private async Task<(int Target, int Responses, decimal AverageScore)> ComputeSemesterCoreStatsAsync(
+    private async Task<(int Sections, int Target, int Responses, decimal AverageScore)> ComputeSemesterCoreStatsAsync(
         int semesterId,
         int? templateId,
+        int? semesterSurveyId,
         CancellationToken cancellationToken)
     {
         var ssIds = await db.SemesterSurveys.AsNoTracking()
             .Where(x => x.SemesterId == semesterId
-                        && (templateId == null || x.SurveyTemplateId == templateId))
+                        && (templateId == null || x.SurveyTemplateId == templateId)
+                        && (semesterSurveyId == null || x.SemesterSurveyId == semesterSurveyId))
             .Select(x => x.SemesterSurveyId)
             .ToListAsync(cancellationToken);
-        if (ssIds.Count == 0) return (0, 0, 0m);
+        if (ssIds.Count == 0) return (0, 0, 0, 0m);
 
         var cssIds = await db.CourseSectionSurveys.AsNoTracking()
             .Where(x => ssIds.Contains(x.SemesterSurveyId))
             .Select(x => x.CourseSectionSurveyId)
             .ToListAsync(cancellationToken);
-        if (cssIds.Count == 0) return (0, 0, 0m);
+        if (cssIds.Count == 0) return (0, 0, 0, 0m);
 
         int target = await (from sec in db.CourseSections.AsNoTracking()
                             join css in db.CourseSectionSurveys.AsNoTracking()
@@ -1316,7 +1511,7 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                             select (int?)sec.ClassSize)
             .SumAsync(cancellationToken) ?? 0;
 
-        // Số lượt nộp đếm hết (tiến độ), điểm chỉ gộp phiếu hợp lệ (chất lượng).
+        // Tiến độ và điểm đều dùng cùng tập phiếu hợp lệ để mốc đối chiếu nhất quán với kỳ hiện tại.
         var agg = await db.SurveyResponses.AsNoTracking()
             .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
             .GroupBy(x => 1)
@@ -1328,11 +1523,11 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             })
             .FirstOrDefaultAsync(cancellationToken);
 
-        int responses = agg?.Count ?? 0;
+        int responses = agg?.ValidCount ?? 0;
         decimal avg = agg is null || agg.ValidCount == 0
             ? 0m
             : Math.Round(agg.ValidTotalScore / agg.ValidCount, 2);
-        return (target, responses, avg);
+        return (cssIds.Count, target, responses, avg);
     }
 
     private static string ScoreBandLabel(int band) => band switch
@@ -1493,6 +1688,81 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             {
                 int count = values.Count(value => value == option.Value);
                 decimal pct = values.Count > 0 ? Math.Round((decimal)count / values.Count * 100, 1) : 0;
+                return new OptionCountDto(option.Value, option.DisplayText, count, pct);
+            })
+            .ToList();
+
+        return new QuestionRatingDto(
+            questionId,
+            questionOrder,
+            questionText,
+            average,
+            total,
+            distribution,
+            AnswerScaleKinds.Options,
+            scale.AnswerScaleName);
+    }
+
+    private static QuestionRatingDto BuildQuestionRatingFromAggregate(
+        int questionId,
+        int questionOrder,
+        string questionText,
+        IEnumerable<(string Value, int Count)> valueCounts,
+        ScaleInfo? scale,
+        IReadOnlyList<string>? textSamples = null,
+        int? textTotalCount = null)
+    {
+        var countList = valueCounts.ToList();
+        int total = countList.Sum(x => x.Count);
+
+        if (scale is null)
+        {
+            return new QuestionRatingDto(questionId, questionOrder, questionText, 0, total, []);
+        }
+
+        if (scale.IsText)
+        {
+            var texts = (textSamples ?? [])
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Take(MaxTextAnswersPerQuestion)
+                .ToList();
+
+            int textTotal = textTotalCount ?? (total > 0 ? total : texts.Count);
+
+            return new QuestionRatingDto(
+                questionId,
+                questionOrder,
+                questionText,
+                0,
+                textTotal,
+                [],
+                AnswerScaleKinds.Text,
+                scale.AnswerScaleName,
+                texts);
+        }
+
+        long sumScores = 0;
+        int scoredCount = 0;
+        var countByValue = new Dictionary<int, int>();
+
+        foreach (var (val, count) in countList)
+        {
+            if (val is not null && int.TryParse(val, out var numericVal))
+            {
+                countByValue[numericVal] = countByValue.GetValueOrDefault(numericVal) + count;
+                sumScores += (long)numericVal * count;
+                scoredCount += count;
+            }
+        }
+
+        decimal average = scoredCount > 0 ? Math.Round((decimal)sumScores / scoredCount, 2) : 0;
+
+        var distribution = scale.Options
+            .OrderBy(option => option.Value)
+            .Select(option =>
+            {
+                int count = countByValue.GetValueOrDefault(option.Value);
+                decimal pct = scoredCount > 0 ? Math.Round((decimal)count / scoredCount * 100, 1) : 0;
                 return new OptionCountDto(option.Value, option.DisplayText, count, pct);
             })
             .ToList();

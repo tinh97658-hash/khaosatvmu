@@ -2,6 +2,7 @@ namespace UnitTests.InfrastructureTests;
 
 using Application;
 using Application.Auth;
+using Domain;
 using FluentAssertions;
 using global::Infrastructure.Persistence;
 using global::Infrastructure.Surveys;
@@ -221,6 +222,43 @@ public class ReportScopeTests
 
             // Nhưng mặt bằng vẫn đúng, không bị kéo về 0 — đó là số của cả trường.
             normalization.Value!.SchoolSectionCount.Should().BeGreaterThan(0);
+        });
+    }
+
+    [Fact]
+    public async Task ScopeAnalysis_ShouldAggregateInDatabaseAndLimitTextSamples()
+    {
+        await RunAsync(async (db, serviceFor) =>
+        {
+            var candidate = await (
+                from sectionSurvey in db.CourseSectionSurveys
+                join section in db.CourseSections
+                    on sectionSurvey.CourseSectionId equals section.CourseSectionId
+                where db.SurveyResponses.Any(response =>
+                    response.CourseSectionSurveyId == sectionSurvey.CourseSectionSurveyId
+                    && response.IsValid)
+                select new { sectionSurvey.SemesterSurveyId, section.CourseId })
+                .FirstOrDefaultAsync();
+            if (candidate is null) return;
+
+            var result = await serviceFor(Admin).GetSurveyScopeAnalysisAsync(
+                candidate.SemesterSurveyId,
+                "course",
+                candidate.CourseId);
+
+            result.Succeeded.Should().BeTrue(result.ErrorCode);
+            var analysis = result.Value!;
+            analysis.ResponseCount.Should().BeGreaterThan(0);
+            analysis.Questions.Should().NotBeEmpty();
+            analysis.Questions
+                .Where(question => question.ScaleKind == AnswerScaleKinds.Text)
+                .All(question => question.TextAnswers != null && question.TextAnswers.Count <= 200)
+                .Should().BeTrue();
+            analysis.Questions
+                .Where(question => question.ScaleKind == AnswerScaleKinds.Options)
+                .All(question =>
+                    question.OptionDistribution.Sum(option => option.Count) <= question.TotalAnswers)
+                .Should().BeTrue();
         });
     }
 }

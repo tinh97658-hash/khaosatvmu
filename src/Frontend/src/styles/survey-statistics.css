@@ -314,6 +314,87 @@
   flex: 0 0 auto;
 }
 
+.statistics-table tbody .analysis-drill-row {
+  cursor: pointer;
+}
+
+.statistics-table tbody .analysis-drill-row:hover td,
+.statistics-table tbody .analysis-drill-row:hover th {
+  background-color: #eef7fb;
+}
+
+.analysis-drill-link {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #036e99;
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.analysis-drill-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.analysis-drill-link:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid #0788b8;
+  outline-offset: 2px;
+}
+
+.analysis-scope-detail {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.analysis-scope-subtable {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  margin-bottom: 24px;
+}
+
+.analysis-subtable-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analysis-subtable-heading h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.analysis-subtable-hint {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+}
+
+.analysis-scope-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.analysis-scope-error {
+  display: grid;
+  gap: 12px;
+}
+
 /* Hai cột trái của tab tổng hợp bộ môn. Bề rộng khác tab chuẩn hoá nên phải có
    bộ lớp riêng, dùng chung sẽ lệch `left` và sinh ra cảnh đè cột. */
 .statistics-table .col-dept-1 { left: 0; width: 150px; min-width: 150px; max-width: 150px; }

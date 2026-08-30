@@ -1,27 +1,43 @@
-import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { ChevronDown, CircleAlert, LoaderCircle, RefreshCw, Search } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowLeft,
+  CircleAlert,
+  LoaderCircle,
+  RefreshCw,
+  Star,
+  Users,
+} from 'lucide-react';
 import { useSemester } from '../context/semesterContext';
+import { QuestionAnalysisChart } from '../components/QuestionAnalysisChart';
 import { TablePagination } from '../components/TablePagination';
 import { usePaginatedItems } from '../hooks/usePaginatedItems';
 import { useColumnFilters, type FilterableColumn } from '../hooks/useColumnFilters';
 import { NoteModalButton } from '../components/NoteModalButton';
+import { ExportDropdown } from '../components/ExportDropdown';
 import { ApiError } from '../services/apiClient';
 import {
   courseDiagnosisDescriptions,
   courseDiagnosisLabels,
+  normalizationVerdictLabels,
   surveyApi,
   surveyErrorMessage,
 } from '../services/surveyApi';
 import type {
+  CourseDiagnosisRow,
+  DepartmentSummaryRow,
   LecturerOption,
   LecturerReport,
+  NormalizedSection,
   SemesterSurveyCourseDiagnosis,
   SemesterSurveyDepartmentSummary,
   SemesterSurveyNormalization,
+  SurveyAnalysisScopeType,
+  SurveyScopeAnalysis,
 } from '../services/surveyApi';
 import type { SemesterSurvey } from '../types';
 import '../styles/survey-operations.css';
 import '../styles/survey-statistics.css';
+import '../styles/reports.css';
 
 function messageFrom(error: unknown): string {
   return error instanceof ApiError ? surveyErrorMessage(error.errorCode) : surveyErrorMessage(null);
@@ -37,6 +53,73 @@ type TabId =
   | 'departments'
   | 'courses'
   | 'lecturer';
+
+interface ScopeSelection {
+  type: SurveyAnalysisScopeType;
+  id: number;
+}
+
+interface AnalysisRouteState {
+  tab: TabId;
+  semesterId?: number;
+  semesterSurveyId?: number;
+  selection: ScopeSelection | null;
+  lecturerId?: number;
+}
+
+const tabIds: readonly TabId[] = [
+  'normalization',
+  'normalizationSections',
+  'departments',
+  'courses',
+  'lecturer',
+];
+
+function parseAnalysisRoute(hash = window.location.hash): AnalysisRouteState {
+  const [pathPart, queryPart = ''] = hash.replace(/^#\/?/, '').split('?');
+  const segments = pathPart.split('/').filter(Boolean);
+  const query = new URLSearchParams(queryPart);
+  const routeTab = query.get('tab');
+  const scopeType = segments[1];
+  const scopeId = Number(segments[2]);
+  const selection: ScopeSelection | null =
+    (scopeType === 'faculty' || scopeType === 'department' || scopeType === 'course')
+      && Number.isInteger(scopeId)
+      && scopeId > 0
+      ? { type: scopeType, id: scopeId }
+      : null;
+  const inferredTab: TabId = selection?.type === 'department'
+    ? 'departments'
+    : selection?.type === 'course'
+      ? 'courses'
+      : 'normalization';
+  const semesterId = Number(query.get('semester'));
+  const semesterSurveyId = Number(query.get('campaign'));
+  const lecturerId = Number(query.get('lecturer'));
+
+  return {
+    tab: tabIds.includes(routeTab as TabId) ? routeTab as TabId : inferredTab,
+    semesterId: Number.isInteger(semesterId) && semesterId > 0 ? semesterId : undefined,
+    semesterSurveyId: Number.isInteger(semesterSurveyId) && semesterSurveyId > 0
+      ? semesterSurveyId
+      : undefined,
+    selection,
+    lecturerId: Number.isInteger(lecturerId) && lecturerId > 0 ? lecturerId : undefined,
+  };
+}
+
+function buildAnalysisHash(route: AnalysisRouteState): string {
+  const path = route.selection
+    ? `/survey-analysis/${route.selection.type}/${route.selection.id}`
+    : '/survey-analysis';
+  const query = new URLSearchParams();
+  if (route.semesterId) query.set('semester', String(route.semesterId));
+  if (route.semesterSurveyId) query.set('campaign', String(route.semesterSurveyId));
+  if (route.tab !== 'normalization') query.set('tab', route.tab);
+  if (route.tab === 'lecturer' && route.lecturerId) query.set('lecturer', String(route.lecturerId));
+  const queryString = query.toString();
+  return `#${path}${queryString ? `?${queryString}` : ''}`;
+}
 
 const tabs: { id: TabId; label: string; hint: string }[] = [
   {
@@ -62,7 +145,7 @@ const tabs: { id: TabId; label: string; hint: string }[] = [
   {
     id: 'lecturer',
     label: 'Báo cáo giảng viên',
-    hint: 'Chọn một giảng viên rồi bấm Tìm. Mỗi lần chỉ hiện đúng một người.',
+    hint: 'Tổng hợp kết quả đánh giá theo từng giảng viên trong đợt khảo sát. Bấm vào giảng viên để xem chi tiết các lớp giảng dạy.',
   },
 ];
 
@@ -92,6 +175,11 @@ function verdictClass(verdict: string): string {
     default:
       return 'verdict';
   }
+}
+
+/** Biên độ rộng thì tô đỏ — đó chính là tín hiệu để đọc bảng này. */
+function spreadClass(spread: number): string {
+  return spread >= 0.8 ? 'num is-flagged' : 'num';
 }
 
 /**
@@ -211,17 +299,26 @@ const tabNotes: Partial<Record<TabId, React.ReactNode>> = {
 
 export const SurveyAnalysisPage: React.FC = () => {
   const { academicYears, activeSemesterId } = useSemester();
+  const [initialRoute] = useState(parseAnalysisRoute);
 
-  const [tab, setTab] = useState<TabId>('normalization');
-  const [semesterId, setSemesterId] = useState<string>(() =>
-    activeSemesterId ? String(activeSemesterId) : ''
+  const [tab, setTab] = useState<TabId>(initialRoute.tab);
+  const [semesterId, setSemesterId] = useState<string>(
+    initialRoute.semesterId
+      ? String(initialRoute.semesterId)
+      : activeSemesterId
+        ? String(activeSemesterId)
+        : '',
   );
   useEffect(() => {
-    if (activeSemesterId) setSemesterId(String(activeSemesterId));
+    if (activeSemesterId && !parseAnalysisRoute().semesterId) {
+      setSemesterId(String(activeSemesterId));
+    }
   }, [activeSemesterId]);
 
   const [semesterSurveys, setSemesterSurveys] = useState<SemesterSurvey[]>([]);
-  const [semesterSurveyId, setSemesterSurveyId] = useState<string>('');
+  const [semesterSurveyId, setSemesterSurveyId] = useState<string>(
+    initialRoute.semesterSurveyId ? String(initialRoute.semesterSurveyId) : '',
+  );
 
   const [normalization, setNormalization] = useState<SemesterSurveyNormalization | null>(null);
   const [departments, setDepartments] = useState<SemesterSurveyDepartmentSummary | null>(null);
@@ -229,6 +326,38 @@ export const SurveyAnalysisPage: React.FC = () => {
   const [lecturers, setLecturers] = useState<LecturerOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [scopeSelection, setScopeSelection] = useState<ScopeSelection | null>(initialRoute.selection);
+  const [selectedLecturerId, setSelectedLecturerId] = useState<number | null>(initialRoute.lecturerId ?? null);
+
+  const applyRoute = useCallback((route: AnalysisRouteState) => {
+    setTab(route.tab);
+    setScopeSelection(route.selection);
+    setSelectedLecturerId(route.lecturerId ?? null);
+    if (route.semesterId) setSemesterId(String(route.semesterId));
+    if (route.semesterId) {
+      setSemesterSurveyId(route.semesterSurveyId ? String(route.semesterSurveyId) : '');
+    }
+  }, []);
+
+  const navigateAnalysis = useCallback((route: AnalysisRouteState, replace = false) => {
+    const method = replace ? 'replaceState' : 'pushState';
+    window.history[method](
+      route.selection ? { surveyAnalysisDrilldown: true } : null,
+      '',
+      buildAnalysisHash(route),
+    );
+    applyRoute(route);
+  }, [applyRoute]);
+
+  useEffect(() => {
+    const handleRouteChange = () => applyRoute(parseAnalysisRoute());
+    window.addEventListener('popstate', handleRouteChange);
+    window.addEventListener('hashchange', handleRouteChange);
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+      window.removeEventListener('hashchange', handleRouteChange);
+    };
+  }, [applyRoute]);
 
   useEffect(() => {
     let cancelled = false;
@@ -242,7 +371,12 @@ export const SurveyAnalysisPage: React.FC = () => {
         const next = await surveyApi.semesterSurveys(Number(semesterId));
         if (cancelled) return;
         setSemesterSurveys(next);
-        setSemesterSurveyId(next.length > 0 ? String(next[0].semesterSurveyId) : '');
+        setSemesterSurveyId((current) => {
+          if (current && next.some((item) => String(item.semesterSurveyId) === current)) {
+            return current;
+          }
+          return next.length > 0 ? String(next[0].semesterSurveyId) : '';
+        });
         setLoadError(null);
       } catch (error) {
         if (!cancelled) setLoadError(messageFrom(error));
@@ -254,43 +388,104 @@ export const SurveyAnalysisPage: React.FC = () => {
     };
   }, [semesterId]);
 
-  const loadData = useCallback(async () => {
+  const campaignCacheRef = useRef<Map<number, {
+    normalization?: SemesterSurveyNormalization;
+    departments?: SemesterSurveyDepartmentSummary;
+    courses?: SemesterSurveyCourseDiagnosis;
+    lecturers?: LecturerOption[];
+  }>>(new Map());
+  const analysisGenRef = useRef(0);
+
+  const loadAnalysis = useCallback(async (force = false) => {
+    const generation = ++analysisGenRef.current;
     if (!semesterSurveyId) {
       setNormalization(null);
       setDepartments(null);
       setCourses(null);
       setLecturers([]);
+      setLoading(false);
       return;
     }
+
+    const campaignId = Number(semesterSurveyId);
+    let cacheEntry = campaignCacheRef.current.get(campaignId);
+    if (!cacheEntry || force) {
+      if (force && cacheEntry) {
+        campaignCacheRef.current.delete(campaignId);
+      }
+      cacheEntry = {};
+      campaignCacheRef.current.set(campaignId, cacheEntry);
+    }
+
+    // Nếu tab đã có trong cache của campaign này, load ngay lập tức
+    if (tab === 'normalization' || tab === 'normalizationSections') {
+      if (cacheEntry.normalization) {
+        setNormalization(cacheEntry.normalization);
+        setLoadError(null);
+        setLoading(false);
+        return;
+      }
+    } else if (tab === 'departments') {
+      if (cacheEntry.departments) {
+        setDepartments(cacheEntry.departments);
+        setLoadError(null);
+        setLoading(false);
+        return;
+      }
+    } else if (tab === 'courses') {
+      if (cacheEntry.courses) {
+        setCourses(cacheEntry.courses);
+        setLoadError(null);
+        setLoading(false);
+        return;
+      }
+    } else if (tab === 'lecturer') {
+      if (cacheEntry.lecturers) {
+        setLecturers(cacheEntry.lecturers);
+        setLoadError(null);
+        setLoading(false);
+        return;
+      }
+    }
+
     setLoading(true);
     try {
-      // Nạp sẵn để chuyển tab không phải chờ lại. Riêng báo cáo cá nhân thì chỉ
-      // lấy danh sách chọn, còn số liệu đợi người dùng bấm Tìm.
-      const [nextNormalization, nextDepartments, nextCourses, nextLecturers] = await Promise.all([
-        surveyApi.semesterSurveyNormalization(Number(semesterSurveyId)),
-        surveyApi.semesterSurveyDepartmentSummary(Number(semesterSurveyId)),
-        surveyApi.semesterSurveyCourseDiagnosis(Number(semesterSurveyId)),
-        surveyApi.semesterSurveyLecturers(Number(semesterSurveyId)),
-      ]);
-      setNormalization(nextNormalization);
-      setDepartments(nextDepartments);
-      setCourses(nextCourses);
-      setLecturers(nextLecturers);
+      if (tab === 'normalization' || tab === 'normalizationSections') {
+        const normRes = await surveyApi.semesterSurveyNormalization(campaignId);
+        if (generation !== analysisGenRef.current) return;
+        cacheEntry.normalization = normRes;
+        setNormalization(normRes);
+      } else if (tab === 'departments') {
+        const deptRes = await surveyApi.semesterSurveyDepartmentSummary(campaignId);
+        if (generation !== analysisGenRef.current) return;
+        cacheEntry.departments = deptRes;
+        setDepartments(deptRes);
+      } else if (tab === 'courses') {
+        const courseRes = await surveyApi.semesterSurveyCourseDiagnosis(campaignId);
+        if (generation !== analysisGenRef.current) return;
+        cacheEntry.courses = courseRes;
+        setCourses(courseRes);
+      } else if (tab === 'lecturer') {
+        const lecRes = await surveyApi.semesterSurveyLecturers(campaignId);
+        if (generation !== analysisGenRef.current) return;
+        cacheEntry.lecturers = lecRes;
+        setLecturers(lecRes);
+      }
+      if (generation !== analysisGenRef.current) return;
       setLoadError(null);
     } catch (error) {
+      if (generation !== analysisGenRef.current) return;
       setLoadError(messageFrom(error));
-      setNormalization(null);
-      setDepartments(null);
-      setCourses(null);
-      setLecturers([]);
     } finally {
-      setLoading(false);
+      if (generation === analysisGenRef.current) {
+        setLoading(false);
+      }
     }
-  }, [semesterSurveyId]);
+  }, [semesterSurveyId, tab]);
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    void loadAnalysis();
+  }, [loadAnalysis]);
 
   const semesterOptions = useMemo(
     () =>
@@ -303,61 +498,499 @@ export const SurveyAnalysisPage: React.FC = () => {
     [academicYears]
   );
 
-  const activeTab = tabs.find((x) => x.id === tab)!;
-  const flipCount = normalization?.sections.filter((x) => x.verdict === 'CONCLUSION_FLIPS').length ?? 0;
+  const activeTab = useMemo(
+    () => tabs.find((item) => item.id === tab) ?? tabs[0],
+    [tab]
+  );
+
+  const flipCount = useMemo(() => {
+    if (!normalization) return 0;
+    return normalization.sections.filter(
+      (section) => section.verdict === 'CONCLUSION_FLIPS'
+    ).length;
+  }, [normalization]);
+
+  const exportAnalysisOptions = useMemo(() => {
+    const activeSurvey = semesterSurveys.find((s) => String(s.semesterSurveyId) === semesterSurveyId);
+    const surveyTitle = activeSurvey?.templateName || 'Khảo sát';
+
+    if (tab === 'normalization' && normalization) {
+      const anomalousSections = (normalization.sections || []).filter(
+        (s) =>
+          s.verdict === 'CONCLUSION_FLIPS' ||
+          s.verdict === 'BELOW_FACULTY' ||
+          Math.abs(s.zFaculty ?? 0) >= 2 ||
+          Math.abs(s.zDifference ?? 0) >= 1.0
+      );
+
+      return {
+        fileName: 'chuan-hoa-diem-khoa-vien',
+        metadata: {
+          title: 'BÁO CÁO CHUẨN HÓA Z-SCORE THEO KHOA / VIỆN',
+          subtitle: `Bộ câu hỏi: ${surveyTitle}`,
+          subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+          info: {
+            'Điểm trung bình toàn trường': normalization.schoolAverageScore.toFixed(2),
+            'Độ lệch chuẩn toàn trường':
+              normalization.schoolStandardDeviation !== null
+                ? normalization.schoolStandardDeviation.toFixed(2)
+                : '—',
+            'Tổng số lớp khảo sát': normalization.schoolSectionCount,
+            'Số lớp đổi kết luận sau chuẩn hóa': flipCount,
+          },
+          summaryNotes: [
+            'Z-Score = (Điểm TB khoa - Điểm TB trường) / Sai số chuẩn.',
+            'Mặt bằng khoa chuẩn hóa theo quy tắc thực nghiệm 68-95-99.7.',
+          ],
+        },
+        sheets: [
+          {
+            sheetName: 'Mat bang Khoa - Vien',
+            title: '1. MẶT BẰNG CHUẨN HÓA KHOA / VIỆN',
+            columns: [
+              { key: 'facultyName', header: 'Khoa / Viện', width: 28 },
+              { key: 'sectionCount', header: 'Số lớp', width: 10, type: 'number' as const, align: 'right' as const },
+              { key: 'averageScore', header: 'Điểm TB khoa', width: 14, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'standardDeviation', header: 'Độ lệch chuẩn', width: 14, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'meanZScore', header: 'Z-Score', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'verdict', header: 'Nhận định', width: 18, format: (_: any, item: any) => zVerdict(item.meanZScore).label },
+            ],
+            data: normalization.groups,
+          },
+          {
+            sheetName: 'Lop doi ket luan',
+            title: `2. DANH SÁCH LỚP ĐỔI KẾT LUẬN & BẤT THƯỜNG (${anomalousSections.length} LỚP)`,
+            subtitle: 'Các lớp học phần có Z-Score lệch lớn hoặc bị đổi kết luận khi tính theo mặt bằng khoa',
+            columns: [
+              { key: 'sectionName', header: 'Lớp HP', width: 14, align: 'center' as const },
+              { key: 'courseCode', header: 'Mã HP', width: 12, align: 'center' as const },
+              { key: 'courseName', header: 'Tên học phần', width: 28 },
+              { key: 'lecturerName', header: 'Giảng viên', width: 22 },
+              { key: 'facultyName', header: 'Khoa / Viện', width: 22 },
+              { key: 'averageScore', header: 'Điểm TB', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'zSchool', header: 'Z Toàn trường', width: 14, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'zFaculty', header: 'Z Khoa', width: 14, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'zDifference', header: 'Chênh Z', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'verdict', header: 'Nhận định', width: 26, format: (v: any) => normalizationVerdictLabels[v] || String(v) },
+            ],
+            data: anomalousSections,
+            summaryNotes: [
+              'CONCLUSION_FLIPS: Điểm tuyệt đối đạt nhưng thấp hơn mặt bằng khoa, hoặc ngược lại.',
+            ],
+          },
+          {
+            sheetName: 'Toan bo lop chuan hoa',
+            title: `3. TOÀN BỘ LỚP HỌC PHẦN ĐÃ CHUẨN HÓA (${normalization.sections.length} LỚP)`,
+            columns: [
+              { key: 'sectionName', header: 'Lớp HP', width: 14, align: 'center' as const },
+              { key: 'courseCode', header: 'Mã HP', width: 12, align: 'center' as const },
+              { key: 'courseName', header: 'Tên học phần', width: 28 },
+              { key: 'lecturerName', header: 'Giảng viên', width: 22 },
+              { key: 'facultyName', header: 'Khoa / Viện', width: 22 },
+              { key: 'averageScore', header: 'Điểm TB', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'zSchool', header: 'Z Toàn trường', width: 14, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'zFaculty', header: 'Z Khoa', width: 14, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'verdict', header: 'Nhận định', width: 26, format: (v: any) => normalizationVerdictLabels[v] || String(v) },
+            ],
+            data: normalization.sections,
+          },
+        ],
+      };
+    }
+
+    if (tab === 'normalizationSections' && normalization) {
+      const notableSections = (normalization.sections || []).filter(
+        (s) =>
+          (s.verdict !== 'NORMAL' && s.verdict !== 'FACULTY_TOO_SMALL') ||
+          (s.zFaculty !== null && s.zFaculty <= -1.0) ||
+          (s.averageScore !== null && s.averageScore < 3.5)
+      );
+
+      return {
+        fileName: 'chuan-hoa-lop-hoc-phan',
+        metadata: {
+          title: 'BÁO CÁO PHÂN LOẠI & CHUẨN HÓA Z-SCORE LỚP HỌC PHẦN',
+          subtitle: `Bộ câu hỏi: ${surveyTitle}`,
+          subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+          info: {
+            'Điểm trung bình toàn trường': normalization.schoolAverageScore.toFixed(2),
+            'Độ lệch chuẩn toàn trường':
+              normalization.schoolStandardDeviation !== null
+                ? normalization.schoolStandardDeviation.toFixed(2)
+                : '—',
+            'Số lớp cần theo dõi': notableSections.length,
+          },
+        },
+        sheets: [
+          {
+            sheetName: 'Lop can theo doi',
+            title: `1. DANH SÁCH LỚP CẦN THEO DÕI & LƯU Ý (${notableSections.length} LỚP)`,
+            subtitle: 'Các lớp có Z-Score lệch âm so với mặt bằng khoa hoặc điểm tuyệt đối dưới ngưỡng',
+            columns: [
+              { key: 'sectionName', header: 'Lớp HP', width: 14, align: 'center' as const },
+              { key: 'courseCode', header: 'Mã HP', width: 12, align: 'center' as const },
+              { key: 'courseName', header: 'Tên học phần', width: 28 },
+              { key: 'lecturerName', header: 'Giảng viên', width: 22 },
+              { key: 'facultyName', header: 'Khoa / Viện', width: 22 },
+              { key: 'averageScore', header: 'Điểm TB', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'zSchool', header: 'Z Toàn trường', width: 14, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'zFaculty', header: 'Z Khoa', width: 14, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'verdict', header: 'Nhận định', width: 26, format: (v: any) => normalizationVerdictLabels[v] || String(v) },
+            ],
+            data: notableSections,
+          },
+          {
+            sheetName: 'Toan bo lop hoc phan',
+            title: `2. TOÀN BỘ DANH SÁCH LỚP HỌC PHẦN (${normalization.sections.length} LỚP)`,
+            columns: [
+              { key: 'sectionName', header: 'Lớp HP', width: 14, align: 'center' as const },
+              { key: 'courseCode', header: 'Mã HP', width: 12, align: 'center' as const },
+              { key: 'courseName', header: 'Tên học phần', width: 28 },
+              { key: 'lecturerName', header: 'Giảng viên', width: 22 },
+              { key: 'facultyName', header: 'Khoa / Viện', width: 22 },
+              { key: 'averageScore', header: 'Điểm TB', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'zSchool', header: 'Z Toàn trường', width: 14, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'zFaculty', header: 'Z Khoa', width: 14, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'verdict', header: 'Nhận định', width: 26, format: (v: any) => normalizationVerdictLabels[v] || String(v) },
+            ],
+            data: normalization.sections,
+          },
+        ],
+      };
+    }
+
+    if (tab === 'departments' && departments) {
+      const allSections = normalization?.sections || [];
+      const warningSections = allSections.filter(
+        (s) =>
+          s.verdict === 'BELOW_FACULTY' ||
+          s.verdict === 'CONCLUSION_FLIPS' ||
+          (s.zFaculty !== null && s.zFaculty <= -1.0) ||
+          (s.averageScore !== null && s.averageScore < 3.5)
+      );
+
+      return {
+        fileName: 'tong-hop-khao-sat-bo-mon',
+        metadata: {
+          title: 'BÁO CÁO TỔNG HỢP KẾT QUẢ KHẢO SÁT THEO BỘ MÔN',
+          subtitle: `Bộ câu hỏi: ${surveyTitle}`,
+          subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+          info: {
+            'Tổng số bộ môn': departments.rows.length,
+            'Tổng số lớp cảnh báo': warningSections.length,
+          },
+          summaryNotes: [
+            'Lớp cảnh báo là các lớp có Z-score trong khoa ≤ -1.0 hoặc thuộc diện điểm thấp cần đơn vị rà soát.',
+          ],
+        },
+        sheets: [
+          {
+            sheetName: 'Tong hop Bo mon',
+            title: '1. TỔNG HỢP KẾT QUẢ THEO BỘ MÔN',
+            columns: [
+              { key: 'departmentName', header: 'Bộ môn', width: 24 },
+              { key: 'facultyName', header: 'Khoa / Viện', width: 22 },
+              { key: 'sectionCount', header: 'Số lớp', width: 10, type: 'number' as const, align: 'right' as const },
+              { key: 'lecturerCount', header: 'Số GV', width: 10, type: 'number' as const, align: 'right' as const },
+              { key: 'totalClassSize', header: 'Tổng sĩ số', width: 12, type: 'number' as const, align: 'right' as const },
+              { key: 'validResponseCount', header: 'Phiếu hợp lệ', width: 12, type: 'number' as const, align: 'right' as const },
+              { key: 'validResponseRate', header: 'Tỷ lệ %', width: 10, type: 'string' as const, align: 'right' as const, format: (v: any) => `${Number(v).toFixed(1)}%` },
+              { key: 'averageScore', header: 'Điểm TB', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'warningSectionCount', header: 'Lớp cảnh báo', width: 12, type: 'number' as const, align: 'right' as const },
+            ],
+            data: departments.rows,
+          },
+          {
+            sheetName: 'Danh sach lop canh bao',
+            title: `2. DANH SÁCH CHI TIẾT CÁC LỚP HỌC PHẦN CẢNH BÁO (${warningSections.length} LỚP)`,
+            subtitle: 'Chi tiết từng lớp học phần cần lưu ý/giải trình (Z-score thấp hoặc đổi kết luận)',
+            columns: [
+              { key: 'sectionName', header: 'Lớp HP', width: 14, align: 'center' as const },
+              { key: 'courseCode', header: 'Mã HP', width: 12, align: 'center' as const },
+              { key: 'courseName', header: 'Tên học phần', width: 28 },
+              { key: 'lecturerName', header: 'Giảng viên', width: 22 },
+              { key: 'departmentName', header: 'Bộ môn', width: 20 },
+              { key: 'facultyName', header: 'Khoa / Viện', width: 20 },
+              { key: 'averageScore', header: 'Điểm TB', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'zFaculty', header: 'Z Khoa', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'zSchool', header: 'Z Toàn trường', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'verdict', header: 'Lý do cảnh báo / Nhận định', width: 26, format: (v: any) => normalizationVerdictLabels[v] || String(v) },
+            ],
+            data: warningSections,
+            summaryNotes: [
+              'Đề nghị Ban chủ nhiệm Khoa và Bộ môn phối hợp với giảng viên phụ trách trao đổi, rà soát nguyên nhân.',
+            ],
+          },
+          {
+            sheetName: 'Toan bo lop hoc phan',
+            title: `3. TOÀN BỘ LỚP HỌC PHẦN CỦA CÁC BỘ MÔN (${allSections.length} LỚP)`,
+            columns: [
+              { key: 'sectionName', header: 'Lớp HP', width: 14, align: 'center' as const },
+              { key: 'courseCode', header: 'Mã HP', width: 12, align: 'center' as const },
+              { key: 'courseName', header: 'Tên học phần', width: 28 },
+              { key: 'lecturerName', header: 'Giảng viên', width: 22 },
+              { key: 'departmentName', header: 'Bộ môn', width: 20 },
+              { key: 'facultyName', header: 'Khoa / Viện', width: 20 },
+              { key: 'averageScore', header: 'Điểm TB', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'zFaculty', header: 'Z Khoa', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'verdict', header: 'Nhận định', width: 24, format: (v: any) => normalizationVerdictLabels[v] || String(v) },
+            ],
+            data: allSections,
+          },
+        ],
+      };
+    }
+
+    if (tab === 'courses' && courses) {
+      const issueCourses = (courses.rows || []).filter(
+        (c) =>
+          c.verdict === 'COURSE_ISSUE' ||
+          c.verdict === 'LECTURER_VARIANCE' ||
+          c.spread >= 0.8
+      );
+      const issueCourseCodes = new Set(issueCourses.map((c) => c.courseCode));
+      const issueSections = (normalization?.sections || []).filter((s) =>
+        issueCourseCodes.has(s.courseCode)
+      );
+
+      return {
+        fileName: 'chan-doan-hoc-phan',
+        metadata: {
+          title: 'BÁO CÁO CHẨN ĐOÁN CHẤT LƯỢNG HỌC PHẦN',
+          subtitle: `Bộ câu hỏi: ${surveyTitle}`,
+          subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+          info: {
+            'Tổng số học phần': courses.rows.length,
+            'Số học phần cần can thiệp': issueCourses.length,
+          },
+        },
+        sheets: [
+          {
+            sheetName: 'Chan doan Hoc phan',
+            title: '1. TỔNG HỢP CHẨN ĐOÁN CHẤT LƯỢNG HỌC PHẦN',
+            columns: [
+              { key: 'courseCode', header: 'Mã HP', width: 12, align: 'center' as const },
+              { key: 'courseName', header: 'Tên học phần', width: 28 },
+              { key: 'departmentName', header: 'Bộ môn', width: 20 },
+              { key: 'facultyName', header: 'Khoa / Viện', width: 20 },
+              { key: 'sectionCount', header: 'Số lớp', width: 10, type: 'number' as const, align: 'right' as const },
+              { key: 'lecturerCount', header: 'Số GV', width: 10, type: 'number' as const, align: 'right' as const },
+              { key: 'averageScore', header: 'Điểm TB', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'minScore', header: 'Min', width: 10, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'maxScore', header: 'Max', width: 10, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'spread', header: 'Biên độ', width: 10, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'verdict', header: 'Chẩn đoán', width: 22, format: (v: any) => courseDiagnosisLabels[v as keyof typeof courseDiagnosisLabels] || String(v) },
+            ],
+            data: courses.rows,
+          },
+          {
+            sheetName: 'Hoc phan can can thiep',
+            title: `2. DANH SÁCH HỌC PHẦN CẦN CAN THIỆP (${issueCourses.length} HỌC PHẦN)`,
+            subtitle: 'Các học phần có lỗi đề cương/tài liệu chung (COURSE_ISSUE) hoặc chênh lệch lớn giữa các GV (LECTURER_VARIANCE)',
+            columns: [
+              { key: 'courseCode', header: 'Mã HP', width: 12, align: 'center' as const },
+              { key: 'courseName', header: 'Tên học phần', width: 28 },
+              { key: 'departmentName', header: 'Bộ môn', width: 20 },
+              { key: 'facultyName', header: 'Khoa / Viện', width: 20 },
+              { key: 'sectionCount', header: 'Số lớp', width: 10, type: 'number' as const, align: 'right' as const },
+              { key: 'averageScore', header: 'Điểm TB', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'spread', header: 'Biên độ', width: 10, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'weakestQuestionText', header: 'Tiêu chí yếu nhất', width: 30, format: (_: any, item: any) => item.weakestQuestionText ? `${item.weakestQuestionText} (${item.weakestQuestionScore?.toFixed(2)})` : '—' },
+              { key: 'verdict', header: 'Kết luận chẩn đoán', width: 22, format: (v: any) => courseDiagnosisLabels[v as keyof typeof courseDiagnosisLabels] || String(v) },
+            ],
+            data: issueCourses,
+          },
+          {
+            sheetName: 'Chi tiet lop hoc phan',
+            title: `3. CHI TIẾT CÁC LỚP THUỘC HỌC PHẦN CẦN CAN THIỆP (${issueSections.length} LỚP)`,
+            columns: [
+              { key: 'courseCode', header: 'Mã HP', width: 12, align: 'center' as const },
+              { key: 'courseName', header: 'Tên học phần', width: 28 },
+              { key: 'sectionName', header: 'Lớp HP', width: 14, align: 'center' as const },
+              { key: 'lecturerName', header: 'Giảng viên', width: 22 },
+              { key: 'facultyName', header: 'Khoa / Viện', width: 20 },
+              { key: 'averageScore', header: 'Điểm TB lớp', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'zFaculty', header: 'Z Khoa', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+              { key: 'verdict', header: 'Nhận định', width: 24, format: (v: any) => normalizationVerdictLabels[v] || String(v) },
+            ],
+            data: issueSections,
+          },
+        ],
+      };
+    }
+
+    if (tab === 'lecturer' && lecturers.length > 0) {
+      return {
+        fileName: 'danh-sach-giang-vien-khao-sat',
+        metadata: {
+          title: 'BÁO CÁO DANH SÁCH GIẢNG VIÊN ĐƯỢC KHẢO SÁT',
+          subtitle: `Bộ câu hỏi: ${surveyTitle}`,
+          subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+          info: {
+            'Tổng số giảng viên': lecturers.length,
+          },
+        },
+        sheets: [
+          {
+            sheetName: 'Danh sach Giang vien',
+            title: '1. DANH SÁCH GIẢNG VIÊN TRONG ĐỢT KHẢO SÁT',
+            columns: [
+              { key: 'lecturerCode', header: 'Mã GV', width: 14, align: 'center' as const },
+              { key: 'fullName', header: 'Họ và tên giảng viên', width: 26 },
+              { key: 'departmentName', header: 'Bộ môn', width: 22 },
+              { key: 'facultyName', header: 'Khoa / Viện', width: 22 },
+              { key: 'sectionCount', header: 'Số lớp dạy', width: 12, type: 'number' as const, align: 'right' as const },
+            ],
+            data: lecturers,
+          },
+          {
+            sheetName: 'Toan bo lop hoc phan',
+            title: `2. TOÀN BỘ DANH SÁCH LỚP HỌC PHẦN (${(normalization?.sections || []).length} LỚP)`,
+            columns: [
+              { key: 'sectionName', header: 'Lớp HP', width: 14, align: 'center' as const },
+              { key: 'courseName', header: 'Tên học phần', width: 28 },
+              { key: 'lecturerName', header: 'Giảng viên', width: 22 },
+              { key: 'departmentName', header: 'Bộ môn', width: 20 },
+              { key: 'facultyName', header: 'Khoa / Viện', width: 20 },
+              { key: 'averageScore', header: 'Điểm TB', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+              { key: 'zFaculty', header: 'Z Khoa', width: 12, type: 'number' as const, align: 'right' as const, format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—') },
+            ],
+            data: normalization?.sections || [],
+          },
+        ],
+      };
+    }
+
+    return null;
+  }, [tab, normalization, departments, courses, lecturers, semesterSurveys, semesterSurveyId, flipCount]);
+
+  if (scopeSelection && semesterSurveyId) {
+    return (
+      <div className="survey-operations-page survey-statistics-page survey-analysis-page">
+        <ScopeAnalysisDetail
+          semesterSurveyId={Number(semesterSurveyId)}
+          selection={scopeSelection}
+          onBack={() => {
+            if (window.history.state?.surveyAnalysisDrilldown) {
+              window.history.back();
+              return;
+            }
+            navigateAnalysis({
+              tab,
+              semesterId: Number(semesterId) || undefined,
+              semesterSurveyId: Number(semesterSurveyId) || undefined,
+              selection: null,
+            }, true);
+          }}
+          onDrillDown={(nextSelection) => {
+            navigateAnalysis({
+              tab,
+              semesterId: Number(semesterId) || undefined,
+              semesterSurveyId: Number(semesterSurveyId) || undefined,
+              selection: nextSelection,
+            });
+          }}
+          onOpenSurvey={(courseSectionSurveyId) => {
+            window.location.hash = `/reports/surveys/${courseSectionSurveyId}`
+              + `?semester=${semesterId}&campaign=${semesterSurveyId}`;
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="survey-operations-page survey-statistics-page">
-      <section className="statistics-toolbar">
-        <label className="form-group">
+    <div className="survey-operations-page survey-statistics-page survey-analysis-page">
+      <header className="operations-header">
+        <div className="operations-header-title">
+          <h1>Phân tích chuyên sâu kết quả khảo sát</h1>
+          <p className="operations-header-sub">
+            Chuẩn hoá điểm theo mặt bằng khoa, phân tách lỗi học phần/giảng viên và báo cáo cá nhân.
+          </p>
+        </div>
+      </header>
+
+      <div className="statistics-toolbar">
+        <div className="form-group">
           <span>Học kỳ</span>
-          <select value={semesterId} onChange={(event) => setSemesterId(event.target.value)}>
-            <option value="">Chọn học kỳ</option>
-            {semesterOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+          <select
+            className="input-select"
+            value={semesterId}
+            onChange={(e) => {
+              const nextSemesterId = e.target.value;
+              setSemesterId(nextSemesterId);
+              navigateAnalysis({
+                tab,
+                semesterId: Number(nextSemesterId) || undefined,
+                semesterSurveyId: undefined,
+                selection: null,
+              });
+            }}
+          >
+            {semesterOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
               </option>
             ))}
           </select>
-        </label>
+        </div>
 
-        <label className="form-group">
+        <div className="form-group">
           <span>Đợt khảo sát</span>
           <select
+            className="input-select"
             value={semesterSurveyId}
-            onChange={(event) => setSemesterSurveyId(event.target.value)}
             disabled={semesterSurveys.length === 0}
+            onChange={(e) => {
+              const nextCampaignId = e.target.value;
+              setSemesterSurveyId(nextCampaignId);
+              navigateAnalysis({
+                tab,
+                semesterId: Number(semesterId) || undefined,
+                semesterSurveyId: Number(nextCampaignId) || undefined,
+                selection: null,
+              });
+            }}
           >
-            {semesterSurveys.length === 0 && <option value="">Chưa có đợt nào</option>}
             {semesterSurveys.map((survey) => (
               <option key={survey.semesterSurveyId} value={String(survey.semesterSurveyId)}>
-                {survey.templateName} · {survey.sectionSurveyCount} lớp
+                {survey.templateName}
               </option>
             ))}
           </select>
-        </label>
+        </div>
 
         <div className="statistics-toolbar-actions">
+          {exportAnalysisOptions && (
+            <ExportDropdown options={exportAnalysisOptions} buttonLabel="Xuất báo cáo phân tích" size="sm" />
+          )}
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => void loadData()}
-            disabled={!semesterSurveyId || loading}
+            className="btn btn-secondary"
+            onClick={() => void loadAnalysis(true)}
+            disabled={loading || !semesterSurveyId}
+            title="Tải lại toàn bộ số liệu phân tích"
           >
-            <RefreshCw aria-hidden="true" size={16} />
+            <RefreshCw className={loading ? 'operation-icon auth-spin' : 'operation-icon'} />
             Tải lại
           </button>
         </div>
-      </section>
+      </div>
 
-      <nav className="analysis-tabs" aria-label="Chọn bảng phân tích">
+      <nav className="analysis-tabs" aria-label="Các góc nhìn phân tích">
         {tabs.map((item) => (
           <button
             key={item.id}
             type="button"
-            className={item.id === tab ? 'analysis-tab is-active' : 'analysis-tab'}
-            aria-current={item.id === tab ? 'page' : undefined}
-            onClick={() => setTab(item.id)}
+            className={`analysis-tab${item.id === tab ? ' is-active' : ''}`}
+            onClick={() => {
+              navigateAnalysis({
+                tab: item.id,
+                semesterId: Number(semesterId) || undefined,
+                semesterSurveyId: Number(semesterSurveyId) || undefined,
+                selection: null,
+              });
+            }}
           >
             {item.label}
           </button>
@@ -382,17 +1015,63 @@ export const SurveyAnalysisPage: React.FC = () => {
           <strong>Đang tính toán...</strong>
         </div>
       ) : tab === 'normalization' ? (
-        <NormalizationGroupTab data={normalization} />
+        <NormalizationGroupTab
+          data={normalization}
+          onOpenDetail={(selection) => navigateAnalysis({
+            tab,
+            semesterId: Number(semesterId) || undefined,
+            semesterSurveyId: Number(semesterSurveyId) || undefined,
+            selection,
+          })}
+        />
       ) : tab === 'normalizationSections' ? (
-        <NormalizationSectionTab data={normalization} flipCount={flipCount} />
+        <NormalizationSectionTab
+          data={normalization}
+          flipCount={flipCount}
+          onOpenSurvey={(courseSectionSurveyId) => {
+            window.location.hash = `/reports/surveys/${courseSectionSurveyId}`
+              + `?semester=${semesterId}&campaign=${semesterSurveyId}`;
+          }}
+        />
       ) : tab === 'departments' ? (
-        <DepartmentTab data={departments} />
+        <DepartmentTab
+          data={departments}
+          onOpenDetail={(selection) => navigateAnalysis({
+            tab,
+            semesterId: Number(semesterId) || undefined,
+            semesterSurveyId: Number(semesterSurveyId) || undefined,
+            selection,
+          })}
+        />
       ) : tab === 'courses' ? (
-        <CourseDiagnosisTab data={courses} />
+        <CourseDiagnosisTab
+          data={courses}
+          onOpenDetail={(selection) => navigateAnalysis({
+            tab,
+            semesterId: Number(semesterId) || undefined,
+            semesterSurveyId: Number(semesterSurveyId) || undefined,
+            selection,
+          })}
+        />
       ) : (
         <LecturerTab
           semesterSurveyId={semesterSurveyId ? Number(semesterSurveyId) : null}
           lecturers={lecturers}
+          selectedLecturerId={selectedLecturerId}
+          onSelectLecturer={(id) => {
+            setSelectedLecturerId(id);
+            navigateAnalysis({
+              tab: 'lecturer',
+              semesterId: Number(semesterId) || undefined,
+              semesterSurveyId: Number(semesterSurveyId) || undefined,
+              selection: null,
+              lecturerId: id ?? undefined,
+            });
+          }}
+          onOpenSurvey={(courseSectionSurveyId) => {
+            window.location.hash = `/reports/surveys/${courseSectionSurveyId}`
+              + `?semester=${semesterId}&campaign=${semesterSurveyId}`;
+          }}
         />
       )}
     </div>
@@ -403,11 +1082,497 @@ export const SurveyAnalysisPage: React.FC = () => {
 // Hai bảng tách làm hai tab: xếp chồng trong một tab thì bảng dưới bị đẩy khỏi
 // tầm nhìn, phải cuộn qua hết bảng khoa mới thấy.
 
-/**
- * Dải số dùng chung cho cả hai tab chuẩn hoá — đều so với cùng mặt bằng này.
- * Chỉ hiện số nào tab đó thực sự dùng: tab mặt bằng khoa chia cho sai số chuẩn
- * σ/√n nên không đọc thẳng σ, tab từng lớp thì chia thẳng cho σ.
- */
+const scopeLabels: Record<SurveyAnalysisScopeType, string> = {
+  faculty: 'Khoa / Viện',
+  department: 'Bộ môn',
+  course: 'Học phần',
+};
+
+const ScopeDepartmentsTable: React.FC<{
+  departments: DepartmentSummaryRow[];
+  onOpenDetail: (selection: ScopeSelection) => void;
+}> = ({ departments, onOpenDetail }) => {
+  const columns = useMemo<FilterableColumn<DepartmentSummaryRow>[]>(() => [
+    { key: 'departmentName', value: (row) => row.departmentName },
+    { key: 'sectionCount', value: (row) => String(row.sectionCount), numeric: true },
+    { key: 'lecturerCount', value: (row) => String(row.lecturerCount), numeric: true },
+    { key: 'totalClassSize', value: (row) => String(row.totalClassSize ?? 0), numeric: true },
+    { key: 'responseCount', value: (row) => String(row.responseCount ?? 0), numeric: true },
+    { key: 'validResponseCount', value: (row) => String(row.validResponseCount ?? 0), numeric: true },
+    {
+      key: 'validResponseRate',
+      value: (row) => `${(row.validResponseRate ?? 0).toFixed(1)}%`,
+      sortValue: (row) => row.validResponseRate ?? 0,
+    },
+    {
+      key: 'averageScore',
+      value: (row) => (typeof row.averageScore === 'number' ? row.averageScore.toFixed(2) : '—'),
+      sortValue: (row) => row.averageScore,
+    },
+    { key: 'warningSectionCount', value: (row) => String(row.warningSectionCount ?? 0), numeric: true },
+  ], []);
+  const filters = useColumnFilters(departments, columns);
+  const pagination = usePaginatedItems(filters.visibleRows, analysisPageSize);
+
+  return (
+    <div className="analysis-scope-subtable">
+      <div className="analysis-subtable-heading">
+        <h3>Danh sách các bộ môn ({departments.length})</h3>
+        <p className="analysis-subtable-hint">Bấm vào tên bộ môn để xem chi tiết thống kê và các học phần của bộ môn đó.</p>
+      </div>
+      <div className="statistics-table-scroll" tabIndex={0} aria-label="Danh sách bộ môn">
+        <table className="statistics-table statistics-table--fill">
+          <thead>
+            <tr>
+              <th scope="col" style={{ textAlign: 'left', minWidth: 200 }}>
+                {filters.filterHeader('departmentName', 'Bộ môn')}
+              </th>
+              <th scope="col">{filters.filterHeader('sectionCount', 'Số lớp')}</th>
+              <th scope="col">{filters.filterHeader('lecturerCount', 'Số GV')}</th>
+              <th scope="col">{filters.filterHeader('totalClassSize', 'Tổng sĩ số')}</th>
+              <th scope="col">{filters.filterHeader('responseCount', 'Số phiếu thu về')}</th>
+              <th scope="col">{filters.filterHeader('validResponseCount', 'Số phiếu hợp lệ')}</th>
+              <th scope="col" title="Số phiếu hợp lệ chia tổng sĩ số">
+                {filters.filterHeader('validResponseRate', 'Tỷ lệ hợp lệ')}
+              </th>
+              <th scope="col">{filters.filterHeader('averageScore', 'Điểm trung bình')}</th>
+              <th scope="col" title="Lớp có điểm thấp hơn trung bình toàn trường từ 1 độ lệch chuẩn trở lên">
+                {filters.filterHeader('warningSectionCount', 'Lớp cảnh báo')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {pagination.visibleItems.map((row) => (
+              <tr
+                key={row.departmentId ?? row.departmentName}
+                className={row.departmentId === null ? undefined : 'analysis-drill-row'}
+                onClick={row.departmentId === null ? undefined : () => onOpenDetail({
+                  type: 'department',
+                  id: row.departmentId!,
+                })}
+              >
+                <td style={{ textAlign: 'left' }} title={row.departmentName}>
+                  {row.departmentId === null ? row.departmentName : (
+                    <button
+                      type="button"
+                      className="analysis-drill-link"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenDetail({
+                          type: 'department',
+                          id: row.departmentId!,
+                        });
+                      }}
+                    >
+                      {row.departmentName}
+                    </button>
+                  )}
+                </td>
+                <td className="num">{row.sectionCount}</td>
+                <td className="num">{row.lecturerCount}</td>
+                <td className="num">{row.totalClassSize}</td>
+                <td className="num">{row.responseCount}</td>
+                <td className="num">{row.validResponseCount}</td>
+                <td className="num">{row.validResponseRate.toFixed(1)}%</td>
+                <td className={scoreClass(row.averageScore)}>
+                  {row.averageScore === null ? '—' : row.averageScore.toFixed(2)}
+                </td>
+                <td className={row.warningSectionCount > 0 ? 'num is-flagged' : 'num'}>
+                  {row.warningSectionCount}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <TablePagination
+          page={pagination.page}
+          pageSize={analysisPageSize}
+          totalItems={filters.visibleRows.length}
+          itemLabel="bộ môn"
+          onPageChange={pagination.setPage}
+        />
+      </div>
+    </div>
+  );
+};
+
+const ScopeCoursesTable: React.FC<{
+  courses: CourseDiagnosisRow[];
+  onOpenDetail: (selection: ScopeSelection) => void;
+}> = ({ courses, onOpenDetail }) => {
+  const columns = useMemo<FilterableColumn<CourseDiagnosisRow>[]>(() => [
+    { key: 'courseCode', value: (row) => row.courseCode },
+    { key: 'courseName', value: (row) => row.courseName },
+    { key: 'sectionCount', value: (row) => String(row.sectionCount), numeric: true },
+    { key: 'lecturerCount', value: (row) => String(row.lecturerCount), numeric: true },
+    { key: 'averageScore', value: (row) => row.averageScore.toFixed(2), numeric: true },
+    { key: 'minScore', value: (row) => row.minScore.toFixed(2), numeric: true },
+    { key: 'maxScore', value: (row) => row.maxScore.toFixed(2), numeric: true },
+    { key: 'spread', value: (row) => row.spread.toFixed(2), numeric: true },
+    {
+      key: 'weakestQuestionOrder',
+      value: (row) => (row.weakestQuestionOrder === null ? '—' : `C${row.weakestQuestionOrder}`),
+      sortValue: (row) => row.weakestQuestionOrder,
+    },
+    {
+      key: 'weakestQuestionScore',
+      value: (row) => (row.weakestQuestionScore === null ? '—' : row.weakestQuestionScore.toFixed(2)),
+      sortValue: (row) => row.weakestQuestionScore,
+    },
+    { key: 'verdict', value: (row) => courseDiagnosisLabels[row.verdict] ?? row.verdict },
+  ], []);
+  const filters = useColumnFilters(courses, columns);
+  const pagination = usePaginatedItems(filters.visibleRows, analysisPageSize);
+
+  return (
+    <div className="analysis-scope-subtable">
+      <div className="analysis-subtable-heading">
+        <h3>Danh sách các học phần ({courses.length})</h3>
+        <p className="analysis-subtable-hint">Bấm vào tên học phần để xem chi tiết thống kê và các lớp học phần của học phần đó.</p>
+      </div>
+      <div className="statistics-table-scroll" tabIndex={0} aria-label="Danh sách học phần">
+        <table className="statistics-table">
+          <thead>
+            <tr>
+              <th className="col-left col-course-1" scope="col">
+                {filters.filterHeader('courseCode', 'Mã HP')}
+              </th>
+              <th className="col-left col-course-2" scope="col">
+                {filters.filterHeader('courseName', 'Học phần')}
+              </th>
+              <th scope="col">{filters.filterHeader('sectionCount', 'Số lớp')}</th>
+              <th scope="col">{filters.filterHeader('lecturerCount', 'Số GV')}</th>
+              <th scope="col">{filters.filterHeader('averageScore', 'Điểm TB')}</th>
+              <th scope="col">{filters.filterHeader('minScore', 'Lớp thấp nhất')}</th>
+              <th scope="col">{filters.filterHeader('maxScore', 'Lớp cao nhất')}</th>
+              <th scope="col" title="Điểm lớp cao nhất trừ điểm lớp thấp nhất">
+                {filters.filterHeader('spread', 'Chênh lệch')}
+              </th>
+              <th scope="col">{filters.filterHeader('weakestQuestionOrder', 'Câu yếu nhất')}</th>
+              <th scope="col">{filters.filterHeader('weakestQuestionScore', 'Điểm câu yếu')}</th>
+              <th scope="col">{filters.filterHeader('verdict', 'Kết luận')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pagination.visibleItems.map((row) => (
+              <tr
+                key={row.courseId}
+                className="analysis-drill-row"
+                onClick={() => onOpenDetail({
+                  type: 'course',
+                  id: row.courseId,
+                })}
+              >
+                <td className="col-left col-course-1">
+                  <span className="operations-code">{row.courseCode}</span>
+                </td>
+                <td className="col-left col-course-2" title={row.courseName}>
+                  <button
+                    type="button"
+                    className="analysis-drill-link"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenDetail({
+                        type: 'course',
+                        id: row.courseId,
+                      });
+                    }}
+                  >
+                    {row.courseName}
+                  </button>
+                </td>
+                <td className="num">{row.sectionCount}</td>
+                <td className="num">{row.lecturerCount}</td>
+                <td className={scoreClass(row.averageScore)}>{row.averageScore.toFixed(2)}</td>
+                <td className={scoreClass(row.minScore)}>{row.minScore.toFixed(2)}</td>
+                <td className={scoreClass(row.maxScore)}>{row.maxScore.toFixed(2)}</td>
+                <td className={spreadClass(row.spread)}>{row.spread.toFixed(2)}</td>
+                <td title={row.weakestQuestionText ?? undefined}>
+                  {row.weakestQuestionOrder === null ? '—' : `C${row.weakestQuestionOrder}`}
+                </td>
+                <td className="num">
+                  {row.weakestQuestionScore === null ? '—' : row.weakestQuestionScore.toFixed(2)}
+                </td>
+                <td>
+                  <span
+                    className={verdictClass(row.verdict)}
+                    title={courseDiagnosisDescriptions[row.verdict]}
+                  >
+                    {courseDiagnosisLabels[row.verdict] ?? row.verdict}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <TablePagination
+          page={pagination.page}
+          pageSize={analysisPageSize}
+          totalItems={filters.visibleRows.length}
+          itemLabel="học phần"
+          onPageChange={pagination.setPage}
+        />
+      </div>
+    </div>
+  );
+};
+
+const ScopeSectionsTable: React.FC<{
+  sections: NormalizedSection[];
+  onOpenSurvey: (courseSectionSurveyId: number) => void;
+}> = ({ sections, onOpenSurvey }) => {
+  const columns = useMemo<FilterableColumn<NormalizedSection>[]>(() => [
+    { key: 'courseCode', value: (row) => row.courseCode },
+    { key: 'sectionName', value: (row) => row.sectionName },
+    { key: 'courseName', value: (row) => row.courseName },
+    { key: 'lecturerName', value: (row) => row.lecturerName },
+    { key: 'departmentName', value: (row) => row.departmentName },
+    { key: 'facultyName', value: (row) => row.facultyName },
+    { key: 'classSize', value: (row) => String(row.classSize), numeric: true },
+    { key: 'averageScore', value: (row) => row.averageScore.toFixed(2), numeric: true },
+    {
+      key: 'zSchool',
+      value: (row) => (row.zSchool === null ? '—' : row.zSchool.toFixed(2)),
+      sortValue: (row) => row.zSchool,
+    },
+    {
+      key: 'zFaculty',
+      value: (row) => (row.zFaculty === null ? '—' : row.zFaculty.toFixed(2)),
+      sortValue: (row) => row.zFaculty,
+    },
+    {
+      key: 'zDifference',
+      value: (row) => (row.zDifference === null ? '—' : row.zDifference.toFixed(2)),
+      sortValue: (row) => row.zDifference,
+    },
+    { key: 'verdict', value: (row) => zVerdict(row.zFaculty).label },
+  ], []);
+  const filters = useColumnFilters(sections, columns);
+  const pagination = usePaginatedItems(filters.visibleRows, analysisPageSize);
+
+  return (
+    <div className="analysis-scope-subtable">
+      <div className="analysis-subtable-heading">
+        <h3>Danh sách các lớp học phần ({sections.length})</h3>
+        <p className="analysis-subtable-hint">Bấm vào mã hoặc lớp để xem toàn bộ kết quả và phiếu khảo sát của lớp.</p>
+      </div>
+      <div className="statistics-table-scroll" tabIndex={0} aria-label="Danh sách lớp học phần">
+        <table className="statistics-table">
+          <thead>
+            <tr>
+              <th className="col-left col-left-1" scope="col">
+                {filters.filterHeader('courseCode', 'Mã HP')}
+              </th>
+              <th className="col-left col-left-2" scope="col">
+                {filters.filterHeader('sectionName', 'Lớp')}
+              </th>
+              <th className="col-left col-left-3" scope="col">
+                {filters.filterHeader('courseName', 'Học phần')}
+              </th>
+              <th scope="col">{filters.filterHeader('lecturerName', 'Giảng viên')}</th>
+              <th scope="col">{filters.filterHeader('departmentName', 'Bộ môn')}</th>
+              <th scope="col">{filters.filterHeader('facultyName', 'Khoa / Viện')}</th>
+              <th scope="col">{filters.filterHeader('classSize', 'Sĩ số')}</th>
+              <th scope="col">{filters.filterHeader('averageScore', 'Điểm')}</th>
+              <th scope="col">{filters.filterHeader('zSchool', 'Z-Score toàn trường')}</th>
+              <th scope="col">{filters.filterHeader('zFaculty', 'Z-Score trong khoa')}</th>
+              <th scope="col">{filters.filterHeader('zDifference', 'Chênh lệch Z-Score')}</th>
+              <th scope="col">{filters.filterHeader('verdict', 'Nhận xét')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pagination.visibleItems.map((section) => (
+              <tr
+                key={section.courseSectionSurveyId}
+                className="analysis-drill-row"
+                onClick={() => onOpenSurvey(section.courseSectionSurveyId)}
+              >
+                <td className="col-left col-left-1">
+                  <button
+                    type="button"
+                    className="analysis-drill-link operations-code"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenSurvey(section.courseSectionSurveyId);
+                    }}
+                    title={`Xem kết quả lớp ${section.courseCode} - ${section.sectionName}`}
+                  >
+                    {section.courseCode}
+                  </button>
+                </td>
+                <td className="col-left col-left-2">{section.sectionName}</td>
+                <td className="col-left col-left-3" title={section.courseName}>
+                  {section.courseName}
+                </td>
+                <td>{section.lecturerName}</td>
+                <td>{section.departmentName}</td>
+                <td>{section.facultyName}</td>
+                <td className="num">{section.classSize}</td>
+                <td className={zTierClass(section.zFaculty)}>
+                  {section.averageScore.toFixed(2)}
+                </td>
+                <td className={zTierClass(section.zSchool)}>
+                  {section.zSchool === null
+                    ? '—'
+                    : `${section.zSchool > 0 ? '+' : ''}${section.zSchool.toFixed(2)}`}
+                </td>
+                <td className={zTierClass(section.zFaculty)}>
+                  {section.zFaculty === null
+                    ? '—'
+                    : `${section.zFaculty > 0 ? '+' : ''}${section.zFaculty.toFixed(2)}`}
+                </td>
+                <td className="num">
+                  {section.zDifference === null
+                    ? '—'
+                    : `${section.zDifference > 0 ? '+' : ''}${section.zDifference.toFixed(2)}`}
+                </td>
+                <td>
+                  {(() => {
+                    const verdict = zVerdict(section.zFaculty);
+                    return <span className={verdict.className}>{verdict.label}</span>;
+                  })()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <TablePagination
+          page={pagination.page}
+          pageSize={analysisPageSize}
+          totalItems={filters.visibleRows.length}
+          itemLabel="lớp"
+          onPageChange={pagination.setPage}
+        />
+      </div>
+    </div>
+  );
+};
+
+const ScopeAnalysisDetail: React.FC<{
+  semesterSurveyId: number;
+  selection: ScopeSelection;
+  onBack: () => void;
+  onDrillDown: (selection: ScopeSelection) => void;
+  onOpenSurvey: (courseSectionSurveyId: number) => void;
+}> = ({ semesterSurveyId, selection, onBack, onDrillDown, onOpenSurvey }) => {
+  const [data, setData] = useState<SurveyScopeAnalysis | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(await surveyApi.semesterSurveyScopeAnalysis(
+        semesterSurveyId,
+        selection.type,
+        selection.id,
+      ));
+      setError(null);
+    } catch (nextError) {
+      setData(null);
+      setError(messageFrom(nextError));
+    } finally {
+      setLoading(false);
+    }
+  }, [semesterSurveyId, selection.id, selection.type]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (loading) {
+    return (
+      <div className="operations-empty" role="status">
+        <LoaderCircle className="operation-icon auth-spin" aria-hidden="true" />
+        <strong>Đang tải thống kê điểm chi tiết...</strong>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="analysis-scope-error">
+        <div className="admin-alert" role="alert">
+          <CircleAlert aria-hidden="true" />
+          <span>{error ?? 'Không có dữ liệu chi tiết cho dòng này.'}</span>
+        </div>
+        <div className="analysis-scope-actions">
+          <button type="button" className="btn btn-secondary btn-sm" onClick={onBack}>
+            <ArrowLeft aria-hidden="true" size={16} />
+            Quay lại bảng
+          </button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => void load()}>
+            <RefreshCw aria-hidden="true" size={16} />
+            Thử lại
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="analysis-scope-detail">
+      <section className="section-responses-summary" aria-label="Thông tin phạm vi phân tích">
+        <div className="section-responses-heading">
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm section-responses-back"
+            onClick={onBack}
+            title="Quay lại bảng phân tích"
+            aria-label="Quay lại bảng phân tích"
+          >
+            <ArrowLeft className="operation-icon" aria-hidden="true" />
+          </button>
+          <h2>{data.scopeName}</h2>
+          <p>
+            {scopeLabels[data.scopeType]} · {data.templateName} · {data.semesterName} · {data.academicYearName}
+          </p>
+        </div>
+        <div className="section-responses-stats">
+          <span>
+            <Users className="operation-icon" aria-hidden="true" />
+            {data.sectionCount} lớp · tổng sĩ số {data.totalClassSize.toLocaleString('vi-VN')}
+          </span>
+          <span>
+            <Star className="operation-icon" aria-hidden="true" />
+            Điểm trung bình {data.averageScore.toFixed(2)}
+          </span>
+          <span>{data.responseCount.toLocaleString('vi-VN')} phiếu hợp lệ</span>
+        </div>
+      </section>
+
+      <QuestionAnalysisChart
+        questions={data.questions}
+        overallAverageScore={data.averageScore}
+        responseCount={data.responseCount}
+        title={`Phân tích điểm chi tiết theo câu hỏi · ${scopeLabels[data.scopeType]}`}
+        showDistributionTable
+      />
+
+      {data.scopeType === 'faculty' && data.departments && data.departments.length > 0 && (
+        <ScopeDepartmentsTable
+          departments={data.departments}
+          onOpenDetail={onDrillDown}
+        />
+      )}
+
+      {data.scopeType === 'department' && data.courses && data.courses.length > 0 && (
+        <ScopeCoursesTable
+          courses={data.courses}
+          onOpenDetail={onDrillDown}
+        />
+      )}
+
+      {data.scopeType === 'course' && data.sections && data.sections.length > 0 && (
+        <ScopeSectionsTable
+          sections={data.sections}
+          onOpenSurvey={onOpenSurvey}
+        />
+      )}
+    </div>
+  );
+};
+
 const NormalizationSummary: React.FC<{
   data: SemesterSurveyNormalization;
   showStandardDeviation?: boolean;
@@ -446,7 +1611,8 @@ const emptyNormalization = (
 
 const NormalizationGroupTab: React.FC<{
   data: SemesterSurveyNormalization | null;
-}> = ({ data }) => {
+  onOpenDetail: (selection: ScopeSelection) => void;
+}> = ({ data, onOpenDetail }) => {
   const groups = useMemo(() => data?.groups ?? [], [data]);
   const groupColumns = useMemo<FilterableColumn<(typeof groups)[number]>[]>(() => [
     { key: 'facultyName', value: (row) => row.facultyName },
@@ -494,8 +1660,31 @@ const NormalizationGroupTab: React.FC<{
             {groupPagination.visibleItems.map((group) => {
               const verdict = zVerdict(group.meanZScore);
               return (
-                <tr key={group.facultyName}>
-                  <td>{group.facultyName}</td>
+                <tr
+                  key={group.facultyName}
+                  className={group.facultyId === null ? undefined : 'analysis-drill-row'}
+                  onClick={group.facultyId === null ? undefined : () => onOpenDetail({
+                    type: 'faculty',
+                    id: group.facultyId!,
+                  })}
+                >
+                  <td>
+                    {group.facultyId === null ? group.facultyName : (
+                      <button
+                        type="button"
+                        className="analysis-drill-link"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onOpenDetail({
+                            type: 'faculty',
+                            id: group.facultyId!,
+                          });
+                        }}
+                      >
+                        {group.facultyName}
+                      </button>
+                    )}
+                  </td>
                   <td className="num">{group.sectionCount}</td>
                   {/* Tô theo bậc Z chứ không theo thang điểm tuyệt đối: cả bảng này
                       đọc bằng một thước duy nhất là 68-95-99.7. */}
@@ -546,7 +1735,8 @@ const NormalizationGroupTab: React.FC<{
 const NormalizationSectionTab: React.FC<{
   data: SemesterSurveyNormalization | null;
   flipCount: number;
-}> = ({ data, flipCount }) => {
+  onOpenSurvey: (courseSectionSurveyId: number) => void;
+}> = ({ data, flipCount, onOpenSurvey }) => {
   const sections = useMemo(() => data?.sections ?? [], [data]);
   const sectionColumns = useMemo<FilterableColumn<(typeof sections)[number]>[]>(() => [
     { key: 'courseCode', value: (row) => row.courseCode },
@@ -609,9 +1799,23 @@ const NormalizationSectionTab: React.FC<{
           </thead>
           <tbody>
             {sectionPagination.visibleItems.map((section) => (
-              <tr key={section.courseSectionSurveyId}>
+              <tr
+                key={section.courseSectionSurveyId}
+                className="analysis-drill-row"
+                onClick={() => onOpenSurvey(section.courseSectionSurveyId)}
+              >
                 <td className="col-left col-left-1">
-                  <span className="operations-code">{section.courseCode}</span>
+                  <button
+                    type="button"
+                    className="analysis-drill-link operations-code"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenSurvey(section.courseSectionSurveyId);
+                    }}
+                    title={`Xem kết quả lớp ${section.courseCode} - ${section.sectionName}`}
+                  >
+                    {section.courseCode}
+                  </button>
                 </td>
                 <td className="col-left col-left-2">{section.sectionName}</td>
                 <td className="col-left col-left-3" title={section.courseName}>
@@ -663,7 +1867,10 @@ const NormalizationSectionTab: React.FC<{
 
 // -------------------------------------------- Tab 3: tổng hợp theo bộ môn
 
-const DepartmentTab: React.FC<{ data: SemesterSurveyDepartmentSummary | null }> = ({ data }) => {
+const DepartmentTab: React.FC<{
+  data: SemesterSurveyDepartmentSummary | null;
+  onOpenDetail: (selection: ScopeSelection) => void;
+}> = ({ data, onOpenDetail }) => {
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const columns = useMemo<FilterableColumn<(typeof rows)[number]>[]>(() => [
     { key: 'facultyName', value: (row) => row.facultyName },
@@ -757,12 +1964,33 @@ const DepartmentTab: React.FC<{ data: SemesterSurveyDepartmentSummary | null }> 
           </thead>
           <tbody>
             {pagination.visibleItems.map((row) => (
-              <tr key={`${row.facultyName}-${row.departmentName}`}>
+              <tr
+                key={`${row.facultyName}-${row.departmentName}`}
+                className={row.departmentId === null ? undefined : 'analysis-drill-row'}
+                onClick={row.departmentId === null ? undefined : () => onOpenDetail({
+                  type: 'department',
+                  id: row.departmentId!,
+                })}
+              >
                 <td className="col-left col-dept-1" title={row.facultyName}>
                   {row.facultyName}
                 </td>
                 <td className="col-left col-dept-2" title={row.departmentName}>
-                  {row.departmentName}
+                  {row.departmentId === null ? row.departmentName : (
+                    <button
+                      type="button"
+                      className="analysis-drill-link"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenDetail({
+                          type: 'department',
+                          id: row.departmentId!,
+                        });
+                      }}
+                    >
+                      {row.departmentName}
+                    </button>
+                  )}
                 </td>
                 <td className="num">{row.sectionCount}</td>
                 <td className="num">{row.lecturerCount}</td>
@@ -819,12 +2047,10 @@ const DepartmentTab: React.FC<{ data: SemesterSurveyDepartmentSummary | null }> 
 
 // ------------------------------------------- Tab 4: chẩn đoán học phần
 
-/** Biên độ rộng thì tô đỏ — đó chính là tín hiệu để đọc bảng này. */
-function spreadClass(spread: number): string {
-  return spread >= 0.8 ? 'num is-flagged' : 'num';
-}
-
-const CourseDiagnosisTab: React.FC<{ data: SemesterSurveyCourseDiagnosis | null }> = ({ data }) => {
+const CourseDiagnosisTab: React.FC<{
+  data: SemesterSurveyCourseDiagnosis | null;
+  onOpenDetail: (selection: ScopeSelection) => void;
+}> = ({ data, onOpenDetail }) => {
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const columns = useMemo<FilterableColumn<(typeof rows)[number]>[]>(() => [
     { key: 'courseCode', value: (row) => row.courseCode },
@@ -917,12 +2143,31 @@ const CourseDiagnosisTab: React.FC<{ data: SemesterSurveyCourseDiagnosis | null 
           </thead>
           <tbody>
             {pagination.visibleItems.map((row) => (
-              <tr key={row.courseId}>
+              <tr
+                key={row.courseId}
+                className="analysis-drill-row"
+                onClick={() => onOpenDetail({
+                  type: 'course',
+                  id: row.courseId,
+                })}
+              >
                 <td className="col-left col-course-1">
                   <span className="operations-code">{row.courseCode}</span>
                 </td>
                 <td className="col-left col-course-2" title={row.courseName}>
-                  {row.courseName}
+                  <button
+                    type="button"
+                    className="analysis-drill-link"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenDetail({
+                        type: 'course',
+                        id: row.courseId,
+                      });
+                    }}
+                  >
+                    {row.courseName}
+                  </button>
                 </td>
                 <td>{row.departmentName}</td>
                 <td>{row.facultyName}</td>
@@ -967,241 +2212,270 @@ const CourseDiagnosisTab: React.FC<{ data: SemesterSurveyCourseDiagnosis | null 
 const LecturerTab: React.FC<{
   semesterSurveyId: number | null;
   lecturers: LecturerOption[];
-}> = ({ semesterSurveyId, lecturers }) => {
-  const lecturerListId = useId();
-  const [faculty, setFaculty] = useState<string>('');
-  const [query, setQuery] = useState<string>('');
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [highlight, setHighlight] = useState(0);
+  selectedLecturerId: number | null;
+  onSelectLecturer: (lecturerId: number | null) => void;
+  onOpenSurvey: (courseSectionSurveyId: number) => void;
+}> = ({
+  semesterSurveyId,
+  lecturers,
+  selectedLecturerId,
+  onSelectLecturer,
+  onOpenSurvey,
+}) => {
   const [report, setReport] = useState<LecturerReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Đổi đợt thì kết quả cũ không còn đúng nữa, xoá đi để không hiểu nhầm.
   useEffect(() => {
-    setFaculty('');
-    setQuery('');
-    setReport(null);
-    setError(null);
-  }, [semesterSurveyId]);
-
-  const faculties = useMemo(
-    () => [...new Set(lecturers.map((x) => x.facultyName))].sort((a, b) => a.localeCompare(b, 'vi')),
-    [lecturers]
-  );
-
-  // Hai ô lọc nối tầng: chọn khoa thì danh sách giảng viên co theo.
-  const visibleLecturers = useMemo(
-    () => lecturers.filter((x) => !faculty || x.facultyName === faculty),
-    [lecturers, faculty]
-  );
-
-  // Ô giảng viên gõ được nên nhãn phải phân biệt được từng người: trùng tên thì
-  // ghi kèm bộ môn, vẫn trùng nữa thì kèm mã để không bao giờ có hai nhãn giống nhau.
-  const lecturerChoices = useMemo(() => {
-    const nameCount = new Map<string, number>();
-    for (const item of visibleLecturers) {
-      nameCount.set(item.fullName, (nameCount.get(item.fullName) ?? 0) + 1);
-    }
-    const usedLabels = new Set<string>();
-    return visibleLecturers.map((item) => {
-      let label = (nameCount.get(item.fullName) ?? 0) > 1
-        ? `${item.fullName} · ${item.departmentName}`
-        : item.fullName;
-      if (usedLabels.has(label)) label = `${label} · #${item.lecturerId}`;
-      usedLabels.add(label);
-      return { ...item, label };
-    });
-  }, [visibleLecturers]);
-
-  // Gõ khớp đúng một nhãn thì mới coi là đã chọn; gõ dở dang thì nút Tìm khoá lại.
-  const activeLecturer = useMemo(
-    () => lecturerChoices.find((x) => x.label === query.trim()) ?? null,
-    [lecturerChoices, query]
-  );
-
-  // Đang gõ thì lọc theo những gì đã gõ; vừa chọn xong thì ô chứa đúng nhãn của
-  // người đó, lúc ấy vẫn hiện cả danh sách để còn đổi sang người khác.
-  const menuChoices = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase('vi');
-    if (!needle || activeLecturer) return lecturerChoices;
-    return lecturerChoices.filter((x) => x.label.toLocaleLowerCase('vi').includes(needle));
-  }, [lecturerChoices, query, activeLecturer]);
-
-  useEffect(() => {
-    setHighlight(0);
-  }, [menuChoices]);
-
-  const pick = (label: string) => {
-    setQuery(label);
-    setMenuOpen(false);
-  };
-
-  const onPickerKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Escape') {
-      setMenuOpen(false);
-      return;
-    }
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      if (!menuOpen) {
-        setMenuOpen(true);
-        return;
-      }
-      if (menuChoices.length === 0) return;
-      const step = event.key === 'ArrowDown' ? 1 : -1;
-      setHighlight((current) => (current + step + menuChoices.length) % menuChoices.length);
-      return;
-    }
-    if (event.key === 'Enter' && menuOpen && menuChoices[highlight]) {
-      event.preventDefault();
-      pick(menuChoices[highlight].label);
-    }
-  };
-
-  const search = async () => {
-    if (!semesterSurveyId || !activeLecturer) return;
-    setLoading(true);
-    try {
-      setReport(await surveyApi.lecturerReport(semesterSurveyId, activeLecturer.lecturerId));
-      setError(null);
-    } catch (loadError) {
-      setError(messageFrom(loadError));
+    if (!selectedLecturerId || !semesterSurveyId) {
       setReport(null);
-    } finally {
-      setLoading(false);
+      setError(null);
+      return;
     }
-  };
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    surveyApi.lecturerReport(semesterSurveyId, selectedLecturerId)
+      .then((res) => {
+        if (!cancelled) {
+          setReport(res);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(messageFrom(err));
+          setReport(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedLecturerId, semesterSurveyId]);
+
+  const columns = useMemo<FilterableColumn<LecturerOption>[]>(() => [
+    { key: 'fullName', value: (row) => row.fullName },
+    { key: 'departmentName', value: (row) => row.departmentName },
+    { key: 'facultyName', value: (row) => row.facultyName },
+    { key: 'sectionCount', value: (row) => String(row.sectionCount), numeric: true },
+    { key: 'totalClassSize', value: (row) => String(row.totalClassSize), numeric: true },
+    { key: 'responseCount', value: (row) => String(row.responseCount), numeric: true },
+    { key: 'validResponseCount', value: (row) => String(row.validResponseCount), numeric: true },
+    {
+      key: 'validResponseRate',
+      value: (row) => `${row.validResponseRate.toFixed(1)}%`,
+      sortValue: (row) => row.validResponseRate,
+    },
+    {
+      key: 'averageScore',
+      value: (row) => (row.averageScore === null ? '—' : row.averageScore.toFixed(2)),
+      sortValue: (row) => row.averageScore,
+    },
+    {
+      key: 'minScore',
+      value: (row) => (typeof row.minScore === 'number' ? row.minScore.toFixed(2) : '—'),
+      sortValue: (row) => row.minScore,
+    },
+    {
+      key: 'maxScore',
+      value: (row) => (typeof row.maxScore === 'number' ? row.maxScore.toFixed(2) : '—'),
+      sortValue: (row) => row.maxScore,
+    },
+    { key: 'warningSectionCount', value: (row) => String(row.warningSectionCount), numeric: true },
+  ], []);
+
+  const filters = useColumnFilters(lecturers, columns);
+  const pagination = usePaginatedItems(filters.visibleRows, analysisPageSize);
+
+  const totalSections = useMemo(() => lecturers.reduce((sum, r) => sum + r.sectionCount, 0), [lecturers]);
+  const totalClassSize = useMemo(() => lecturers.reduce((sum, r) => sum + (r.totalClassSize ?? 0), 0), [lecturers]);
+  const totalResponses = useMemo(() => lecturers.reduce((sum, r) => sum + (r.responseCount ?? 0), 0), [lecturers]);
+  const totalValidResponses = useMemo(() => lecturers.reduce((sum, r) => sum + (r.validResponseCount ?? 0), 0), [lecturers]);
+  const totalWarnings = useMemo(() => lecturers.reduce((sum, r) => sum + (r.warningSectionCount ?? 0), 0), [lecturers]);
+  const lecturersWithWarning = useMemo(() => lecturers.filter((r) => r.warningSectionCount > 0).length, [lecturers]);
+  const overallAvgScore = useMemo(() => {
+    const scored = lecturers.filter(
+      (row) => typeof row.averageScore === 'number' && (row.validResponseCount ?? 0) > 0,
+    );
+    const responseCount = scored.reduce((sum, row) => sum + (row.validResponseCount ?? 0), 0);
+    if (responseCount === 0) return null;
+    const totalScore = scored.reduce(
+      (sum, row) => sum + (row.averageScore ?? 0) * (row.validResponseCount ?? 0),
+      0,
+    );
+    return totalScore / responseCount;
+  }, [lecturers]);
 
   if (lecturers.length === 0) {
     return (
       <div className="operations-empty">
-        <strong>Đợt này chưa có giảng viên nào gắn được với lớp có phiếu.</strong>
+        <strong>Đợt này chưa có giảng viên nào thu được phiếu hợp lệ.</strong>
+      </div>
+    );
+  }
+
+  if (selectedLecturerId) {
+    return (
+      <div className="analysis-scope-detail">
+        {error && (
+          <div className="admin-alert" role="alert">
+            <CircleAlert aria-hidden="true" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="operations-empty" role="status">
+            <LoaderCircle className="operation-icon auth-spin" aria-hidden="true" />
+            <strong>Đang tải báo cáo giảng viên...</strong>
+          </div>
+        ) : report ? (
+          <LecturerReportView
+            report={report}
+            onBack={() => onSelectLecturer(null)}
+            onOpenSurvey={onOpenSurvey}
+          />
+        ) : null}
       </div>
     );
   }
 
   return (
     <>
-      <section className="statistics-toolbar analysis-picker">
-        <label className="form-group">
-          <span>Khoa / Viện</span>
-          <select
-            value={faculty}
-            onChange={(event) => {
-              setFaculty(event.target.value);
-              setQuery('');
-            }}
-          >
-            <option value="">Tất cả khoa / viện</option>
-            {faculties.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div
-          className="form-group analysis-combobox"
-          onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false);
-          }}
-        >
-          <span>
-            Giảng viên ({visibleLecturers.length})
-            {activeLecturer && ` · ${activeLecturer.sectionCount} lớp`}
+      <section className="statistics-summary">
+        <span>
+          <strong>{lecturers.length}</strong> giảng viên thu được phiếu · <strong>{totalSections}</strong> lớp giảng dạy
+        </span>
+        <span>
+          Tổng sĩ số: <strong>{totalClassSize.toLocaleString('vi-VN')}</strong> ·{' '}
+          Phiếu hợp lệ: <strong>{totalValidResponses.toLocaleString('vi-VN')}</strong> (
+          {totalClassSize === 0 ? 0 : ((totalValidResponses / totalClassSize) * 100).toFixed(1)}%)
+        </span>
+        <span>
+          Điểm trung bình chung:{' '}
+          <strong>{overallAvgScore !== null ? overallAvgScore.toFixed(2) : '—'}</strong>
+        </span>
+        {lecturersWithWarning > 0 && (
+          <span className="statistics-trap-note">
+            <strong>{lecturersWithWarning} giảng viên</strong> có lớp thuộc diện cảnh báo ({totalWarnings} lớp Z-Score ≤ −1)
           </span>
-          <div className="analysis-combobox__control">
-            <input
-              type="text"
-              role="combobox"
-              aria-expanded={menuOpen}
-              aria-controls={lecturerListId}
-              aria-autocomplete="list"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setMenuOpen(true);
-              }}
-              onFocus={() => setMenuOpen(true)}
-              // Chọn xong menu đóng nhưng ô vẫn giữ focus, nên bấm lại phải mở
-              // lại được bằng onClick — onFocus lúc đó không bắn nữa.
-              onClick={() => setMenuOpen(true)}
-              onKeyDown={onPickerKeyDown}
-              placeholder="Gõ tên hoặc chọn trong danh sách..."
-              autoComplete="off"
-            />
-            <ChevronDown className="analysis-combobox__caret" aria-hidden="true" size={16} />
-          </div>
-
-          {menuOpen && (
-            /* Giữ chuột trên danh sách không được làm ô nhập mất focus, nếu không
-               onBlur đóng menu trước khi kịp nhận cú bấm chọn. */
-            <ul
-              className="analysis-combobox__menu"
-              id={lecturerListId}
-              role="listbox"
-              onMouseDown={(event) => event.preventDefault()}
-            >
-              {menuChoices.length === 0 ? (
-                <li className="analysis-combobox__empty">Không có giảng viên nào khớp.</li>
-              ) : (
-                menuChoices.map((lecturer, index) => (
-                  <li
-                    key={lecturer.lecturerId}
-                    className="analysis-combobox__option"
-                    role="option"
-                    aria-selected={index === highlight}
-                    onMouseEnter={() => setHighlight(index)}
-                    onClick={() => pick(lecturer.label)}
-                  >
-                    <span>{lecturer.label}</span>
-                    <small>{lecturer.sectionCount} lớp</small>
-                  </li>
-                ))
-              )}
-            </ul>
-          )}
-        </div>
-
-        <div className="statistics-toolbar-actions">
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            onClick={() => void search()}
-            disabled={!activeLecturer || loading}
-          >
-            <Search aria-hidden="true" size={16} />
-            Tìm
-          </button>
-        </div>
+        )}
       </section>
 
-      {error && (
-        <div className="admin-alert" role="alert">
-          <CircleAlert aria-hidden="true" />
-          <span>{error}</span>
-        </div>
-      )}
+      <div className="statistics-table-scroll" tabIndex={0} aria-label="Tổng hợp kết quả đánh giá theo giảng viên">
+        <table className="statistics-table statistics-table--fill">
+          <thead>
+            <tr>
+              <th className="col-left col-dept-1" scope="col">
+                {filters.filterHeader('fullName', 'Giảng viên')}
+              </th>
+              <th scope="col">{filters.filterHeader('departmentName', 'Bộ môn')}</th>
+              <th scope="col">{filters.filterHeader('facultyName', 'Khoa / Viện')}</th>
+              <th scope="col">{filters.filterHeader('sectionCount', 'Số lớp')}</th>
+              <th scope="col">{filters.filterHeader('totalClassSize', 'Tổng sĩ số')}</th>
+              <th scope="col">{filters.filterHeader('responseCount', 'Số phiếu thu')}</th>
+              <th scope="col">{filters.filterHeader('validResponseCount', 'Số phiếu hợp lệ')}</th>
+              <th scope="col" title="Số phiếu hợp lệ chia tổng sĩ số">
+                {filters.filterHeader('validResponseRate', 'Tỷ lệ hợp lệ')}
+              </th>
+              <th scope="col">{filters.filterHeader('averageScore', 'Điểm TB')}</th>
+              <th scope="col">{filters.filterHeader('minScore', 'Lớp thấp nhất')}</th>
+              <th scope="col">{filters.filterHeader('maxScore', 'Lớp cao nhất')}</th>
+              <th
+                scope="col"
+                title="Số lớp có điểm thấp hơn trung bình từ 1 độ lệch chuẩn trở lên (Z-Score ≤ -1)"
+              >
+                {filters.filterHeader('warningSectionCount', 'Lớp cảnh báo')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {pagination.visibleItems.map((row) => (
+              <tr
+                key={row.lecturerId}
+                className="analysis-drill-row"
+                onClick={() => onSelectLecturer(row.lecturerId)}
+              >
+                <td className="col-left col-dept-1" title={row.fullName}>
+                  <button
+                    type="button"
+                    className="analysis-drill-link"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelectLecturer(row.lecturerId);
+                    }}
+                  >
+                    {row.fullName}
+                  </button>
+                </td>
+                <td title={row.departmentName}>{row.departmentName}</td>
+                <td title={row.facultyName}>{row.facultyName}</td>
+                <td className="num">{row.sectionCount}</td>
+                <td className="num">{row.totalClassSize}</td>
+                <td className="num">{row.responseCount}</td>
+                <td className="num">{row.validResponseCount}</td>
+                <td className="num">{(row.validResponseRate ?? 0).toFixed(1)}%</td>
+                <td className={scoreClass(row.averageScore)}>
+                  {typeof row.averageScore === 'number' ? row.averageScore.toFixed(2) : '—'}
+                </td>
+                <td className={scoreClass(row.minScore)}>
+                  {typeof row.minScore === 'number' ? row.minScore.toFixed(2) : '—'}
+                </td>
+                <td className={scoreClass(row.maxScore)}>
+                  {typeof row.maxScore === 'number' ? row.maxScore.toFixed(2) : '—'}
+                </td>
+                <td className={row.warningSectionCount > 0 ? 'num is-flagged' : 'num'}>
+                  {row.warningSectionCount}
+                </td>
+              </tr>
+            ))}
+            <tr className="table-spacer" aria-hidden="true">
+              <td colSpan={12} />
+            </tr>
+          </tbody>
 
-      {loading ? (
-        <div className="operations-empty" role="status">
-          <LoaderCircle className="operation-icon auth-spin" aria-hidden="true" />
-          <strong>Đang tính toán...</strong>
-        </div>
-      ) : report === null ? (
-        <div className="operations-empty">
-          <strong>Chọn một giảng viên rồi bấm Tìm để xem báo cáo.</strong>
-        </div>
-      ) : (
-        <LecturerReportView report={report} />
-      )}
+          <tfoot>
+            <tr>
+              <th className="col-left col-dept-1" scope="row">Toàn trường</th>
+              <td colSpan={2}>{lecturers.length} giảng viên</td>
+              <td className="num is-sum">{totalSections}</td>
+              <td className="num is-sum">{totalClassSize}</td>
+              <td className="num is-sum">{totalResponses}</td>
+              <td className="num is-sum">{totalValidResponses}</td>
+              <td className="num is-mean">
+                {totalClassSize === 0
+                  ? '—'
+                  : `${((totalValidResponses / totalClassSize) * 100).toFixed(1)}%`}
+              </td>
+              <td className="num is-mean is-total">
+                {overallAvgScore === null ? '—' : overallAvgScore.toFixed(2)}
+              </td>
+              <td />
+              <td />
+              <td className="num is-sum">{totalWarnings}</td>
+            </tr>
+          </tfoot>
+        </table>
+        <TablePagination
+          page={pagination.page}
+          pageSize={analysisPageSize}
+          totalItems={filters.visibleRows.length}
+          itemLabel="giảng viên"
+          onPageChange={pagination.setPage}
+        />
+      </div>
     </>
   );
 };
 
-const LecturerReportView: React.FC<{ report: LecturerReport }> = ({ report }) => {
+const LecturerReportView: React.FC<{
+  report: LecturerReport;
+  onBack?: () => void;
+  onOpenSurvey?: (courseSectionSurveyId: number) => void;
+}> = ({ report, onBack, onOpenSurvey }) => {
   const columns = useMemo<FilterableColumn<LecturerReport['sections'][number]>[]>(() => [
     { key: 'courseCode', value: (row) => row.courseCode },
     { key: 'courseName', value: (row) => row.courseName },
@@ -1249,24 +2523,41 @@ const LecturerReportView: React.FC<{ report: LecturerReport }> = ({ report }) =>
 
   return (
     <>
-      <section className="statistics-summary">
-        <span className="summary-title">{report.fullName}</span>
-        <span>
-          {report.departmentName} · {report.facultyName}
-        </span>
-        <span>
-          {report.sectionCount} lớp · {report.totalResponseCount} phiếu
-        </span>
-        <span>
-          Tỷ lệ phản hồi: <strong>{overallRate.toFixed(1)}%</strong>
-        </span>
-        <span>
-          Điểm trung bình: <strong>{report.averageScore.toFixed(2)}</strong>
-        </span>
+      <section className="section-responses-summary" aria-label="Thông tin giảng viên">
+        <div className="section-responses-heading">
+          {onBack && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm section-responses-back"
+              onClick={onBack}
+              title="Quay lại danh sách giảng viên"
+              aria-label="Quay lại danh sách giảng viên"
+            >
+              <ArrowLeft className="operation-icon" aria-hidden="true" />
+            </button>
+          )}
+          <h2>{report.fullName}</h2>
+          <p>
+            {report.departmentName} · {report.facultyName}
+          </p>
+        </div>
+        <div className="section-responses-stats">
+          <span>
+            <Users className="operation-icon" aria-hidden="true" />
+            {report.sectionCount} lớp · tổng sĩ số {totalClassSize.toLocaleString('vi-VN')}
+          </span>
+          <span>
+            <Star className="operation-icon" aria-hidden="true" />
+            Điểm trung bình {report.averageScore.toFixed(2)}
+          </span>
+          <span>
+            {report.totalResponseCount.toLocaleString('vi-VN')} phiếu thu ({overallRate.toFixed(1)}%)
+          </span>
+        </div>
       </section>
 
       <div className="analysis-section analysis-section--grow">
-        <h4 className="analysis-section-title">Các lớp giảng dạy trong kỳ</h4>
+        <h4 className="analysis-section-title">Danh sách các lớp giảng dạy trong kỳ ({report.sections.length} lớp)</h4>
         <div
           className="statistics-table-scroll"
           tabIndex={0}
@@ -1299,9 +2590,27 @@ const LecturerReportView: React.FC<{ report: LecturerReport }> = ({ report }) =>
               {filters.visibleRows.map((section) => {
                 const verdict = zVerdict(section.zDepartment);
                 return (
-                  <tr key={section.courseSectionSurveyId}>
+                  <tr
+                    key={section.courseSectionSurveyId}
+                    className={onOpenSurvey ? 'analysis-drill-row' : undefined}
+                    onClick={onOpenSurvey ? () => onOpenSurvey(section.courseSectionSurveyId) : undefined}
+                  >
                     <td>
-                      <span className="operations-code">{section.courseCode}</span>
+                      {onOpenSurvey ? (
+                        <button
+                          type="button"
+                          className="analysis-drill-link operations-code"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenSurvey(section.courseSectionSurveyId);
+                          }}
+                          title={`Xem kết quả lớp ${section.courseCode} - ${section.sectionName}`}
+                        >
+                          {section.courseCode}
+                        </button>
+                      ) : (
+                        <span className="operations-code">{section.courseCode}</span>
+                      )}
                     </td>
                     <td title={section.courseName}>{section.courseName}</td>
                     <td>{section.sectionName}</td>

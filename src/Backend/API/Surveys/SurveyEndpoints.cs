@@ -133,7 +133,14 @@ public static class SurveyEndpoints
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
-            Results.Ok(await service.GetCourseSectionSurveysAsync(semesterSurveyId, cancellationToken)));
+            Results.Ok(await service.GetCourseSectionSurveysAsync(semesterSurveyId, null, cancellationToken)));
+
+        operationalReadGroup.MapGet("/course-section-surveys", async (
+            int? semesterSurveyId,
+            int? semesterId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetCourseSectionSurveysAsync(semesterSurveyId, semesterId, cancellationToken)));
 
         operationalReadGroup.MapGet("/course-section-surveys/{courseSectionSurveyId:int}", async (
             int courseSectionSurveyId,
@@ -203,6 +210,18 @@ public static class SurveyEndpoints
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSemesterSurveyCourseDiagnosisAsync(semesterSurveyId, cancellationToken)));
+
+        surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/scope-analysis", async (
+            int semesterSurveyId,
+            string scopeType,
+            int scopeId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.GetSurveyScopeAnalysisAsync(
+                semesterSurveyId,
+                scopeType,
+                scopeId,
+                cancellationToken)));
 
         surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/lecturers", async (
             int semesterSurveyId,

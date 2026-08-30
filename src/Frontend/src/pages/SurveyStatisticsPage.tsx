@@ -3,6 +3,7 @@ import { Calculator, CircleAlert, LoaderCircle, RefreshCw, TriangleAlert } from 
 import { toast } from 'sonner';
 import { useSemester } from '../context/semesterContext';
 import { TablePagination } from '../components/TablePagination';
+import { ExportDropdown } from '../components/ExportDropdown';
 import { ApiError } from '../services/apiClient';
 import { surveyApi, surveyErrorMessage } from '../services/surveyApi';
 import type { SemesterSurvey } from '../types';
@@ -203,6 +204,150 @@ export const SurveyStatisticsPage: React.FC = () => {
         </label>
 
         <div className="statistics-toolbar-actions">
+          {statistics && rows.length > 0 && (
+            <ExportDropdown
+              buttonLabel="Xuất bảng điểm"
+              size="sm"
+              options={{
+                fileName: 'thong-ke-diem-khao-sat-dot',
+                metadata: {
+                  title: 'BÁO CÁO THỐNG KÊ ĐIỂM SỐ ĐỢT KHẢO SÁT',
+                  subtitle: `Bộ câu hỏi: ${statistics.templateName}`,
+                  subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+                  info: {
+                    'Bộ câu hỏi': statistics.templateName,
+                    'Số lượng lớp học phần': rows.length,
+                    'Tổng sĩ số sinh viên': footer.classSizeTotal,
+                    'Tổng phiếu khảo sát đã thu': footer.responseTotal,
+                    'Điểm trung bình toàn đợt':
+                      footer.averageScoreMean !== null ? footer.averageScoreMean.toFixed(2) : '—',
+                  },
+                  summaryNotes: [
+                    'Điểm trung bình mỗi câu hỏi và điểm tổng hợp được tính trên thang điểm 5.0 từ phiếu hợp lệ.',
+                    'Dữ liệu được cập nhật tại thời điểm chốt tính điểm.',
+                  ],
+                },
+                sheets: [
+                  {
+                    sheetName: 'Bang diem chi tiet',
+                    title: `1. BẢNG ĐIỂM CHI TIẾT TẤT CẢ CÁC LỚP HỌC PHẦN (${rows.length} LỚP)`,
+                    columns: [
+                      { key: 'courseCode', header: 'Mã HP', width: 12, align: 'center' as const },
+                      { key: 'sectionName', header: 'Lớp HP', width: 14, align: 'center' as const },
+                      { key: 'courseName', header: 'Tên học phần', width: 26 },
+                      { key: 'departmentName', header: 'Bộ môn', width: 20 },
+                      { key: 'lecturerName', header: 'Họ tên GV', width: 22 },
+                      { key: 'classSize', header: 'Sĩ số', width: 10, type: 'number' as const, align: 'right' as const },
+                      { key: 'totalResponseCount', header: 'Số phiếu', width: 10, type: 'number' as const, align: 'right' as const },
+                      {
+                        key: 'completionRate',
+                        header: 'Tỷ lệ PH',
+                        width: 12,
+                        type: 'string' as const,
+                        align: 'right' as const,
+                        format: (val: any) => `${Number(val).toFixed(1)}%`,
+                      },
+                      ...columns.map((c) => ({
+                        key: `c_${c.questionId}`,
+                        header: `C${c.order}`,
+                        width: 8,
+                        type: 'number' as const,
+                        align: 'right' as const,
+                        format: (_: any, row: any) => {
+                          const score = row.questionScores?.find((s: any) => s.questionId === c.questionId);
+                          return score?.answerCount ? score.averageScore.toFixed(2) : '—';
+                        },
+                      })),
+                      {
+                        key: 'averageScore',
+                        header: 'Điểm tổng hợp',
+                        width: 14,
+                        type: 'number' as const,
+                        align: 'right' as const,
+                        format: (val: any) => (val !== null ? Number(val).toFixed(2) : '—'),
+                      },
+                      { key: 'invalidResponseCount', header: 'Phiếu lỗi', width: 10, type: 'number' as const, align: 'right' as const },
+                      { key: 'openCommentCount', header: 'Ý kiến mở', width: 10, type: 'number' as const, align: 'right' as const },
+                    ],
+                    data: rows,
+                  },
+                  {
+                    sheetName: 'Lop diem thap & Luu y',
+                    title: '2. DANH SÁCH LỚP CÓ ĐIỂM THẤP HOẶC CÓ TIÊU CHÍ CẦN CẢI THIỆN',
+                    subtitle: 'Các lớp có Điểm tổng hợp < 3.50 hoặc có tiêu chí đơn lẻ bị đánh giá thấp',
+                    columns: [
+                      { key: 'courseCode', header: 'Mã HP', width: 12, align: 'center' as const },
+                      { key: 'sectionName', header: 'Lớp HP', width: 14, align: 'center' as const },
+                      { key: 'courseName', header: 'Tên học phần', width: 26 },
+                      { key: 'lecturerName', header: 'Giảng viên', width: 22 },
+                      { key: 'departmentName', header: 'Bộ môn', width: 20 },
+                      { key: 'classSize', header: 'Sĩ số', width: 10, type: 'number' as const, align: 'right' as const },
+                      { key: 'totalResponseCount', header: 'Phiếu thu', width: 10, type: 'number' as const, align: 'right' as const },
+                      {
+                        key: 'averageScore',
+                        header: 'Điểm tổng hợp',
+                        width: 14,
+                        type: 'number' as const,
+                        align: 'right' as const,
+                        format: (v: any) => (v !== null ? Number(v).toFixed(2) : '—'),
+                      },
+                      {
+                        key: 'weakestQuestionOrder',
+                        header: 'Câu yếu nhất',
+                        width: 14,
+                        align: 'center' as const,
+                        format: (v: any, item: any) => v ? `C${v} (${item.weakestQuestionScore?.toFixed(2)})` : '—',
+                      },
+                      {
+                        key: 'weakestQuestionText',
+                        header: 'Nội dung câu hỏi yếu nhất',
+                        width: 36,
+                        format: (_: any, item: any) => {
+                          const q = item.weakestQuestionId ? questionTextById.get(item.weakestQuestionId) : null;
+                          return q?.questionText || item.weakestQuestionText || '—';
+                        },
+                      },
+                    ],
+                    data: rows.filter((r) => (r.averageScore !== null && r.averageScore < 3.5) || (r.weakestQuestionScore !== null && r.weakestQuestionScore < 3.0)),
+                  },
+                  {
+                    sheetName: 'Thong ke theo Tieu chi',
+                    title: '3. THỐNG KÊ ĐIỂM TRUNG BÌNH THEO TỪNG TIÊU CHÍ CÂU HỎI',
+                    columns: [
+                      { key: 'order', header: 'Mã câu', width: 10, align: 'center' as const, format: (v: any) => `C${v}` },
+                      { key: 'questionText', header: 'Nội dung tiêu chí câu hỏi', width: 50 },
+                      {
+                        key: 'questionId',
+                        header: 'Điểm TB toàn trường',
+                        width: 18,
+                        type: 'number' as const,
+                        align: 'right' as const,
+                        format: (qid: any) => {
+                          const mean = footer.questionMeans.get(Number(qid));
+                          return mean !== null && mean !== undefined ? mean.toFixed(2) : '—';
+                        },
+                      },
+                      {
+                        key: 'questionId',
+                        header: 'Số lớp < 3.5 điểm',
+                        width: 16,
+                        type: 'number' as const,
+                        align: 'right' as const,
+                        format: (qid: any) => {
+                          const id = Number(qid);
+                          return rows.filter((r) => {
+                            const sc = r.questionScores?.find((s) => s.questionId === id);
+                            return sc && sc.answerCount > 0 && sc.averageScore < 3.5;
+                          }).length;
+                        },
+                      },
+                    ],
+                    data: columns,
+                  },
+                ],
+              }}
+            />
+          )}
           <button
             type="button"
             className="btn btn-secondary btn-sm"

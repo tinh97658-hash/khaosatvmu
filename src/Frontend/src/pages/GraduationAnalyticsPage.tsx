@@ -15,10 +15,8 @@ import {
 import { toast } from 'sonner';
 import { GraduationEChart } from '../components/graduation/GraduationEChart';
 import { GraduationImportDialog } from '../components/graduation/GraduationImportDialog';
-import {
-  GraduationOverview,
-  type GraduationOverviewChartModel,
-} from '../components/graduation/GraduationOverview';
+import { GraduationOverview, type GraduationOverviewChartModel } from '../components/graduation/GraduationOverview';
+import { ExportDropdown } from '../components/ExportDropdown';
 import { graduationAnalyticsApi } from '../services/graduationAnalyticsApi';
 import type {
   GraduationChartType,
@@ -607,7 +605,41 @@ export function GraduationAnalyticsPage() {
         </aside>
 
         <div className="graduation-chart-panel">
-          <header><div><h2>{metric?.label}</h2><p>So sánh theo {metadata?.dimensions.find((item) => item.id === groupBy)?.label.toLowerCase()}</p></div><span>{queryLoading ? 'Đang cập nhật...' : `${displayChartData.length}${displayChartData.length < chartData.length ? `/${chartData.length}` : ''} nhóm`}</span></header>
+          <header>
+            <div>
+              <h2>{metric?.label}</h2>
+              <p>So sánh theo {metadata?.dimensions.find((item) => item.id === groupBy)?.label.toLowerCase()}</p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>{queryLoading ? 'Đang cập nhật...' : `${displayChartData.length}${displayChartData.length < chartData.length ? `/${chartData.length}` : ''} nhóm`}</span>
+              {displayChartData.length > 0 && (
+                <ExportDropdown
+                  buttonLabel="Xuất số liệu"
+                  size="sm"
+                  options={{
+                    fileName: `phan-tich-${metricId}-theo-${groupBy}`,
+                    metadata: {
+                      title: `BÁO CÁO PHÂN TÍCH ${metric?.label?.toUpperCase() || 'TỐT NGHIỆP'} THEO ${metadata?.dimensions.find((item) => item.id === groupBy)?.label.toUpperCase() || 'NHÓM'}`,
+                      subtitle: `Bộ dữ liệu tốt nghiệp VMU`,
+                      subInstitution: 'PHÒNG ĐÀO TẠO & PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+                    },
+                    columns: [
+                      { key: 'name', header: 'Nhóm phân tích', width: 28 },
+                      ...chartModel.series.map((s) => ({
+                        key: s.key,
+                        header: s.label,
+                        width: 14,
+                        type: 'number' as const,
+                        align: 'right' as const,
+                        format: (val: any) => formatValue(typeof val === 'number' ? Number(val) : null, metric?.unit),
+                      })),
+                    ],
+                    data: displayChartData,
+                  }}
+                />
+              )}
+            </div>
+          </header>
           {displayChartData.length === 0 ? <div className="graduation-chart-empty">Không có dữ liệu phù hợp với lựa chọn hiện tại.</div> : (
             <div className="graduation-chart" role="img" aria-label={`${metric?.label} theo ${groupBy}`}>
               <GraduationEChart
@@ -633,7 +665,58 @@ export function GraduationAnalyticsPage() {
       )}
 
       <section className="graduation-table-section">
-        <header><div><h2>Dữ liệu nguồn C–U</h2><span>{rowTotal} dòng</span></div><input type="search" placeholder="Tìm khoa, mã/tên CTĐT, khóa..." value={search} onChange={(event) => { setSearch(event.target.value); setRowPage(1); }} /></header>
+        <header>
+          <div>
+            <h2>Dữ liệu nguồn C–U</h2>
+            <span>{rowTotal} dòng</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <input type="search" placeholder="Tìm khoa, mã/tên CTĐT, khóa..." value={search} onChange={(event) => { setSearch(event.target.value); setRowPage(1); }} />
+            {rows.length > 0 && (
+              <ExportDropdown
+                buttonLabel="Xuất dữ liệu C–U"
+                size="sm"
+                options={{
+                  fileName: 'du-lieu-nguon-tot-nghiep-c-u',
+                  metadata: {
+                    title: 'DỮ LIỆU NGUỒN TỐT NGHIỆP C–U TOÀN TRƯỜNG',
+                    subtitle: `Trường Đại học Hàng hải Việt Nam`,
+                    subInstitution: 'PHÒNG ĐÀO TẠO & PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+                    info: {
+                      'Tổng số dòng': rowTotal,
+                      'Khoa': faculty || 'Tất cả',
+                      'Khóa': cohort || 'Tất cả',
+                      'Năm xét': reviewYear || 'Tất cả',
+                    },
+                  },
+                  columns: [
+                    { key: 'sourceRowNumber', header: 'Dòng', width: 8, type: 'number' as const, align: 'center' as const },
+                    { key: 'facultyName', header: 'Khoa', width: 22 },
+                    { key: 'programCode', header: 'Mã CTĐT', width: 12, align: 'center' as const },
+                    { key: 'programName', header: 'Tên CTĐT', width: 26 },
+                    { key: 'cohort', header: 'Khóa', width: 10, align: 'center' as const },
+                    { key: 'initialEnrollmentCount', header: 'Nhập học', width: 10, type: 'number' as const, align: 'right' as const },
+                    { key: 'reviewPeriodText', header: 'Thời điểm', width: 14, align: 'center' as const },
+                    { key: 'eligibleGraduateCount', header: 'Được xét', width: 10, type: 'number' as const, align: 'right' as const },
+                    { key: 'onTimeGraduateCount', header: 'Đúng hạn', width: 10, type: 'number' as const, align: 'right' as const },
+                    { key: 'onTimeGraduateRate', header: 'Tỷ lệ đúng hạn', width: 14, type: 'string' as const, align: 'right' as const, format: (v: any) => (v !== null && v !== undefined ? `${Number(v).toFixed(2)}%` : '—') },
+                    { key: 'excellentCount', header: 'XS', width: 8, type: 'number' as const, align: 'right' as const },
+                    { key: 'excellentRate', header: '% XS', width: 10, type: 'string' as const, align: 'right' as const, format: (v: any) => (v !== null && v !== undefined ? `${Number(v).toFixed(2)}%` : '—') },
+                    { key: 'veryGoodCount', header: 'Giỏi', width: 8, type: 'number' as const, align: 'right' as const },
+                    { key: 'veryGoodRate', header: '% Giỏi', width: 10, type: 'string' as const, align: 'right' as const, format: (v: any) => (v !== null && v !== undefined ? `${Number(v).toFixed(2)}%` : '—') },
+                    { key: 'goodCount', header: 'Khá', width: 8, type: 'number' as const, align: 'right' as const },
+                    { key: 'goodRate', header: '% Khá', width: 10, type: 'string' as const, align: 'right' as const, format: (v: any) => (v !== null && v !== undefined ? `${Number(v).toFixed(2)}%` : '—') },
+                    { key: 'averageCount', header: 'T.Bình', width: 8, type: 'number' as const, align: 'right' as const },
+                    { key: 'averageRate', header: '% TB', width: 10, type: 'string' as const, align: 'right' as const, format: (v: any) => (v !== null && v !== undefined ? `${Number(v).toFixed(2)}%` : '—') },
+                    { key: 'workStudyTransferCount', header: 'VHVL', width: 8, type: 'number' as const, align: 'right' as const },
+                    { key: 'workStudyTransferRate', header: '% VHVL', width: 10, type: 'string' as const, align: 'right' as const, format: (v: any) => (v !== null && v !== undefined ? `${Number(v).toFixed(2)}%` : '—') },
+                  ],
+                  data: rows,
+                }}
+              />
+            )}
+          </div>
+        </header>
         <div className="graduation-source-table"><table><thead><tr><th>Dòng</th><th>Khoa</th><th>Mã CTĐT</th><th>Tên CTĐT</th><th>Khóa</th><th>Nhập học</th><th>Thời điểm</th><th>Được xét</th><th>Đúng hạn</th><th>Tỷ lệ</th><th>XS</th><th>% XS</th><th>Giỏi</th><th>% Giỏi</th><th>Khá</th><th>% Khá</th><th>T.Bình</th><th>% T.Bình</th><th>VHVL</th><th>% VHVL</th></tr></thead><tbody>
           {rows.map((row) => <tr key={row.rowId}><td>{row.sourceRowNumber}</td><td>{row.facultyName}</td><td>{sourceCell(row.programCode)}</td><td>{row.programName}</td><td>{row.cohort}</td><td>{sourceCell(row.initialEnrollmentCount)}</td><td>{row.reviewPeriodText}</td><td>{sourceCell(row.eligibleGraduateCount)}</td><td>{sourceCell(row.onTimeGraduateCount)}</td><td>{sourceCell(row.onTimeGraduateRate, true)}</td><td>{sourceCell(row.excellentCount)}</td><td>{sourceCell(row.excellentRate, true)}</td><td>{sourceCell(row.veryGoodCount)}</td><td>{sourceCell(row.veryGoodRate, true)}</td><td>{sourceCell(row.goodCount)}</td><td>{sourceCell(row.goodRate, true)}</td><td>{sourceCell(row.averageCount)}</td><td>{sourceCell(row.averageRate, true)}</td><td>{sourceCell(row.workStudyTransferCount)}</td><td>{sourceCell(row.workStudyTransferRate, true)}</td></tr>)}
         </tbody></table></div>

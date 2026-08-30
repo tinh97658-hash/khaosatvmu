@@ -71,6 +71,7 @@ public static class ReportEndpoints
             int semesterId,
             int? comparisonSemesterId,
             int? semesterSurveyId,
+            int? comparisonSemesterSurveyId,
             IReportService reportService,
             CancellationToken cancellationToken) =>
         {
@@ -78,9 +79,15 @@ public static class ReportEndpoints
                 semesterId,
                 comparisonSemesterId,
                 semesterSurveyId,
+                comparisonSemesterSurveyId,
                 cancellationToken);
             return report is null ? Results.NotFound() : Results.Ok(report);
         });
+
+        group.MapGet("/school-overview/comparison-options", async (
+            IReportService reportService,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await reportService.GetSchoolOverviewComparisonOptionsAsync(cancellationToken)));
 
         group.MapGet("/question-ranking", async (
             int semesterId,

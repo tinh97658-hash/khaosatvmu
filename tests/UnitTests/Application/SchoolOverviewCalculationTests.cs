@@ -74,6 +74,19 @@ public class SchoolOverviewCalculationTests
     }
 
     [Fact]
+    public void SchoolOverview_MicroAverage_ShouldWeightEveryValidResponseEqually()
+    {
+        // Một lớp đông không được có cùng trọng số với một lớp ít phiếu như cách tính macro-average.
+        decimal scoreSum = 4.8m * 100 + 2.0m * 10;
+
+        decimal microAverage = Math.Round(scoreSum / 110, 2);
+        decimal macroAverage = Math.Round((4.8m + 2.0m) / 2, 2);
+
+        microAverage.Should().Be(4.55m);
+        microAverage.Should().NotBe(macroAverage);
+    }
+
+    [Fact]
     public void SchoolSurveyOverviewDto_ShouldRetainAggregates()
     {
         var faculty = new FacultyOverviewDto(
@@ -82,7 +95,8 @@ public class SchoolOverviewCalculationTests
             10, "Bộ môn Công nghệ phần mềm", 1, "Khoa CNTT", 4, 200, 120, 60.0m, 4.1m);
         var band = new ScoreBandDto(5, "Xuất sắc", 500, 78.1m);
         var comparison = new SemesterComparisonDto(
-            2, "Học kỳ 1", "2024-2025", 85.0m, 4.2m, 6.43m, 0.35m);
+            "campaign", 2, 20, "Học kỳ 1", "2024-2025", "Khảo sát học phần",
+            12, 700, 595, 85.0m, 4.2m, 6.43m, 0.35m);
 
         var overview = new SchoolSurveyOverviewDto(
             3, "Học kỳ 2", "2025-2026",
@@ -106,6 +120,7 @@ public class SchoolOverviewCalculationTests
         overview.Departments.Should().ContainSingle();
         overview.SemesterComparison!.CompletionRateDelta.Should().Be(6.43m);
         overview.SemesterComparison!.AverageScoreDelta.Should().Be(0.35m);
+        overview.SemesterComparison!.ComparisonResponseCount.Should().Be(595);
     }
 
     // ---- Câu hỏi yếu nhất toàn trường --------------------------------------

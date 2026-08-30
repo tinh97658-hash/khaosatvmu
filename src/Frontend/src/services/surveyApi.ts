@@ -3,6 +3,7 @@ import type {
   AnswerScaleKind,
   CourseSectionSurvey,
   PublicSurvey,
+  QuestionRating,
   SemesterSurvey,
   SurveyResponseDetail,
   SurveyResponseSummary,
@@ -157,6 +158,27 @@ export interface SemesterSurveyCourseDiagnosis {
   rows: CourseDiagnosisRow[];
 }
 
+export type SurveyAnalysisScopeType = 'faculty' | 'department' | 'course';
+
+export interface SurveyScopeAnalysis {
+  semesterSurveyId: number;
+  scopeType: SurveyAnalysisScopeType;
+  scopeId: number;
+  scopeName: string;
+  templateName: string;
+  semesterName: string;
+  academicYearName: string;
+  sectionCount: number;
+  totalClassSize: number;
+  /** Chỉ đếm phiếu qua bộ lọc nhiễu. */
+  responseCount: number;
+  averageScore: number;
+  questions: QuestionRating[];
+  departments?: DepartmentSummaryRow[] | null;
+  courses?: CourseDiagnosisRow[] | null;
+  sections?: NormalizedSection[] | null;
+}
+
 export const courseDiagnosisLabels: Record<string, string> = {
   COURSE_ISSUE: 'Do học phần',
   LECTURER_VARIANCE: 'Do giảng viên',
@@ -202,13 +224,21 @@ export interface DepartmentDashboard {
   weakScoreThreshold: number;
 }
 
-/** Một giảng viên có dạy trong đợt, dùng cho ô chọn ở bộ lọc. */
+/** Một giảng viên trong bảng tổng hợp giảng viên của đợt khảo sát. */
 export interface LecturerOption {
   lecturerId: number;
   fullName: string;
   departmentName: string;
   facultyName: string;
   sectionCount: number;
+  totalClassSize: number;
+  responseCount: number;
+  validResponseCount: number;
+  validResponseRate: number;
+  averageScore: number | null;
+  minScore: number | null;
+  maxScore: number | null;
+  warningSectionCount: number;
 }
 
 export interface LecturerSection {
@@ -234,6 +264,7 @@ export interface LecturerSection {
 }
 
 export interface LecturerReport {
+
   lecturerId: number;
   fullName: string;
   departmentName: string;
@@ -394,9 +425,46 @@ export const surveyApi = {
     apiRequest<SemesterSurveyCourseDiagnosis>(
       `/api/surveys/semester-surveys/${semesterSurveyId}/course-diagnosis`,
     ),
+  semesterSurveyScopeAnalysis: (
+    semesterSurveyId: number,
+    scopeType: SurveyAnalysisScopeType,
+    scopeId: number,
+  ) => {
+    const query = new URLSearchParams({ scopeType, scopeId: String(scopeId) });
+    return apiRequest<SurveyScopeAnalysis>(
+      `/api/surveys/semester-surveys/${semesterSurveyId}/scope-analysis?${query.toString()}`,
+    );
+  },
   /** Danh sách giảng viên có lớp trong đợt, dùng cho ô chọn. */
   semesterSurveyLecturers: (semesterSurveyId: number) =>
-    apiRequest<LecturerOption[]>(`/api/surveys/semester-surveys/${semesterSurveyId}/lecturers`),
+    apiRequest<LecturerOption[]>(`/api/surveys/semester-surveys/${semesterSurveyId}/lecturers`)
+      .then((rows) => rows.map((row) => {
+        const totalClassSize = Number.isFinite(row.totalClassSize) ? row.totalClassSize : 0;
+        const validResponseCount = Number.isFinite(row.validResponseCount) ? row.validResponseCount : 0;
+        return {
+          ...row,
+          totalClassSize,
+          responseCount: Number.isFinite(row.responseCount) ? row.responseCount : 0,
+          validResponseCount,
+          validResponseRate: Number.isFinite(row.validResponseRate)
+            ? row.validResponseRate
+            : totalClassSize > 0
+              ? (validResponseCount / totalClassSize) * 100
+              : 0,
+          averageScore: typeof row.averageScore === 'number' && Number.isFinite(row.averageScore)
+            ? row.averageScore
+            : null,
+          minScore: typeof row.minScore === 'number' && Number.isFinite(row.minScore)
+            ? row.minScore
+            : null,
+          maxScore: typeof row.maxScore === 'number' && Number.isFinite(row.maxScore)
+            ? row.maxScore
+            : null,
+          warningSectionCount: Number.isFinite(row.warningSectionCount)
+            ? row.warningSectionCount
+            : 0,
+        };
+      })),
   /** Báo cáo cá nhân của đúng một giảng viên trong đợt. */
   lecturerReport: (semesterSurveyId: number, lecturerId: number) =>
     apiRequest<LecturerReport>(
@@ -416,11 +484,12 @@ export const surveyApi = {
       `/api/surveys/semester-surveys/${semesterSurveyId}/department-dashboard`,
     ),
 
-  semesterSurveys: (semesterId?: number) =>
+  semesterSurveys: (semesterId?: number, signal?: AbortSignal) =>
     apiRequest<SemesterSurvey[]>(
       semesterId === undefined
         ? '/api/surveys/semester-surveys'
         : `/api/surveys/semester-surveys?semesterId=${semesterId}`,
+      { signal },
     ),
   createSemesterSurvey: (survey: CreateSemesterSurveyPayload) =>
     csrfRequest<SemesterSurvey>('/api/surveys/semester-surveys', 'POST', survey),
@@ -433,10 +502,28 @@ export const surveyApi = {
       'POST',
     ),
 
-  courseSectionSurveys: (semesterSurveyId: number) =>
+  courseSectionSurveys: (semesterSurveyId: number, signal?: AbortSignal) =>
     apiRequest<CourseSectionSurvey[]>(
       `/api/surveys/semester-surveys/${semesterSurveyId}/sections`,
+      { signal },
     ),
+  allCourseSectionSurveys: (
+    params?: { semesterSurveyId?: number; semesterId?: number },
+    signal?: AbortSignal,
+  ) => {
+    const searchParams = new URLSearchParams();
+    if (params?.semesterSurveyId !== undefined) {
+      searchParams.set('semesterSurveyId', String(params.semesterSurveyId));
+    }
+    if (params?.semesterId !== undefined) {
+      searchParams.set('semesterId', String(params.semesterId));
+    }
+    const qs = searchParams.toString();
+    return apiRequest<CourseSectionSurvey[]>(
+      qs ? `/api/surveys/course-section-surveys?${qs}` : '/api/surveys/course-section-surveys',
+      { signal },
+    );
+  },
   courseSectionSurvey: (courseSectionSurveyId: number) =>
     apiRequest<CourseSectionSurvey>(
       `/api/surveys/course-section-surveys/${courseSectionSurveyId}`,

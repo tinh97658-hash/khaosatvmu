@@ -335,6 +335,33 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm theo mã phiếu hoặc ý kiến..."
+        exportConfig={{
+          title: `BÁO CÁO KẾT QUẢ KHẢO SÁT LỚP ${sectionSurvey?.sectionName || ''}`.trim(),
+          fileName: `khao-sat-lop-${sectionSurvey?.sectionName || 'hoc-phan'}`,
+          subtitle: `${sectionSurvey?.courseCode || ''} - ${sectionSurvey?.courseName || ''}`,
+          subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+          info: {
+            'Học phần': `${sectionSurvey?.courseCode || ''} - ${sectionSurvey?.courseName || ''}`,
+            'Lớp học phần': sectionSurvey?.sectionName,
+            'Giảng viên': sectionSurvey?.lecturerName || 'Chưa phân công',
+            'Sĩ số sinh viên': sectionSurvey?.classSize,
+            'Tổng số phiếu thu': responses.length,
+            'Số phiếu hợp lệ': validResponses.length,
+            'Điểm trung bình': averageScore > 0 ? averageScore.toFixed(2) : '—',
+          },
+          summaryNotes: [
+            'Điểm trung bình chỉ tính trên các phiếu đánh giá hợp lệ qua bộ lọc.',
+            'Ý kiến đóng góp của sinh viên được ghi nhận trung thực phục vụ nâng cao chất lượng giảng dạy.',
+          ],
+          columns: [
+            { key: 'responseId', header: 'Mã phiếu', width: 12, align: 'center' as const },
+            { key: 'submittedAt', header: 'Thời gian nộp', width: 18, format: (val: any) => formatDateTime(val) },
+            { key: 'score', header: 'Điểm', width: 10, type: 'number' as const, align: 'right' as const, format: (val: any) => Number(val).toFixed(2) },
+            { key: 'isValid', header: 'Trạng thái', width: 12, align: 'center' as const, format: (val: any) => (val ? 'Hợp lệ' : 'Bị lọc') },
+            { key: 'rejectionReasons', header: 'Lý do bị lọc', width: 20, format: (_: any, item: any) => rejectionReasonTexts(item.rejectionReasons).join('; ') || '—' },
+            { key: 'additionalComments', header: 'Ý kiến đóng góp', width: 35, format: (val: any) => val || '—' },
+          ],
+        }}
         emptyMessage={loading ? 'Đang tải phiếu trả lời...' : 'Lớp này chưa có phiếu trả lời nào.'}
         keyExtractor={(item) => String(item.responseId)}
         showIndex={false}

@@ -1,4 +1,4 @@
-﻿namespace Application.Surveys;
+namespace Application.Surveys;
 
 public sealed record AnswerScaleOptionDto(
     int AnswerScaleOptionId,
@@ -216,6 +216,44 @@ public sealed record SemesterSurveyCourseDiagnosisDto(
     string AcademicYearName,
     IReadOnlyList<CourseDiagnosisRowDto> Rows);
 
+public sealed record ScopeAnalysisOptionDto(
+    int Value,
+    string DisplayText,
+    int Count,
+    decimal Percentage);
+
+public sealed record ScopeAnalysisQuestionDto(
+    int QuestionId,
+    int QuestionOrder,
+    string QuestionText,
+    decimal AverageScore,
+    int TotalAnswers,
+    IReadOnlyList<ScopeAnalysisOptionDto> OptionDistribution,
+    string ScaleKind,
+    string AnswerScaleName,
+    IReadOnlyList<string>? TextAnswers);
+
+/// <summary>
+/// Kết quả chi tiết theo từng câu hỏi cho một khoa/viện, bộ môn hoặc học phần
+/// trong đúng một đợt khảo sát.
+/// </summary>
+public sealed record SurveyScopeAnalysisDto(
+    int SemesterSurveyId,
+    string ScopeType,
+    int ScopeId,
+    string ScopeName,
+    string TemplateName,
+    string SemesterName,
+    string AcademicYearName,
+    int SectionCount,
+    int TotalClassSize,
+    int ResponseCount,
+    decimal AverageScore,
+    IReadOnlyList<ScopeAnalysisQuestionDto> Questions,
+    IReadOnlyList<DepartmentSummaryRowDto>? Departments = null,
+    IReadOnlyList<CourseDiagnosisRowDto>? Courses = null,
+    IReadOnlyList<NormalizedSectionDto>? Sections = null);
+
 // ------------------------------ Sheet 5: báo cáo cá nhân giảng viên
 
 /// <summary>Một giảng viên có dạy trong đợt, dùng cho ô chọn ở bộ lọc.</summary>
@@ -224,7 +262,15 @@ public sealed record LecturerOptionDto(
     string FullName,
     string DepartmentName,
     string FacultyName,
-    int SectionCount);
+    int SectionCount,
+    int TotalClassSize,
+    int ResponseCount,
+    int ValidResponseCount,
+    decimal ValidResponseRate,
+    decimal? AverageScore,
+    decimal? MinScore,
+    decimal? MaxScore,
+    int WarningSectionCount);
 
 /// <summary>Một lớp trong bảng "các lớp giảng dạy trong kỳ".</summary>
 public sealed record LecturerSectionDto(
@@ -597,6 +643,11 @@ public interface ISurveyService
         int semesterSurveyId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<CourseSectionSurveyDto>> GetCourseSectionSurveysAsync(
+        int? semesterSurveyId = null,
+        int? semesterId = null,
+        CancellationToken cancellationToken = default);
+
     Task<SurveyOperationResult<CourseSectionSurveyDto>> GetCourseSectionSurveyAsync(
         int courseSectionSurveyId,
         CancellationToken cancellationToken = default);
@@ -638,6 +689,13 @@ public interface ISurveyService
     /// </summary>
     Task<SurveyOperationResult<SemesterSurveyCourseDiagnosisDto>> GetSemesterSurveyCourseDiagnosisAsync(
         int semesterSurveyId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Chi tiết điểm theo từng câu hỏi của một khoa, bộ môn hoặc học phần.</summary>
+    Task<SurveyOperationResult<SurveyScopeAnalysisDto>> GetSurveyScopeAnalysisAsync(
+        int semesterSurveyId,
+        string scopeType,
+        int scopeId,
         CancellationToken cancellationToken = default);
 
     /// <summary>Danh sách giảng viên có dạy trong đợt, dùng cho bộ lọc.</summary>
@@ -756,6 +814,9 @@ public static class SurveyErrorCodes
 
     /// <summary>Câu trả lời tự nhập vượt <see cref="SurveyRules.MaximumTextAnswerLength"/> ký tự.</summary>
     public const string AnswerTextTooLong = "SURVEY_ANSWER_TEXT_TOO_LONG";
+
+    public const string ScopeTypeInvalid = "SURVEY_SCOPE_TYPE_INVALID";
+    public const string ScopeNotFound = "SURVEY_SCOPE_NOT_FOUND";
 
     public const string CommentsTooLong = "SURVEY_COMMENTS_TOO_LONG";
 }

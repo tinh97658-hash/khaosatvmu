@@ -582,15 +582,36 @@ public sealed class EfSurveyService(
             endTime));
     }
 
-    public async Task<IReadOnlyList<CourseSectionSurveyDto>> GetCourseSectionSurveysAsync(
+    public Task<IReadOnlyList<CourseSectionSurveyDto>> GetCourseSectionSurveysAsync(
         int semesterSurveyId,
+        CancellationToken cancellationToken = default) =>
+        GetCourseSectionSurveysAsync(semesterSurveyId, null, cancellationToken);
+
+    public async Task<IReadOnlyList<CourseSectionSurveyDto>> GetCourseSectionSurveysAsync(
+        int? semesterSurveyId = null,
+        int? semesterId = null,
         CancellationToken cancellationToken = default)
     {
         var scope = await userScope.ResolveAsync(cancellationToken);
         if (scope.SeesNothing) return [];
 
-        var query = db.CourseSectionSurveys
-            .Where(x => x.SemesterSurveyId == semesterSurveyId);
+        // Bắt buộc phải lọc theo đợt khảo sát hoặc học kỳ để tránh quét toàn bộ dữ liệu lịch sử
+        if (!semesterSurveyId.HasValue && !semesterId.HasValue)
+        {
+            return [];
+        }
+
+        var query = db.CourseSectionSurveys.AsNoTracking().AsQueryable();
+
+        if (semesterSurveyId.HasValue)
+        {
+            query = query.Where(x => x.SemesterSurveyId == semesterSurveyId.Value);
+        }
+        else if (semesterId.HasValue)
+        {
+            query = query.Where(x => db.SemesterSurveys
+                .Any(s => s.SemesterSurveyId == x.SemesterSurveyId && s.SemesterId == semesterId.Value));
+        }
 
         // Bài khảo sát đi theo lớp, nên thừa hưởng đúng phạm vi của lớp: giảng viên
         // lấy lớp mình dạy, trưởng bộ môn lấy lớp có học phần thuộc bộ môn mình.
@@ -623,27 +644,40 @@ public sealed class EfSurveyService(
             sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList(),
             cancellationToken);
         var sectionIds = sectionSurveys.Select(x => x.CourseSectionId).Distinct().ToList();
-        var sections = await db.CourseSections
+        var sections = await db.CourseSections.AsNoTracking()
             .Where(x => sectionIds.Contains(x.CourseSectionId))
             .ToListAsync(cancellationToken);
-        var courses = await db.Courses
+        var courses = await db.Courses.AsNoTracking()
             .Where(x => sections.Select(section => section.CourseId).Contains(x.CourseId))
             .ToListAsync(cancellationToken);
-        var lecturers = await db.Lecturers
+        var lecturers = await db.Lecturers.AsNoTracking()
             .Where(x => sections.Select(section => section.LecturerId).Contains(x.LecturerId))
             .ToListAsync(cancellationToken);
-        var departments = await db.Departments
+        var departments = await db.Departments.AsNoTracking()
             .ToDictionaryAsync(x => x.DepartmentId, x => x, cancellationToken);
-        var faculties = await db.Faculties
+        var faculties = await db.Faculties.AsNoTracking()
             .ToDictionaryAsync(x => x.FacultyId, x => x.FacultyName, cancellationToken);
+
+        var sectionById = sections.ToDictionary(x => x.CourseSectionId);
+        var courseById = courses.ToDictionary(x => x.CourseId);
+        var lecturerById = lecturers
+            .GroupBy(x => x.LecturerId)
+            .ToDictionary(g => g.Key, g => g.First());
 
         return sectionSurveys
             .Select(sectionSurvey =>
             {
-                var section = sections
-                    .FirstOrDefault(x => x.CourseSectionId == sectionSurvey.CourseSectionId);
-                var course = courses.FirstOrDefault(x => x.CourseId == section?.CourseId);
-                var lecturer = lecturers.FirstOrDefault(x => x.LecturerId == section?.LecturerId);
+                sectionById.TryGetValue(sectionSurvey.CourseSectionId, out var section);
+                Course? course = null;
+                if (section != null)
+                {
+                    courseById.TryGetValue(section.CourseId, out course);
+                }
+                Lecturer? lecturer = null;
+                if (section?.LecturerId != null)
+                {
+                    lecturerById.TryGetValue(section.LecturerId.Value, out lecturer);
+                }
 
                 // Cùng thứ tự quy thuộc đơn vị với LoadAnalysedSectionsAsync và trang
                 // Lớp học phần, để ba màn hình không xếp một lớp vào ba khoa khác nhau.
@@ -1521,6 +1555,7 @@ public sealed class EfSurveyService(
     private sealed record AnalysedSection(
         int CourseSectionSurveyId,
         int CourseSectionId,
+        int CourseId,
         string CourseCode,
         string CourseName,
         string SectionName,
@@ -1532,6 +1567,7 @@ public sealed class EfSurveyService(
         int ResponseCount,
         /// <summary>Số phiếu qua được bộ lọc nhiễu.</summary>
         int ValidResponseCount,
+        decimal ValidTotalScore,
         decimal AverageScore,
         int? FacultyId,
         string FacultyName,
@@ -1641,6 +1677,7 @@ public sealed class EfSurveyService(
             result.Add(new AnalysedSection(
                 css.CourseSectionSurveyId,
                 css.CourseSectionId,
+                section?.CourseId ?? 0,
                 course?.CourseCode ?? string.Empty,
                 course?.CourseName ?? string.Empty,
                 section?.SectionName ?? string.Empty,
@@ -1650,6 +1687,7 @@ public sealed class EfSurveyService(
                 section?.ClassSize ?? 0,
                 tally.TotalCount,
                 tally.ValidCount,
+                tally.ValidTotal,
                 Math.Round(tally.ValidTotal / tally.ValidCount, 2),
                 facultyId,
                 facultyId is { } fId && faculties.TryGetValue(fId, out var fn) ? fn : "Chưa thuộc khoa",
@@ -1986,22 +2024,15 @@ public sealed class EfSurveyService(
     {
         if (sections.Count == 0) return [];
 
-        // Cần CourseId để gộp; AnalysedSection chỉ mang mã và tên nên tra lại.
-        var sectionIds = sections.Select(x => x.CourseSectionId).ToList();
-        var courseIdBySection = await db.CourseSections.AsNoTracking()
-            .Where(x => sectionIds.Contains(x.CourseSectionId))
-            .ToDictionaryAsync(x => x.CourseSectionId, x => x.CourseId, cancellationToken);
-
         var questionOrder = await QuestionOrderMapAsync(surveyTemplateId, cancellationToken);
         var cssIds = sections.Select(x => x.CourseSectionSurveyId).ToList();
         var perQuestion = await SectionQuestionStatsAsync(
             cssIds, questionOrder.Keys.ToList(), cancellationToken);
 
         var courseOfCss = sections
-            .Where(x => courseIdBySection.ContainsKey(x.CourseSectionId))
             .ToDictionary(
                 x => x.CourseSectionSurveyId,
-                x => courseIdBySection[x.CourseSectionId]);
+                x => x.CourseId);
 
         // Câu yếu nhất của từng học phần: gộp mọi lớp của học phần đó.
         var weakestByCourse = perQuestion
@@ -2017,8 +2048,7 @@ public sealed class EfSurveyService(
             .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Score).First());
 
         return sections
-            .Where(x => courseIdBySection.ContainsKey(x.CourseSectionId))
-            .GroupBy(x => courseIdBySection[x.CourseSectionId])
+            .GroupBy(x => x.CourseId)
             .Select(g =>
             {
                 var scores = g.Select(x => x.AverageScore).ToList();
@@ -2220,6 +2250,219 @@ public sealed class EfSurveyService(
             courseRows.Count(x => x.Verdict == CourseDiagnosisVerdicts.LecturerVariance)));
     }
 
+    public async Task<SurveyOperationResult<SurveyScopeAnalysisDto>> GetSurveyScopeAnalysisAsync(
+        int semesterSurveyId,
+        string scopeType,
+        int scopeId,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedScopeType = (scopeType ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalizedScopeType != "faculty" && normalizedScopeType != "department" && normalizedScopeType != "course")
+        {
+            return Failed<SurveyScopeAnalysisDto>(SurveyErrorCodes.ScopeTypeInvalid);
+        }
+
+        var header = await LoadSurveyHeaderAsync(semesterSurveyId, cancellationToken);
+        if (header is null)
+        {
+            return Failed<SurveyScopeAnalysisDto>(SurveyErrorCodes.SemesterSurveyNotFound);
+        }
+
+        var allSections = await LoadAnalysedSectionsAsync(semesterSurveyId, cancellationToken);
+        var sections = normalizedScopeType switch
+        {
+            "faculty" => allSections.Where(x => x.FacultyId == scopeId).ToList(),
+            "department" => allSections.Where(x => x.DepartmentId == scopeId).ToList(),
+            "course" => allSections.Where(x => x.CourseId == scopeId).ToList(),
+            _ => []
+        };
+
+        if (sections.Count == 0)
+        {
+            return Failed<SurveyScopeAnalysisDto>(SurveyErrorCodes.ScopeNotFound);
+        }
+
+        var scopeName = normalizedScopeType switch
+        {
+            "faculty" => sections[0].FacultyName,
+            "department" => sections[0].DepartmentName,
+            "course" => $"{sections[0].CourseCode} - {sections[0].CourseName}",
+            _ => string.Empty
+        };
+
+        var cssIds = sections.Select(x => x.CourseSectionSurveyId).ToList();
+
+        var questions = await (
+            from q in db.SurveyQuestions.AsNoTracking()
+            join s in db.AnswerScales.AsNoTracking() on q.AnswerScaleId equals s.AnswerScaleId
+            where q.SurveyTemplateId == header.SurveyTemplateId
+            orderby q.QuestionId
+            select new
+            {
+                q.QuestionId,
+                q.QuestionText,
+                q.AttentionCheckValue,
+                s.ScaleKind,
+                s.AnswerScaleName
+            })
+            .ToListAsync(cancellationToken);
+
+        var scoredQuestionIds = questions
+            .Where(x => x.AttentionCheckValue == null && x.ScaleKind == AnswerScaleKinds.Options)
+            .Select(x => x.QuestionId)
+            .ToList();
+
+        var scoresByQuestion = cssIds.Count == 0 || scoredQuestionIds.Count == 0
+            ? []
+            : await db.CourseSectionSurveyQuestionScores.AsNoTracking()
+                .Where(x => cssIds.Contains(x.CourseSectionSurveyId) && scoredQuestionIds.Contains(x.QuestionId))
+                .GroupBy(x => x.QuestionId)
+                .Select(g => new
+                {
+                    QuestionId = g.Key,
+                    Average = g.Average(x => x.AverageScore),
+                    TotalAnswers = g.Sum(x => x.AnswerCount)
+                })
+                .ToDictionaryAsync(x => x.QuestionId, x => x, cancellationToken);
+
+        var questionRows = questions
+            .Where(x => x.AttentionCheckValue == null)
+            .Select((q, index) =>
+            {
+                var stat = scoresByQuestion.GetValueOrDefault(q.QuestionId);
+                return new ScopeAnalysisQuestionDto(
+                    q.QuestionId,
+                    index + 1,
+                    q.QuestionText,
+                    stat is not null ? Math.Round(stat.Average, 2) : 0m,
+                    stat?.TotalAnswers ?? 0,
+                    [],
+                    q.ScaleKind,
+                    q.AnswerScaleName,
+                    null);
+            })
+            .ToList();
+
+        List<DepartmentSummaryRowDto>? scopeDepartments = null;
+        List<CourseDiagnosisRowDto>? scopeCourses = null;
+        List<NormalizedSectionDto>? scopeSections = null;
+
+        if (normalizedScopeType == "faculty")
+        {
+            var warningCutoff = WarningScoreCutoff(allSections.Select(x => x.AverageScore).ToList());
+            scopeDepartments = sections
+                .GroupBy(x => new { x.FacultyId, x.FacultyName, x.DepartmentId, x.DepartmentName })
+                .Select(g =>
+                {
+                    var scores = g.Select(x => x.AverageScore).ToList();
+                    var totalResponses = g.Sum(x => x.ResponseCount);
+                    var validResponses = g.Sum(x => x.ValidResponseCount);
+                    var totalClassSize = g.Sum(x => x.ClassSize);
+
+                    return new DepartmentSummaryRowDto(
+                        g.Key.FacultyId,
+                        g.Key.FacultyName,
+                        g.Key.DepartmentId,
+                        g.Key.DepartmentName,
+                        g.Count(),
+                        CountLecturers(g),
+                        totalClassSize,
+                        totalResponses,
+                        validResponses,
+                        totalClassSize == 0
+                            ? 0m
+                            : Math.Round((decimal)validResponses / totalClassSize * 100, 1),
+                        scores.Count == 0 ? null : Math.Round(scores.Average(), 2),
+                        warningCutoff is { } cutoff ? scores.Count(x => x <= cutoff) : 0);
+                })
+                .OrderBy(x => x.DepartmentName)
+                .ToList();
+        }
+        else if (normalizedScopeType == "department")
+        {
+            var warningCutoff = WarningScoreCutoff(allSections.Select(x => x.AverageScore).ToList());
+            scopeCourses = await BuildCourseDiagnosisAsync(
+                header.SurveyTemplateId,
+                sections,
+                warningCutoff,
+                cancellationToken);
+        }
+        else if (normalizedScopeType == "course")
+        {
+            var schoolScores = allSections.Select(x => x.AverageScore).ToList();
+            var schoolAverage = schoolScores.Count == 0 ? 0m : Math.Round(schoolScores.Average(), 3);
+            var schoolSd = SampleStandardDeviation(schoolScores);
+
+            var facultySections = allSections.Where(x => x.FacultyId == sections[0].FacultyId).ToList();
+            var facultyScores = facultySections.Select(x => x.AverageScore).ToList();
+            var facultyAverage = facultyScores.Count == 0 ? 0m : Math.Round(facultyScores.Average(), 3);
+            var facultySd = SampleStandardDeviation(facultyScores);
+            var canNormalizeFaculty = facultyScores.Count >= ReportThresholds.MinimumSectionsForNormalization;
+
+            var facultyGroup = new NormalizationGroupDto(
+                sections[0].FacultyId,
+                sections[0].FacultyName,
+                facultySections.Count,
+                facultyAverage,
+                facultySd,
+                canNormalizeFaculty,
+                schoolSd is > 0 && facultyScores.Count > 0
+                    ? Math.Round(
+                        (facultyAverage - schoolAverage) / (schoolSd.Value / (decimal)Math.Sqrt(facultyScores.Count)),
+                        2)
+                    : null);
+
+            scopeSections = sections
+                .Select(section =>
+                {
+                    decimal? zSchool = schoolSd is > 0
+                        ? Math.Round((section.AverageScore - schoolAverage) / schoolSd.Value, 2)
+                        : null;
+                    decimal? zFaculty = canNormalizeFaculty && facultySd is > 0
+                        ? Math.Round((section.AverageScore - facultyAverage) / facultySd.Value, 2)
+                        : null;
+
+                    var verdict = Verdict(facultyGroup, zSchool, zFaculty);
+
+                    return new NormalizedSectionDto(
+                        section.CourseSectionSurveyId,
+                        section.CourseCode,
+                        section.CourseName,
+                        section.SectionName,
+                        section.LecturerName,
+                        section.DepartmentName,
+                        section.FacultyName,
+                        section.ClassSize,
+                        section.AverageScore,
+                        zSchool,
+                        zFaculty,
+                        zSchool is not null && zFaculty is not null
+                            ? Math.Round(zFaculty.Value - zSchool.Value, 2)
+                            : null,
+                        verdict);
+                })
+                .OrderBy(x => x.SectionName)
+                .ToList();
+        }
+
+        return Succeeded(new SurveyScopeAnalysisDto(
+            semesterSurveyId,
+            normalizedScopeType,
+            scopeId,
+            scopeName,
+            header.TemplateName,
+            header.SemesterName,
+            header.AcademicYearName,
+            sections.Count,
+            sections.Sum(x => x.ClassSize),
+            sections.Sum(x => x.ValidResponseCount),
+            Math.Round(sections.Average(x => x.AverageScore), 2),
+            questionRows,
+            Departments: scopeDepartments,
+            Courses: scopeCourses,
+            Sections: scopeSections));
+    }
+
     public async Task<SurveyOperationResult<IReadOnlyList<LecturerOptionDto>>> GetSemesterSurveyLecturersAsync(
         int semesterSurveyId,
         CancellationToken cancellationToken = default)
@@ -2237,6 +2480,7 @@ public sealed class EfSurveyService(
         // GetLecturerReportAsync và cố ý không đụng tới.
         var scope = await userScope.ResolveAsync(cancellationToken);
         var sections = VisibleTo(scope, allSections);
+        var warningCutoff = WarningScoreCutoff(allSections.Select(x => x.AverageScore).ToList());
 
         // Lớp chưa gắn được giảng viên thì không có ai để làm báo cáo cá nhân.
         // Gom theo mã giảng viên và chỉ theo mã. Bộ môn/khoa của một lớp suy từ
@@ -2247,12 +2491,31 @@ public sealed class EfSurveyService(
         var options = sections
             .Where(x => x.LecturerId is not null)
             .GroupBy(x => x.LecturerId!.Value)
-            .Select(g => new LecturerOptionDto(
-                g.Key,
-                g.First().LecturerName,
-                g.First().DepartmentName,
-                g.First().FacultyName,
-                g.Count()))
+            .Select(g =>
+            {
+                int totalClassSize = g.Sum(x => x.ClassSize);
+                int validResponses = g.Sum(x => x.ValidResponseCount);
+                return new LecturerOptionDto(
+                    g.Key,
+                    g.First().LecturerName,
+                    g.First().DepartmentName,
+                    g.First().FacultyName,
+                    g.Count(),
+                    totalClassSize,
+                    g.Sum(x => x.ResponseCount),
+                    validResponses,
+                    totalClassSize > 0
+                        ? Math.Round((decimal)validResponses / totalClassSize * 100, 2)
+                        : 0m,
+                    validResponses > 0
+                        ? Math.Round(g.Sum(x => x.ValidTotalScore) / validResponses, 2)
+                        : null,
+                    g.Min(x => (decimal?)x.AverageScore),
+                    g.Max(x => (decimal?)x.AverageScore),
+                    warningCutoff is null
+                        ? 0
+                        : g.Count(x => x.AverageScore <= warningCutoff.Value));
+            })
             .OrderBy(x => x.FacultyName)
             .ThenBy(x => x.DepartmentName)
             .ThenBy(x => x.FullName)
