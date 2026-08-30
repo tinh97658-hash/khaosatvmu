@@ -1,9 +1,11 @@
 import type {
-  GraduationDataset,
+  GraduationAnalysisScope,
   GraduationFacets,
   GraduationImportResult,
   GraduationImportRow,
   GraduationMetadata,
+  GraduationOverview,
+  GraduationOverviewQuery,
   GraduationPeriod,
   GraduationQuery,
   GraduationQueryResult,
@@ -13,30 +15,21 @@ import { apiRequest, csrfRequest } from './apiClient';
 
 const basePath = '/api/v1/graduation-analytics';
 
-// Adapter tạm cho màn hình dashboard cũ; được loại bỏ khi chuyển sang cấu trúc ba tab.
-const toLegacyDataset = (period: GraduationPeriod): GraduationDataset => ({
-  datasetId: period.periodId,
-  datasetName: period.label,
-  originalFileName: period.originalFileName,
-  importedByName: period.importedByName,
-  importedAtUtc: period.importedAtUtc,
-  rowCount: period.rowCount,
-  minimumReviewDate: `${period.reviewYear}-${String(period.reviewMonth).padStart(2, '0')}-01`,
-  maximumReviewDate: `${period.reviewYear}-${String(period.reviewMonth).padStart(2, '0')}-01`,
-});
-
 export const graduationAnalyticsApi = {
   periods: () => apiRequest<GraduationPeriod[]>(`${basePath}/periods`),
-  datasets: () => apiRequest<GraduationPeriod[]>(`${basePath}/periods`)
-    .then((periods) => periods.map(toLegacyDataset)),
   metadata: () => apiRequest<GraduationMetadata>(`${basePath}/metadata`),
-  facets: (periodId: number) =>
-    apiRequest<GraduationFacets>(`${basePath}/periods/${periodId}/facets`),
+  facets: (scope: GraduationAnalysisScope, periodId?: number | null) => {
+    const query = new URLSearchParams({ scope });
+    if (scope === 'period' && periodId) query.set('periodId', String(periodId));
+    return apiRequest<GraduationFacets>(`${basePath}/facets?${query.toString()}`);
+  },
   importPeriod: (payload: {
     originalFileName: string;
     sourceSheetName: string;
     rows: GraduationImportRow[];
   }) => csrfRequest<GraduationImportResult>(`${basePath}/periods`, 'POST', payload),
+  overview: (payload: GraduationOverviewQuery) =>
+    csrfRequest<GraduationOverview>(`${basePath}/overview`, 'POST', payload),
   query: (payload: GraduationQuery) =>
     csrfRequest<GraduationQueryResult>(`${basePath}/query`, 'POST', payload),
   rows: (

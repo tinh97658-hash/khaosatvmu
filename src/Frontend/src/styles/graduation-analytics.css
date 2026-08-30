@@ -334,3 +334,89 @@
   .catalog-modal-card--import.modal-card { width: 100%; max-height: 100dvh; border: 0; }
   .catalog-modal-card--import .catalog-modal-body.modal-body { padding: 14px; }
 }
+
+/* Cấu trúc ba tab theo mô hình một file = một đợt. */
+.graduation-view-switch--three { display: flex; width: min(520px, 100%); }
+.graduation-view-switch--three button { flex: 1 1 0; }
+.graduation-tab-panel { min-width: 0; margin-top: 12px; }
+.graduation-tab-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #dfe4e8;
+  background: #fff;
+}
+.graduation-tab-heading > div > span { color: #68737d; font-size: 10px; font-weight: 700; letter-spacing: .05em; }
+.graduation-tab-heading h2 { margin: 3px 0 0; font-size: 17px; }
+.graduation-tab-heading p { margin: 3px 0 0; color: #68737d; font-size: 12px; }
+.graduation-tab-heading > span { display: inline-flex; align-items: center; gap: 6px; color: #68737d; font-size: 11px; }
+.graduation-tab-heading > span svg { width: 14px; height: 14px; }
+.graduation-tab-panel > .graduation-alert { margin-top: 8px; }
+.graduation-filters--years { grid-template-columns: repeat(5, minmax(120px, 1fr)) auto; }
+.graduation-kpis--five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.graduation-kpis--five > div:last-child { border-right: 0; }
+
+.graduation-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.graduation-overview-grid .graduation-overview-card--wide { grid-column: 1 / -1; }
+.graduation-matrix { margin-top: 12px; border: 1px solid #dfe4e8; background: #fff; }
+.graduation-matrix > header { padding: 12px 14px; border-bottom: 1px solid #dfe4e8; }
+.graduation-matrix h3 { margin: 0; font-size: 14px; }
+.graduation-matrix p { margin: 3px 0 0; color: #68737d; font-size: 11px; }
+.graduation-matrix > div { overflow: auto; }
+.graduation-matrix table { width: 100%; min-width: 540px; border-collapse: collapse; font-size: 12px; }
+.graduation-matrix th, .graduation-matrix td { padding: 9px 12px; border-right: 1px solid #edf0f2; border-bottom: 1px solid #edf0f2; text-align: right; font-variant-numeric: tabular-nums; }
+.graduation-matrix th:first-child { position: sticky; left: 0; z-index: 1; background: #f7f9fa; text-align: left; }
+.graduation-matrix thead th { background: #f7f9fa; color: #4d5962; }
+
+.graduation-period-context {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+  padding: 9px 12px;
+  border: 1px solid #dfe4e8;
+  background: #fff;
+}
+.graduation-period-context label { display: grid; min-width: min(320px, 100%); gap: 5px; color: #68737d; font-size: 12px; font-weight: 600; }
+.graduation-period-context select { height: 36px; border: 1px solid #cfd6db; border-radius: 3px; background: #fff; padding: 0 10px; color: #20262c; font: inherit; }
+.graduation-period-context > div { display: grid; justify-items: end; gap: 3px; font-size: 12px; }
+.graduation-period-context > div span { color: #68737d; }
+.graduation-table-section { margin-top: 8px; }
+.graduation-source-table table { min-width: 1550px; }
+.graduation-table-section > header > div { flex-wrap: wrap; }
+
+@media (max-width: 1100px) {
+  .graduation-filters--years { grid-template-columns: repeat(3, minmax(140px, 1fr)); }
+  .graduation-kpis--five { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .graduation-kpis--five > div { border-bottom: 1px solid #dfe4e8; }
+  .graduation-kpis--five > div:nth-child(3) { border-right: 0; }
+}
+
+@media (max-width: 900px) {
+  .graduation-tab-heading, .graduation-period-context { align-items: stretch; flex-direction: column; }
+  .graduation-period-context > div { justify-items: start; }
+  .graduation-overview-grid { grid-template-columns: 1fr; }
+  .graduation-overview-grid .graduation-overview-card--wide { grid-column: auto; }
+  .graduation-filters--years { grid-template-columns: 1fr 1fr; }
+  .graduation-kpis--five { grid-template-columns: 1fr 1fr; }
+  .graduation-kpis--five > div:nth-child(odd) { border-right: 1px solid #dfe4e8; }
+  .graduation-kpis--five > div:nth-child(even) { border-right: 0; }
+  .graduation-kpis--five > div:last-child { grid-column: 1 / -1; border-right: 0; }
+}
+
+@media (max-width: 560px) {
+  .graduation-view-switch--three button { padding-inline: 5px; font-size: 11px; }
+  .graduation-filters--years { grid-template-columns: 1fr; }
+  .graduation-kpis--five { grid-template-columns: 1fr; }
+  .graduation-kpis--five > div, .graduation-kpis--five > div:nth-child(odd) { grid-column: auto; border-right: 0; }
+  .graduation-period-column { display: none; }
+}

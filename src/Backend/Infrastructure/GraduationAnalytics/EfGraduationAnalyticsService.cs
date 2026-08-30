@@ -404,10 +404,15 @@ public sealed partial class EfGraduationAnalyticsService(
             x.Group,
             x.TotalOutcome,
             x.ExcellentCount,
+            Ratio(x.CompleteExcellentCount, x.TotalOutcome),
             x.VeryGoodCount,
+            Ratio(x.CompleteVeryGoodCount, x.TotalOutcome),
             x.GoodCount,
+            Ratio(x.CompleteGoodCount, x.TotalOutcome),
             x.AverageCount,
+            Ratio(x.CompleteAverageCount, x.TotalOutcome),
             x.WorkStudyTransferCount,
+            Ratio(x.CompleteWorkStudyTransferCount, x.TotalOutcome),
             x.CompleteRows,
             x.TotalRows)).ToList();
 

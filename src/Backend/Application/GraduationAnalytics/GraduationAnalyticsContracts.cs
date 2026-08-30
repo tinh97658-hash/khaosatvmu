@@ -165,10 +165,15 @@ public sealed record GraduationOutcomeGroupDto(
     string Group,
     decimal TotalOutcome,
     decimal ExcellentCount,
+    decimal? ExcellentRate,
     decimal VeryGoodCount,
+    decimal? VeryGoodRate,
     decimal GoodCount,
+    decimal? GoodRate,
     decimal AverageCount,
+    decimal? AverageRate,
     decimal WorkStudyTransferCount,
+    decimal? WorkStudyTransferRate,
     int IncludedRows,
     int TotalRows);
 

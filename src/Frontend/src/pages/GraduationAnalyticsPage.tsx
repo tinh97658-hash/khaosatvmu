@@ -8,33 +8,40 @@ import {
   Donut,
   FileSpreadsheet,
   LineChart as LineChartIcon,
+  LoaderCircle,
   PieChart,
-  RefreshCw,
+  Table2,
   Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { GraduationEChart } from '../components/graduation/GraduationEChart';
 import { GraduationImportDialog } from '../components/graduation/GraduationImportDialog';
-import {
-  GraduationOverview,
-  type GraduationOverviewChartModel,
-} from '../components/graduation/GraduationOverview';
 import { graduationAnalyticsApi } from '../services/graduationAnalyticsApi';
 import type {
+  GraduationAnalysisScope,
   GraduationChartType,
-  GraduationDataset,
+  GraduationDimension,
   GraduationFacets,
   GraduationMetadata,
+  GraduationOverview,
+  GraduationPeriod,
   GraduationQueryResult,
   GraduationRow,
 } from '../types/graduationAnalytics';
 import '../styles/graduation-analytics.css';
 
-const chartOptions: Array<{
-  id: GraduationChartType;
-  label: string;
-  icon: typeof BarChart3;
-}> = [
+type GraduationView = 'overview' | 'explore' | 'table';
+type ChartSort = 'auto' | 'value-desc' | 'value-asc' | 'label-asc';
+
+const bucketSeries = [
+  { key: 'excellent', countKey: 'excellentCount', rateKey: 'excellentRate', label: 'Xuất sắc', color: '#0788b8' },
+  { key: 'veryGood', countKey: 'veryGoodCount', rateKey: 'veryGoodRate', label: 'Giỏi', color: '#38a3a5' },
+  { key: 'good', countKey: 'goodCount', rateKey: 'goodRate', label: 'Khá', color: '#86b049' },
+  { key: 'average', countKey: 'averageCount', rateKey: 'averageRate', label: 'Trung bình', color: '#e2a23a' },
+  { key: 'workStudyTransfer', countKey: 'workStudyTransferCount', rateKey: 'workStudyTransferRate', label: 'Chuyển VHVL', color: '#9b6eb2' },
+] as const;
+
+const chartOptions: Array<{ id: GraduationChartType; label: string; icon: typeof BarChart3 }> = [
   { id: 'bar', label: 'Thanh ngang', icon: BarChart3 },
   { id: 'column', label: 'Cột', icon: ChartColumn },
   { id: 'stacked-bar', label: 'Thanh chồng', icon: ChartBarStacked },
@@ -45,53 +52,40 @@ const chartOptions: Array<{
   { id: 'donut', label: 'Donut', icon: Donut },
 ];
 
-const metricDefaults = ['initialEnrollment', 'eligible', 'onTimeCount', 'onTimeRate'];
-const compositionMetrics = [
-  { id: 'excellentCount', label: 'Xuất sắc', color: '#0788b8' },
-  { id: 'veryGoodCount', label: 'Giỏi', color: '#38a3a5' },
-  { id: 'goodCount', label: 'Khá', color: '#86b049' },
-  { id: 'averageCount', label: 'Trung bình', color: '#e2a23a' },
-  { id: 'workStudyTransferCount', label: 'Chuyển VHVL', color: '#9b6eb2' },
-];
-const isTimeDimension = (dimension: string) =>
-  dimension === 'reviewYear' || dimension === 'reviewPeriod';
-type ChartSort = 'auto' | 'value-desc' | 'value-asc' | 'label-asc';
-type GraduationView = 'overview' | 'explore';
 const queryValue = (key: string) => new URLSearchParams(window.location.search).get(key) ?? '';
+const initialView = (): GraduationView => {
+  const value = queryValue('gaView');
+  return value === 'explore' || value === 'table' ? value : 'overview';
+};
+const initialScope = (): GraduationAnalysisScope => queryValue('gaScope') === 'period' ? 'period' : 'cumulative';
 const initialChartType = (): GraduationChartType => {
   const value = queryValue('gaChart');
-  return ['bar', 'column', 'stacked-bar', 'stacked-column', 'line', 'area', 'pie', 'donut'].includes(value)
-    ? value as GraduationChartType
-    : 'bar';
+  return chartOptions.some((item) => item.id === value) ? value as GraduationChartType : 'bar';
 };
-const initialTopN = () => {
-  const value = Number(queryValue('gaTop'));
-  return [5, 10, 20].includes(value) ? value : 0;
+const positiveNumber = (value: string) => {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 };
-
-const formatValue = (value: number | null | undefined, unit?: 'count' | 'percent') => {
-  if (value === null || value === undefined) return '—';
+const formatValue = (value: number | null | undefined, unit: 'count' | 'percent' = 'count') => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
   return `${value.toLocaleString('vi-VN', { maximumFractionDigits: unit === 'percent' ? 1 : 0 })}${unit === 'percent' ? '%' : ''}`;
 };
-
 const sourceCell = (value: string | number | null, percent = false) => {
   if (value === null || value === '') return '—';
-  return percent ? `${Number(value).toLocaleString('vi-VN', { maximumFractionDigits: 4 })}%` : value;
+  if (percent && typeof value === 'number') return `${value.toLocaleString('vi-VN', { maximumFractionDigits: 4 })}%`;
+  return typeof value === 'number' ? value.toLocaleString('vi-VN', { maximumFractionDigits: 4 }) : value;
 };
 
-const toChartModel = (
-  result: GraduationQueryResult | null,
-  fallbackLabel: string,
-): GraduationOverviewChartModel => {
-  if (!result) return { data: [], series: [{ key: 'value', label: fallbackLabel }] };
-  const seriesLabels = [...new Set(result.points.map((point) => point.series).filter(Boolean))] as string[];
+const toChartModel = (result: GraduationQueryResult | null, label: string) => {
+  if (!result) return { data: [], series: [] as Array<{ key: string; label: string }> };
+  const seriesLabels = [...new Set(result.points.map((point) => point.series).filter((value): value is string => Boolean(value)))];
   if (seriesLabels.length === 0) {
     return {
       data: result.points.map((point) => ({ name: point.group, value: point.value })),
-      series: [{ key: 'value', label: fallbackLabel }],
+      series: [{ key: 'value', label }],
     };
   }
-  const series = seriesLabels.map((label, index) => ({ key: `series${index}`, label }));
+  const series = seriesLabels.map((seriesLabel, index) => ({ key: `series${index}`, label: seriesLabel }));
   const keyByLabel = new Map(series.map((item) => [item.label, item.key]));
   const grouped = new Map<string, Record<string, string | number | null>>();
   result.points.forEach((point) => {
@@ -103,543 +97,373 @@ const toChartModel = (
   return { data: [...grouped.values()], series };
 };
 
+const sortChartData = (
+  data: Array<Record<string, string | number | null>>,
+  series: Array<{ key: string }>,
+  sort: ChartSort,
+  topN: number,
+) => {
+  const next = [...data];
+  const total = (row: Record<string, string | number | null>) => series.reduce(
+    (sum, item) => sum + (typeof row[item.key] === 'number' ? Number(row[item.key]) : 0), 0);
+  if (sort === 'value-desc') next.sort((a, b) => total(b) - total(a));
+  if (sort === 'value-asc') next.sort((a, b) => total(a) - total(b));
+  if (sort === 'label-asc') next.sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
+  return topN > 0 ? next.slice(0, topN) : next;
+};
+
 export function GraduationAnalyticsPage() {
-  const [datasets, setDatasets] = useState<GraduationDataset[]>([]);
+  const [periods, setPeriods] = useState<GraduationPeriod[]>([]);
   const [metadata, setMetadata] = useState<GraduationMetadata | null>(null);
   const [facets, setFacets] = useState<GraduationFacets | null>(null);
-  const [selectedDatasetId, setSelectedDatasetId] = useState<number | null>(() => {
-    const value = Number(queryValue('gaDataset'));
-    return Number.isSafeInteger(value) && value > 0 ? value : null;
-  });
-  const [metricId, setMetricId] = useState(() => queryValue('gaMetric') || 'onTimeRate');
-  const [groupBy, setGroupBy] = useState(() => queryValue('gaGroup') || 'faculty');
-  const [seriesBy, setSeriesBy] = useState(() => queryValue('gaSeries'));
-  const [chartType, setChartType] = useState<GraduationChartType>(initialChartType);
-  const [chartSort, setChartSort] = useState<ChartSort>(() => {
-    const value = queryValue('gaSort');
-    return ['value-desc', 'value-asc', 'label-asc'].includes(value) ? value as ChartSort : 'auto';
-  });
-  const [topN, setTopN] = useState(initialTopN);
-  const [showLabels, setShowLabels] = useState(() => queryValue('gaLabels') === '1');
+  const [view, setView] = useState<GraduationView>(initialView);
+  const [scope, setScope] = useState<GraduationAnalysisScope>(initialScope);
+  const [periodId, setPeriodId] = useState<number | null>(() => positiveNumber(queryValue('gaPeriod')));
   const [faculty, setFaculty] = useState(() => queryValue('gaFaculty'));
   const [program, setProgram] = useState(() => queryValue('gaProgram'));
   const [cohort, setCohort] = useState(() => queryValue('gaCohort'));
-  const [reviewYear, setReviewYear] = useState(() => queryValue('gaYear'));
-  const [result, setResult] = useState<GraduationQueryResult | null>(null);
-  const [kpis, setKpis] = useState<Record<string, number | null>>({});
-  const [composition, setComposition] = useState<Record<string, number | null>>({});
-  const [compositionLoading, setCompositionLoading] = useState(false);
+  const [fromYear, setFromYear] = useState(() => queryValue('gaFrom'));
+  const [toYear, setToYear] = useState(() => queryValue('gaTo'));
+  const [metricId, setMetricId] = useState(() => queryValue('gaMetric') || 'excellentRate');
+  const [groupBy, setGroupBy] = useState<GraduationDimension['id']>(() => {
+    const value = queryValue('gaGroup');
+    return value === 'program' || value === 'cohort' ? value : 'faculty';
+  });
+  const [seriesBy, setSeriesBy] = useState<GraduationDimension['id'] | ''>(() => {
+    const value = queryValue('gaSeries');
+    return value === 'faculty' || value === 'program' || value === 'cohort' ? value : '';
+  });
+  const [chartType, setChartType] = useState<GraduationChartType>(initialChartType);
+  const [chartSort, setChartSort] = useState<ChartSort>(() => {
+    const value = queryValue('gaSort');
+    return value === 'value-desc' || value === 'value-asc' || value === 'label-asc' ? value : 'auto';
+  });
+  const [topN, setTopN] = useState(() => Number(queryValue('gaTop')) || 0);
+  const [showLabels, setShowLabels] = useState(() => queryValue('gaLabels') === '1');
+  const [overview, setOverview] = useState<GraduationOverview | null>(null);
+  const [queryResult, setQueryResult] = useState<GraduationQueryResult | null>(null);
   const [rows, setRows] = useState<GraduationRow[]>([]);
   const [rowTotal, setRowTotal] = useState(0);
   const [rowPage, setRowPage] = useState(1);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [queryLoading, setQueryLoading] = useState(false);
+  const [panelLoading, setPanelLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [panelError, setPanelError] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [view, setView] = useState<GraduationView>(() => queryValue('gaView') === 'explore' ? 'explore' : 'overview');
-  const [overviewResults, setOverviewResults] = useState<{
-    groupedRate: GraduationQueryResult | null;
-    trendRate: GraduationQueryResult | null;
-    eligible: GraduationQueryResult | null;
-    onTime: GraduationQueryResult | null;
-  }>({ groupedRate: null, trendRate: null, eligible: null, onTime: null });
-  const [overviewLoading, setOverviewLoading] = useState(false);
-  const [overviewError, setOverviewError] = useState<string | null>(null);
 
-  const loadInitial = async (preferredDatasetId?: number) => {
+  const loadInitial = useCallback(async (preferredPeriodId?: number) => {
     setLoading(true);
     setError(null);
     try {
-      const [nextDatasets, nextMetadata] = await Promise.all([
-        graduationAnalyticsApi.datasets(),
+      const [nextPeriods, nextMetadata] = await Promise.all([
+        graduationAnalyticsApi.periods(),
         graduationAnalyticsApi.metadata(),
       ]);
-      setDatasets(nextDatasets);
+      setPeriods(nextPeriods);
       setMetadata(nextMetadata);
+      setPeriodId((current) => preferredPeriodId
+        ?? (current && nextPeriods.some((item) => item.periodId === current)
+          ? current
+          : nextPeriods[0]?.periodId ?? null));
       setMetricId((current) => nextMetadata.metrics.some((item) => item.id === current)
-        ? current : 'onTimeRate');
-      setGroupBy((current) => nextMetadata.dimensions.some((item) => item.id === current && item.id !== 'all')
-        ? current : 'faculty');
-      setSeriesBy((current) => nextMetadata.dimensions.some((item) => item.id === current && item.id !== 'all')
-        ? current : '');
-      setSelectedDatasetId((current) => preferredDatasetId
-        ?? (current && nextDatasets.some((item) => item.datasetId === current) ? current : nextDatasets[0]?.datasetId ?? null));
+        ? current
+        : nextMetadata.metrics[0]?.id ?? 'excellentRate');
     } catch {
-      setError('Không tải được module thống kê tốt nghiệp.');
+      setError('Không tải được module thống kê kết quả tốt nghiệp.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { void loadInitial(); }, []);
+  useEffect(() => { void loadInitial(); }, [loadInitial]);
+  useEffect(() => {
+    if (seriesBy === groupBy) setSeriesBy('');
+  }, [groupBy, seriesBy]);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const setOrDelete = (key: string, value: string | number | null) => {
-      if (value === null || value === '' || value === 0) query.delete(key);
+      if (value === '' || value === null || value === 0) query.delete(key);
       else query.set(key, String(value));
     };
-    setOrDelete('gaDataset', selectedDatasetId);
     setOrDelete('gaView', view === 'overview' ? '' : view);
-    setOrDelete('gaMetric', metricId === 'onTimeRate' ? '' : metricId);
-    setOrDelete('gaGroup', groupBy === 'faculty' ? '' : groupBy);
-    setOrDelete('gaSeries', seriesBy);
-    setOrDelete('gaChart', chartType === 'bar' ? '' : chartType);
-    setOrDelete('gaSort', chartSort === 'auto' ? '' : chartSort);
-    setOrDelete('gaTop', topN);
-    setOrDelete('gaLabels', showLabels ? '1' : '');
+    setOrDelete('gaScope', view === 'explore' && scope === 'period' ? scope : '');
+    setOrDelete('gaPeriod', view === 'table' || view === 'explore' && scope === 'period' ? periodId : null);
     setOrDelete('gaFaculty', faculty);
     setOrDelete('gaProgram', program);
     setOrDelete('gaCohort', cohort);
-    setOrDelete('gaYear', reviewYear);
+    setOrDelete('gaFrom', view === 'overview' ? fromYear : '');
+    setOrDelete('gaTo', view === 'overview' ? toYear : '');
+    setOrDelete('gaMetric', view === 'explore' ? metricId : '');
+    setOrDelete('gaGroup', view === 'explore' && groupBy !== 'faculty' ? groupBy : '');
+    setOrDelete('gaSeries', view === 'explore' ? seriesBy : '');
+    setOrDelete('gaChart', view === 'explore' && chartType !== 'bar' ? chartType : '');
+    setOrDelete('gaSort', view === 'explore' && chartSort !== 'auto' ? chartSort : '');
+    setOrDelete('gaTop', view === 'explore' ? topN : 0);
+    setOrDelete('gaLabels', view === 'explore' && showLabels ? '1' : '');
     const nextUrl = `${window.location.pathname}${query.size ? `?${query}` : ''}${window.location.hash}`;
     window.history.replaceState(window.history.state, '', nextUrl);
-  }, [selectedDatasetId, view, metricId, groupBy, seriesBy, chartType, chartSort, topN, showLabels, faculty, program, cohort, reviewYear]);
+  }, [chartSort, chartType, cohort, faculty, fromYear, groupBy, metricId, periodId, program, scope, seriesBy, showLabels, toYear, topN, view]);
 
+  const facetScope: GraduationAnalysisScope = view === 'overview'
+    ? 'cumulative'
+    : view === 'table' ? 'period' : scope;
   useEffect(() => {
-    if (!selectedDatasetId) {
+    if (facetScope === 'period' && !periodId) {
       setFacets(null);
       return;
     }
     let cancelled = false;
-    graduationAnalyticsApi.facets(selectedDatasetId)
-      .then((nextFacets) => { if (!cancelled) setFacets(nextFacets); })
+    graduationAnalyticsApi.facets(facetScope, facetScope === 'period' ? periodId : null)
+      .then((next) => { if (!cancelled) setFacets(next); })
       .catch(() => { if (!cancelled) toast.error('Không tải được danh mục bộ lọc'); });
     return () => { cancelled = true; };
-  }, [selectedDatasetId]);
+  }, [facetScope, periodId]);
 
   useEffect(() => {
-    if (!selectedDatasetId) {
-      setKpis({});
-      return;
-    }
+    if (view !== 'overview' || periods.length === 0) return;
     let cancelled = false;
-    const filters = {
+    setPanelLoading(true);
+    setPanelError(null);
+    graduationAnalyticsApi.overview({
       faculty: faculty || null,
       program: program || null,
       cohort: cohort || null,
-      reviewYear: reviewYear ? Number(reviewYear) : null,
-    };
-    const base = { datasetIds: [selectedDatasetId], groupBy: 'all', ...filters };
-    Promise.all(metricDefaults.map((id) => graduationAnalyticsApi.query({ ...base, metricId: id }))).then((kpiResults) => {
-      if (cancelled) return;
-      setError(null);
-      setKpis(Object.fromEntries(metricDefaults.map((id, index) => [id, kpiResults[index].points[0]?.value ?? null])));
-    }).catch(() => {
-      if (!cancelled) setError('Không tải được các chỉ số tổng quan. Hãy thử lại.');
-    });
+      fromYear: fromYear ? Number(fromYear) : null,
+      toYear: toYear ? Number(toYear) : null,
+    }).then((next) => { if (!cancelled) setOverview(next); })
+      .catch(() => { if (!cancelled) setPanelError('Không tải được dữ liệu Tổng quan.'); })
+      .finally(() => { if (!cancelled) setPanelLoading(false); });
     return () => { cancelled = true; };
-  }, [selectedDatasetId, faculty, program, cohort, reviewYear]);
+  }, [cohort, faculty, fromYear, periods.length, program, toYear, view]);
 
   useEffect(() => {
-    if (!selectedDatasetId) {
-      setResult(null);
-      return;
-    }
-    if (view !== 'explore') return;
+    if (view !== 'explore' || !metadata || scope === 'period' && !periodId) return;
     let cancelled = false;
-    setQueryLoading(true);
+    setPanelLoading(true);
+    setPanelError(null);
     graduationAnalyticsApi.query({
-      datasetIds: [selectedDatasetId],
+      scope,
+      periodId: scope === 'period' ? periodId : null,
       metricId,
       groupBy,
       seriesBy: seriesBy || null,
       faculty: faculty || null,
       program: program || null,
       cohort: cohort || null,
-      reviewYear: reviewYear ? Number(reviewYear) : null,
-    }).then((nextResult) => {
-      if (!cancelled) {
-        setError(null);
-        setResult(nextResult);
-      }
-    }).catch(() => {
-      if (!cancelled) setError('Không tải được dữ liệu biểu đồ. Hãy thử lại.');
-    }).finally(() => {
-      if (!cancelled) setQueryLoading(false);
-    });
+    }).then((next) => { if (!cancelled) setQueryResult(next); })
+      .catch(() => { if (!cancelled) setPanelError('Không thể tạo biểu đồ với cấu hình hiện tại.'); })
+      .finally(() => { if (!cancelled) setPanelLoading(false); });
     return () => { cancelled = true; };
-  }, [selectedDatasetId, view, metricId, groupBy, seriesBy, faculty, program, cohort, reviewYear]);
+  }, [cohort, faculty, groupBy, metadata, metricId, periodId, program, scope, seriesBy, view]);
 
   useEffect(() => {
-    if (!selectedDatasetId) {
-      setComposition({});
-      return;
-    }
-    if (view !== 'overview') return;
+    if (view !== 'table' || !periodId) return;
     let cancelled = false;
-    setCompositionLoading(true);
-    const filters = {
-      faculty: faculty || null,
-      program: program || null,
-      cohort: cohort || null,
-      reviewYear: reviewYear ? Number(reviewYear) : null,
-    };
-    Promise.all(compositionMetrics.map((item) => graduationAnalyticsApi.query({
-      datasetIds: [selectedDatasetId], metricId: item.id, groupBy: 'all', ...filters,
-    }))).then((responses) => {
-      if (cancelled) return;
-      setComposition(Object.fromEntries(compositionMetrics.map((item, index) => [
-        item.id,
-        responses[index].points[0]?.value ?? null,
-      ])));
-    }).catch(() => {
-      if (!cancelled) toast.error('Không tải được cơ cấu kết quả tốt nghiệp');
-    }).finally(() => {
-      if (!cancelled) setCompositionLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [selectedDatasetId, view, faculty, program, cohort, reviewYear]);
-
-  useEffect(() => {
-    if (!selectedDatasetId || view !== 'overview') return;
-    let cancelled = false;
-    setOverviewLoading(true);
-    setOverviewError(null);
-    const filters = {
-      faculty: faculty || null,
-      program: program || null,
-      cohort: cohort || null,
-      reviewYear: reviewYear ? Number(reviewYear) : null,
-    };
-    const base = { datasetIds: [selectedDatasetId], ...filters };
-    Promise.all([
-      graduationAnalyticsApi.query({ ...base, metricId: 'onTimeRate', groupBy: 'faculty', seriesBy: 'reviewYear' }),
-      graduationAnalyticsApi.query({ ...base, metricId: 'onTimeRate', groupBy: 'reviewYear', seriesBy: 'faculty' }),
-      graduationAnalyticsApi.query({ ...base, metricId: 'eligible', groupBy: 'faculty' }),
-      graduationAnalyticsApi.query({ ...base, metricId: 'onTimeCount', groupBy: 'faculty' }),
-    ]).then(([groupedRate, trendRate, eligible, onTime]) => {
-      if (!cancelled) setOverviewResults({ groupedRate, trendRate, eligible, onTime });
-    }).catch(() => {
-      if (!cancelled) setOverviewError('Không tải được các biểu đồ tổng quan. Hãy thử lại hoặc chuyển sang Khám phá chi tiết.');
-    }).finally(() => {
-      if (!cancelled) setOverviewLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [selectedDatasetId, view, faculty, program, cohort, reviewYear]);
-
-  useEffect(() => {
-    if (!selectedDatasetId) return;
-    let cancelled = false;
-    graduationAnalyticsApi.rows(selectedDatasetId, rowPage, 25, search, {
+    setPanelLoading(true);
+    setPanelError(null);
+    graduationAnalyticsApi.rows(periodId, rowPage, 25, search, {
       faculty: faculty || undefined,
       program: program || undefined,
       cohort: cohort || undefined,
-    })
-      .then((page) => {
-        if (cancelled) return;
-        setRows(page.items);
-        setRowTotal(page.totalCount);
-      })
-      .catch(() => { if (!cancelled) toast.error('Không tải được bảng dữ liệu nguồn'); });
+    }).then((page) => {
+      if (cancelled) return;
+      setRows(page.items);
+      setRowTotal(page.totalCount);
+    }).catch(() => { if (!cancelled) setPanelError('Không tải được bảng dữ liệu nguồn.'); })
+      .finally(() => { if (!cancelled) setPanelLoading(false); });
     return () => { cancelled = true; };
-  }, [selectedDatasetId, rowPage, search, faculty, program, cohort, reviewYear]);
+  }, [cohort, faculty, periodId, program, rowPage, search, view]);
 
   const metric = metadata?.metrics.find((item) => item.id === metricId);
-  const chartModel = useMemo(
-    () => toChartModel(result, metric?.label ?? 'Giá trị'),
-    [result, metric?.label],
-  );
-  const chartData = chartModel.data;
-  const displayChartData = useMemo(() => {
-    const next = [...chartData];
-    const total = (row: Record<string, string | number | null>) => chartModel.series.reduce(
-      (sum, item) => sum + (typeof row[item.key] === 'number' ? Number(row[item.key]) : 0), 0,
-    );
-    const effectiveSort = chartSort === 'auto'
-      ? (isTimeDimension(groupBy) ? 'source' : 'value-desc')
-      : chartSort;
-    if (effectiveSort === 'value-desc') next.sort((a, b) => total(b) - total(a));
-    else if (effectiveSort === 'value-asc') next.sort((a, b) => total(a) - total(b));
-    else if (effectiveSort === 'label-asc') next.sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
-    return topN > 0 ? next.slice(0, topN) : next;
-  }, [chartData, chartModel.series, chartSort, groupBy, topN]);
-  const overviewGroupedRate = useMemo(
-    () => toChartModel(overviewResults.groupedRate, 'Tỷ lệ đúng hạn'),
-    [overviewResults.groupedRate],
-  );
-  const overviewTrendRate = useMemo(
-    () => toChartModel(overviewResults.trendRate, 'Tỷ lệ đúng hạn'),
-    [overviewResults.trendRate],
-  );
-  const overviewCompletion = useMemo(() => {
-    const eligibleByGroup = new Map(overviewResults.eligible?.points.map((point) => [point.group, point.value]) ?? []);
-    const onTimeByGroup = new Map(overviewResults.onTime?.points.map((point) => [point.group, point.value]) ?? []);
-    const groups = [...new Set([
-      ...(overviewResults.eligible?.points.map((point) => point.group) ?? []),
-      ...(overviewResults.onTime?.points.map((point) => point.group) ?? []),
-    ])];
-    let hasInvalid = false;
-    const data = groups.map((name) => {
-      const eligible = eligibleByGroup.get(name);
-      const onTime = onTimeByGroup.get(name);
-      const comparable = typeof eligible === 'number' && typeof onTime === 'number';
-      const invalid = comparable && onTime > eligible;
-      if (invalid) hasInvalid = true;
-      return {
-        name,
-        onTime: typeof onTime === 'number' ? onTime : null,
-        notOnTime: comparable && !invalid ? eligible - onTime : null,
-      };
-    });
-    return {
-      model: {
-        data,
-        series: [
-          { key: 'onTime', label: 'Đúng hạn' },
-          { key: 'notOnTime', label: 'Chưa đúng hạn' },
-        ],
-      } satisfies GraduationOverviewChartModel,
-      hasInvalid,
-    };
-  }, [overviewResults.eligible, overviewResults.onTime]);
-  const selectedDataset = datasets.find((item) => item.datasetId === selectedDatasetId);
-  const rowPageCount = Math.max(1, Math.ceil(rowTotal / 25));
-  const compositionTotal = compositionMetrics.reduce(
-    (sum, item) => sum + (composition[item.id] ?? 0), 0,
-  );
-  const availablePrograms = facets?.programs.filter((item) =>
-    !faculty || item.facultyName === faculty) ?? [];
-  const chartUnavailableReason = useCallback((type: GraduationChartType) =>
-    !(metric?.chartTypes.includes(type) ?? false)
-      ? 'Chỉ tiêu này không hỗ trợ loại biểu đồ'
-      : ['stacked-bar', 'stacked-column'].includes(type) && chartModel.series.length < 2
-        ? 'Chọn Phân chuỗi để dùng biểu đồ chồng'
-        : ['pie', 'donut'].includes(type) && chartModel.series.length !== 1
-          ? 'Biểu đồ tròn chỉ dùng khi không phân chuỗi'
-          : ['pie', 'donut'].includes(type) && displayChartData.length > 12
-            ? 'Giới hạn tối đa 12 nhóm để biểu đồ dễ đọc'
-            : '', [metric?.chartTypes, chartModel.series.length, displayChartData.length]);
-
+  const availablePrograms = useMemo(() => facets?.programs.filter((item) =>
+    !faculty || item.facultyName === faculty) ?? [], [facets?.programs, faculty]);
+  const chartModel = useMemo(() => toChartModel(queryResult, metric?.label ?? 'Giá trị'), [metric?.label, queryResult]);
+  const displayChartData = useMemo(() =>
+    sortChartData(chartModel.data, chartModel.series, chartSort, topN),
+  [chartModel.data, chartModel.series, chartSort, topN]);
+  const distinctExploreGroups = new Set(queryResult?.points.map((point) => point.group)).size;
+  const availableChartTypes = useMemo(() => metric?.chartTypes.filter((type) => {
+    if ((type === 'pie' || type === 'donut') && (seriesBy || distinctExploreGroups > 12)) return false;
+    if ((type === 'stacked-bar' || type === 'stacked-column') && !seriesBy) return false;
+    return true;
+  }) ?? [], [distinctExploreGroups, metric?.chartTypes, seriesBy]);
   useEffect(() => {
-    if (metric && chartUnavailableReason(chartType)) {
-      setChartType(chartModel.series.length > 1 ? 'column' : 'bar');
+    if (availableChartTypes.length > 0 && !availableChartTypes.includes(chartType)) {
+      setChartType(availableChartTypes[0]);
     }
-  }, [chartType, chartModel.series.length, chartUnavailableReason, metric]);
+  }, [availableChartTypes, chartType]);
+
+  const overviewCountData = useMemo(() => overview?.byCohort.map((item) => ({
+    name: item.group,
+    excellent: item.excellentCount,
+    veryGood: item.veryGoodCount,
+    good: item.goodCount,
+    average: item.averageCount,
+    workStudyTransfer: item.workStudyTransferCount,
+  })) ?? [], [overview?.byCohort]);
+  const overviewRateData = useMemo(() => overview?.byCohort.map((item) => ({
+    name: item.group,
+    excellent: item.excellentRate,
+    veryGood: item.veryGoodRate,
+    good: item.goodRate,
+    average: item.averageRate,
+    workStudyTransfer: item.workStudyTransferRate,
+  })) ?? [], [overview?.byCohort]);
+  const trendModel = useMemo(() => {
+    const points = overview?.cohortYear ?? [];
+    const cohorts = [...new Set(points.map((point) => point.cohort))];
+    const series = cohorts.map((label, index) => ({ key: `cohort${index}`, label }));
+    const keyByCohort = new Map(series.map((item) => [item.label, item.key]));
+    const rowsByYear = new Map<number, Record<string, string | number | null>>();
+    points.forEach((point) => {
+      const row = rowsByYear.get(point.reviewYear) ?? { name: String(point.reviewYear) };
+      const key = keyByCohort.get(point.cohort);
+      if (key) row[key] = point.totalOutcome;
+      rowsByYear.set(point.reviewYear, row);
+    });
+    return { data: [...rowsByYear.entries()].sort(([a], [b]) => a - b).map(([, row]) => row), series };
+  }, [overview?.cohortYear]);
+  const matrixModel = useMemo(() => {
+    const points = overview?.cohortYear ?? [];
+    const years = [...new Set(points.map((point) => point.reviewYear))].sort((a, b) => a - b);
+    const cohorts = [...new Set(points.map((point) => point.cohort))].sort((a, b) => a.localeCompare(b, 'vi'));
+    const values = new Map(points.map((point) => [`${point.cohort}|${point.reviewYear}`, point.totalOutcome]));
+    return { years, cohorts, values };
+  }, [overview?.cohortYear]);
+  const selectedPeriod = periods.find((item) => item.periodId === periodId) ?? null;
+  const rowPageCount = Math.max(1, Math.ceil(rowTotal / 25));
 
   const resetFilters = () => {
     setFaculty('');
     setProgram('');
     setCohort('');
-    setReviewYear('');
+    setFromYear('');
+    setToYear('');
     setRowPage(1);
   };
-
-  const selectDataset = (datasetId: number) => {
-    setSelectedDatasetId(datasetId);
-    setSeriesBy('');
+  const handlePeriodChange = (nextId: number) => {
+    setPeriodId(nextId);
+    setRowPage(1);
+    setSearch('');
     resetFilters();
   };
-
   const handleImport = async (payload: Parameters<typeof graduationAnalyticsApi.importPeriod>[0]) => {
     const imported = await graduationAnalyticsApi.importPeriod(payload);
     await loadInitial(imported.period.periodId);
+    setPeriodId(imported.period.periodId);
+    setScope('period');
+    setView('table');
+    setRowPage(1);
     toast.success(`Đã import đợt ${imported.period.label} với ${imported.period.rowCount} dòng`);
     return imported.period;
   };
 
-  if (loading) return <div className="graduation-page"><div className="graduation-state"><RefreshCw className="spin" /> Đang tải module...</div></div>;
-
-  if (error && !metadata) {
-    return (
-      <div className="graduation-page">
-        <div className="graduation-empty">
-          <h2>Không tải được dữ liệu</h2><p>{error}</p>
-          <button type="button" className="btn btn-primary" onClick={() => void loadInitial()}>Thử lại</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (datasets.length === 0) {
-    return (
-      <div className="graduation-page">
-        <header className="graduation-page__header"><div><span>BÁO CÁO ĐÀO TẠO</span><h1>Thống kê sinh viên tốt nghiệp đúng hạn</h1></div></header>
-        <div className="graduation-empty">
-          <FileSpreadsheet aria-hidden="true" size={36} />
-          <h2>Chưa có bộ dữ liệu tốt nghiệp</h2>
-          <p>Import biểu mẫu Excel để xem trước và tạo dashboard từ các chỉ tiêu đã tính sẵn.</p>
-          <button type="button" className="btn btn-primary" onClick={() => setImportOpen(true)}><Upload /> Import file Excel</button>
-        </div>
-        <GraduationImportDialog isOpen={importOpen} onClose={() => setImportOpen(false)} onImport={handleImport} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="graduation-page">
-      <header className="graduation-page__header">
-        <div><span>BÁO CÁO ĐÀO TẠO</span><h1>Thống kê sinh viên tốt nghiệp đúng hạn</h1></div>
-        <button type="button" className="btn btn-primary" onClick={() => setImportOpen(true)}><Upload aria-hidden="true" size={17} /> Import file mới</button>
-      </header>
-
-      <section className="graduation-context" aria-label="Phạm vi dữ liệu">
-        <label>Bộ dữ liệu<select value={selectedDatasetId ?? ''} onChange={(event) => selectDataset(Number(event.target.value))}>
-          {datasets.map((item) => <option key={item.datasetId} value={item.datasetId}>{item.datasetName}</option>)}
-        </select></label>
-        {selectedDataset && <div className="graduation-context__meta"><strong>{selectedDataset.rowCount} dòng</strong><span>{selectedDataset.originalFileName} · {new Date(selectedDataset.importedAtUtc).toLocaleString('vi-VN')}</span></div>}
-      </section>
-
-      {error && <div className="graduation-alert" role="alert">{error}</div>}
-
-      <section className="graduation-filters" aria-label="Bộ lọc dashboard">
-        <label>Khoa<select value={faculty} onChange={(event) => { setFaculty(event.target.value); setProgram(''); setRowPage(1); }}>
-          <option value="">Toàn trường</option>
-          {facets?.faculties.map((item) => <option key={item} value={item}>{item}</option>)}
-        </select></label>
-        <label>Ngành / CTĐT<select value={program} onChange={(event) => { setProgram(event.target.value); setRowPage(1); }}>
-          <option value="">Tất cả ngành</option>
-          {availablePrograms.map((item) => <option key={`${item.facultyName}-${item.value}-${item.label}`} value={item.value}>{item.label}</option>)}
-        </select></label>
-        <label>Khóa<select value={cohort} onChange={(event) => { setCohort(event.target.value); setRowPage(1); }}>
-          <option value="">Tất cả khóa</option>
-          {facets?.cohorts.map((item) => <option key={item} value={item}>{item}</option>)}
-        </select></label>
-        <label>Năm xét<select value={reviewYear} onChange={(event) => { setReviewYear(event.target.value); setRowPage(1); }}>
-          <option value="">Tất cả năm</option>
-          {facets?.reviewYears.map((item) => <option key={item} value={item}>{item}</option>)}
-        </select></label>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={resetFilters} disabled={!faculty && !program && !cohort && !reviewYear}>Xóa lọc</button>
-      </section>
-
-      <nav className="graduation-view-switch" aria-label="Chế độ xem dashboard">
-        <button type="button" className={view === 'overview' ? 'is-selected' : ''} aria-pressed={view === 'overview'} onClick={() => setView('overview')}>
-          Tổng quan
-        </button>
-        <button type="button" className={view === 'explore' ? 'is-selected' : ''} aria-pressed={view === 'explore'} onClick={() => setView('explore')}>
-          Khám phá chi tiết
-        </button>
-      </nav>
-
-      {view === 'overview' ? <>
-      <section className="graduation-kpis" aria-label="Chỉ số tổng quan">
-        {[
-          ['initialEnrollment', 'Sinh viên nhập học'],
-          ['eligible', 'Được xét tốt nghiệp'],
-          ['onTimeCount', 'Tốt nghiệp đúng hạn'],
-          ['onTimeRate', 'Tỷ lệ đúng hạn'],
-        ].map(([id, label]) => <div key={id}><span>{label}</span><strong>{formatValue(kpis[id], id === 'onTimeRate' ? 'percent' : 'count')}</strong><small>Phạm vi bộ dữ liệu đang chọn</small></div>)}
-      </section>
-
-      <section className="graduation-composition" aria-label="Cơ cấu kết quả tốt nghiệp">
-        <header>
-          <div><span>GÓC NHÌN NHANH</span><h2>Cơ cấu kết quả trong phạm vi đang lọc</h2></div>
-          <strong>{compositionLoading ? 'Đang cập nhật...' : `${formatValue(compositionTotal, 'count')} sinh viên`}</strong>
-        </header>
-        {compositionTotal > 0 ? (
-          <>
-            <div className="graduation-composition__chart" role="img" aria-label="Biểu đồ cơ cấu xếp loại và chuyển VHVL">
-              {compositionMetrics.map((item) => {
-                const value = composition[item.id] ?? 0;
-                if (value <= 0) return null;
-                return <span key={item.id} style={{ width: `${(value / compositionTotal) * 100}%`, background: item.color }} title={`${item.label}: ${formatValue(value, 'count')}`} />;
-              })}
-            </div>
-            <div className="graduation-composition__legend">
-              {compositionMetrics.map((item) => {
-                const value = composition[item.id] ?? 0;
-                return <div key={item.id}><i style={{ background: item.color }} /><span>{item.label}</span><strong>{formatValue(value, 'count')}</strong><small>{compositionTotal > 0 ? formatValue((value / compositionTotal) * 100, 'percent') : '—'}</small></div>;
-              })}
-            </div>
-            <p>Các nhóm dùng trực tiếp số lượng nguồn trong Excel; hệ thống chỉ cộng theo phạm vi lọc.</p>
-          </>
-        ) : <div className="graduation-composition__empty">Không có số liệu cơ cấu trong phạm vi này.</div>}
-      </section>
-
-      {overviewError && <div className="graduation-alert" role="alert">{overviewError}</div>}
-      <GraduationOverview
-        groupedRate={overviewGroupedRate}
-        trendRate={overviewTrendRate}
-        completion={overviewCompletion.model}
-        averageRate={typeof kpis.onTimeRate === 'number' ? kpis.onTimeRate : null}
-        loading={overviewLoading}
-        hasInvalidCompletion={overviewCompletion.hasInvalid}
-      />
-      </> : (
-      <section className="graduation-workspace">
-        <aside className="graduation-builder" aria-label="Tùy chỉnh biểu đồ">
-          <h2>Tùy chỉnh biểu đồ</h2>
-          <label>Chỉ tiêu<select value={metricId} onChange={(event) => setMetricId(event.target.value)}>
-            {metadata?.metrics.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-          </select></label>
-          <label>So sánh theo<select value={groupBy} onChange={(event) => {
-            const nextGroup = event.target.value;
-            setGroupBy(nextGroup);
-            if (seriesBy === nextGroup) setSeriesBy('');
-          }}>
-            {metadata?.dimensions.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-          </select></label>
-          <label>Phân chuỗi<select value={seriesBy} onChange={(event) => setSeriesBy(event.target.value)}>
-            <option value="">Không phân chuỗi</option>
-            {metadata?.dimensions.filter((item) => item.id !== 'all' && item.id !== groupBy && item.id !== 'dataset').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-          </select></label>
-          <div className="graduation-builder__advanced">
-            <label>Sắp xếp<select value={chartSort} onChange={(event) => setChartSort(event.target.value as ChartSort)}>
-              <option value="auto">Tự động phù hợp</option>
-              <option value="value-desc">Giá trị giảm dần</option>
-              <option value="value-asc">Giá trị tăng dần</option>
-              <option value="label-asc">Tên A → Z</option>
-            </select></label>
-            <label>Giới hạn<select value={topN} onChange={(event) => setTopN(Number(event.target.value))}>
-              <option value={0}>Tất cả nhóm</option>
-              <option value={5}>Top 5</option>
-              <option value={10}>Top 10</option>
-              <option value={20}>Top 20</option>
-            </select></label>
-          </div>
-          <label className="graduation-builder__check"><input type="checkbox" checked={showLabels} onChange={(event) => setShowLabels(event.target.checked)} /> Hiện nhãn giá trị</label>
-          <fieldset><legend>Loại biểu đồ</legend><div className="graduation-chart-types">
-            {chartOptions.map((option) => {
-              const Icon = option.icon;
-              const unavailableReason = chartUnavailableReason(option.id);
-              return <button
-                key={option.id}
-                type="button"
-                className={chartType === option.id ? 'is-selected' : ''}
-                disabled={Boolean(unavailableReason)}
-                title={unavailableReason || option.label}
-                onClick={() => setChartType(option.id)}
-              ><Icon aria-hidden="true" /><span>{option.label}</span></button>;
-            })}
-          </div><p className="graduation-chart-types__hint">Apache ECharts · rê chuột vào lựa chọn bị mờ để xem điều kiện.</p></fieldset>
-        </aside>
-
-        <div className="graduation-chart-panel">
-          <header><div><h2>{metric?.label}</h2><p>So sánh theo {metadata?.dimensions.find((item) => item.id === groupBy)?.label.toLowerCase()}</p></div><span>{queryLoading ? 'Đang cập nhật...' : `${displayChartData.length}${displayChartData.length < chartData.length ? `/${chartData.length}` : ''} nhóm`}</span></header>
-          {displayChartData.length === 0 ? <div className="graduation-chart-empty">Không có dữ liệu phù hợp với lựa chọn hiện tại.</div> : (
-            <div className="graduation-chart" role="img" aria-label={`${metric?.label} theo ${groupBy}`}>
-              <GraduationEChart
-                type={chartType}
-                data={displayChartData}
-                series={chartModel.series}
-                unit={metric?.unit}
-                showLabels={showLabels}
-              />
-            </div>
-          )}
-          <footer>Giá trị nguồn được giữ nguyên; điểm có nhiều dòng dùng phép {metric?.aggregation === 'weighted-average' ? 'trung bình có trọng số' : 'cộng'} chỉ để hiển thị biểu đồ.</footer>
-          {displayChartData.length > 0 && (
-            <details className="graduation-chart-data">
-              <summary>Xem bảng số liệu tương ứng</summary>
-              <div><table><thead><tr><th>Nhóm</th>{chartModel.series.map((item) => <th key={item.key}>{item.label}</th>)}</tr></thead><tbody>
-                {displayChartData.map((row) => <tr key={String(row.name)}><td>{row.name}</td>{chartModel.series.map((item) => <td key={item.key}>{formatValue(typeof row[item.key] === 'number' ? Number(row[item.key]) : null, metric?.unit)}</td>)}</tr>)}
-              </tbody></table></div>
-            </details>
-          )}
-        </div>
-      </section>
-      )}
-
-      <section className="graduation-table-section">
-        <header><div><h2>Dữ liệu nguồn C–R</h2><span>{rowTotal} dòng</span></div><input type="search" placeholder="Tìm khoa, mã/tên CTĐT, khóa..." value={search} onChange={(event) => { setSearch(event.target.value); setRowPage(1); }} /></header>
-        <div className="graduation-source-table"><table><thead><tr><th>Dòng</th><th>Khoa</th><th>Mã CTĐT</th><th>Tên CTĐT</th><th>Khóa</th><th>Nhập học</th><th>Thời điểm</th><th>XS</th><th>% XS</th><th>Giỏi</th><th>% Giỏi</th><th>Khá</th><th>% Khá</th><th>T.Bình</th><th>% T.Bình</th><th>VHVL</th><th>% VHVL</th></tr></thead><tbody>
-          {rows.map((row) => <tr key={row.rowId}><td>{row.sourceRowNumber}</td><td>{row.facultyName}</td><td>{sourceCell(row.programCode)}</td><td>{row.programName}</td><td>{row.cohort}</td><td>{sourceCell(row.initialEnrollmentCount)}</td><td>{row.reviewPeriodText}</td><td>{sourceCell(row.excellentCount)}</td><td>{sourceCell(row.excellentRate, true)}</td><td>{sourceCell(row.veryGoodCount)}</td><td>{sourceCell(row.veryGoodRate, true)}</td><td>{sourceCell(row.goodCount)}</td><td>{sourceCell(row.goodRate, true)}</td><td>{sourceCell(row.averageCount)}</td><td>{sourceCell(row.averageRate, true)}</td><td>{sourceCell(row.workStudyTransferCount)}</td><td>{sourceCell(row.workStudyTransferRate, true)}</td></tr>)}
-        </tbody></table></div>
-        <footer><span>Trang {rowPage}/{rowPageCount}</span><div><button type="button" className="btn btn-secondary btn-sm" disabled={rowPage === 1} onClick={() => setRowPage((page) => page - 1)}>Trước</button><button type="button" className="btn btn-secondary btn-sm" disabled={rowPage >= rowPageCount} onClick={() => setRowPage((page) => page + 1)}>Sau</button></div></footer>
-      </section>
-
-      <GraduationImportDialog isOpen={importOpen} onClose={() => setImportOpen(false)} onImport={handleImport} />
+  const renderFilters = (withYears = false) => (
+    <div className={`graduation-filters${withYears ? ' graduation-filters--years' : ''}`}>
+      <label>Khoa<select value={faculty} onChange={(event) => { setFaculty(event.target.value); setProgram(''); setRowPage(1); }}><option value="">Tất cả khoa</option>{facets?.faculties.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+      <label>Chương trình đào tạo<select value={program} onChange={(event) => { setProgram(event.target.value); setRowPage(1); }}><option value="">Tất cả CTĐT</option>{availablePrograms.map((item) => <option key={`${item.facultyName}|${item.value}`} value={item.value}>{item.label}</option>)}</select></label>
+      <label>Khóa<select value={cohort} onChange={(event) => { setCohort(event.target.value); setRowPage(1); }}><option value="">Tất cả khóa</option>{facets?.cohorts.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+      {withYears && <>
+        <label>Từ năm<select value={fromYear} onChange={(event) => setFromYear(event.target.value)}><option value="">Tất cả</option>{facets?.reviewYears.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
+        <label>Đến năm<select value={toYear} onChange={(event) => setToYear(event.target.value)}><option value="">Tất cả</option>{facets?.reviewYears.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
+      </>}
+      <button type="button" className="btn btn-secondary" onClick={resetFilters}>Đặt lại</button>
     </div>
   );
+
+  if (loading) {
+    return <div className="graduation-page"><div className="graduation-state"><LoaderCircle className="spin" /> Đang tải module...</div></div>;
+  }
+  if (error || !metadata) {
+    return <div className="graduation-page"><div className="graduation-empty"><h2>Không tải được dữ liệu</h2><p>{error}</p><button type="button" className="btn btn-primary" onClick={() => void loadInitial()}>Thử lại</button></div></div>;
+  }
+
+  if (periods.length === 0) {
+    return <div className="graduation-page">
+      <header className="graduation-page__header"><div><span>THỐNG KÊ KẾT QUẢ TỐT NGHIỆP</span><h1>Kết quả tốt nghiệp theo đợt</h1></div></header>
+      <div className="graduation-empty"><FileSpreadsheet size={42} /><h2>Chưa có đợt tốt nghiệp</h2><p>Import biểu mẫu 16 cột C–R để bắt đầu xây dựng báo cáo tích lũy.</p><button type="button" className="btn btn-primary" onClick={() => setImportOpen(true)}><Upload size={17} /> Import đợt đầu tiên</button></div>
+      <GraduationImportDialog isOpen={importOpen} onClose={() => setImportOpen(false)} onImport={handleImport} />
+    </div>;
+  }
+
+  return <div className="graduation-page">
+    <header className="graduation-page__header">
+      <div><span>THỐNG KÊ KẾT QUẢ TỐT NGHIỆP</span><h1>Kết quả tốt nghiệp theo đợt</h1></div>
+      <button type="button" className="btn btn-primary" onClick={() => setImportOpen(true)}><Upload size={17} /> Import đợt</button>
+    </header>
+
+    <nav className="graduation-view-switch graduation-view-switch--three" aria-label="Màn hình thống kê tốt nghiệp">
+      <button type="button" className={view === 'overview' ? 'is-selected' : ''} onClick={() => setView('overview')}>Tổng quan</button>
+      <button type="button" className={view === 'explore' ? 'is-selected' : ''} onClick={() => setView('explore')}>Khám phá chi tiết</button>
+      <button type="button" className={view === 'table' ? 'is-selected' : ''} onClick={() => setView('table')}>Bảng</button>
+    </nav>
+
+    {view === 'overview' && <section className="graduation-tab-panel" aria-busy={panelLoading}>
+      <header className="graduation-tab-heading"><div><span>DỮ LIỆU TÍCH LŨY</span><h2>Kết quả theo khóa qua các năm</h2><p>Tổng quan luôn cộng tất cả các đợt trong phạm vi bộ lọc.</p></div>{panelLoading && <span><LoaderCircle className="spin" /> Đang cập nhật...</span>}</header>
+      {renderFilters(true)}
+      {panelError && <div className="graduation-alert" role="alert">{panelError}</div>}
+      {overview && <>
+        <div className="graduation-kpis graduation-kpis--five">
+          <div><span>Tổng kết quả tốt nghiệp</span><strong>{formatValue(overview.totalOutcome)}</strong><small>{overview.includedRows}/{overview.totalRows} dòng đủ 5 nhóm</small></div>
+          <div><span>Số đợt đã import</span><strong>{formatValue(overview.periodCount)}</strong><small>Trong khoảng năm đang lọc</small></div>
+          <div><span>Số khóa</span><strong>{formatValue(overview.cohortCount)}</strong><small>Có dữ liệu kết quả</small></div>
+          <div><span>Chương trình đào tạo</span><strong>{formatValue(overview.programCount)}</strong><small>Trong phạm vi hiện tại</small></div>
+          <div><span>Khoa</span><strong>{formatValue(overview.facultyCount)}</strong><small>Trong phạm vi hiện tại</small></div>
+        </div>
+
+        <article className="graduation-composition">
+          <header><div><span>CƠ CẤU TÍCH LŨY TOÀN TRƯỜNG</span><h2>Năm nhóm kết quả tốt nghiệp</h2></div><strong>{formatValue(overview.totalOutcome)} kết quả</strong></header>
+          {overview.totalOutcome > 0 ? <>
+            <div className="graduation-composition__chart" aria-label="Cơ cấu năm nhóm kết quả">{overview.composition.map((item, index) => <span key={item.metricId} style={{ width: `${item.rate ?? 0}%`, background: bucketSeries[index]?.color }} title={`${item.label}: ${formatValue(item.rate, 'percent')}`} />)}</div>
+            <div className="graduation-composition__legend">{overview.composition.map((item, index) => <div key={item.metricId}><i style={{ background: bucketSeries[index]?.color }} /><span>{item.label}</span><strong>{formatValue(item.count)}</strong><small>{formatValue(item.rate, 'percent')}</small></div>)}</div>
+            <p>Tỉ trọng được tính lại từ số lượng của {overview.includedRows}/{overview.totalRows} dòng đủ cả năm nhóm; không lấy trung bình cột tỷ lệ Excel.</p>
+          </> : <div className="graduation-composition__empty">Không có dữ liệu phù hợp với bộ lọc.</div>}
+        </article>
+
+        <div className="graduation-overview-grid">
+          <article className="graduation-overview-card graduation-overview-card--wide"><header><div><h3>Kết quả theo khóa</h3><p>Số lượng năm nhóm, cộng từ tất cả các đợt.</p></div></header><div className="graduation-overview-chart graduation-overview-chart--wide"><GraduationEChart type="stacked-column" data={overviewCountData} series={bucketSeries.map(({ key, label }) => ({ key, label }))} unit="count" showLabels={false} colors={bucketSeries.map((item) => item.color)} /></div></article>
+          <article className="graduation-overview-card"><header><div><h3>Tỉ trọng theo khóa</h3><p>Ratio-of-sums trên các dòng đủ năm nhóm.</p></div></header><div className="graduation-overview-chart"><GraduationEChart type="stacked-column" data={overviewRateData} series={bucketSeries.map(({ key, label }) => ({ key, label }))} unit="percent" showLabels={false} colors={bucketSeries.map((item) => item.color)} /></div></article>
+          <article className="graduation-overview-card"><header><div><h3>Quy mô các khóa qua các năm</h3><p>Mỗi đường là một khóa; bật/tắt bằng chú giải.</p></div></header><div className="graduation-overview-chart"><GraduationEChart type="line" data={trendModel.data} series={trendModel.series} unit="count" showLabels={false} /></div></article>
+        </div>
+
+        <article className="graduation-matrix"><header><div><h3>Ma trận khóa × năm</h3><p>Tổng số kết quả tốt nghiệp đủ dữ liệu theo năm xét.</p></div></header><div><table><thead><tr><th>Khóa</th>{matrixModel.years.map((year) => <th key={year}>{year}</th>)}</tr></thead><tbody>{matrixModel.cohorts.map((matrixCohort) => <tr key={matrixCohort}><th>{matrixCohort}</th>{matrixModel.years.map((year) => <td key={year}>{formatValue(matrixModel.values.get(`${matrixCohort}|${year}`) ?? null)}</td>)}</tr>)}</tbody></table></div></article>
+      </>}
+    </section>}
+
+    {view === 'explore' && <section className="graduation-tab-panel" aria-busy={panelLoading}>
+      <header className="graduation-tab-heading"><div><span>KHÁM PHÁ CHI TIẾT</span><h2>Tự cấu hình biểu đồ</h2><p>Chọn phạm vi dữ liệu trước, sau đó chọn chỉ tiêu và chiều phân tích.</p></div>{panelLoading && <span><LoaderCircle className="spin" /> Đang tính...</span>}</header>
+      {renderFilters(false)}
+      {panelError && <div className="graduation-alert" role="alert">{panelError}</div>}
+      <div className="graduation-workspace">
+        <aside className="graduation-builder">
+          <h2>Cấu hình phân tích</h2>
+          <label>Dữ liệu phân tích<select value={scope} onChange={(event) => setScope(event.target.value as GraduationAnalysisScope)}><option value="cumulative">Tích lũy tất cả các đợt</option><option value="period">Theo một đợt</option></select></label>
+          {scope === 'period' && <label>Đợt tốt nghiệp<select value={periodId ?? ''} onChange={(event) => handlePeriodChange(Number(event.target.value))}>{periods.map((item) => <option key={item.periodId} value={item.periodId}>{item.label}</option>)}</select></label>}
+          <label>Chỉ tiêu<select value={metricId} onChange={(event) => setMetricId(event.target.value)}>{metadata.metrics.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+          <label>So sánh theo<select value={groupBy} onChange={(event) => { setGroupBy(event.target.value as GraduationDimension['id']); if (seriesBy === event.target.value) setSeriesBy(''); }}>{metadata.dimensions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+          <label>Phân chuỗi<select value={seriesBy} onChange={(event) => setSeriesBy(event.target.value as GraduationDimension['id'] | '')}><option value="">Không phân chuỗi</option>{metadata.dimensions.filter((item) => item.id !== groupBy).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+          <fieldset><legend>Loại biểu đồ</legend><div className="graduation-chart-types">{chartOptions.map((item) => { const Icon = item.icon; const enabled = availableChartTypes.includes(item.id); return <button key={item.id} type="button" disabled={!enabled} className={chartType === item.id ? 'is-selected' : ''} onClick={() => setChartType(item.id)}><Icon /><span>{item.label}</span></button>; })}</div><p className="graduation-chart-types__hint">Biểu đồ tròn tối đa 12 nhóm và không dùng phân chuỗi; biểu đồ chồng cần một chiều phân chuỗi.</p></fieldset>
+          <div className="graduation-builder__advanced"><label>Sắp xếp<select value={chartSort} onChange={(event) => setChartSort(event.target.value as ChartSort)}><option value="auto">Mặc định</option><option value="value-desc">Giá trị giảm dần</option><option value="value-asc">Giá trị tăng dần</option><option value="label-asc">Tên A–Z</option></select></label><label>Top N<select value={topN} onChange={(event) => setTopN(Number(event.target.value))}><option value={0}>Tất cả</option><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label></div>
+          <label className="graduation-builder__check"><input type="checkbox" checked={showLabels} onChange={(event) => setShowLabels(event.target.checked)} /> Hiển thị nhãn giá trị</label>
+        </aside>
+        <article className="graduation-chart-panel"><header><div><h2>{metric?.label ?? 'Biểu đồ'}</h2><p>{scope === 'cumulative' ? 'Tích lũy tất cả các đợt' : selectedPeriod?.label}</p></div><span>{queryResult?.points.length ?? 0} điểm dữ liệu</span></header>{displayChartData.length > 0 ? <><div className="graduation-chart"><GraduationEChart type={chartType} data={displayChartData} series={chartModel.series} unit={metric?.unit} showLabels={showLabels} /></div><footer>{metric?.aggregation === 'ratio-of-sums' ? 'Tỉ lệ được tính từ tổng số lượng trong phạm vi; không dùng tỷ lệ nguyên bản Excel.' : 'Số lượng được cộng từ các dòng nguồn trong phạm vi.'}</footer><details className="graduation-chart-data"><summary>Xem bảng số liệu tương ứng</summary><div><table><thead><tr><th>Nhóm</th>{chartModel.series.map((item) => <th key={item.key}>{item.label}</th>)}</tr></thead><tbody>{displayChartData.map((row) => <tr key={String(row.name)}><td>{row.name}</td>{chartModel.series.map((item) => <td key={item.key}>{formatValue(typeof row[item.key] === 'number' ? Number(row[item.key]) : null, metric?.unit)}</td>)}</tr>)}</tbody></table></div></details></> : <div className="graduation-chart-empty">Không có dữ liệu phù hợp với cấu hình hiện tại.</div>}</article>
+      </div>
+    </section>}
+
+    {view === 'table' && <section className="graduation-tab-panel" aria-busy={panelLoading}>
+      <header className="graduation-tab-heading"><div><span>BẢNG DỮ LIỆU NGUỒN</span><h2>Đối chiếu từng dòng C–R</h2><p>Mỗi dòng giữ nguyên sheet và số dòng nguồn để truy vết.</p></div>{panelLoading && <span><LoaderCircle className="spin" /> Đang tải...</span>}</header>
+      <div className="graduation-period-context"><label>Đợt tốt nghiệp<select value={periodId ?? ''} onChange={(event) => handlePeriodChange(Number(event.target.value))}>{periods.map((item) => <option key={item.periodId} value={item.periodId}>{item.label}</option>)}</select></label>{selectedPeriod && <div><strong>{selectedPeriod.label} · {selectedPeriod.rowCount} dòng</strong><span>{selectedPeriod.originalFileName} · {selectedPeriod.importedByName} · {new Date(selectedPeriod.importedAtUtc).toLocaleString('vi-VN')}</span></div>}</div>
+      {renderFilters(false)}
+      {panelError && <div className="graduation-alert" role="alert">{panelError}</div>}
+      <div className="graduation-table-section">
+        <header><div><Table2 size={18} /><h2>Dữ liệu nguồn C–R</h2><span>{rowTotal} dòng</span></div><input type="search" placeholder="Tìm khoa, mã/tên CTĐT, khóa..." value={search} onChange={(event) => { setSearch(event.target.value); setRowPage(1); }} /></header>
+        <div className="graduation-source-table"><table><thead><tr><th>Dòng</th><th>Khoa</th><th>Mã CTĐT</th><th>Tên CTĐT</th><th>Khóa</th><th>Nhập học</th><th className="graduation-period-column">Thời điểm</th><th>XS</th><th>% XS</th><th>Giỏi</th><th>% Giỏi</th><th>Khá</th><th>% Khá</th><th>T.Bình</th><th>% T.Bình</th><th>VHVL</th><th>% VHVL</th></tr></thead><tbody>{rows.map((row) => <tr key={row.rowId}><td>{row.sourceRowNumber}</td><td>{row.facultyName}</td><td>{sourceCell(row.programCode)}</td><td>{row.programName}</td><td>{row.cohort}</td><td>{sourceCell(row.initialEnrollmentCount)}</td><td className="graduation-period-column">{row.reviewPeriodText}</td><td>{sourceCell(row.excellentCount)}</td><td>{sourceCell(row.excellentRate, true)}</td><td>{sourceCell(row.veryGoodCount)}</td><td>{sourceCell(row.veryGoodRate, true)}</td><td>{sourceCell(row.goodCount)}</td><td>{sourceCell(row.goodRate, true)}</td><td>{sourceCell(row.averageCount)}</td><td>{sourceCell(row.averageRate, true)}</td><td>{sourceCell(row.workStudyTransferCount)}</td><td>{sourceCell(row.workStudyTransferRate, true)}</td></tr>)}</tbody></table></div>
+        <footer><span>Trang {rowPage}/{rowPageCount}</span><div><button type="button" className="btn btn-secondary btn-sm" disabled={rowPage === 1} onClick={() => setRowPage((page) => page - 1)}>Trước</button><button type="button" className="btn btn-secondary btn-sm" disabled={rowPage >= rowPageCount} onClick={() => setRowPage((page) => page + 1)}>Sau</button></div></footer>
+      </div>
+    </section>}
+
+    <GraduationImportDialog isOpen={importOpen} onClose={() => setImportOpen(false)} onImport={handleImport} />
+  </div>;
 }

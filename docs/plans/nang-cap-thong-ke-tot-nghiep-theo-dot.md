@@ -436,11 +436,11 @@ trong cùng lần deploy vì đây là module nội bộ.
 
 ### Giai đoạn 4 — Ba tab UI
 
-- [ ] Bỏ dataset picker chung, thêm switch ba tab.
-- [ ] Làm lại toàn bộ Tổng quan theo khóa/năm và 5 nhóm kết quả.
-- [ ] Thêm box dữ liệu phân tích vào Khám phá chi tiết.
-- [ ] Chuyển bảng nguồn thành tab Bảng với period picker.
-- [ ] Đồng bộ URL, loading/empty/error/no-result và responsive.
+- [x] Bỏ dataset picker chung, thêm switch ba tab.
+- [x] Làm lại toàn bộ Tổng quan theo khóa/năm và 5 nhóm kết quả.
+- [x] Thêm box dữ liệu phân tích vào Khám phá chi tiết.
+- [x] Chuyển bảng nguồn thành tab Bảng với period picker.
+- [x] Đồng bộ URL, loading/empty/error/no-result và responsive.
 
 ### Giai đoạn 5 — Kiểm thử và rollout
 

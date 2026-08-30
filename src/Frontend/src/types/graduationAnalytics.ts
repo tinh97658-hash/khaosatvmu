@@ -18,17 +18,6 @@ export interface GraduationImportRow {
   workStudyTransferRate: number | null;
 }
 
-export interface GraduationDataset {
-  datasetId: number;
-  datasetName: string;
-  originalFileName: string;
-  importedByName: string;
-  importedAtUtc: string;
-  rowCount: number;
-  minimumReviewDate: string | null;
-  maximumReviewDate: string | null;
-}
-
 export interface GraduationPeriod {
   periodId: number;
   label: string;
@@ -56,16 +45,16 @@ export interface GraduationFacets {
 }
 
 export interface GraduationDimension {
-  id: string;
+  id: 'faculty' | 'program' | 'cohort';
   label: string;
-  type: 'category' | 'time' | 'dataset';
+  type: 'category';
 }
 
 export interface GraduationMetric {
   id: string;
   label: string;
   unit: 'count' | 'percent';
-  aggregation: 'sum' | 'weighted-average';
+  aggregation: 'sum' | 'ratio-of-sums';
   chartTypes: GraduationChartType[];
 }
 
@@ -84,16 +73,17 @@ export interface GraduationMetadata {
   metrics: GraduationMetric[];
 }
 
+export type GraduationAnalysisScope = 'cumulative' | 'period';
+
 export interface GraduationQuery {
-  datasetIds: number[];
+  scope: GraduationAnalysisScope;
+  periodId?: number | null;
   metricId: string;
-  groupBy: string;
-  seriesBy?: string | null;
+  groupBy: GraduationDimension['id'];
+  seriesBy?: GraduationDimension['id'] | null;
   faculty?: string | null;
   program?: string | null;
   cohort?: string | null;
-  reviewYear?: number | null;
-  reviewMonth?: number | null;
 }
 
 export interface GraduationAnalyticsPoint {
@@ -101,7 +91,7 @@ export interface GraduationAnalyticsPoint {
   series: string | null;
   metricId: string;
   value: number | null;
-  aggregation: 'source' | 'sum' | 'weighted-average';
+  aggregation: 'sum' | 'ratio-of-sums';
   includedRows: number;
   totalRows: number;
 }
@@ -109,9 +99,64 @@ export interface GraduationAnalyticsPoint {
 export interface GraduationQueryResult {
   metricId: string;
   unit: 'count' | 'percent';
-  groupBy: string;
-  seriesBy: string | null;
+  groupBy: GraduationDimension['id'];
+  seriesBy: GraduationDimension['id'] | null;
   points: GraduationAnalyticsPoint[];
+}
+
+export interface GraduationOverviewQuery {
+  faculty?: string | null;
+  program?: string | null;
+  cohort?: string | null;
+  fromYear?: number | null;
+  toYear?: number | null;
+}
+
+export interface GraduationOutcomeSummary {
+  metricId: string;
+  label: string;
+  count: number;
+  rate: number | null;
+  includedRows: number;
+  totalRows: number;
+}
+
+export interface GraduationOutcomeGroup {
+  group: string;
+  totalOutcome: number;
+  excellentCount: number;
+  excellentRate: number | null;
+  veryGoodCount: number;
+  veryGoodRate: number | null;
+  goodCount: number;
+  goodRate: number | null;
+  averageCount: number;
+  averageRate: number | null;
+  workStudyTransferCount: number;
+  workStudyTransferRate: number | null;
+  includedRows: number;
+  totalRows: number;
+}
+
+export interface GraduationCohortYearPoint {
+  reviewYear: number;
+  cohort: string;
+  totalOutcome: number;
+  includedRows: number;
+  totalRows: number;
+}
+
+export interface GraduationOverview {
+  totalOutcome: number;
+  periodCount: number;
+  cohortCount: number;
+  programCount: number;
+  facultyCount: number;
+  includedRows: number;
+  totalRows: number;
+  composition: GraduationOutcomeSummary[];
+  byCohort: GraduationOutcomeGroup[];
+  cohortYear: GraduationCohortYearPoint[];
 }
 
 export interface GraduationRow extends GraduationImportRow {
