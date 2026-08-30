@@ -384,25 +384,54 @@
 .graduation-matrix th:first-child { position: sticky; left: 0; z-index: 1; background: #f7f9fa; text-align: left; }
 .graduation-matrix thead th { background: #f7f9fa; color: #4d5962; }
 
-.graduation-trend-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 12px;
-}
-.graduation-trend-card {
+.graduation-cohort-comparison {
   min-width: 0;
+  margin-top: 12px;
   padding: 14px 16px 10px;
   border: 1px solid #dfe4e8;
   background: #fff;
 }
-.graduation-trend-card:last-child { grid-column: 1 / -1; }
-.graduation-trend-card > header { display: flex; align-items: flex-start; gap: 9px; }
-.graduation-trend-card > header i { width: 9px; height: 9px; flex: 0 0 9px; margin-top: 5px; border-radius: 50%; }
-.graduation-trend-card h3 { margin: 0; font-size: 14px; }
-.graduation-trend-card p { margin: 3px 0 0; color: #68737d; font-size: 11px; }
-.graduation-trend-chart { height: 340px; margin-top: 8px; }
-.graduation-trend-card:last-child .graduation-trend-chart { height: 380px; }
+.graduation-cohort-comparison > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.graduation-cohort-comparison > header span { color: #68737d; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
+.graduation-cohort-comparison h2 { margin: 3px 0 0; font-size: 16px; }
+.graduation-cohort-comparison header p { margin: 3px 0 0; color: #68737d; font-size: 11px; }
+.graduation-measure-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 3px;
+  border: 1px solid #cfd7dc;
+  background: #f1f4f5;
+}
+.graduation-measure-switch button {
+  min-width: 88px;
+  min-height: 31px;
+  padding: 5px 12px;
+  border: 0;
+  background: transparent;
+  color: #5f6b74;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.graduation-measure-switch button:hover { color: #075d79; }
+.graduation-measure-switch button.is-selected { background: #fff; color: #075d79; box-shadow: 0 0 0 1px #b8d2dc; }
+.graduation-cohort-comparison__chart { height: 460px; margin-top: 8px; }
+.graduation-cohort-comparison > footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  padding-top: 8px;
+  border-top: 1px solid #edf0f2;
+  color: #68737d;
+  font-size: 11px;
+}
+.graduation-cohort-comparison > footer strong { color: #8a6419; font-weight: 600; }
 
 .graduation-period-context {
   display: flex;
@@ -435,9 +464,9 @@
   .graduation-period-context > div { justify-items: start; }
   .graduation-overview-grid { grid-template-columns: 1fr; }
   .graduation-overview-grid .graduation-overview-card--wide { grid-column: auto; }
-  .graduation-trend-grid { grid-template-columns: 1fr; }
-  .graduation-trend-card:last-child { grid-column: auto; }
-  .graduation-trend-chart, .graduation-trend-card:last-child .graduation-trend-chart { height: 330px; }
+  .graduation-cohort-comparison > header { align-items: stretch; flex-direction: column; }
+  .graduation-measure-switch { align-self: flex-start; }
+  .graduation-cohort-comparison__chart { height: 410px; }
   .graduation-filters--years { grid-template-columns: 1fr 1fr; }
   .graduation-kpis--five { grid-template-columns: 1fr 1fr; }
   .graduation-kpis--five > div:nth-child(odd) { border-right: 1px solid #dfe4e8; }
@@ -451,4 +480,7 @@
   .graduation-kpis--five { grid-template-columns: 1fr; }
   .graduation-kpis--five > div, .graduation-kpis--five > div:nth-child(odd) { grid-column: auto; border-right: 0; }
   .graduation-period-column { display: none; }
+  .graduation-measure-switch { width: 100%; }
+  .graduation-measure-switch button { min-width: 0; flex: 1; }
+  .graduation-cohort-comparison__chart { height: 380px; }
 }

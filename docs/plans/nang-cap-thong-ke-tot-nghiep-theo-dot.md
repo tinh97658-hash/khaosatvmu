@@ -288,20 +288,22 @@ cần thu hẹp báo cáo.
   VHVL trong phạm vi đang lọc.
 - Hiển thị tổng số sinh viên, số lượng và tỉ trọng từng nhóm cùng coverage dòng
   nguồn; tỉ trọng luôn tính lại từ số lượng.
-- Đây là phần tổng hợp chung trước khi người dùng đi xuống các biểu đồ xu hướng.
+- Đây là phần tổng hợp chung trước khi người dùng đi xuống biểu đồ so sánh năm–khóa.
 
 ### 6.2. Biểu đồ mặc định
 
-1. **Sinh viên xuất sắc** — biểu đồ đường theo năm xét, mỗi đường là một khóa.
-2. **Sinh viên giỏi** — cùng trục và quy ước màu khóa.
-3. **Sinh viên khá** — cùng trục và quy ước màu khóa.
-4. **Sinh viên trung bình** — cùng trục và quy ước màu khóa.
-5. **Sinh viên chuyển VHVL** — cùng trục và quy ước màu khóa.
+Một **biểu đồ cột chồng theo nhóm năm–khóa** thay cho năm biểu đồ đường:
 
-Năm biểu đồ dùng bố cục hai cột, biểu đồ cuối chiếm toàn chiều ngang và chuyển
-thành một cột trên màn hình nhỏ. Không gộp mặc định năm nhóm vào một biểu đồ
-đường duy nhất vì số series sẽ bằng `số khóa × 5`, làm legend và đường biểu diễn
-quá dày; thanh Góc nhìn nhanh đảm nhiệm vai trò tổng hợp chung.
+- Trục X là từng cặp năm xét và khóa; chỉ tổ hợp thực sự có dữ liệu mới có cột.
+- Mỗi cột chồng năm nhóm Xuất sắc, Giỏi, Khá, Trung bình và Chuyển VHVL; màu cố
+  định theo nhóm kết quả thay vì theo khóa.
+- Chế độ `Số lượng` thể hiện quy mô thực tế; chế độ `Tỷ lệ` quy mỗi cột đủ dữ liệu
+  về 100% để so sánh cơ cấu giữa các khóa.
+- Tổ hợp thiếu một hoặc nhiều nhóm vẫn hiện số lượng nguồn nhưng không bị suy
+  diễn thành tỷ lệ; giao diện phải cảnh báo coverage.
+
+Cách biểu diễn này phù hợp với dữ liệu chỉ có ít mốc năm, tránh hàm ý xu hướng
+liên tục và cho phép đọc đồng thời tổng số lẫn cơ cấu năm nhóm trên một biểu đồ.
 
 Các chart theo khoa/CTĐT không bị loại bỏ hoàn toàn: filter khoa/CTĐT thay đổi
 phạm vi của toàn bộ Tổng quan. Mục tiêu chính của layout là nhìn được kết quả theo
@@ -438,7 +440,7 @@ trong cùng lần deploy vì đây là module nội bộ.
 ### Giai đoạn 4 — Ba tab UI
 
 - [x] Bỏ dataset picker chung, thêm switch ba tab.
-- [x] Làm lại toàn bộ Tổng quan theo khóa/năm và 5 nhóm kết quả.
+- [x] Làm lại Tổng quan bằng Góc nhìn nhanh và cột chồng năm–khóa, có chế độ số lượng/tỷ lệ.
 - [x] Thêm box dữ liệu phân tích vào Khám phá chi tiết.
 - [x] Chuyển bảng nguồn thành tab Bảng với period picker.
 - [x] Đồng bộ URL, loading/empty/error/no-result và responsive.
@@ -477,7 +479,7 @@ Kết quả kiểm thử local ngày 30/08/2026:
 7. Năm nhóm kết quả hiển thị đủ số lượng, tỉ trọng và coverage.
 8. Tổng/tỉ lệ tích lũy dùng ratio-of-sums; không cộng hoặc average tỉ lệ nguồn.
 9. `InitialEnrollmentCount` không bị cộng lặp qua các đợt.
-10. Tổng quan có góc nhìn theo khóa qua năm và hoạt động với filter khoa/CTĐT.
+10. Tổng quan có cột chồng năm–khóa, chuyển được số lượng/tỷ lệ và hoạt động với filter khoa/CTĐT.
 11. Khám phá chỉ cho group/series theo khoa, CTĐT, khóa và chọn được scope.
 12. Tab Bảng hiển thị đúng dữ liệu nguồn của đợt được chọn, đủ truy vết file/dòng.
 13. Dữ liệu legacy được audit/migrate mà không âm thầm gộp các đợt trùng; row
