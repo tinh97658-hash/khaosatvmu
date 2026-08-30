@@ -66,6 +66,7 @@ export function GraduationEChart({
     const isHorizontal = type === 'bar' || type === 'stacked-bar';
     const isStacked = type === 'stacked-bar' || type === 'stacked-column';
     const isPie = type === 'pie' || type === 'donut';
+    const isLineChart = type === 'line' || type === 'area';
     const visibleCategoryCount = isHorizontal ? 14 : 12;
     const needsCategoryZoom = categories.length > visibleCategoryCount;
     const categoryZoomEnd = Math.min(100, (visibleCategoryCount / categories.length) * 100);
@@ -132,15 +133,21 @@ export function GraduationEChart({
 
     const chartSeries = series.map((item, index) => ({
       name: item.label,
-      type: type === 'line' || type === 'area' ? 'line' as const : 'bar' as const,
+      type: isLineChart ? 'line' as const : 'bar' as const,
       data: data.map((row) => typeof row[item.key] === 'number' ? row[item.key] : null),
       stack: isStacked ? 'total' : undefined,
-      smooth: type === 'line' || type === 'area',
-      symbolSize: 7,
+      smooth: isLineChart ? 0.55 : false,
+      smoothMonotone: isLineChart ? 'x' as const : undefined,
+      symbol: isLineChart ? 'circle' as const : undefined,
+      symbolSize: isLineChart ? 8 : 7,
       showSymbol: data.length <= 30,
       areaStyle: type === 'area' ? { opacity: 0.14 } : undefined,
-      itemStyle: { color: palette[index % palette.length] },
-      lineStyle: { width: 2 },
+      itemStyle: {
+        color: palette[index % palette.length],
+        borderColor: isLineChart ? '#fff' : undefined,
+        borderWidth: isLineChart ? 1.5 : undefined,
+      },
+      lineStyle: isLineChart ? { width: 2.5, cap: 'round' as const, join: 'round' as const } : undefined,
       barMaxWidth: 52,
       label: {
         show: showLabels,
@@ -174,7 +181,7 @@ export function GraduationEChart({
       aria: { enabled: true },
       tooltip: {
         trigger: 'axis',
-        axisPointer: { type: 'shadow' },
+        axisPointer: { type: isLineChart ? 'line' : 'shadow' },
         valueFormatter: (value) => formatValue(value, unit),
       },
       legend: { show: series.length > 1, type: 'scroll', top: 0 },
