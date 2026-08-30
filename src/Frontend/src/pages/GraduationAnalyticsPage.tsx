@@ -34,6 +34,12 @@ type GraduationView = 'overview' | 'explore' | 'table';
 type ChartSort = 'auto' | 'value-desc' | 'value-asc' | 'label-asc';
 type OverviewMeasure = 'count' | 'percent';
 
+const reviewYearDimension: GraduationDimension = {
+  id: 'reviewYear',
+  label: 'Năm xét',
+  type: 'time',
+};
+
 const bucketSeries = [
   { key: 'excellent', countKey: 'excellentCount', label: 'Xuất sắc', color: '#0788b8' },
   { key: 'veryGood', countKey: 'veryGoodCount', label: 'Giỏi', color: '#38a3a5' },
@@ -285,8 +291,15 @@ export function GraduationAnalyticsPage() {
   }, [cohort, faculty, periodId, program, rowPage, search, view]);
 
   const metric = metadata?.metrics.find((item) => item.id === metricId);
-  const exploreDimensions = useMemo(() => metadata?.dimensions.filter((item) =>
-    scope === 'cumulative' || item.id !== 'reviewYear') ?? [], [metadata?.dimensions, scope]);
+  const exploreDimensions = useMemo(() => {
+    const metadataDimensions = metadata?.dimensions ?? [];
+    const cumulativeDimensions = metadataDimensions.some((item) => item.id === 'reviewYear')
+      ? metadataDimensions
+      : [...metadataDimensions, reviewYearDimension];
+    return scope === 'cumulative'
+      ? cumulativeDimensions
+      : cumulativeDimensions.filter((item) => item.id !== 'reviewYear');
+  }, [metadata?.dimensions, scope]);
   const availablePrograms = useMemo(() => facets?.programs.filter((item) =>
     !faculty || item.facultyName === faculty) ?? [], [facets?.programs, faculty]);
   const chartModel = useMemo(() => toChartModel(queryResult, metric?.label ?? 'Giá trị'), [metric?.label, queryResult]);
