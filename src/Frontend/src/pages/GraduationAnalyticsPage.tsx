@@ -41,6 +41,8 @@ const bucketSeries = [
   { key: 'workStudyTransfer', countKey: 'workStudyTransferCount', rateKey: 'workStudyTransferRate', label: 'Chuyển VHVL', color: '#9b6eb2' },
 ] as const;
 
+const cohortColors = ['#0788b8', '#e07a2d', '#5b8f3c', '#7557a5', '#c24f6d', '#526d82'];
+
 const chartOptions: Array<{ id: GraduationChartType; label: string; icon: typeof BarChart3 }> = [
   { id: 'bar', label: 'Thanh ngang', icon: BarChart3 },
   { id: 'column', label: 'Cột', icon: ChartColumn },
@@ -295,42 +297,29 @@ export function GraduationAnalyticsPage() {
     }
   }, [availableChartTypes, chartType]);
 
-  const overviewCountData = useMemo(() => overview?.byCohort.map((item) => ({
-    name: item.group,
-    excellent: item.excellentCount,
-    veryGood: item.veryGoodCount,
-    good: item.goodCount,
-    average: item.averageCount,
-    workStudyTransfer: item.workStudyTransferCount,
-  })) ?? [], [overview?.byCohort]);
-  const overviewRateData = useMemo(() => overview?.byCohort.map((item) => ({
-    name: item.group,
-    excellent: item.excellentRate,
-    veryGood: item.veryGoodRate,
-    good: item.goodRate,
-    average: item.averageRate,
-    workStudyTransfer: item.workStudyTransferRate,
-  })) ?? [], [overview?.byCohort]);
-  const trendModel = useMemo(() => {
+  const overviewTrendModels = useMemo(() => {
     const points = overview?.cohortYear ?? [];
-    const cohorts = [...new Set(points.map((point) => point.cohort))];
+    const cohorts = [...new Set(points.map((point) => point.cohort))]
+      .sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
     const series = cohorts.map((label, index) => ({ key: `cohort${index}`, label }));
     const keyByCohort = new Map(series.map((item) => [item.label, item.key]));
-    const rowsByYear = new Map<number, Record<string, string | number | null>>();
-    points.forEach((point) => {
-      const row = rowsByYear.get(point.reviewYear) ?? { name: String(point.reviewYear) };
-      const key = keyByCohort.get(point.cohort);
-      if (key) row[key] = point.totalOutcome;
-      rowsByYear.set(point.reviewYear, row);
-    });
-    return { data: [...rowsByYear.entries()].sort(([a], [b]) => a - b).map(([, row]) => row), series };
-  }, [overview?.cohortYear]);
-  const matrixModel = useMemo(() => {
-    const points = overview?.cohortYear ?? [];
     const years = [...new Set(points.map((point) => point.reviewYear))].sort((a, b) => a - b);
-    const cohorts = [...new Set(points.map((point) => point.cohort))].sort((a, b) => a.localeCompare(b, 'vi'));
-    const values = new Map(points.map((point) => [`${point.cohort}|${point.reviewYear}`, point.totalOutcome]));
-    return { years, cohorts, values };
+    return bucketSeries.map((bucket) => {
+      const rowsByYear = new Map<number, Record<string, string | number | null>>(
+        years.map((year) => [year, { name: String(year) }]),
+      );
+      points.forEach((point) => {
+        const key = keyByCohort.get(point.cohort);
+        if (key) rowsByYear.get(point.reviewYear)![key] = point[bucket.countKey];
+      });
+      return {
+        key: bucket.key,
+        label: bucket.label,
+        color: bucket.color,
+        data: years.map((year) => rowsByYear.get(year)!),
+        series,
+      };
+    });
   }, [overview?.cohortYear]);
   const selectedPeriod = periods.find((item) => item.periodId === periodId) ?? null;
   const rowPageCount = Math.max(1, Math.ceil(rowTotal / 25));
@@ -401,35 +390,20 @@ export function GraduationAnalyticsPage() {
     </nav>
 
     {view === 'overview' && <section className="graduation-tab-panel" aria-busy={panelLoading}>
-      <header className="graduation-tab-heading"><div><span>DỮ LIỆU TÍCH LŨY</span><h2>Kết quả theo khóa qua các năm</h2><p>Tổng quan luôn cộng tất cả các đợt trong phạm vi bộ lọc.</p></div>{panelLoading && <span><LoaderCircle className="spin" /> Đang cập nhật...</span>}</header>
       {renderFilters(true)}
+      {panelLoading && <div className="graduation-overview-status"><LoaderCircle className="spin" /> Đang cập nhật biểu đồ...</div>}
       {panelError && <div className="graduation-alert" role="alert">{panelError}</div>}
-      {overview && <>
-        <div className="graduation-kpis graduation-kpis--five">
-          <div><span>Tổng kết quả tốt nghiệp</span><strong>{formatValue(overview.totalOutcome)}</strong><small>{overview.includedRows}/{overview.totalRows} dòng đủ 5 nhóm</small></div>
-          <div><span>Số đợt đã import</span><strong>{formatValue(overview.periodCount)}</strong><small>Trong khoảng năm đang lọc</small></div>
-          <div><span>Số khóa</span><strong>{formatValue(overview.cohortCount)}</strong><small>Có dữ liệu kết quả</small></div>
-          <div><span>Chương trình đào tạo</span><strong>{formatValue(overview.programCount)}</strong><small>Trong phạm vi hiện tại</small></div>
-          <div><span>Khoa</span><strong>{formatValue(overview.facultyCount)}</strong><small>Trong phạm vi hiện tại</small></div>
-        </div>
-
-        <article className="graduation-composition">
-          <header><div><span>CƠ CẤU TÍCH LŨY TOÀN TRƯỜNG</span><h2>Năm nhóm kết quả tốt nghiệp</h2></div><strong>{formatValue(overview.totalOutcome)} kết quả</strong></header>
-          {overview.totalOutcome > 0 ? <>
-            <div className="graduation-composition__chart" aria-label="Cơ cấu năm nhóm kết quả">{overview.composition.map((item, index) => <span key={item.metricId} style={{ width: `${item.rate ?? 0}%`, background: bucketSeries[index]?.color }} title={`${item.label}: ${formatValue(item.rate, 'percent')}`} />)}</div>
-            <div className="graduation-composition__legend">{overview.composition.map((item, index) => <div key={item.metricId}><i style={{ background: bucketSeries[index]?.color }} /><span>{item.label}</span><strong>{formatValue(item.count)}</strong><small>{formatValue(item.rate, 'percent')}</small></div>)}</div>
-            <p>Tỉ trọng được tính lại từ số lượng của {overview.includedRows}/{overview.totalRows} dòng đủ cả năm nhóm; không lấy trung bình cột tỷ lệ Excel.</p>
-          </> : <div className="graduation-composition__empty">Không có dữ liệu phù hợp với bộ lọc.</div>}
-        </article>
-
-        <div className="graduation-overview-grid">
-          <article className="graduation-overview-card graduation-overview-card--wide"><header><div><h3>Kết quả theo khóa</h3><p>Số lượng năm nhóm, cộng từ tất cả các đợt.</p></div></header><div className="graduation-overview-chart graduation-overview-chart--wide"><GraduationEChart type="stacked-column" data={overviewCountData} series={bucketSeries.map(({ key, label }) => ({ key, label }))} unit="count" showLabels={false} colors={bucketSeries.map((item) => item.color)} /></div></article>
-          <article className="graduation-overview-card"><header><div><h3>Tỉ trọng theo khóa</h3><p>Ratio-of-sums trên các dòng đủ năm nhóm.</p></div></header><div className="graduation-overview-chart"><GraduationEChart type="stacked-column" data={overviewRateData} series={bucketSeries.map(({ key, label }) => ({ key, label }))} unit="percent" showLabels={false} colors={bucketSeries.map((item) => item.color)} /></div></article>
-          <article className="graduation-overview-card"><header><div><h3>Quy mô các khóa qua các năm</h3><p>Mỗi đường là một khóa; bật/tắt bằng chú giải.</p></div></header><div className="graduation-overview-chart"><GraduationEChart type="line" data={trendModel.data} series={trendModel.series} unit="count" showLabels={false} /></div></article>
-        </div>
-
-        <article className="graduation-matrix"><header><div><h3>Ma trận khóa × năm</h3><p>Tổng số kết quả tốt nghiệp đủ dữ liệu theo năm xét.</p></div></header><div><table><thead><tr><th>Khóa</th>{matrixModel.years.map((year) => <th key={year}>{year}</th>)}</tr></thead><tbody>{matrixModel.cohorts.map((matrixCohort) => <tr key={matrixCohort}><th>{matrixCohort}</th>{matrixModel.years.map((year) => <td key={year}>{formatValue(matrixModel.values.get(`${matrixCohort}|${year}`) ?? null)}</td>)}</tr>)}</tbody></table></div></article>
-      </>}
+      {overview && <article className="graduation-composition">
+        <header><div><span>GÓC NHÌN NHANH</span><h2>Cơ cấu kết quả trong phạm vi đang lọc</h2></div><strong>{formatValue(overview.totalOutcome)} sinh viên</strong></header>
+        {overview.totalOutcome > 0 ? <>
+          <div className="graduation-composition__chart" aria-label="Cơ cấu năm nhóm kết quả tốt nghiệp">{overview.composition.map((item) => { const color = bucketSeries.find((bucket) => bucket.key === item.metricId)?.color ?? '#87919a'; return <span key={item.metricId} style={{ width: `${item.rate ?? 0}%`, background: color }} title={`${item.label}: ${formatValue(item.rate, 'percent')}`} />; })}</div>
+          <div className="graduation-composition__legend">{overview.composition.map((item) => { const color = bucketSeries.find((bucket) => bucket.key === item.metricId)?.color ?? '#87919a'; return <div key={item.metricId}><i style={{ background: color }} /><span>{item.label}</span><strong>{formatValue(item.count)}</strong><small>{formatValue(item.rate, 'percent')}</small></div>; })}</div>
+          <p>Các nhóm dùng trực tiếp số lượng nguồn Excel; hệ thống chỉ cộng theo phạm vi lọc. {overview.includedRows}/{overview.totalRows} dòng đủ cả năm nhóm.</p>
+        </> : <div className="graduation-composition__empty">Không có dữ liệu phù hợp với bộ lọc.</div>}
+      </article>}
+      {overview && overview.cohortYear.length > 0
+        ? <div className="graduation-trend-grid">{overviewTrendModels.map((model) => <article key={model.key} className="graduation-trend-card"><header><i style={{ background: model.color }} /><div><h3>Sinh viên {model.label.toLowerCase()}</h3><p>Mỗi đường biểu diễn một khóa theo năm xét tốt nghiệp.</p></div></header><div className="graduation-trend-chart"><GraduationEChart type="line" data={model.data} series={model.series} unit="count" showLabels={false} colors={cohortColors} xAxisName="Năm xét" yAxisName="Số sinh viên" /></div></article>)}</div>
+        : !panelLoading && <div className="graduation-overview-empty">Không có dữ liệu phù hợp với bộ lọc.</div>}
     </section>}
 
     {view === 'explore' && <section className="graduation-tab-panel" aria-busy={panelLoading}>

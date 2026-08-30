@@ -282,25 +282,26 @@ Tổng quan luôn dùng dữ liệu tích lũy của tất cả các đợt; kh�
 không có metric “đúng hạn”. Bộ lọc còn lại: Khoa, CTĐT, Khóa và khoảng năm nếu
 cần thu hẹp báo cáo.
 
-### 6.1. KPI
+### 6.1. Góc nhìn nhanh
 
-- Tổng số kết quả tốt nghiệp đã ghi nhận (tổng năm nhóm).
-- Số đợt đã import.
-- Số khóa có dữ liệu.
-- Số CTĐT/khoa trong phạm vi hiện tại.
-- Năm nhóm Xuất sắc, Giỏi, Khá, Trung bình, VHVL hiển thị cả số lượng và tỉ trọng
-  tính từ số lượng.
+- Một thanh cơ cấu 100% kết hợp cả năm nhóm Xuất sắc, Giỏi, Khá, Trung bình và
+  VHVL trong phạm vi đang lọc.
+- Hiển thị tổng số sinh viên, số lượng và tỉ trọng từng nhóm cùng coverage dòng
+  nguồn; tỉ trọng luôn tính lại từ số lượng.
+- Đây là phần tổng hợp chung trước khi người dùng đi xuống các biểu đồ xu hướng.
 
 ### 6.2. Biểu đồ mặc định
 
-1. **Cơ cấu tích lũy toàn trường** — donut hoặc thanh 100% cho năm nhóm.
-2. **Kết quả theo khóa** — cột chồng số lượng, trục X là khóa, stack là năm nhóm.
-3. **Tỉ trọng theo khóa** — cột chồng 100%, giúp so sánh cơ cấu giữa các khóa có
-   quy mô khác nhau.
-4. **Quy mô các khóa qua các năm** — trục X là năm xét, series là khóa, giá trị là
-   tổng năm nhóm; mặc định chỉ hiện các khóa có dữ liệu và cho bật/tắt legend.
-5. **Bảng ma trận khóa × năm** — tổng số kết quả và cơ cấu rút gọn, là fallback
-   dễ đọc khi số series quá nhiều trên mobile.
+1. **Sinh viên xuất sắc** — biểu đồ đường theo năm xét, mỗi đường là một khóa.
+2. **Sinh viên giỏi** — cùng trục và quy ước màu khóa.
+3. **Sinh viên khá** — cùng trục và quy ước màu khóa.
+4. **Sinh viên trung bình** — cùng trục và quy ước màu khóa.
+5. **Sinh viên chuyển VHVL** — cùng trục và quy ước màu khóa.
+
+Năm biểu đồ dùng bố cục hai cột, biểu đồ cuối chiếm toàn chiều ngang và chuyển
+thành một cột trên màn hình nhỏ. Không gộp mặc định năm nhóm vào một biểu đồ
+đường duy nhất vì số series sẽ bằng `số khóa × 5`, làm legend và đường biểu diễn
+quá dày; thanh Góc nhìn nhanh đảm nhiệm vai trò tổng hợp chung.
 
 Các chart theo khoa/CTĐT không bị loại bỏ hoàn toàn: filter khoa/CTĐT thay đổi
 phạm vi của toàn bộ Tổng quan. Mục tiêu chính của layout là nhìn được kết quả theo

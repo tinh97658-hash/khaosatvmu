@@ -69,6 +69,11 @@ public sealed partial class EfGraduationAnalyticsService(
         public int ReviewYear { get; init; }
         public string Cohort { get; init; } = string.Empty;
         public decimal TotalOutcome { get; init; }
+        public decimal ExcellentCount { get; init; }
+        public decimal VeryGoodCount { get; init; }
+        public decimal GoodCount { get; init; }
+        public decimal AverageCount { get; init; }
+        public decimal WorkStudyTransferCount { get; init; }
         public int IncludedRows { get; init; }
         public int TotalRows { get; init; }
     }
@@ -362,6 +367,11 @@ public sealed partial class EfGraduationAnalyticsService(
                           + x.AverageCount.Value
                           + x.WorkStudyTransferCount.Value
                         : null) ?? 0,
+                ExcellentCount = group.Sum(x => (decimal?)x.ExcellentCount) ?? 0,
+                VeryGoodCount = group.Sum(x => (decimal?)x.VeryGoodCount) ?? 0,
+                GoodCount = group.Sum(x => (decimal?)x.GoodCount) ?? 0,
+                AverageCount = group.Sum(x => (decimal?)x.AverageCount) ?? 0,
+                WorkStudyTransferCount = group.Sum(x => (decimal?)x.WorkStudyTransferCount) ?? 0,
                 IncludedRows = group.Count(x =>
                     x.ExcellentCount.HasValue
                     && x.VeryGoodCount.HasValue
@@ -374,7 +384,16 @@ public sealed partial class EfGraduationAnalyticsService(
             .ThenBy(x => x.Cohort)
             .ToListAsync(cancellationToken);
         var cohortYear = cohortYearAggregates.Select(x => new GraduationCohortYearPointDto(
-            x.ReviewYear, x.Cohort, x.TotalOutcome, x.IncludedRows, x.TotalRows)).ToList();
+            x.ReviewYear,
+            x.Cohort,
+            x.TotalOutcome,
+            x.ExcellentCount,
+            x.VeryGoodCount,
+            x.GoodCount,
+            x.AverageCount,
+            x.WorkStudyTransferCount,
+            x.IncludedRows,
+            x.TotalRows)).ToList();
 
         var periodCount = await rows.Select(x => x.DatasetId).Distinct().CountAsync(cancellationToken);
         var cohortCount = await rows.Select(x => x.Cohort).Distinct().CountAsync(cancellationToken);

@@ -79,6 +79,12 @@ public sealed class GraduationAnalyticsDatabaseIntegrationTests
             overview.Composition.Single(x => x.MetricId == "excellent").Rate
                 .Should().BeApproximately(115m / 137m * 100m, 0.0001m);
             overview.ByCohort.Single(x => x.Group == "K20").IncludedRows.Should().Be(1);
+            var latestCohortTrend = overview.CohortYear.Single(x => x.Cohort == "K22");
+            latestCohortTrend.ExcellentCount.Should().Be(30);
+            latestCohortTrend.VeryGoodCount.Should().Be(2);
+            latestCohortTrend.GoodCount.Should().Be(3);
+            latestCohortTrend.AverageCount.Should().Be(1);
+            latestCohortTrend.WorkStudyTransferCount.Should().Be(0);
 
             var sourceRows = await service.GetRowsAsync(new GraduationRowsQuery(
                 first.Period.PeriodId, null, "Khoa A", "A01", null, 1, 25),

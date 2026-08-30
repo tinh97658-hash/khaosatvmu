@@ -142,6 +142,11 @@ export interface GraduationCohortYearPoint {
   reviewYear: number;
   cohort: string;
   totalOutcome: number;
+  excellentCount: number;
+  veryGoodCount: number;
+  goodCount: number;
+  averageCount: number;
+  workStudyTransferCount: number;
   includedRows: number;
   totalRows: number;
 }

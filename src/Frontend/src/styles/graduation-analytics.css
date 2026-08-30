@@ -354,6 +354,15 @@
 .graduation-tab-heading > span { display: inline-flex; align-items: center; gap: 6px; color: #68737d; font-size: 11px; }
 .graduation-tab-heading > span svg { width: 14px; height: 14px; }
 .graduation-tab-panel > .graduation-alert { margin-top: 8px; }
+.graduation-overview-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  margin-top: 8px;
+  color: #68737d;
+  font-size: 11px;
+}
 .graduation-filters--years { grid-template-columns: repeat(5, minmax(120px, 1fr)) auto; }
 .graduation-kpis--five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .graduation-kpis--five > div:last-child { border-right: 0; }
@@ -374,6 +383,26 @@
 .graduation-matrix th, .graduation-matrix td { padding: 9px 12px; border-right: 1px solid #edf0f2; border-bottom: 1px solid #edf0f2; text-align: right; font-variant-numeric: tabular-nums; }
 .graduation-matrix th:first-child { position: sticky; left: 0; z-index: 1; background: #f7f9fa; text-align: left; }
 .graduation-matrix thead th { background: #f7f9fa; color: #4d5962; }
+
+.graduation-trend-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.graduation-trend-card {
+  min-width: 0;
+  padding: 14px 16px 10px;
+  border: 1px solid #dfe4e8;
+  background: #fff;
+}
+.graduation-trend-card:last-child { grid-column: 1 / -1; }
+.graduation-trend-card > header { display: flex; align-items: flex-start; gap: 9px; }
+.graduation-trend-card > header i { width: 9px; height: 9px; flex: 0 0 9px; margin-top: 5px; border-radius: 50%; }
+.graduation-trend-card h3 { margin: 0; font-size: 14px; }
+.graduation-trend-card p { margin: 3px 0 0; color: #68737d; font-size: 11px; }
+.graduation-trend-chart { height: 340px; margin-top: 8px; }
+.graduation-trend-card:last-child .graduation-trend-chart { height: 380px; }
 
 .graduation-period-context {
   display: flex;
@@ -406,6 +435,9 @@
   .graduation-period-context > div { justify-items: start; }
   .graduation-overview-grid { grid-template-columns: 1fr; }
   .graduation-overview-grid .graduation-overview-card--wide { grid-column: auto; }
+  .graduation-trend-grid { grid-template-columns: 1fr; }
+  .graduation-trend-card:last-child { grid-column: auto; }
+  .graduation-trend-chart, .graduation-trend-card:last-child .graduation-trend-chart { height: 330px; }
   .graduation-filters--years { grid-template-columns: 1fr 1fr; }
   .graduation-kpis--five { grid-template-columns: 1fr 1fr; }
   .graduation-kpis--five > div:nth-child(odd) { border-right: 1px solid #dfe4e8; }

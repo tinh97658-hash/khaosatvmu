@@ -36,6 +36,8 @@ interface GraduationEChartProps {
   showLabels: boolean;
   colors?: string[];
   referenceLine?: { value: number; label: string };
+  xAxisName?: string;
+  yAxisName?: string;
 }
 
 const colors = ['#0788b8', '#e07a2d', '#5b8f3c', '#7557a5', '#c24f6d', '#526d82', '#38a3a5', '#d49b28'];
@@ -54,6 +56,8 @@ export function GraduationEChart({
   showLabels,
   colors: customColors,
   referenceLine,
+  xAxisName,
+  yAxisName,
 }: GraduationEChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const option = useMemo<EChartsOption>(() => {
@@ -69,12 +73,20 @@ export function GraduationEChart({
       type: 'value' as const,
       min: 0,
       max: unit === 'percent' ? 100 : undefined,
+      name: isHorizontal ? xAxisName : yAxisName,
+      nameLocation: 'middle' as const,
+      nameGap: isHorizontal ? 34 : 42,
+      nameTextStyle: { color: '#68737d', fontSize: 11 },
       axisLabel: { formatter: (value: number) => formatValue(value, unit) },
       splitLine: { lineStyle: { color: '#d9dfe3', type: 'dashed' as const } },
     };
     const categoryAxis = {
       type: 'category' as const,
       data: categories,
+      name: isHorizontal ? yAxisName : xAxisName,
+      nameLocation: 'middle' as const,
+      nameGap: isHorizontal ? 118 : 34,
+      nameTextStyle: { color: '#68737d', fontSize: 11 },
       axisTick: { alignWithLabel: true },
       axisLabel: {
         color: '#59636c',
@@ -181,16 +193,20 @@ export function GraduationEChart({
       ]) : undefined,
       grid: {
         top: series.length > 1 ? 46 : 20,
-        left: isHorizontal ? 184 : 52,
+        left: isHorizontal ? 184 : yAxisName ? 68 : 52,
         right: isHorizontal && needsCategoryZoom ? 34 : showLabels ? 70 : 24,
-        bottom: !isHorizontal && needsCategoryZoom ? 108 : !isHorizontal && categories.length > 6 ? 94 : 54,
+        bottom: !isHorizontal && needsCategoryZoom
+          ? 108
+          : !isHorizontal && categories.length > 6
+            ? 94
+            : xAxisName ? 66 : 54,
         containLabel: false,
       },
       xAxis: isHorizontal ? valueAxis : categoryAxis,
       yAxis: isHorizontal ? categoryAxis : valueAxis,
       series: chartSeries,
     };
-  }, [customColors, data, referenceLine, series, showLabels, type, unit]);
+  }, [customColors, data, referenceLine, series, showLabels, type, unit, xAxisName, yAxisName]);
 
   useEffect(() => {
     const host = hostRef.current;

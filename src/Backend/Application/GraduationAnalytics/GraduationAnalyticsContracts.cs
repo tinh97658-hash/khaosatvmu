@@ -181,6 +181,11 @@ public sealed record GraduationCohortYearPointDto(
     int ReviewYear,
     string Cohort,
     decimal TotalOutcome,
+    decimal ExcellentCount,
+    decimal VeryGoodCount,
+    decimal GoodCount,
+    decimal AverageCount,
+    decimal WorkStudyTransferCount,
     int IncludedRows,
     int TotalRows);
 
