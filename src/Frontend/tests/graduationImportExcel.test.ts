@@ -5,9 +5,23 @@ import {
   parseGraduationSheet,
 } from '../src/utils/graduationImportExcel.ts';
 import {
+  anonymousGraduationPeriodSheetFixture,
   anonymousGraduationSheetFixture,
   withInvalidReviewPeriod,
 } from './fixtures/graduationSheetFixture.ts';
+
+test('fixture 16 cột khớp mốc workbook một đợt đã chốt', () => {
+  const rows = anonymousGraduationPeriodSheetFixture.slice(6);
+  const sourceColumnIndexes = [8, 10, 12, 14, 16];
+
+  assert.equal(rows.length, 15);
+  assert.deepEqual(new Set(rows.map((row) => row[7])), new Set(['T7 - 2026']));
+  assert.deepEqual(
+    sourceColumnIndexes.map((columnIndex) =>
+      rows.reduce((total, row) => total + Number(row[columnIndex] ?? 0), 0)),
+    [20, 98, 203, 89, 6],
+  );
+});
 
 test('đọc header hai tầng, bỏ dòng thứ tự và formula-only row', () => {
   const parsed = parseGraduationSheet(anonymousGraduationSheetFixture);
