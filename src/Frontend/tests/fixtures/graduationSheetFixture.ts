@@ -44,6 +44,8 @@ export const anonymousGraduationSheetFixture: FixtureCell[][] = [
   excelRow([null, null, null, null, null, null, null, null, 33.3]),
 ];
 
+export const anonymousLegacyGraduationSheetFixture = anonymousGraduationSheetFixture;
+
 const periodPrimaryHeaders = excelRow([
   'Tên Khoa', 'Mã CTĐT', 'Tên CTĐT', 'Khóa', 'Số SV nhập học ban đầu',
   'Thời điểm xét Tốt nghiệp', 'Thông số xác định trong thời điểm xét tốt nghiệp',
@@ -90,7 +92,13 @@ export const anonymousGraduationPeriodSheetFixture: FixtureCell[][] = [
 ];
 
 export const withInvalidReviewPeriod = () => {
-  const sheet = anonymousGraduationSheetFixture.map((row) => [...row]);
+  const sheet = anonymousGraduationPeriodSheetFixture.map((row) => [...row]);
   sheet[6][7] = 'Đợt không hợp lệ';
+  return sheet;
+};
+
+export const withMultipleReviewPeriods = () => {
+  const sheet = anonymousGraduationPeriodSheetFixture.map((row) => [...row]);
+  sheet[7][7] = 'T11/2026';
   return sheet;
 };

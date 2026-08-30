@@ -1,5 +1,6 @@
 namespace UnitTests.InfrastructureTests;
 
+using global::API.GraduationAnalytics;
 using Application;
 using Application.GraduationAnalytics;
 using FluentAssertions;
@@ -73,6 +74,37 @@ public sealed class GraduationAnalyticsServiceTests
         var exception = await action.Should().ThrowAsync<GraduationAnalyticsException>();
         exception.Which.ErrorCode.Should().Be(GraduationAnalyticsErrorCodes.MultipleReviewPeriods);
         exception.Which.Message.Should().Contain("T7 - 2026").And.Contain("T11 - 2026");
+    }
+
+    [Fact]
+    public void ApiRequest_RejectsLegacyColumnsBeforeCreatingTheApplicationCommand()
+    {
+        var request = new GraduationAnalyticsEndpoints.GraduationImportRowRequest(
+            SourceRowNumber: 7,
+            FacultyName: "Khoa A",
+            ProgramCode: "A01",
+            ProgramName: "Ngành A",
+            Cohort: "K62",
+            InitialEnrollmentCount: 100,
+            ReviewPeriodText: "T7 - 2026",
+            EligibleGraduateCount: 50,
+            OnTimeGraduateCount: 40,
+            OnTimeGraduateRate: 80,
+            ExcellentCount: 1,
+            ExcellentRate: 10,
+            VeryGoodCount: 2,
+            VeryGoodRate: 20,
+            GoodCount: 3,
+            GoodRate: 30,
+            AverageCount: 4,
+            AverageRate: 40,
+            WorkStudyTransferCount: 0,
+            WorkStudyTransferRate: 0);
+
+        Action action = () => request.ToCommand();
+
+        var exception = action.Should().Throw<GraduationAnalyticsException>();
+        exception.Which.ErrorCode.Should().Be(GraduationAnalyticsErrorCodes.LegacyStructureUnsupported);
     }
 
     private static GraduationImportRowCommand Row(int rowNumber, string period) => new(

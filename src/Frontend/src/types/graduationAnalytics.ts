@@ -6,9 +6,6 @@ export interface GraduationImportRow {
   cohort: string;
   initialEnrollmentCount: number | null;
   reviewPeriodText: string;
-  eligibleGraduateCount: number | null;
-  onTimeGraduateCount: number | null;
-  onTimeGraduateRate: number | null;
   excellentCount: number | null;
   excellentRate: number | null;
   veryGoodCount: number | null;
@@ -32,7 +29,18 @@ export interface GraduationDataset {
   maximumReviewDate: string | null;
 }
 
-export interface GraduationImportResult { dataset: GraduationDataset }
+export interface GraduationPeriod {
+  periodId: number;
+  label: string;
+  reviewMonth: number;
+  reviewYear: number;
+  originalFileName: string;
+  importedByName: string;
+  importedAtUtc: string;
+  rowCount: number;
+}
+
+export interface GraduationImportResult { period: GraduationPeriod }
 
 export interface GraduationProgramOption {
   value: string;
@@ -108,7 +116,7 @@ export interface GraduationQueryResult {
 
 export interface GraduationRow extends GraduationImportRow {
   rowId: number;
-  datasetId: number;
+  periodId: number;
   sourceSheetName: string;
   reviewMonth: number | null;
   reviewYear: number | null;

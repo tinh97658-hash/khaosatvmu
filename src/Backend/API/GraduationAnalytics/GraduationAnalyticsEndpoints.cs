@@ -97,6 +97,9 @@ public static class GraduationAnalyticsEndpoints
         string? Cohort,
         int? InitialEnrollmentCount,
         string? ReviewPeriodText,
+        int? EligibleGraduateCount,
+        int? OnTimeGraduateCount,
+        decimal? OnTimeGraduateRate,
         int? ExcellentCount,
         decimal? ExcellentRate,
         int? VeryGoodCount,
@@ -108,11 +111,21 @@ public static class GraduationAnalyticsEndpoints
         int? WorkStudyTransferCount,
         decimal? WorkStudyTransferRate)
     {
-        public GraduationImportRowCommand ToCommand() => new(
-            SourceRowNumber, FacultyName ?? string.Empty, ProgramCode, ProgramName ?? string.Empty,
-            Cohort ?? string.Empty, InitialEnrollmentCount, ReviewPeriodText ?? string.Empty,
-            ExcellentCount, ExcellentRate, VeryGoodCount, VeryGoodRate, GoodCount, GoodRate, AverageCount,
-            AverageRate, WorkStudyTransferCount, WorkStudyTransferRate);
+        public GraduationImportRowCommand ToCommand()
+        {
+            if (EligibleGraduateCount.HasValue || OnTimeGraduateCount.HasValue || OnTimeGraduateRate.HasValue)
+            {
+                throw new GraduationAnalyticsException(
+                    GraduationAnalyticsErrorCodes.LegacyStructureUnsupported,
+                    "File còn cấu trúc 19 cột cũ (cột 7–9). Hãy dùng biểu mẫu mới 16 cột.");
+            }
+
+            return new(
+                SourceRowNumber, FacultyName ?? string.Empty, ProgramCode, ProgramName ?? string.Empty,
+                Cohort ?? string.Empty, InitialEnrollmentCount, ReviewPeriodText ?? string.Empty,
+                ExcellentCount, ExcellentRate, VeryGoodCount, VeryGoodRate, GoodCount, GoodRate, AverageCount,
+                AverageRate, WorkStudyTransferCount, WorkStudyTransferRate);
+        }
     }
 
     public sealed record GraduationAnalyticsQueryRequest(

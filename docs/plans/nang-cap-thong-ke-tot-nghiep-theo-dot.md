@@ -421,10 +421,10 @@ trong cùng lần deploy vì đây là module nội bộ.
 
 ### Giai đoạn 2 — Parser/import
 
-- [ ] Parser header 16 cột và single-period validation.
-- [ ] Warning cho analytical key lặp, không làm mất hoặc gộp row nguồn.
-- [ ] Backend validate lại toàn bộ rule, hash mới và transaction.
-- [ ] Làm lại modal preview/import theo đợt.
+- [x] Parser header 16 cột và single-period validation.
+- [x] Warning cho analytical key lặp, không làm mất hoặc gộp row nguồn.
+- [x] Backend validate lại toàn bộ rule, hash mới và transaction.
+- [x] Làm lại modal preview/import theo đợt.
 
 ### Giai đoạn 3 — Query engine
 
