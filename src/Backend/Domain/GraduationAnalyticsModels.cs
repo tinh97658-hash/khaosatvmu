@@ -5,6 +5,9 @@ public sealed class GraduationAnalyticsDataset
 {
     public long DatasetId { get; set; }
     public string DatasetName { get; set; } = string.Empty;
+    public string ReviewPeriodText { get; set; } = string.Empty;
+    public int ReviewMonth { get; set; }
+    public int ReviewYear { get; set; }
     public string OriginalFileName { get; set; } = string.Empty;
     public string ContentHash { get; set; } = string.Empty;
     public Guid ImportedByUserId { get; set; }
@@ -15,7 +18,7 @@ public sealed class GraduationAnalyticsDataset
     public DateOnly? MaximumReviewDate { get; set; }
 }
 
-/// <summary>Một dòng C-U giữ nguyên từ workbook nguồn.</summary>
+/// <summary>Một dòng C-R giữ nguyên từ workbook nguồn.</summary>
 public sealed class GraduationAnalyticsRow
 {
     public long RowId { get; set; }

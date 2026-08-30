@@ -28,20 +28,17 @@ public sealed partial class EfGraduationAnalyticsService(
     private static readonly IReadOnlyDictionary<string, MetricDefinition> Metrics =
         new Dictionary<string, MetricDefinition>(StringComparer.OrdinalIgnoreCase)
         {
-            ["initialEnrollment"] = Count("Số SV nhập học ban đầu", x => x.InitialEnrollmentCount),
-            ["eligible"] = Count("Số SV được xét tốt nghiệp", x => x.EligibleGraduateCount),
-            ["onTimeCount"] = Count("Số SV tốt nghiệp đúng hạn", x => x.OnTimeGraduateCount),
-            ["onTimeRate"] = Rate("Tỉ lệ tốt nghiệp đúng hạn", x => x.OnTimeGraduateRate, x => x.InitialEnrollmentCount),
+            ["totalOutcome"] = Count("Tổng số kết quả tốt nghiệp", TotalOutcomeCount),
             ["excellentCount"] = Count("Số SV tốt nghiệp xuất sắc", x => x.ExcellentCount),
-            ["excellentRate"] = Rate("Tỉ lệ tốt nghiệp xuất sắc", x => x.ExcellentRate, x => x.EligibleGraduateCount),
+            ["excellentRate"] = Rate("Tỉ lệ tốt nghiệp xuất sắc", x => x.ExcellentRate, TotalOutcomeCount),
             ["veryGoodCount"] = Count("Số SV tốt nghiệp giỏi", x => x.VeryGoodCount),
-            ["veryGoodRate"] = Rate("Tỉ lệ tốt nghiệp giỏi", x => x.VeryGoodRate, x => x.EligibleGraduateCount),
+            ["veryGoodRate"] = Rate("Tỉ lệ tốt nghiệp giỏi", x => x.VeryGoodRate, TotalOutcomeCount),
             ["goodCount"] = Count("Số SV tốt nghiệp khá", x => x.GoodCount),
-            ["goodRate"] = Rate("Tỉ lệ tốt nghiệp khá", x => x.GoodRate, x => x.EligibleGraduateCount),
+            ["goodRate"] = Rate("Tỉ lệ tốt nghiệp khá", x => x.GoodRate, TotalOutcomeCount),
             ["averageCount"] = Count("Số SV tốt nghiệp trung bình", x => x.AverageCount),
-            ["averageRate"] = Rate("Tỉ lệ tốt nghiệp trung bình", x => x.AverageRate, x => x.EligibleGraduateCount),
+            ["averageRate"] = Rate("Tỉ lệ tốt nghiệp trung bình", x => x.AverageRate, TotalOutcomeCount),
             ["workStudyTransferCount"] = Count("Số SV chuyển VHVL", x => x.WorkStudyTransferCount),
-            ["workStudyTransferRate"] = Rate("Tỉ lệ SV chuyển VHVL", x => x.WorkStudyTransferRate, x => x.EligibleGraduateCount),
+            ["workStudyTransferRate"] = Rate("Tỉ lệ SV chuyển VHVL", x => x.WorkStudyTransferRate, TotalOutcomeCount),
         };
 
     private static MetricDefinition Count(
@@ -57,30 +54,44 @@ public sealed partial class EfGraduationAnalyticsService(
         new(label, "percent", "weighted-average", x => selector(x), x => weightSelector(x),
             ["bar", "column", "stacked-bar", "stacked-column", "line", "area", "pie", "donut"]);
 
-    public async Task<IReadOnlyList<GraduationDatasetDto>> GetDatasetsAsync(
+    private static int? TotalOutcomeCount(GraduationAnalyticsRow row)
+    {
+        var counts = new[]
+        {
+            row.ExcellentCount,
+            row.VeryGoodCount,
+            row.GoodCount,
+            row.AverageCount,
+            row.WorkStudyTransferCount,
+        };
+        return counts.Any(x => !x.HasValue) ? null : counts.Sum(x => x!.Value);
+    }
+
+    public async Task<IReadOnlyList<GraduationPeriodDto>> GetPeriodsAsync(
         CancellationToken cancellationToken) =>
         await db.GraduationAnalyticsDatasets
             .AsNoTracking()
-            .OrderByDescending(x => x.ImportedAtUtc)
-            .Select(x => ToDatasetDto(x))
+            .OrderByDescending(x => x.ReviewYear)
+            .ThenByDescending(x => x.ReviewMonth)
+            .Select(x => ToPeriodDto(x))
             .ToListAsync(cancellationToken);
 
     public async Task<GraduationAnalyticsFacetsDto> GetFacetsAsync(
-        long datasetId,
+        long periodId,
         CancellationToken cancellationToken)
     {
         if (!await db.GraduationAnalyticsDatasets
                 .AsNoTracking()
-                .AnyAsync(x => x.DatasetId == datasetId, cancellationToken))
+                .AnyAsync(x => x.DatasetId == periodId, cancellationToken))
         {
             throw new GraduationAnalyticsException(
-                GraduationAnalyticsErrorCodes.DatasetNotFound,
-                "Không tìm thấy bộ dữ liệu.");
+                GraduationAnalyticsErrorCodes.PeriodNotFound,
+                "Không tìm thấy đợt tốt nghiệp.");
         }
 
         var source = await db.GraduationAnalyticsRows
             .AsNoTracking()
-            .Where(x => x.DatasetId == datasetId)
+            .Where(x => x.DatasetId == periodId)
             .Select(x => new
             {
                 x.FacultyName,
@@ -122,8 +133,8 @@ public sealed partial class EfGraduationAnalyticsService(
         return new GraduationAnalyticsFacetsDto(faculties, programs, cohorts, years);
     }
 
-    public async Task<GraduationImportResultDto> ImportDatasetAsync(
-        ImportGraduationDatasetCommand command,
+    public async Task<GraduationImportResultDto> ImportPeriodAsync(
+        ImportGraduationPeriodCommand command,
         CancellationToken cancellationToken)
     {
         if (command.Rows.Count == 0)
@@ -163,9 +174,6 @@ public sealed partial class EfGraduationAnalyticsService(
                 ReviewPeriodText = RequiredText(row.ReviewPeriodText, "Thời điểm xét Tốt nghiệp", row.SourceRowNumber),
                 ReviewMonth = reviewMonth,
                 ReviewYear = reviewYear,
-                EligibleGraduateCount = row.EligibleGraduateCount,
-                OnTimeGraduateCount = row.OnTimeGraduateCount,
-                OnTimeGraduateRate = row.OnTimeGraduateRate,
                 ExcellentCount = row.ExcellentCount,
                 ExcellentRate = row.ExcellentRate,
                 VeryGoodCount = row.VeryGoodCount,
@@ -179,23 +187,53 @@ public sealed partial class EfGraduationAnalyticsService(
             });
         }
 
-        var contentHash = ComputeContentHash(entities);
-        var existing = await db.GraduationAnalyticsDatasets
+        var periods = entities
+            .Select(x => new { Month = x.ReviewMonth!.Value, Year = x.ReviewYear!.Value })
+            .Distinct()
+            .OrderBy(x => x.Year)
+            .ThenBy(x => x.Month)
+            .ToList();
+        if (periods.Count != 1)
+        {
+            var found = string.Join(", ", periods.Select(x => $"T{x.Month} - {x.Year}"));
+            throw new GraduationAnalyticsException(
+                GraduationAnalyticsErrorCodes.MultipleReviewPeriods,
+                $"Mỗi file chỉ được chứa một đợt tốt nghiệp. Các đợt tìm thấy: {found}.");
+        }
+
+        var period = periods[0];
+        var periodText = $"T{period.Month} - {period.Year}";
+        var existingPeriod = await db.GraduationAnalyticsDatasets
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.ContentHash == contentHash, cancellationToken);
-        if (existing is not null)
+            .FirstOrDefaultAsync(
+                x => x.ReviewMonth == period.Month && x.ReviewYear == period.Year,
+                cancellationToken);
+        if (existingPeriod is not null)
         {
             throw new GraduationAnalyticsException(
-                GraduationAnalyticsErrorCodes.DuplicateImport,
-                $"Nội dung này đã được import trong bộ dữ liệu '{existing.DatasetName}'.");
+                GraduationAnalyticsErrorCodes.PeriodExists,
+                $"Đợt {periodText} đã được import.");
+        }
+
+        var contentHash = ComputeContentHash(entities);
+        var duplicateContent = await db.GraduationAnalyticsDatasets
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.ContentHash == contentHash, cancellationToken);
+        if (duplicateContent is not null)
+        {
+            throw new GraduationAnalyticsException(
+                GraduationAnalyticsErrorCodes.PeriodExists,
+                $"Nội dung này đã được import trong đợt '{duplicateContent.ReviewPeriodText}'.");
         }
 
         var importedAt = DateTime.UtcNow;
         var originalFileName = SafeFileName(command.OriginalFileName);
         var dataset = new GraduationAnalyticsDataset
         {
-            DatasetName = OptionalText(command.DatasetName)
-                ?? $"{Path.GetFileNameWithoutExtension(originalFileName)} · {importedAt:dd/MM/yyyy HH:mm}",
+            DatasetName = $"Đợt {periodText}",
+            ReviewPeriodText = periodText,
+            ReviewMonth = period.Month,
+            ReviewYear = period.Year,
             OriginalFileName = originalFileName,
             ContentHash = contentHash,
             ImportedByUserId = currentUser.UserId ?? Guid.Empty,
@@ -217,7 +255,7 @@ public sealed partial class EfGraduationAnalyticsService(
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        return new GraduationImportResultDto(ToDatasetDto(dataset));
+        return new GraduationImportResultDto(ToPeriodDto(dataset));
     }
 
     public GraduationAnalyticsMetadataDto GetMetadata() => new(
@@ -226,9 +264,6 @@ public sealed partial class EfGraduationAnalyticsService(
             new("faculty", "Khoa", "category"),
             new("program", "Chương trình đào tạo", "category"),
             new("cohort", "Khóa", "category"),
-            new("reviewYear", "Năm xét tốt nghiệp", "time"),
-            new("reviewPeriod", "Thời điểm xét tốt nghiệp", "time"),
-            new("dataset", "Bộ dữ liệu", "dataset"),
         ],
         Metrics.Select(x => new GraduationMetricDto(
             x.Key,
@@ -271,8 +306,8 @@ public sealed partial class EfGraduationAnalyticsService(
         if (datasets.Count != datasetIds.Count)
         {
             throw new GraduationAnalyticsException(
-                GraduationAnalyticsErrorCodes.DatasetNotFound,
-                "Không tìm thấy một hoặc nhiều bộ dữ liệu.");
+                GraduationAnalyticsErrorCodes.PeriodNotFound,
+                "Không tìm thấy một hoặc nhiều đợt tốt nghiệp.");
         }
 
         var rowsQuery = ApplyFilters(
@@ -319,21 +354,21 @@ public sealed partial class EfGraduationAnalyticsService(
         GraduationRowsQuery query,
         CancellationToken cancellationToken)
     {
-        if (!await db.GraduationAnalyticsDatasets.AnyAsync(x => x.DatasetId == query.DatasetId, cancellationToken))
+        if (!await db.GraduationAnalyticsDatasets.AnyAsync(x => x.DatasetId == query.PeriodId, cancellationToken))
         {
             throw new GraduationAnalyticsException(
-                GraduationAnalyticsErrorCodes.DatasetNotFound,
-                "Không tìm thấy bộ dữ liệu.");
+                GraduationAnalyticsErrorCodes.PeriodNotFound,
+                "Không tìm thấy đợt tốt nghiệp.");
         }
 
         var page = Math.Max(1, query.Page);
         var pageSize = Math.Clamp(query.PageSize, 10, 100);
         var rows = ApplyFilters(
-            db.GraduationAnalyticsRows.AsNoTracking().Where(x => x.DatasetId == query.DatasetId),
+            db.GraduationAnalyticsRows.AsNoTracking().Where(x => x.DatasetId == query.PeriodId),
             query.Faculty,
             query.Program,
             query.Cohort,
-            query.ReviewYear,
+            null,
             null);
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
@@ -469,8 +504,7 @@ public sealed partial class EfGraduationAnalyticsService(
     {
         var values = new int?[]
         {
-            row.InitialEnrollmentCount, row.EligibleGraduateCount, row.OnTimeGraduateCount,
-            row.ExcellentCount, row.VeryGoodCount, row.GoodCount, row.AverageCount,
+            row.InitialEnrollmentCount, row.ExcellentCount, row.VeryGoodCount, row.GoodCount, row.AverageCount,
             row.WorkStudyTransferCount,
         };
         if (values.Any(x => x < 0))
@@ -485,8 +519,7 @@ public sealed partial class EfGraduationAnalyticsService(
         foreach (var row in rows.OrderBy(x => x.SourceRowNumber))
         {
             Append(builder, row.SourceSheetName, row.SourceRowNumber, row.FacultyName, row.ProgramCode,
-                row.ProgramName, row.Cohort, row.InitialEnrollmentCount, row.ReviewPeriodText,
-                row.EligibleGraduateCount, row.OnTimeGraduateCount, row.OnTimeGraduateRate,
+                row.ProgramName, row.Cohort, row.InitialEnrollmentCount, row.ReviewMonth, row.ReviewYear,
                 row.ExcellentCount, row.ExcellentRate, row.VeryGoodCount, row.VeryGoodRate,
                 row.GoodCount, row.GoodRate, row.AverageCount, row.AverageRate,
                 row.WorkStudyTransferCount, row.WorkStudyTransferRate);
@@ -534,15 +567,14 @@ public sealed partial class EfGraduationAnalyticsService(
     private static GraduationAnalyticsException InvalidRow(int rowNumber, string message) =>
         new(GraduationAnalyticsErrorCodes.InvalidImport, $"Dòng {rowNumber}: {message}");
 
-    private static GraduationDatasetDto ToDatasetDto(GraduationAnalyticsDataset x) => new(
-        x.DatasetId, x.DatasetName, x.OriginalFileName, x.ImportedByName, x.ImportedAtUtc,
-        x.RowCount, x.MinimumReviewDate, x.MaximumReviewDate);
+    private static GraduationPeriodDto ToPeriodDto(GraduationAnalyticsDataset x) => new(
+        x.DatasetId, x.ReviewPeriodText, x.ReviewMonth, x.ReviewYear, x.OriginalFileName,
+        x.ImportedByName, x.ImportedAtUtc, x.RowCount);
 
     private static GraduationAnalyticsRowDto ToRowDto(GraduationAnalyticsRow x) => new(
         x.RowId, x.DatasetId, x.SourceSheetName, x.SourceRowNumber, x.FacultyName, x.ProgramCode,
         x.ProgramName, x.Cohort, x.InitialEnrollmentCount, x.ReviewPeriodText, x.ReviewMonth,
-        x.ReviewYear, x.EligibleGraduateCount, x.OnTimeGraduateCount, x.OnTimeGraduateRate,
-        x.ExcellentCount, x.ExcellentRate, x.VeryGoodCount, x.VeryGoodRate, x.GoodCount,
+        x.ReviewYear, x.ExcellentCount, x.ExcellentRate, x.VeryGoodCount, x.VeryGoodRate, x.GoodCount,
         x.GoodRate, x.AverageCount, x.AverageRate, x.WorkStudyTransferCount,
         x.WorkStudyTransferRate);
 

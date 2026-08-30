@@ -413,11 +413,11 @@ trong cùng lần deploy vì đây là module nội bộ.
 
 ### Giai đoạn 1 — Migration và domain
 
-- [ ] Viết preflight audit dữ liệu legacy.
-- [ ] Thêm metadata đợt ở dataset và migration tách dataset nhiều đợt.
-- [ ] Thêm unique period sau khi dữ liệu sạch.
-- [ ] Đổi DTO/command từ dataset tùy ý sang period.
-- [ ] Bỏ ba metric 7–9 khỏi contract và metadata.
+- [x] Viết preflight audit dữ liệu legacy.
+- [x] Thêm metadata đợt ở dataset và migration tách dataset nhiều đợt.
+- [x] Thêm unique period sau khi dữ liệu sạch.
+- [x] Đổi DTO/command từ dataset tùy ý sang period.
+- [x] Bỏ ba metric 7–9 khỏi contract và metadata.
 
 ### Giai đoạn 2 — Parser/import
 
