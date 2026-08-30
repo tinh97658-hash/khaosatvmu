@@ -421,7 +421,18 @@
 }
 .graduation-measure-switch button:hover { color: #075d79; }
 .graduation-measure-switch button.is-selected { background: #fff; color: #075d79; box-shadow: 0 0 0 1px #b8d2dc; }
-.graduation-cohort-comparison__chart { height: 460px; margin-top: 8px; }
+.graduation-outcome-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px 18px;
+  margin-top: 13px;
+  color: #59636c;
+  font-size: 11px;
+}
+.graduation-outcome-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.graduation-outcome-legend i { width: 9px; height: 9px; border-radius: 2px; }
+.graduation-cohort-comparison__chart { height: 460px; margin-top: 2px; }
 .graduation-cohort-comparison > footer {
   display: flex;
   flex-wrap: wrap;

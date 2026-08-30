@@ -31,9 +31,10 @@ echarts.use([
 interface GraduationEChartProps {
   type: GraduationChartType;
   data: Array<Record<string, string | number | null>>;
-  series: Array<{ key: string; label: string }>;
+  series: Array<{ key: string; label: string; stack?: string; stackLabel?: string }>;
   unit?: 'count' | 'percent';
   showLabels: boolean;
+  showLegend?: boolean;
   colors?: string[];
   referenceLine?: { value: number; label: string };
   xAxisName?: string;
@@ -54,6 +55,7 @@ export function GraduationEChart({
   series,
   unit,
   showLabels,
+  showLegend = true,
   colors: customColors,
   referenceLine,
   xAxisName,
@@ -67,6 +69,7 @@ export function GraduationEChart({
     const isStacked = type === 'stacked-bar' || type === 'stacked-column';
     const isPie = type === 'pie' || type === 'donut';
     const isLineChart = type === 'line' || type === 'area';
+    const hasStackLabels = series.some((item) => Boolean(item.stackLabel));
     const visibleCategoryCount = isHorizontal ? 14 : 12;
     const needsCategoryZoom = categories.length > visibleCategoryCount;
     const categoryZoomEnd = Math.min(100, (visibleCategoryCount / categories.length) * 100);
@@ -145,7 +148,7 @@ export function GraduationEChart({
       name: item.label,
       type: isLineChart ? 'line' as const : 'bar' as const,
       data: data.map((row) => typeof row[item.key] === 'number' ? row[item.key] : null),
-      stack: isStacked ? 'total' : undefined,
+      stack: item.stack ?? (isStacked ? 'total' : undefined),
       smooth: isLineChart ? 0.55 : false,
       smoothMonotone: isLineChart ? 'x' as const : undefined,
       symbol: isLineChart ? 'circle' as const : undefined,
@@ -160,12 +163,16 @@ export function GraduationEChart({
       lineStyle: isLineChart ? { width: 2.5, cap: 'round' as const, join: 'round' as const } : undefined,
       barMaxWidth: 52,
       label: {
-        show: showLabels,
+        show: Boolean(item.stackLabel) || showLabels,
         position: isHorizontal ? 'right' as const : 'top' as const,
-        formatter: (params: { value?: unknown }) => formatValue(params.value, unit),
+        formatter: item.stackLabel
+          ? item.stackLabel
+          : (params: { value?: unknown }) => formatValue(params.value, unit),
         color: '#4d5962',
         fontSize: 11,
+        fontWeight: item.stackLabel ? 650 : 400,
       },
+      labelLayout: item.stackLabel ? { hideOverlap: true } : undefined,
       emphasis: { focus: 'series' as const },
       markLine: index === 0 && referenceLine ? {
         silent: true,
@@ -229,10 +236,10 @@ export function GraduationEChart({
         axisPointer: { type: isLineChart ? 'line' : 'shadow' },
         valueFormatter: (value) => formatValue(value, unit),
       },
-      legend: { show: series.length > 1, type: 'scroll', top: 0 },
+      legend: { show: showLegend && series.length > 1, type: 'scroll', top: 0 },
       dataZoom: [...categoryDataZoom, ...percentDataZoom],
       grid: {
-        top: series.length > 1 ? 46 : 20,
+        top: showLegend && series.length > 1 ? 46 : hasStackLabels ? 34 : 20,
         left: isHorizontal ? 184 : yAxisName ? 68 : 52,
         right: !isHorizontal && needsPercentZoom
           ? showLabels ? 86 : 48
@@ -248,7 +255,7 @@ export function GraduationEChart({
       yAxis: isHorizontal ? categoryAxis : valueAxis,
       series: chartSeries,
     };
-  }, [customColors, data, referenceLine, series, showLabels, type, unit, xAxisName, yAxisName]);
+  }, [customColors, data, referenceLine, series, showLabels, showLegend, type, unit, xAxisName, yAxisName]);
 
   useEffect(() => {
     const host = hostRef.current;

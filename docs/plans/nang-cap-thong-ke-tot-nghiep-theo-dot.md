@@ -294,9 +294,10 @@ cần thu hẹp báo cáo.
 
 Một **biểu đồ cột chồng theo nhóm năm–khóa** thay cho năm biểu đồ đường:
 
-- Trục X là từng cặp năm xét và khóa; chỉ tổ hợp thực sự có dữ liệu mới có cột.
-- Mỗi cột chồng năm nhóm Xuất sắc, Giỏi, Khá, Trung bình và Chuyển VHVL; màu cố
-  định theo nhóm kết quả thay vì theo khóa.
+- Trục X chỉ hiển thị năm xét. Trong mỗi năm, mỗi khóa có một cột chồng riêng và
+  tên khóa đặt trên đỉnh cột; tổ hợp không có dữ liệu không sinh cột giả.
+- Đây là dạng kết hợp `grouped + stacked column`: mỗi cột chồng năm nhóm Xuất sắc,
+  Giỏi, Khá, Trung bình và Chuyển VHVL; màu cố định theo nhóm kết quả thay vì theo khóa.
 - Chế độ `Số lượng` thể hiện quy mô thực tế; chế độ `Tỷ lệ` quy mỗi cột đủ dữ liệu
   về 100% để so sánh cơ cấu giữa các khóa.
 - Tổ hợp thiếu một hoặc nhiều nhóm vẫn hiện số lượng nguồn nhưng không bị suy
@@ -319,15 +320,15 @@ Thêm box đầu tiên `Dữ liệu phân tích`:
 - `Tích lũy tất cả các đợt`;
 - `Theo một đợt` và period picker đi kèm.
 
-Các box `So sánh theo` và `Phân chuỗi` chỉ còn:
+Các box `So sánh theo` và `Phân chuỗi` gồm:
 
 - Khoa;
 - Chương trình đào tạo;
-- Khóa.
+- Khóa;
+- Năm xét, nhưng chỉ xuất hiện trong phạm vi `Tích lũy tất cả các đợt`.
 
 Loại bỏ khỏi hai box:
 
-- năm xét;
 - thời điểm xét;
 - dataset/bộ dữ liệu.
 
@@ -345,7 +346,9 @@ ghi `Tính từ số lượng trong phạm vi`, không gọi đây là giá tr�
 của Excel. Các tỉ lệ nguồn chỉ xem tại tab Bảng.
 
 Quy tắc chart hiện có về cùng dimension, pie tối đa 12 nhóm, stacked cần series,
-sort/top N, nhãn và bảng dữ liệu tương ứng vẫn được giữ.
+sort/top N, nhãn và bảng dữ liệu tương ứng vẫn được giữ. Chart Cartesian dùng
+metric phần trăm có thêm data zoom trên trục giá trị; cửa sổ ban đầu ôm miền dữ
+liệu thực tế nhưng người dùng luôn có thể kéo về toàn miền 0–100%.
 
 ## 8. Tab Bảng
 
@@ -479,8 +482,9 @@ Kết quả kiểm thử local ngày 30/08/2026:
 7. Năm nhóm kết quả hiển thị đủ số lượng, tỉ trọng và coverage.
 8. Tổng/tỉ lệ tích lũy dùng ratio-of-sums; không cộng hoặc average tỉ lệ nguồn.
 9. `InitialEnrollmentCount` không bị cộng lặp qua các đợt.
-10. Tổng quan có cột chồng năm–khóa, chuyển được số lượng/tỷ lệ và hoạt động với filter khoa/CTĐT.
-11. Khám phá chỉ cho group/series theo khoa, CTĐT, khóa và chọn được scope.
+10. Tổng quan chỉ đặt năm trên trục X, ghi khóa trên từng cột chồng, chuyển được số lượng/tỷ lệ
+    và hoạt động với filter khoa/CTĐT.
+11. Khám phá cho group/series theo khoa, CTĐT, khóa; thêm năm xét khi chọn scope tích lũy.
 12. Tab Bảng hiển thị đúng dữ liệu nguồn của đợt được chọn, đủ truy vết file/dòng.
 13. Dữ liệu legacy được audit/migrate mà không âm thầm gộp các đợt trùng; row
     nguồn cùng khóa phân tích vẫn được giữ riêng.

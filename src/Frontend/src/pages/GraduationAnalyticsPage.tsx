@@ -35,11 +35,11 @@ type ChartSort = 'auto' | 'value-desc' | 'value-asc' | 'label-asc';
 type OverviewMeasure = 'count' | 'percent';
 
 const bucketSeries = [
-  { key: 'excellent', countKey: 'excellentCount', rateKey: 'excellentRate', label: 'Xuất sắc', color: '#0788b8' },
-  { key: 'veryGood', countKey: 'veryGoodCount', rateKey: 'veryGoodRate', label: 'Giỏi', color: '#38a3a5' },
-  { key: 'good', countKey: 'goodCount', rateKey: 'goodRate', label: 'Khá', color: '#86b049' },
-  { key: 'average', countKey: 'averageCount', rateKey: 'averageRate', label: 'Trung bình', color: '#e2a23a' },
-  { key: 'workStudyTransfer', countKey: 'workStudyTransferCount', rateKey: 'workStudyTransferRate', label: 'Chuyển VHVL', color: '#9b6eb2' },
+  { key: 'excellent', countKey: 'excellentCount', label: 'Xuất sắc', color: '#0788b8' },
+  { key: 'veryGood', countKey: 'veryGoodCount', label: 'Giỏi', color: '#38a3a5' },
+  { key: 'good', countKey: 'goodCount', label: 'Khá', color: '#86b049' },
+  { key: 'average', countKey: 'averageCount', label: 'Trung bình', color: '#e2a23a' },
+  { key: 'workStudyTransfer', countKey: 'workStudyTransferCount', label: 'Chuyển VHVL', color: '#9b6eb2' },
 ] as const;
 
 const chartOptions: Array<{ id: GraduationChartType; label: string; icon: typeof BarChart3 }> = [
@@ -308,24 +308,36 @@ export function GraduationAnalyticsPage() {
   const overviewComparisonModel = useMemo(() => {
     const points = [...(overview?.cohortYear ?? [])].sort((a, b) =>
       a.reviewYear - b.reviewYear || a.cohort.localeCompare(b.cohort, 'vi', { numeric: true }));
-    const data = points.map((point) => {
-      const row: Record<string, string | number | null> = {
-        name: `${point.reviewYear}\n${point.cohort}`,
-      };
-      bucketSeries.forEach((bucket) => {
-        const count = point[bucket.countKey];
-        row[bucket.key] = overviewMeasure === 'count'
+    const years = [...new Set(points.map((point) => point.reviewYear))].sort((a, b) => a - b);
+    const cohorts = [...new Set(points.map((point) => point.cohort))]
+      .sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
+    const dataByYear = new Map<number, Record<string, string | number | null>>(
+      years.map((year) => [year, { name: String(year) }]),
+    );
+    const series = cohorts.flatMap((cohort, cohortIndex) => bucketSeries.map((bucket, bucketIndex) => ({
+      key: `cohort${cohortIndex}-${bucket.key}`,
+      label: `${cohort} · ${bucket.label}`,
+      stack: `cohort${cohortIndex}`,
+      stackLabel: bucketIndex === bucketSeries.length - 1 ? cohort : undefined,
+      color: bucket.color,
+      countKey: bucket.countKey,
+      cohort,
+    })));
+    points.forEach((point) => {
+      const row = dataByYear.get(point.reviewYear)!;
+      series.filter((item) => item.cohort === point.cohort).forEach((item) => {
+        const count = point[item.countKey];
+        row[item.key] = overviewMeasure === 'count'
           ? count
           : point.includedRows === point.totalRows && point.totalOutcome > 0
             ? count / point.totalOutcome * 100
             : null;
       });
-      return row;
     });
     return {
-      data,
-      series: bucketSeries.map((bucket) => ({ key: bucket.key, label: bucket.label })),
-      colors: bucketSeries.map((bucket) => bucket.color),
+      data: years.map((year) => dataByYear.get(year)!),
+      series: series.map(({ key, label, stack, stackLabel }) => ({ key, label, stack, stackLabel })),
+      colors: series.map((item) => item.color),
       incompletePointCount: points.filter((point) => point.includedRows < point.totalRows).length,
     };
   }, [overview?.cohortYear, overviewMeasure]);
@@ -412,12 +424,15 @@ export function GraduationAnalyticsPage() {
       {overview && overview.cohortYear.length > 0
         ? <article className="graduation-cohort-comparison">
           <header>
-            <div><span>SO SÁNH THEO NĂM VÀ KHÓA</span><h2>Cơ cấu kết quả tốt nghiệp</h2><p>Mỗi cột là một khóa trong một năm xét; năm màu là năm nhóm kết quả.</p></div>
+            <div><span>CỘT CHỒNG THEO NHÓM</span><h2>Cơ cấu kết quả theo năm và khóa</h2><p>Trục ngang chỉ hiển thị năm; tên khóa nằm trên từng cột chồng.</p></div>
             <div className="graduation-measure-switch" role="group" aria-label="Đơn vị biểu đồ">
               <button type="button" className={overviewMeasure === 'count' ? 'is-selected' : ''} aria-pressed={overviewMeasure === 'count'} onClick={() => setOverviewMeasure('count')}>Số lượng</button>
               <button type="button" className={overviewMeasure === 'percent' ? 'is-selected' : ''} aria-pressed={overviewMeasure === 'percent'} onClick={() => setOverviewMeasure('percent')}>Tỷ lệ</button>
             </div>
           </header>
+          <div className="graduation-outcome-legend" aria-label="Chú giải nhóm kết quả">
+            {bucketSeries.map((bucket) => <span key={bucket.key}><i style={{ background: bucket.color }} />{bucket.label}</span>)}
+          </div>
           <div className="graduation-cohort-comparison__chart">
             <GraduationEChart
               type="stacked-column"
@@ -425,8 +440,9 @@ export function GraduationAnalyticsPage() {
               series={overviewComparisonModel.series}
               unit={overviewMeasure}
               showLabels={false}
+              showLegend={false}
               colors={overviewComparisonModel.colors}
-              xAxisName="Năm xét · Khóa"
+              xAxisName="Năm xét"
               yAxisName={overviewMeasure === 'count' ? 'Số sinh viên' : 'Tỷ trọng'}
             />
           </div>
