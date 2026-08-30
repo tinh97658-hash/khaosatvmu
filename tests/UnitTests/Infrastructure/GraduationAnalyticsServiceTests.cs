@@ -21,12 +21,12 @@ public sealed class GraduationAnalyticsServiceTests
         var metadata = service.GetMetadata();
 
         metadata.Dimensions.Select(x => x.Id).Should().BeEquivalentTo(
-            "all", "faculty", "program", "cohort");
+            "faculty", "program", "cohort");
         metadata.Metrics.Should().HaveCount(11);
         metadata.Metrics.Should().Contain(x =>
             x.Id == "excellentRate"
             && x.Unit == "percent"
-            && x.Aggregation == "weighted-average");
+            && x.Aggregation == "ratio-of-sums");
         metadata.Metrics.Select(x => x.Id).Should().NotContain(
             ["initialEnrollment", "eligible", "onTimeCount", "onTimeRate"]);
     }
@@ -37,8 +37,23 @@ public sealed class GraduationAnalyticsServiceTests
         await using var db = CreateContext();
         var service = new EfGraduationAnalyticsService(db, Mock.Of<ICurrentUserAccessor>());
         var command = new GraduationAnalyticsQueryCommand(
-            [1], "excellentRate", "faculty", "faculty",
-            null, null, null, null, null);
+            GraduationAnalysisScopes.Cumulative, null, "excellentRate", "faculty", "faculty",
+            null, null, null);
+
+        var action = () => service.QueryAsync(command, CancellationToken.None);
+
+        var exception = await action.Should().ThrowAsync<GraduationAnalyticsException>();
+        exception.Which.ErrorCode.Should().Be(GraduationAnalyticsErrorCodes.InvalidQuery);
+    }
+
+    [Fact]
+    public async Task Query_RejectsAnUnknownScopeBeforeTouchingTheDatabase()
+    {
+        await using var db = CreateContext();
+        var service = new EfGraduationAnalyticsService(db, Mock.Of<ICurrentUserAccessor>());
+        var command = new GraduationAnalyticsQueryCommand(
+            "arbitrary-datasets", null, "excellentCount", "faculty", null,
+            null, null, null);
 
         var action = () => service.QueryAsync(command, CancellationToken.None);
 

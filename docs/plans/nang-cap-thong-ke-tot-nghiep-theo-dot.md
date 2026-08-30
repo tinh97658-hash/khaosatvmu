@@ -428,11 +428,11 @@ trong cùng lần deploy vì đây là module nội bộ.
 
 ### Giai đoạn 3 — Query engine
 
-- [ ] Thêm `cumulative|period` scope.
-- [ ] Giới hạn dimension còn faculty/program/cohort.
-- [ ] Thêm total outcome và ratio-of-sums cho 5 nhóm.
-- [ ] Chuyển aggregation chính xuống database.
-- [ ] Thêm endpoint overview và facets theo scope.
+- [x] Thêm `cumulative|period` scope.
+- [x] Giới hạn dimension còn faculty/program/cohort.
+- [x] Thêm total outcome và ratio-of-sums cho 5 nhóm.
+- [x] Chuyển aggregation chính xuống database.
+- [x] Thêm endpoint overview và facets theo scope.
 
 ### Giai đoạn 4 — Ba tab UI
 

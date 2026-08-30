@@ -16,12 +16,13 @@ public static class GraduationAnalyticsEndpoints
         group.MapGet("/metadata", (IGraduationAnalyticsService service) =>
             Results.Ok(service.GetMetadata()));
 
-        group.MapGet("/periods/{periodId:long}/facets", async (
-            long periodId,
+        group.MapGet("/facets", async (
+            string? scope,
+            long? periodId,
             IGraduationAnalyticsService service,
             CancellationToken ct) =>
         {
-            try { return Results.Ok(await service.GetFacetsAsync(periodId, ct)); }
+            try { return Results.Ok(await service.GetFacetsAsync(scope ?? string.Empty, periodId, ct)); }
             catch (GraduationAnalyticsException exception) { return ToError(exception); }
         });
 
@@ -47,6 +48,15 @@ public static class GraduationAnalyticsEndpoints
             CancellationToken ct) =>
         {
             try { return Results.Ok(await service.QueryAsync(request.ToCommand(), ct)); }
+            catch (GraduationAnalyticsException exception) { return ToError(exception); }
+        }).AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapPost("/overview", async (
+            GraduationOverviewRequest request,
+            IGraduationAnalyticsService service,
+            CancellationToken ct) =>
+        {
+            try { return Results.Ok(await service.GetOverviewAsync(request.ToQuery(), ct)); }
             catch (GraduationAnalyticsException exception) { return ToError(exception); }
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
@@ -129,18 +139,27 @@ public static class GraduationAnalyticsEndpoints
     }
 
     public sealed record GraduationAnalyticsQueryRequest(
-        IReadOnlyList<long>? DatasetIds,
+        string? Scope,
+        long? PeriodId,
         string? MetricId,
         string? GroupBy,
         string? SeriesBy,
         string? Faculty,
         string? Program,
-        string? Cohort,
-        int? ReviewYear,
-        int? ReviewMonth)
+        string? Cohort)
     {
         public GraduationAnalyticsQueryCommand ToCommand() => new(
-            DatasetIds ?? [], MetricId ?? string.Empty, GroupBy ?? string.Empty, SeriesBy,
-            Faculty, Program, Cohort, ReviewYear, ReviewMonth);
+            Scope ?? string.Empty, PeriodId, MetricId ?? string.Empty, GroupBy ?? string.Empty,
+            SeriesBy, Faculty, Program, Cohort);
+    }
+
+    public sealed record GraduationOverviewRequest(
+        string? Faculty,
+        string? Program,
+        string? Cohort,
+        int? FromYear,
+        int? ToYear)
+    {
+        public GraduationOverviewQuery ToQuery() => new(Faculty, Program, Cohort, FromYear, ToYear);
     }
 }

@@ -42,20 +42,43 @@ public sealed class GraduationAnalyticsDatabaseIntegrationTests
             first.Period.ReviewYear.Should().Be(firstPeriod.Year);
 
             var faculty = await service.QueryAsync(new GraduationAnalyticsQueryCommand(
-                [first.Period.PeriodId], "excellentCount", "faculty", null,
-                null, null, null, null, null), CancellationToken.None);
+                GraduationAnalysisScopes.Period, first.Period.PeriodId,
+                "excellentCount", "faculty", null, null, null, null), CancellationToken.None);
             faculty.Points.Single(x => x.Group == "Khoa A").Value.Should().Be(100);
             faculty.Points.Single(x => x.Group == "Khoa B").Value.Should().Be(25);
 
             var programInFaculty = await service.QueryAsync(new GraduationAnalyticsQueryCommand(
-                [first.Period.PeriodId], "excellentRate", "program", null,
-                "Khoa A", null, null, null, null), CancellationToken.None);
+                GraduationAnalysisScopes.Period, first.Period.PeriodId,
+                "excellentRate", "program", null, "Khoa A", null, null), CancellationToken.None);
             programInFaculty.Points.Should().HaveCount(2);
+            var completeProgram = programInFaculty.Points.Single(x => x.Group.StartsWith("A02"));
+            completeProgram.Value.Should().BeApproximately(60m / 69m * 100m, 0.0001m);
+            completeProgram.Aggregation.Should().Be("ratio-of-sums");
+            completeProgram.IncludedRows.Should().Be(1);
+            programInFaculty.Points.Single(x => x.Group.StartsWith("A01")).Value.Should().BeNull();
 
-            var datasets = await service.QueryAsync(new GraduationAnalyticsQueryCommand(
-                [first.Period.PeriodId, second.Period.PeriodId], "excellentCount", "dataset", null,
-                null, null, null, null, null), CancellationToken.None);
-            datasets.Points.Should().HaveCount(2);
+            var cumulative = await service.QueryAsync(new GraduationAnalyticsQueryCommand(
+                GraduationAnalysisScopes.Cumulative, null,
+                "excellentCount", "cohort", null, null, null, null), CancellationToken.None);
+            cumulative.Points.Should().Contain(x => x.Group == "K22" && x.Value == 30);
+
+            var periodFacets = await service.GetFacetsAsync(
+                GraduationAnalysisScopes.Period, first.Period.PeriodId, CancellationToken.None);
+            periodFacets.Cohorts.Should().NotContain("K22");
+            var cumulativeFacets = await service.GetFacetsAsync(
+                GraduationAnalysisScopes.Cumulative, null, CancellationToken.None);
+            cumulativeFacets.Cohorts.Should().Contain("K22");
+
+            var overview = await service.GetOverviewAsync(
+                new GraduationOverviewQuery(null, null, null, null, null),
+                CancellationToken.None);
+            overview.TotalOutcome.Should().Be(137);
+            overview.PeriodCount.Should().Be(2);
+            overview.IncludedRows.Should().Be(3);
+            overview.TotalRows.Should().Be(4);
+            overview.Composition.Single(x => x.MetricId == "excellent").Rate
+                .Should().BeApproximately(115m / 137m * 100m, 0.0001m);
+            overview.ByCohort.Single(x => x.Group == "K20").IncludedRows.Should().Be(1);
 
             var sourceRows = await service.GetRowsAsync(new GraduationRowsQuery(
                 first.Period.PeriodId, null, "Khoa A", "A01", null, 1, 25),
