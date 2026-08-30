@@ -70,6 +70,16 @@ export function GraduationEChart({
     const visibleCategoryCount = isHorizontal ? 14 : 12;
     const needsCategoryZoom = categories.length > visibleCategoryCount;
     const categoryZoomEnd = Math.min(100, (visibleCategoryCount / categories.length) * 100);
+    const needsPercentZoom = unit === 'percent';
+    const maximumPercentValue = Math.max(
+      referenceLine?.value ?? 0,
+      ...data.map((row) => isStacked
+        ? series.reduce((sum, item) => sum + (typeof row[item.key] === 'number' ? Number(row[item.key]) : 0), 0)
+        : Math.max(0, ...series.map((item) => typeof row[item.key] === 'number' ? Number(row[item.key]) : 0))),
+    );
+    const percentZoomEnd = isStacked
+      ? 100
+      : Math.min(100, Math.max(10, Math.ceil(maximumPercentValue * 1.2 / 5) * 5));
     const valueAxis = {
       type: 'value' as const,
       min: 0,
@@ -174,6 +184,41 @@ export function GraduationEChart({
         data: [{ yAxis: referenceLine.value }],
       } : undefined,
     }));
+    const categoryDataZoom = !needsCategoryZoom ? [] : isHorizontal ? [
+      { type: 'inside' as const, yAxisIndex: 0, start: 0, end: categoryZoomEnd },
+      {
+        type: 'slider' as const, yAxisIndex: 0, start: 0, end: categoryZoomEnd,
+        right: 5, top: 44, bottom: 24, width: 14, showDetail: false, brushSelect: false,
+      },
+    ] : [
+      { type: 'inside' as const, xAxisIndex: 0, start: 0, end: categoryZoomEnd },
+      {
+        type: 'slider' as const, xAxisIndex: 0, start: 0, end: categoryZoomEnd,
+        left: 52, right: needsPercentZoom ? 48 : 24, bottom: 4, height: 18,
+        showDetail: false, brushSelect: false,
+      },
+    ];
+    const percentDataZoom = !needsPercentZoom ? [] : isHorizontal ? [
+      {
+        type: 'inside' as const, xAxisIndex: 0, start: 0, end: percentZoomEnd,
+        filterMode: 'none' as const,
+      },
+      {
+        type: 'slider' as const, xAxisIndex: 0, start: 0, end: percentZoomEnd,
+        filterMode: 'none' as const, left: 184, right: 24, bottom: 4, height: 18,
+        showDetail: true, brushSelect: false,
+      },
+    ] : [
+      {
+        type: 'inside' as const, yAxisIndex: 0, start: 0, end: percentZoomEnd,
+        filterMode: 'none' as const,
+      },
+      {
+        type: 'slider' as const, yAxisIndex: 0, start: 0, end: percentZoomEnd,
+        filterMode: 'none' as const, right: 4, top: 48, bottom: 48, width: 14,
+        showDetail: true, brushSelect: false,
+      },
+    ];
 
     return {
       color: palette,
@@ -185,23 +230,13 @@ export function GraduationEChart({
         valueFormatter: (value) => formatValue(value, unit),
       },
       legend: { show: series.length > 1, type: 'scroll', top: 0 },
-      dataZoom: needsCategoryZoom ? (isHorizontal ? [
-        { type: 'inside', yAxisIndex: 0, start: 0, end: categoryZoomEnd },
-        {
-          type: 'slider', yAxisIndex: 0, start: 0, end: categoryZoomEnd,
-          right: 5, top: 44, bottom: 24, width: 14, showDetail: false, brushSelect: false,
-        },
-      ] : [
-        { type: 'inside', xAxisIndex: 0, start: 0, end: categoryZoomEnd },
-        {
-          type: 'slider', xAxisIndex: 0, start: 0, end: categoryZoomEnd,
-          left: 52, right: 24, bottom: 4, height: 18, showDetail: false, brushSelect: false,
-        },
-      ]) : undefined,
+      dataZoom: [...categoryDataZoom, ...percentDataZoom],
       grid: {
         top: series.length > 1 ? 46 : 20,
         left: isHorizontal ? 184 : yAxisName ? 68 : 52,
-        right: isHorizontal && needsCategoryZoom ? 34 : showLabels ? 70 : 24,
+        right: !isHorizontal && needsPercentZoom
+          ? showLabels ? 86 : 48
+          : isHorizontal && needsCategoryZoom ? 34 : showLabels ? 70 : 24,
         bottom: !isHorizontal && needsCategoryZoom
           ? 108
           : !isHorizontal && categories.length > 6
