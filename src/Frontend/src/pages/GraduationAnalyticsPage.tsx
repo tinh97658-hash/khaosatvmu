@@ -331,15 +331,23 @@ export function GraduationAnalyticsPage() {
       key: `cohort${cohortIndex}-${bucket.key}`,
       label: `${cohort} · ${bucket.label}`,
       stack: `cohort${cohortIndex}`,
-      stackLabel: bucketIndex === bucketSeries.length - 1 ? cohort : undefined,
+      stackLabelKey: bucketIndex === bucketSeries.length - 1 ? `cohort${cohortIndex}-label` : undefined,
+      tooltipCountKey: `cohort${cohortIndex}-${bucket.key}-count`,
+      tooltipTotalKey: `cohort${cohortIndex}-total`,
       color: bucket.color,
       countKey: bucket.countKey,
       cohort,
     })));
     points.forEach((point) => {
       const row = dataByYear.get(point.reviewYear)!;
+      const cohortIndex = cohorts.indexOf(point.cohort);
+      row[`cohort${cohortIndex}-label`] = overviewMeasure === 'percent'
+        ? `${point.cohort}\nn=${formatValue(point.totalOutcome)}`
+        : point.cohort;
+      row[`cohort${cohortIndex}-total`] = point.totalOutcome;
       series.filter((item) => item.cohort === point.cohort).forEach((item) => {
         const count = point[item.countKey];
+        row[item.tooltipCountKey] = count;
         row[item.key] = overviewMeasure === 'count'
           ? count
           : point.includedRows === point.totalRows && point.totalOutcome > 0
@@ -349,7 +357,14 @@ export function GraduationAnalyticsPage() {
     });
     return {
       data: years.map((year) => dataByYear.get(year)!),
-      series: series.map(({ key, label, stack, stackLabel }) => ({ key, label, stack, stackLabel })),
+      series: series.map(({ key, label, stack, stackLabelKey, tooltipCountKey, tooltipTotalKey }) => ({
+        key,
+        label,
+        stack,
+        stackLabelKey,
+        tooltipCountKey,
+        tooltipTotalKey,
+      })),
       colors: series.map((item) => item.color),
       incompletePointCount: points.filter((point) => point.includedRows < point.totalRows).length,
     };
@@ -440,7 +455,7 @@ export function GraduationAnalyticsPage() {
             <div><span>CỘT CHỒNG THEO NHÓM</span><h2>Cơ cấu kết quả theo năm và khóa</h2><p>Trục ngang chỉ hiển thị năm; tên khóa nằm trên từng cột chồng.</p></div>
             <div className="graduation-measure-switch" role="group" aria-label="Đơn vị biểu đồ">
               <button type="button" className={overviewMeasure === 'count' ? 'is-selected' : ''} aria-pressed={overviewMeasure === 'count'} onClick={() => setOverviewMeasure('count')}>Số lượng</button>
-              <button type="button" className={overviewMeasure === 'percent' ? 'is-selected' : ''} aria-pressed={overviewMeasure === 'percent'} onClick={() => setOverviewMeasure('percent')}>Tỷ lệ</button>
+              <button type="button" className={overviewMeasure === 'percent' ? 'is-selected' : ''} aria-pressed={overviewMeasure === 'percent'} onClick={() => setOverviewMeasure('percent')}>Cơ cấu %</button>
             </div>
           </header>
           <div className="graduation-outcome-legend" aria-label="Chú giải nhóm kết quả">
@@ -454,15 +469,16 @@ export function GraduationAnalyticsPage() {
               unit={overviewMeasure}
               showLabels={false}
               showLegend={false}
+              tooltipTrigger="item"
               colors={overviewComparisonModel.colors}
               xAxisName="Năm xét"
-              yAxisName={overviewMeasure === 'count' ? 'Số sinh viên' : 'Tỷ trọng'}
+              yAxisName={overviewMeasure === 'count' ? 'Số sinh viên' : 'Cơ cấu (%)'}
             />
           </div>
           <footer>
             {overviewMeasure === 'count'
               ? 'Chiều cao cột thể hiện tổng số sinh viên; rê chuột để xem số lượng từng nhóm.'
-              : 'Mỗi cột đủ dữ liệu được quy về 100% để so sánh cơ cấu giữa các khóa.'}
+              : 'Mỗi cột là cơ cấu năm nhóm trong chính cặp năm–khóa đó; n là tổng số sinh viên dùng làm mẫu số, không phải số nhập học.'}
             {overviewMeasure === 'percent' && overviewComparisonModel.incompletePointCount > 0
               && <strong>{overviewComparisonModel.incompletePointCount} tổ hợp năm–khóa thiếu một hoặc nhiều nhóm nên không tính tỷ lệ.</strong>}
           </footer>

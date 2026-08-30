@@ -12,6 +12,7 @@ import {
 import { LabelLayout } from 'echarts/features';
 import { CanvasRenderer } from 'echarts/renderers';
 import type { EChartsOption } from 'echarts';
+import type { CallbackDataParams } from 'echarts/types/dist/shared';
 import type { GraduationChartType } from '../../types/graduationAnalytics';
 
 echarts.use([
@@ -31,10 +32,19 @@ echarts.use([
 interface GraduationEChartProps {
   type: GraduationChartType;
   data: Array<Record<string, string | number | null>>;
-  series: Array<{ key: string; label: string; stack?: string; stackLabel?: string }>;
+  series: Array<{
+    key: string;
+    label: string;
+    stack?: string;
+    stackLabel?: string;
+    stackLabelKey?: string;
+    tooltipCountKey?: string;
+    tooltipTotalKey?: string;
+  }>;
   unit?: 'count' | 'percent';
   showLabels: boolean;
   showLegend?: boolean;
+  tooltipTrigger?: 'axis' | 'item';
   colors?: string[];
   referenceLine?: { value: number; label: string };
   xAxisName?: string;
@@ -49,6 +59,14 @@ const formatValue = (value: unknown, unit?: 'count' | 'percent') => {
   return `${numeric.toLocaleString('vi-VN', { maximumFractionDigits: unit === 'percent' ? 1 : 0 })}${unit === 'percent' ? '%' : ''}`;
 };
 
+const escapeHtml = (value: unknown) => String(value).replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+})[character] ?? character);
+
 export function GraduationEChart({
   type,
   data,
@@ -56,6 +74,7 @@ export function GraduationEChart({
   unit,
   showLabels,
   showLegend = true,
+  tooltipTrigger = 'axis',
   colors: customColors,
   referenceLine,
   xAxisName,
@@ -69,7 +88,7 @@ export function GraduationEChart({
     const isStacked = type === 'stacked-bar' || type === 'stacked-column';
     const isPie = type === 'pie' || type === 'donut';
     const isLineChart = type === 'line' || type === 'area';
-    const hasStackLabels = series.some((item) => Boolean(item.stackLabel));
+    const hasStackLabels = series.some((item) => Boolean(item.stackLabel || item.stackLabelKey));
     const visibleCategoryCount = isHorizontal ? 14 : 12;
     const needsCategoryZoom = categories.length > visibleCategoryCount;
     const categoryZoomEnd = Math.min(100, (visibleCategoryCount / categories.length) * 100);
@@ -163,17 +182,20 @@ export function GraduationEChart({
       lineStyle: isLineChart ? { width: 2.5, cap: 'round' as const, join: 'round' as const } : undefined,
       barMaxWidth: 52,
       label: {
-        show: Boolean(item.stackLabel) || showLabels,
+        show: Boolean(item.stackLabel || item.stackLabelKey) || showLabels,
         position: isHorizontal ? 'right' as const : 'top' as const,
-        formatter: item.stackLabel
-          ? item.stackLabel
-          : (params: { value?: unknown }) => formatValue(params.value, unit),
+        formatter: item.stackLabelKey
+          ? (params: CallbackDataParams) => String(data[params.dataIndex]?.[item.stackLabelKey!] ?? '')
+          : item.stackLabel
+            ? item.stackLabel
+            : (params: { value?: unknown }) => formatValue(params.value, unit),
         color: '#4d5962',
         fontSize: 11,
-        fontWeight: item.stackLabel ? 650 : 400,
+        fontWeight: item.stackLabel || item.stackLabelKey ? 650 : 400,
+        lineHeight: item.stackLabelKey ? 15 : undefined,
       },
-      labelLayout: item.stackLabel ? { hideOverlap: true } : undefined,
-      emphasis: { focus: 'series' as const },
+      labelLayout: item.stackLabel || item.stackLabelKey ? { hideOverlap: true } : undefined,
+      emphasis: { focus: tooltipTrigger === 'item' ? 'self' as const : 'series' as const },
       markLine: index === 0 && referenceLine ? {
         silent: true,
         symbol: 'none',
@@ -231,15 +253,35 @@ export function GraduationEChart({
       color: palette,
       animationDuration: 350,
       aria: { enabled: true },
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: isLineChart ? 'line' : 'shadow' },
-        valueFormatter: (value) => formatValue(value, unit),
-      },
+      tooltip: tooltipTrigger === 'item'
+        ? {
+          trigger: 'item',
+          formatter: (rawParams: CallbackDataParams | CallbackDataParams[]) => {
+            const params = Array.isArray(rawParams) ? rawParams[0] : rawParams;
+            if (!params) return '';
+            const item = typeof params.seriesIndex === 'number' ? series[params.seriesIndex] : undefined;
+            const row = data[params.dataIndex];
+            const count = item?.tooltipCountKey ? row?.[item.tooltipCountKey] : null;
+            const total = item?.tooltipTotalKey ? row?.[item.tooltipTotalKey] : null;
+            const details = [
+              `<strong>${escapeHtml(params.name)}</strong>`,
+              `${typeof params.marker === 'string' ? params.marker : ''}${escapeHtml(item?.label ?? params.seriesName ?? '')}: <strong>${escapeHtml(formatValue(params.value, unit))}</strong>`,
+            ];
+            if (unit === 'percent' && typeof count === 'number' && typeof total === 'number') {
+              details.push(`Số lượng: ${escapeHtml(formatValue(count))}/${escapeHtml(formatValue(total))} sinh viên`);
+            }
+            return details.join('<br/>');
+          },
+        }
+        : {
+          trigger: 'axis',
+          axisPointer: { type: isLineChart ? 'line' : 'shadow' },
+          valueFormatter: (value) => formatValue(value, unit),
+        },
       legend: { show: showLegend && series.length > 1, type: 'scroll', top: 0 },
       dataZoom: [...categoryDataZoom, ...percentDataZoom],
       grid: {
-        top: showLegend && series.length > 1 ? 46 : hasStackLabels ? 34 : 20,
+        top: showLegend && series.length > 1 ? 46 : hasStackLabels ? 48 : 20,
         left: isHorizontal ? 184 : yAxisName ? 68 : 52,
         right: !isHorizontal && needsPercentZoom
           ? showLabels ? 86 : 48
@@ -255,7 +297,7 @@ export function GraduationEChart({
       yAxis: isHorizontal ? categoryAxis : valueAxis,
       series: chartSeries,
     };
-  }, [customColors, data, referenceLine, series, showLabels, showLegend, type, unit, xAxisName, yAxisName]);
+  }, [customColors, data, referenceLine, series, showLabels, showLegend, tooltipTrigger, type, unit, xAxisName, yAxisName]);
 
   useEffect(() => {
     const host = hostRef.current;
