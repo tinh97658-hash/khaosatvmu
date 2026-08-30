@@ -62,6 +62,49 @@ public sealed class GraduationAnalyticsServiceTests
     }
 
     [Fact]
+    public async Task Query_RejectsPeriodIdForCumulativeScopeBeforeTouchingTheDatabase()
+    {
+        await using var db = CreateContext();
+        var service = new EfGraduationAnalyticsService(db, Mock.Of<ICurrentUserAccessor>());
+        var command = new GraduationAnalyticsQueryCommand(
+            GraduationAnalysisScopes.Cumulative, 7, "excellentCount", "faculty", null,
+            null, null, null);
+
+        var action = () => service.QueryAsync(command, CancellationToken.None);
+
+        var exception = await action.Should().ThrowAsync<GraduationAnalyticsException>();
+        exception.Which.ErrorCode.Should().Be(GraduationAnalyticsErrorCodes.InvalidQuery);
+    }
+
+    [Fact]
+    public async Task Query_RequiresPeriodIdForPeriodScopeBeforeTouchingTheDatabase()
+    {
+        await using var db = CreateContext();
+        var service = new EfGraduationAnalyticsService(db, Mock.Of<ICurrentUserAccessor>());
+        var command = new GraduationAnalyticsQueryCommand(
+            GraduationAnalysisScopes.Period, null, "excellentCount", "faculty", null,
+            null, null, null);
+
+        var action = () => service.QueryAsync(command, CancellationToken.None);
+
+        var exception = await action.Should().ThrowAsync<GraduationAnalyticsException>();
+        exception.Which.ErrorCode.Should().Be(GraduationAnalyticsErrorCodes.InvalidQuery);
+    }
+
+    [Fact]
+    public async Task Overview_RejectsInvertedYearRangeBeforeTouchingTheDatabase()
+    {
+        await using var db = CreateContext();
+        var service = new EfGraduationAnalyticsService(db, Mock.Of<ICurrentUserAccessor>());
+        var query = new GraduationOverviewQuery(null, null, null, 2027, 2026);
+
+        var action = () => service.GetOverviewAsync(query, CancellationToken.None);
+
+        var exception = await action.Should().ThrowAsync<GraduationAnalyticsException>();
+        exception.Which.ErrorCode.Should().Be(GraduationAnalyticsErrorCodes.InvalidQuery);
+    }
+
+    [Fact]
     public async Task Import_RejectsEmptyPeriodBeforeTouchingTheDatabase()
     {
         await using var db = CreateContext();

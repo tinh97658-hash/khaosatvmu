@@ -1,6 +1,6 @@
 # Kế hoạch nâng cấp — Thống kê kết quả tốt nghiệp theo đợt
 
-Trạng thái: **đã khảo sát code và hai workbook; chưa triển khai**
+Trạng thái: **đã triển khai và kiểm thử trên nhánh `hieu3`; chờ preflight bản sao production trước rollout**
 
 Tài liệu này thay thế phần nghiệp vụ của phiên bản 19 cột trong
 `thong-ke-sinh-vien-tot-nghiep-dung-han.md`. Các nguyên tắc tách bounded context,
@@ -444,13 +444,26 @@ trong cùng lần deploy vì đây là module nội bộ.
 
 ### Giai đoạn 5 — Kiểm thử và rollout
 
-- [ ] Unit test parser 16 cột, file cũ, nhiều đợt, duplicate key, null/zero.
-- [ ] Service test cumulative/per-period, ratio-of-sums và coverage.
-- [ ] Integration test migration dữ liệu 19 cột nhiều đợt.
-- [ ] Endpoint authorization và validation tests.
-- [ ] Build/lint/test backend + frontend.
-- [ ] Visual QA desktop/mobile cho cả ba tab.
+- [x] Unit test parser 16 cột, file cũ, nhiều đợt, duplicate key, null/zero.
+- [x] Service test cumulative/per-period, ratio-of-sums và coverage.
+- [x] Integration test migration dữ liệu 19 cột nhiều đợt.
+- [x] Endpoint authorization và validation tests.
+- [x] Build/lint/test backend + frontend.
+- [x] Visual QA desktop/mobile cho cả ba tab.
 - [ ] Chạy preflight trên bản sao production trước khi deploy migration.
+
+Kết quả kiểm thử local ngày 30/08/2026:
+
+- frontend: lint đạt, parser `10/10`, production build đạt;
+- backend: solution build `0` warning/`0` error, unit test `159/159`;
+- PostgreSQL: service integration test cumulative/per-period và ratio-of-sums đạt; script
+  `scripts/test-graduation-analytics-migration.ps1` dựng schema legacy, chạy preflight,
+  tách dataset nhiều đợt và kiểm tra bảo toàn row đạt;
+- visual QA bằng dữ liệu `T7 - 2026` đạt cho cả ba tab ở `1440×1000` và `390×844`:
+  đúng màn hình, không alert và không tràn ngang toàn trang;
+- bước còn lại thuộc rollout: chạy
+  `scripts/graduation-analytics-period-preflight.sql` trên bản sao production, xử lý mọi
+  period trùng/row lỗi nếu có, sau đó mới deploy migration.
 
 ## 12. Tiêu chí nghiệm thu
 

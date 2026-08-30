@@ -82,6 +82,34 @@ public sealed class EndpointAuthorizationTests
     }
 
     [Theory]
+    [InlineData("/api/v1/graduation-analytics/periods", "GET")]
+    [InlineData("/api/v1/graduation-analytics/periods", "POST")]
+    [InlineData("/api/v1/graduation-analytics/metadata", "GET")]
+    [InlineData("/api/v1/graduation-analytics/facets", "GET")]
+    [InlineData("/api/v1/graduation-analytics/query", "POST")]
+    [InlineData("/api/v1/graduation-analytics/overview", "POST")]
+    [InlineData("/api/v1/graduation-analytics/periods/{periodId:long}/rows", "GET")]
+    public void GraduationAnalyticsEndpoints_ExposeThePeriodBasedRouteSurface(
+        string route,
+        string method)
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddAuthorization();
+        builder.Services.AddSingleton(Mock.Of<IGraduationAnalyticsService>());
+        var app = builder.Build();
+        app.MapGraduationAnalyticsEndpoints();
+
+        var endpoint = ((IEndpointRouteBuilder)app).DataSources
+            .SelectMany(source => source.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Single(candidate => candidate.RoutePattern.RawText == route
+                && candidate.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods.Contains(method) == true);
+
+        endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>()
+            .Should().Contain(data => data.Policy == AuthPolicies.GraduationAnalyticsAccess);
+    }
+
+    [Theory]
     [InlineData("/api/catalog/faculties", "GET", AuthPolicies.FacultiesRead)]
     [InlineData("/api/catalog/faculties", "POST", AuthPolicies.FacultiesAccess)]
     [InlineData("/api/catalog/departments", "GET", AuthPolicies.DepartmentsRead)]
