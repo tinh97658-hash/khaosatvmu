@@ -107,6 +107,40 @@ public sealed class GraduationAnalyticsDatabaseIntegrationTests
     }
 
     [Fact]
+    public async Task CumulativeQuery_CanGroupByReviewYearAndCohort()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        var prefix = $"codex-graduation-year-{Guid.NewGuid():N}";
+        var cohort = $"K-{Guid.NewGuid():N}";
+        try
+        {
+            await using var db = CreateContext(connectionString);
+            var period = (await FindAvailablePeriodsAsync(db, 1))[0];
+            var service = new EfGraduationAnalyticsService(db, new TestCurrentUser());
+            await service.ImportPeriodAsync(new ImportGraduationPeriodCommand(
+                $"{prefix}.xlsx", "Sheet1",
+                [Row(7, "Khoa kiểm thử", "KT01", "Ngành kiểm thử", cohort,
+                    period.Text, 10, 4, 40, 1, 0)]), CancellationToken.None);
+
+            var result = await service.QueryAsync(new GraduationAnalyticsQueryCommand(
+                GraduationAnalysisScopes.Cumulative, null,
+                "excellentCount", "reviewYear", "cohort", null, null, cohort),
+                CancellationToken.None);
+
+            result.Points.Should().ContainSingle();
+            result.Points[0].Group.Should().Be(period.Year.ToString());
+            result.Points[0].Series.Should().Be(cohort);
+            result.Points[0].Value.Should().Be(4);
+        }
+        finally
+        {
+            await DeleteTestPeriodsAsync(connectionString, prefix);
+        }
+    }
+
+    [Fact]
     public async Task ImportTransaction_RollsBackPeriodWhenRowsSaveFails()
     {
         var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");

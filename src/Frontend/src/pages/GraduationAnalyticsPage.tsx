@@ -130,11 +130,11 @@ export function GraduationAnalyticsPage() {
   const [metricId, setMetricId] = useState(() => queryValue('gaMetric') || 'excellentRate');
   const [groupBy, setGroupBy] = useState<GraduationDimension['id']>(() => {
     const value = queryValue('gaGroup');
-    return value === 'program' || value === 'cohort' ? value : 'faculty';
+    return value === 'program' || value === 'cohort' || value === 'reviewYear' ? value : 'faculty';
   });
   const [seriesBy, setSeriesBy] = useState<GraduationDimension['id'] | ''>(() => {
     const value = queryValue('gaSeries');
-    return value === 'faculty' || value === 'program' || value === 'cohort' ? value : '';
+    return value === 'faculty' || value === 'program' || value === 'cohort' || value === 'reviewYear' ? value : '';
   });
   const [chartType, setChartType] = useState<GraduationChartType>(initialChartType);
   const [chartSort, setChartSort] = useState<ChartSort>(() => {
@@ -181,8 +181,10 @@ export function GraduationAnalyticsPage() {
 
   useEffect(() => { void loadInitial(); }, [loadInitial]);
   useEffect(() => {
+    if (scope === 'period' && groupBy === 'reviewYear') setGroupBy('faculty');
+    if (scope === 'period' && seriesBy === 'reviewYear') setSeriesBy('');
     if (seriesBy === groupBy) setSeriesBy('');
-  }, [groupBy, seriesBy]);
+  }, [groupBy, scope, seriesBy]);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
@@ -243,7 +245,9 @@ export function GraduationAnalyticsPage() {
   }, [cohort, faculty, fromYear, periods.length, program, toYear, view]);
 
   useEffect(() => {
-    if (view !== 'explore' || !metadata || scope === 'period' && !periodId) return;
+    if (view !== 'explore'
+      || !metadata
+      || scope === 'period' && (!periodId || groupBy === 'reviewYear' || seriesBy === 'reviewYear')) return;
     let cancelled = false;
     setPanelLoading(true);
     setPanelError(null);
@@ -281,6 +285,8 @@ export function GraduationAnalyticsPage() {
   }, [cohort, faculty, periodId, program, rowPage, search, view]);
 
   const metric = metadata?.metrics.find((item) => item.id === metricId);
+  const exploreDimensions = useMemo(() => metadata?.dimensions.filter((item) =>
+    scope === 'cumulative' || item.id !== 'reviewYear') ?? [], [metadata?.dimensions, scope]);
   const availablePrograms = useMemo(() => facets?.programs.filter((item) =>
     !faculty || item.facultyName === faculty) ?? [], [facets?.programs, faculty]);
   const chartModel = useMemo(() => toChartModel(queryResult, metric?.label ?? 'Giá trị'), [metric?.label, queryResult]);
@@ -445,8 +451,8 @@ export function GraduationAnalyticsPage() {
           <label>Dữ liệu phân tích<select value={scope} onChange={(event) => setScope(event.target.value as GraduationAnalysisScope)}><option value="cumulative">Tích lũy tất cả các đợt</option><option value="period">Theo một đợt</option></select></label>
           {scope === 'period' && <label>Đợt tốt nghiệp<select value={periodId ?? ''} onChange={(event) => handlePeriodChange(Number(event.target.value))}>{periods.map((item) => <option key={item.periodId} value={item.periodId}>{item.label}</option>)}</select></label>}
           <label>Chỉ tiêu<select value={metricId} onChange={(event) => setMetricId(event.target.value)}>{metadata.metrics.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-          <label>So sánh theo<select value={groupBy} onChange={(event) => { setGroupBy(event.target.value as GraduationDimension['id']); if (seriesBy === event.target.value) setSeriesBy(''); }}>{metadata.dimensions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-          <label>Phân chuỗi<select value={seriesBy} onChange={(event) => setSeriesBy(event.target.value as GraduationDimension['id'] | '')}><option value="">Không phân chuỗi</option>{metadata.dimensions.filter((item) => item.id !== groupBy).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+          <label>So sánh theo<select value={groupBy} onChange={(event) => { setGroupBy(event.target.value as GraduationDimension['id']); if (seriesBy === event.target.value) setSeriesBy(''); }}>{exploreDimensions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+          <label>Phân chuỗi<select value={seriesBy} onChange={(event) => setSeriesBy(event.target.value as GraduationDimension['id'] | '')}><option value="">Không phân chuỗi</option>{exploreDimensions.filter((item) => item.id !== groupBy).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
           <fieldset><legend>Loại biểu đồ</legend><div className="graduation-chart-types">{chartOptions.map((item) => { const Icon = item.icon; const enabled = availableChartTypes.includes(item.id); return <button key={item.id} type="button" disabled={!enabled} className={chartType === item.id ? 'is-selected' : ''} onClick={() => setChartType(item.id)}><Icon /><span>{item.label}</span></button>; })}</div><p className="graduation-chart-types__hint">Biểu đồ tròn tối đa 12 nhóm và không dùng phân chuỗi; biểu đồ chồng cần một chiều phân chuỗi.</p></fieldset>
           <div className="graduation-builder__advanced"><label>Sắp xếp<select value={chartSort} onChange={(event) => setChartSort(event.target.value as ChartSort)}><option value="auto">Mặc định</option><option value="value-desc">Giá trị giảm dần</option><option value="value-asc">Giá trị tăng dần</option><option value="label-asc">Tên A–Z</option></select></label><label>Top N<select value={topN} onChange={(event) => setTopN(Number(event.target.value))}><option value={0}>Tất cả</option><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label></div>
           <label className="graduation-builder__check"><input type="checkbox" checked={showLabels} onChange={(event) => setShowLabels(event.target.checked)} /> Hiển thị nhãn giá trị</label>

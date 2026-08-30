@@ -21,7 +21,7 @@ public sealed class GraduationAnalyticsServiceTests
         var metadata = service.GetMetadata();
 
         metadata.Dimensions.Select(x => x.Id).Should().BeEquivalentTo(
-            "faculty", "program", "cohort");
+            "faculty", "program", "cohort", "reviewYear");
         metadata.Metrics.Should().HaveCount(11);
         metadata.Metrics.Should().Contain(x =>
             x.Id == "excellentRate"

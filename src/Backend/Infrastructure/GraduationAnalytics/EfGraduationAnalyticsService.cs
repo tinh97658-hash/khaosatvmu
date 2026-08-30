@@ -284,6 +284,7 @@ public sealed partial class EfGraduationAnalyticsService(
             new("faculty", "Khoa", "category"),
             new("program", "Chương trình đào tạo", "category"),
             new("cohort", "Khóa", "category"),
+            new("reviewYear", "Năm xét", "time"),
         ],
         Metrics.Select(x => new GraduationMetricDto(
             x.Key,
@@ -300,15 +301,21 @@ public sealed partial class EfGraduationAnalyticsService(
         {
             throw InvalidQuery("Chỉ tiêu không hợp lệ.");
         }
-        ValidateDimension(command.GroupBy);
-        if (!string.IsNullOrWhiteSpace(command.SeriesBy)) ValidateDimension(command.SeriesBy);
+        var rows = await ResolveScopeAsync(command.Scope, command.PeriodId, cancellationToken);
+        var allowReviewYear = command.Scope.Trim().Equals(
+            GraduationAnalysisScopes.Cumulative,
+            StringComparison.OrdinalIgnoreCase);
+        ValidateDimension(command.GroupBy, allowReviewYear);
+        if (!string.IsNullOrWhiteSpace(command.SeriesBy))
+        {
+            ValidateDimension(command.SeriesBy, allowReviewYear);
+        }
         if (!string.IsNullOrWhiteSpace(command.SeriesBy)
             && command.GroupBy.Equals(command.SeriesBy, StringComparison.OrdinalIgnoreCase))
         {
             throw InvalidQuery("Chiều so sánh và chiều phân chuỗi phải khác nhau.");
         }
 
-        var rows = await ResolveScopeAsync(command.Scope, command.PeriodId, cancellationToken);
         rows = ApplyFilters(rows, command.Faculty, command.Program, command.Cohort);
         var aggregates = await BuildAggregates(rows, command.GroupBy, command.SeriesBy)
             .OrderBy(x => x.Group)
@@ -544,7 +551,9 @@ public sealed partial class EfGraduationAnalyticsService(
                     ? (row.ProgramCode == null || row.ProgramCode == string.Empty
                         ? row.ProgramName
                         : row.ProgramCode + " · " + row.ProgramName)
-                    : row.Cohort,
+                    : normalizedGroup == "reviewyear"
+                        ? row.ReviewYear!.Value.ToString()
+                        : row.Cohort,
             Series = normalizedSeries == null
                 ? null
                 : normalizedSeries == "faculty"
@@ -553,7 +562,9 @@ public sealed partial class EfGraduationAnalyticsService(
                         ? (row.ProgramCode == null || row.ProgramCode == string.Empty
                             ? row.ProgramName
                             : row.ProgramCode + " · " + row.ProgramName)
-                        : row.Cohort,
+                        : normalizedSeries == "reviewyear"
+                            ? row.ReviewYear!.Value.ToString()
+                            : row.Cohort,
             row.ExcellentCount,
             row.VeryGoodCount,
             row.GoodCount,
@@ -688,11 +699,16 @@ public sealed partial class EfGraduationAnalyticsService(
     private static decimal? Ratio(decimal numerator, decimal denominator) =>
         denominator > 0 ? numerator / denominator * 100 : null;
 
-    private static void ValidateDimension(string dimension)
+    private static void ValidateDimension(string dimension, bool allowReviewYear)
     {
-        if (dimension.ToLowerInvariant() is not ("faculty" or "program" or "cohort"))
+        var normalized = dimension.ToLowerInvariant();
+        if (normalized is "reviewyear" && !allowReviewYear)
         {
-            throw InvalidQuery("Chiều phân tích chỉ gồm Khoa, Chương trình đào tạo hoặc Khóa.");
+            throw InvalidQuery("Năm xét chỉ dùng được khi phân tích tích lũy tất cả các đợt.");
+        }
+        if (normalized is not ("faculty" or "program" or "cohort" or "reviewyear"))
+        {
+            throw InvalidQuery("Chiều phân tích chỉ gồm Khoa, Chương trình đào tạo, Khóa hoặc Năm xét.");
         }
     }
 

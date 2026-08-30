@@ -45,9 +45,9 @@ export interface GraduationFacets {
 }
 
 export interface GraduationDimension {
-  id: 'faculty' | 'program' | 'cohort';
+  id: 'faculty' | 'program' | 'cohort' | 'reviewYear';
   label: string;
-  type: 'category';
+  type: 'category' | 'time';
 }
 
 export interface GraduationMetric {
