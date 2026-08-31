@@ -334,6 +334,18 @@ export interface AddSectionsToSemesterSurveyPayload {
   endTime: string;
 }
 
+export interface ClearSectionSurveyResponsesResult {
+  courseSectionSurveyId: number;
+  courseCode: string;
+  courseName: string;
+  sectionName: string;
+  /** Số phiếu vừa bị huỷ, tính cả phiếu đã bị bộ lọc nhiễu loại. */
+  clearedResponseCount: number;
+  /** Số dòng điểm từng câu bị xoá theo. */
+  clearedQuestionScoreCount: number;
+  clearedAt: string;
+}
+
 export interface SurveyScopePreview {
   scopeType: SurveyScopeType;
   scopeId: number | null;
@@ -582,6 +594,12 @@ export const surveyApi = {
     ),
   surveyResponse: (responseId: number) =>
     apiRequest<SurveyResponseDetail>(`/api/surveys/responses/${responseId}`),
+  /** Huỷ toàn bộ phiếu của một lớp để lớp làm lại. Xoá mềm, có lưu vết. */
+  clearSectionSurveyResponses: (courseSectionSurveyId: number) =>
+    csrfRequest<ClearSectionSurveyResponsesResult>(
+      `/api/surveys/course-section-surveys/${courseSectionSurveyId}/clear-responses`,
+      'POST',
+    ),
 
   updateSectionSurveySchedule: (
     courseSectionSurveyId: number,
@@ -683,6 +701,7 @@ export const surveyErrorMessages: Record<string, string> = {
   SURVEY_SCOPE_SECTIONS_ALREADY_ADDED:
     'Mọi lớp của phạm vi này đều đã có bài khảo sát trong đợt.',
   SURVEY_SECTION_SURVEY_NOT_FOUND: 'Không tìm thấy bài khảo sát của lớp học phần.',
+  SURVEY_SECTION_SURVEY_HAS_NO_RESPONSES: 'Lớp này chưa có phiếu nào nên không có gì để huỷ.',
   SURVEY_RESPONSE_NOT_FOUND: 'Không tìm thấy phiếu trả lời.',
   SURVEY_LINK_NOT_FOUND: 'Đường dẫn khảo sát không tồn tại.',
   SURVEY_LINK_NOT_OPEN: 'Bài khảo sát chưa mở hoặc đã hết hạn.',

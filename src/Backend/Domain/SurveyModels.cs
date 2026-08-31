@@ -191,7 +191,7 @@ public sealed class CourseSectionSurveyQuestionScore
 }
 
 /// <summary>Bảng "SurveyResponses". Phiếu trả lời ẩn danh của sinh viên.</summary>
-public sealed class SurveyResponse
+public sealed class SurveyResponse : ISoftDeletable
 {
     public int ResponseId { get; set; }
 
@@ -221,6 +221,20 @@ public sealed class SurveyResponse
     public string? RejectionReasons { get; set; }
 
     public DateTime SubmittedAt { get; set; }
+
+    /// <summary>
+    /// Xoá mềm cả loạt phiếu của một lớp khi thanh tra thấy số liệu không dùng
+    /// được (vd cả lớp nộp nhưng bộ lọc nhiễu loại sạch) và muốn lớp làm lại.
+    /// Dòng vẫn nằm nguyên trong bảng để còn lần lại được chuyện gì đã xảy ra.
+    ///
+    /// LƯU Ý: <see cref="Infrastructure"/> KHÔNG tự chuyển
+    /// <c>Remove()</c> thành xoá mềm cho loại này — AuditInterceptor loại
+    /// SurveyResponse khỏi vòng xử lý (phiếu ẩn danh, không ghi nội dung vào nhật
+    /// ký) nên gọi <c>Remove()</c> là xoá cứng thật. Phải gán tay hai cột này.
+    /// </summary>
+    public bool IsDeleted { get; set; }
+
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>Bảng "SurveyResponseAnswers". Khóa chính ghép (ResponseId, QuestionId).</summary>

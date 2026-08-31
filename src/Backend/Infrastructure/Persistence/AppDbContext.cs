@@ -53,6 +53,18 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<SurveyTemplate>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<SemesterSurvey>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<CourseSectionSurvey>().HasQueryFilter(e => !e.IsDeleted);
+        // Phiếu bị thanh tra huỷ để lớp làm lại. Lọc ở đây thì mọi phép tính sống
+        // — điểm lớp, Z-score, tổng quan toàn trường — tự bỏ qua, không phải sửa
+        // hai chục chỗ truy vấn.
+        modelBuilder.Entity<SurveyResponse>().HasQueryFilter(e => !e.IsDeleted);
+        // Câu trả lời không có cột IsDeleted riêng mà bám theo phiếu cha. Bắt buộc
+        // phải khai bộ lọc khớp: answer là đầu BẮT BUỘC của quan hệ, thiếu bộ lọc
+        // thì EF cảnh báo đọc ra answer mà navigation phiếu cha lại null.
+        // Chỗ nào cần nhìn cả phiếu đã huỷ thì gọi IgnoreQueryFilters() cho rõ ý.
+        // Navigation khai nullable cho khớp EF, nhưng quan hệ là bắt buộc nên không
+        // bao giờ null thật; dấu ! ở đây chỉ để tắt cảnh báo, không phải giả định ẩu.
+        modelBuilder.Entity<SurveyResponseAnswer>()
+            .HasQueryFilter(e => !e.SurveyResponse!.IsDeleted);
 
         modelBuilder.Entity<User>(entity =>
         {
@@ -410,6 +422,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(x => x.CourseSectionSurveyId);
             // Tính điểm trung bình lớp luôn lọc theo IsValid nên đánh chỉ mục ghép.
             entity.HasIndex(x => new { x.CourseSectionSurveyId, x.IsValid });
+            // Query filter thêm "NOT IsDeleted" vào MỌI truy vấn phiếu, nên cột này
+            // phải nằm trong chỉ mục, nếu không cả bảng vài trăm nghìn dòng bị quét.
+            entity.HasIndex(x => new { x.CourseSectionSurveyId, x.IsDeleted });
             entity.HasOne<CourseSectionSurvey>()
                 .WithMany()
                 .HasForeignKey(x => x.CourseSectionSurveyId)

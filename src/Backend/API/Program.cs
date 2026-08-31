@@ -184,6 +184,9 @@ builder.Services.AddSingleton(_ =>
     }
     return new SurveyStartTicket(signingKey);
 });
+// Singleton: số phiên bản cache tổng quan phải dùng chung cho cả tiến trình, một
+// request huỷ phiếu tăng nó là mọi request khác đọc ngay số mới.
+builder.Services.AddSingleton<SchoolOverviewCacheVersion>();
 builder.Services.AddScoped<IReportService, EfReportService>();
 builder.Services.AddScoped<IGraduationAnalyticsService, EfGraduationAnalyticsService>();
 builder.Services.AddScoped<ApplicationCookieEvents>();

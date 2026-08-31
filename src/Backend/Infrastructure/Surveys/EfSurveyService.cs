@@ -2,6 +2,7 @@ using Application.Auth;
 using Application.Surveys;
 using Domain;
 using Infrastructure.Persistence;
+using Infrastructure.Reports;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -10,7 +11,8 @@ namespace Infrastructure.Surveys;
 public sealed class EfSurveyService(
     AppDbContext db,
     IMemoryCache cache,
-    IUserScopeResolver userScope) : ISurveyService
+    IUserScopeResolver userScope,
+    SchoolOverviewCacheVersion schoolOverviewCache) : ISurveyService
 {
     private const int MaximumScaleOptions = 5;
     private const int MaximumCommentLength = 1000;
@@ -235,10 +237,15 @@ public sealed class EfSurveyService(
 
         // Đổi thang của một câu đã có phiếu trả lời sẽ làm "AnswerValue" đã lưu bị
         // hiểu sai (số thành chữ hoặc ngược lại), nên chặn từ đầu.
+        //
+        // CỐ Ý nhìn cả phiếu đã huỷ (IgnoreQueryFilters): câu trả lời của phiếu xoá
+        // mềm vẫn nằm nguyên trong bảng kèm "AnswerValue", đổi thang là làm hỏng
+        // chính dữ liệu đang giữ để lưu vết. Đừng bỏ IgnoreQueryFilters ở đây.
         var existingIds = existing.Select(x => x.QuestionId).ToList();
         var answeredIds = existingIds.Count == 0
             ? []
             : await db.SurveyResponseAnswers
+                .IgnoreQueryFilters()
                 .Where(x => existingIds.Contains(x.QuestionId))
                 .Select(x => x.QuestionId)
                 .Distinct()
@@ -929,6 +936,99 @@ public sealed class EfSurveyService(
             : Succeeded(dto);
     }
 
+    // Huỷ toàn bộ phiếu của một lớp để lớp làm lại. Cùng mức quyền với tạo/xoá đợt:
+    // đây là thao tác bỏ đi dữ liệu đã thu của cả một lớp.
+    public async Task<SurveyOperationResult<ClearSectionSurveyResponsesDto>> ClearSectionSurveyResponsesAsync(
+        int courseSectionSurveyId,
+        CancellationToken cancellationToken = default)
+    {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.SeesEverything)
+        {
+            return Failed<ClearSectionSurveyResponsesDto>(SurveyErrorCodes.OutOfScope);
+        }
+
+        var sectionSurvey = await db.CourseSectionSurveys
+            .FirstOrDefaultAsync(x => x.CourseSectionSurveyId == courseSectionSurveyId, cancellationToken);
+        if (sectionSurvey is null)
+        {
+            return Failed<ClearSectionSurveyResponsesDto>(SurveyErrorCodes.SectionSurveyNotFound);
+        }
+
+        // Query filter đã bỏ phiếu huỷ trước đó, nên bấm lần hai trên lớp đã sạch
+        // sẽ báo "không có gì để huỷ" chứ không âm thầm chạy không.
+        var responses = await db.SurveyResponses
+            .Where(x => x.CourseSectionSurveyId == courseSectionSurveyId)
+            .ToListAsync(cancellationToken);
+        if (responses.Count == 0)
+        {
+            return Failed<ClearSectionSurveyResponsesDto>(SurveyErrorCodes.SectionSurveyHasNoResponses);
+        }
+
+        var clearedAt = DateTime.UtcNow;
+
+        // Phiếu và số dẫn xuất phải cùng ăn hoặc cùng bỏ: dọn được phiếu mà điểm cũ
+        // còn đứng lại thì bảng đọc ra "0 phiếu, 4.17 điểm". Hai câu lệnh dưới đây
+        // chạy riêng (SaveChanges và ExecuteDelete) nên cần transaction bao ngoài.
+        //
+        // Người gọi đã mở transaction sẵn thì tham gia vào đó chứ không mở lồng —
+        // Npgsql không cho lồng, và hàm này phải ghép được vào một thao tác lớn hơn.
+        var ownTransaction = db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await using var transactionScope = ownTransaction;
+
+        // Gán tay chứ KHÔNG gọi Remove(): AuditInterceptor loại SurveyResponse khỏi
+        // vòng xử lý nên nó không chuyển Remove() thành xoá mềm, gọi vào là mất
+        // sạch dữ liệu thật.
+        foreach (var response in responses)
+        {
+            response.IsDeleted = true;
+            response.DeletedAt = clearedAt;
+        }
+
+        // Ảnh chụp điểm không tự tính lại nên phải dọn tay. Ba cột đếm về 0 chứ
+        // không giữ số cũ — lớp này coi như chưa ai làm.
+        sectionSurvey.AverageScore = null;
+        sectionSurvey.TotalResponseCount = 0;
+        sectionSurvey.ValidResponseCount = 0;
+        sectionSurvey.InvalidResponseCount = 0;
+        sectionSurvey.ScoreCalculatedAt = null;
+
+        // Điểm từng câu (các cột C1, C2… của bảng dữ liệu) là mặt còn lại của cùng
+        // một lần chốt điểm, xoá hẳn dòng chứ không để lại số mồ côi.
+        var clearedQuestionScores = await db.CourseSectionSurveyQuestionScores
+            .Where(x => x.CourseSectionSurveyId == courseSectionSurveyId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await db.SaveChangesAsync(cancellationToken);
+        if (ownTransaction is not null)
+        {
+            await ownTransaction.CommitAsync(cancellationToken);
+        }
+
+        // Tổng quan toàn trường có cache 90 giây; không dọn thì bấm xong mở báo cáo
+        // vẫn thấy điểm cũ hơn một phút, trông như hệ thống hỏng.
+        schoolOverviewCache.Bump();
+        cache.Remove($"survey:public:{sectionSurvey.LinkToken}");
+
+        var section = await db.CourseSections.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.CourseSectionId == sectionSurvey.CourseSectionId, cancellationToken);
+        var course = section is null
+            ? null
+            : await db.Courses.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.CourseId == section.CourseId, cancellationToken);
+
+        return Succeeded(new ClearSectionSurveyResponsesDto(
+            courseSectionSurveyId,
+            course?.CourseCode ?? string.Empty,
+            course?.CourseName ?? string.Empty,
+            section?.SectionName ?? string.Empty,
+            responses.Count,
+            clearedQuestionScores,
+            clearedAt));
+    }
+
     public async Task<SurveyOperationResult<IReadOnlyList<SurveyResponseSummaryDto>>> GetSurveyResponsesAsync(
         int courseSectionSurveyId,
         CancellationToken cancellationToken = default)
@@ -1486,8 +1586,18 @@ public sealed class EfSurveyService(
 
         // Cả ba câu phải cùng ăn hoặc cùng bỏ: điểm tổng hợp của lớp và điểm từng
         // câu là hai mặt của cùng một lần chốt, lệch nhau thì bảng đọc ra số vô lý.
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        //
+        // Người gọi đã mở transaction sẵn thì tham gia vào đó chứ không mở lồng —
+        // Npgsql không cho lồng transaction.
+        var ownTransaction = db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await using var transactionScope = ownTransaction;
 
+        // CẢNH BÁO: cả ba câu dưới đây là SQL THÔ nên KHÔNG hưởng query filter của
+        // EF. Mọi điều kiện lọc phải viết tay, kể cả NOT "IsDeleted" của phiếu —
+        // thiếu nó thì bấm tính lại sau khi huỷ phiếu sẽ hồi sinh đúng đám vừa xoá.
+        //
         // Một câu UPDATE ... FROM chạy trọn trong Postgres: dù đợt có bao nhiêu
         // nghìn phiếu cũng không kéo dòng nào về bộ nhớ ứng dụng.
         // LEFT JOIN để lớp chưa có phiếu nào cũng được ghi về 0 thay vì giữ số cũ.
@@ -1519,6 +1629,7 @@ public sealed class EfSurveyService(
                 JOIN "CourseSections" s ON s."CourseSectionId" = c."CourseSectionId"
                 LEFT JOIN "SurveyResponses" r
                        ON r."CourseSectionSurveyId" = c."CourseSectionSurveyId"
+                      AND NOT r."IsDeleted"
                 WHERE c."SemesterSurveyId" = {semesterSurveyId}
                   AND NOT c."IsDeleted"
                 GROUP BY c."CourseSectionSurveyId", s."ClassSize"
@@ -1557,6 +1668,7 @@ public sealed class EfSurveyService(
             JOIN "AnswerScales" AS s ON s."AnswerScaleId" = q."AnswerScaleId"
             WHERE c."SemesterSurveyId" = {semesterSurveyId}
               AND NOT c."IsDeleted"
+              AND NOT r."IsDeleted"
               AND c."AverageScore" IS NOT NULL
               AND r."IsValid"
               AND q."AttentionCheckValue" IS NULL
@@ -1564,7 +1676,10 @@ public sealed class EfSurveyService(
             GROUP BY r."CourseSectionSurveyId", a."QuestionId"
             """, cancellationToken);
 
-        await transaction.CommitAsync(cancellationToken);
+        if (ownTransaction is not null)
+        {
+            await ownTransaction.CommitAsync(cancellationToken);
+        }
 
         return Succeeded(new RecalculateScoresDto(semesterSurveyId, updated, calculatedAt));
     }

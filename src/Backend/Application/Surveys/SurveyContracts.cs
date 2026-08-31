@@ -538,6 +538,21 @@ public sealed record SurveyScopePreviewDto(
     /// </summary>
     int NewSectionCount);
 
+/// <summary>
+/// Kết quả huỷ toàn bộ phiếu của một lớp để lớp làm lại. Phiếu chỉ bị xoá MỀM:
+/// dòng vẫn nằm trong bảng, nhưng mọi phép tính đều bỏ qua từ đây.
+/// </summary>
+public sealed record ClearSectionSurveyResponsesDto(
+    int CourseSectionSurveyId,
+    string CourseCode,
+    string CourseName,
+    string SectionName,
+    /// <summary>Số phiếu vừa bị huỷ, tính cả phiếu đã bị bộ lọc nhiễu loại.</summary>
+    int ClearedResponseCount,
+    /// <summary>Số dòng điểm từng câu bị xoá theo.</summary>
+    int ClearedQuestionScoreCount,
+    DateTime ClearedAt);
+
 /// <summary>Kết quả một lần bổ sung phạm vi vào đợt đã có.</summary>
 public sealed record AddSectionsToSemesterSurveyDto(
     int SemesterSurveyId,
@@ -744,6 +759,19 @@ public interface ISurveyService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Huỷ toàn bộ phiếu đã thu của một lớp để yêu cầu lớp làm lại — dùng khi số
+    /// liệu không tin được, vd cả lớp nộp nhưng bộ lọc nhiễu loại sạch.
+    ///
+    /// Xoá MỀM: phiếu và câu trả lời vẫn nằm trong bảng để lần lại được. Mọi số
+    /// dẫn xuất bị dọn ngay trong cùng một transaction — điểm lớp, ba cột đếm
+    /// phiếu, mốc chốt điểm, và điểm từng câu. Link cùng khung giờ giữ nguyên nên
+    /// lớp làm lại được ngay bằng đúng mã QR cũ.
+    /// </summary>
+    Task<SurveyOperationResult<ClearSectionSurveyResponsesDto>> ClearSectionSurveyResponsesAsync(
+        int courseSectionSurveyId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Tính lại điểm trung bình cho mọi lớp của một đợt khảo sát. Chạy theo mẻ khi
     /// quản trị bấm nút, không tự chạy sau mỗi phiếu mới về.
     /// </summary>
@@ -891,6 +919,9 @@ public static class SurveyErrorCodes
     public const string SemesterSurveyHasResponses = "SURVEY_SEMESTER_SURVEY_HAS_RESPONSES";
 
     public const string SectionSurveyNotFound = "SURVEY_SECTION_SURVEY_NOT_FOUND";
+
+    /// <summary>Lớp chưa có phiếu nào nên không có gì để huỷ.</summary>
+    public const string SectionSurveyHasNoResponses = "SURVEY_SECTION_SURVEY_HAS_NO_RESPONSES";
 
     /// <summary>Giảng viên không có lớp nào trong đợt nên không dựng được báo cáo cá nhân.</summary>
     public const string LecturerHasNoSections = "SURVEY_LECTURER_HAS_NO_SECTIONS";

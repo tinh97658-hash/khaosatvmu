@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   CalendarDays,
   CircleAlert,
+  Eraser,
   Eye,
   LoaderCircle,
   MessageSquare,
@@ -13,8 +14,10 @@ import {
 import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
-import { Modal } from '../components/Modal';
+import { ConfirmDialog, Modal } from '../components/Modal';
 import { QuestionAnalysisChart } from '../components/QuestionAnalysisChart';
+import { useAuth } from '../auth/authContext';
+import { isUnrestrictedRole } from '../auth/roles';
 import { ApiError } from '../services/apiClient';
 import { reportApi } from '../services/reportApi';
 import { surveyApi, surveyErrorMessage } from '../services/surveyApi';
@@ -73,6 +76,13 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
   const [detail, setDetail] = useState<SurveyResponseDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // Huỷ toàn bộ phiếu của lớp để yêu cầu lớp làm lại.
+  const [isClearOpen, setIsClearOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const { activeProfile } = useAuth();
+  // Cùng mức quyền với tạo/xoá đợt: đây là thao tác bỏ dữ liệu đã thu của cả lớp.
+  const canClearResponses = isUnrestrictedRole(activeProfile?.roleCode);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -89,6 +99,33 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
       setLoading(false);
     }
   }, [courseSectionSurveyId]);
+
+  const handleClearResponses = async () => {
+    setClearing(true);
+    try {
+      const result = await surveyApi.clearSectionSurveyResponses(courseSectionSurveyId);
+      setIsClearOpen(false);
+      // Nạp lại cả danh sách phiếu lẫn phần phân tích: cả hai vừa bị dọn sạch.
+      await load();
+      if (showAnalysis) {
+        try {
+          setAnalysis(await reportApi.sectionAnalysis(courseSectionSurveyId));
+        } catch {
+          setAnalysis(null);
+        }
+      }
+      toast.success('Đã huỷ toàn bộ phiếu của lớp', {
+        description:
+          `${result.clearedResponseCount} phiếu · đã xoá điểm tổng hợp và `
+          + `${result.clearedQuestionScoreCount} dòng điểm từng câu. `
+          + 'Đường dẫn và mã QR giữ nguyên, lớp làm lại được ngay.',
+      });
+    } catch (error) {
+      toast.error('Không huỷ được phiếu của lớp', { description: messageFrom(error) });
+    } finally {
+      setClearing(false);
+    }
+  };
 
   useEffect(() => {
     if (!showAnalysis) return;
@@ -308,9 +345,60 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
               <CalendarDays className="operation-icon" aria-hidden="true" />
               {formatDateTime(sectionSurvey.startTime)} → {formatDateTime(sectionSurvey.endTime)}
             </span>
+            {/* Dùng khi số liệu của lớp không tin được — vd cả lớp nộp nhưng bộ lọc
+                nhiễu loại sạch — và cần yêu cầu lớp làm lại. */}
+            {canClearResponses && responses.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-danger btn-sm"
+                onClick={() => setIsClearOpen(true)}
+                disabled={clearing}
+              >
+                {clearing ? (
+                  <>
+                    <LoaderCircle className="operation-icon auth-spin" aria-hidden="true" />
+                    Đang huỷ...
+                  </>
+                ) : (
+                  <>
+                    <Eraser className="operation-icon" aria-hidden="true" />
+                    Huỷ phiếu, cho làm lại
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </section>
       )}
+
+      <ConfirmDialog
+        isOpen={isClearOpen}
+        onClose={() => setIsClearOpen(false)}
+        onConfirm={() => void handleClearResponses()}
+        title="Huỷ toàn bộ phiếu của lớp"
+        recordName={
+          sectionSurvey
+            ? `${sectionSurvey.courseCode} - ${sectionSurvey.courseName} · Lớp ${sectionSurvey.sectionName}`
+            : ''
+        }
+        confirmText="Huỷ phiếu"
+        message={
+          <>
+            Huỷ toàn bộ <strong>{responses.length} phiếu</strong> đã thu của lớp{' '}
+            <strong>
+              {sectionSurvey?.courseCode} - {sectionSurvey?.courseName} · Lớp{' '}
+              {sectionSurvey?.sectionName}
+            </strong>{' '}
+            để yêu cầu lớp làm lại?
+          </>
+        }
+        warning={
+          'Điểm trung bình của lớp và điểm từng câu C1, C2… sẽ bị xoá khỏi hệ thống, '
+          + 'các số liệu tổng hợp của bộ môn, khoa và toàn trường cũng đổi theo. '
+          + 'Phiếu được xoá mềm nên vẫn lần lại được. Đường dẫn và mã QR giữ nguyên — '
+          + 'lớp làm lại được ngay, nhưng phải báo cho lớp bằng kênh ngoài hệ thống.'
+        }
+      />
 
       {showAnalysis && analysisLoading && (
         <div className="operations-empty section-analysis-loading" role="status">

@@ -175,6 +175,15 @@ public static class SurveyEndpoints
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSurveyResponsesAsync(courseSectionSurveyId, cancellationToken)));
 
+        // Huỷ toàn bộ phiếu của một lớp để lớp làm lại. Nằm ở campaignGroup chứ
+        // không phải nhóm chỉ đọc: đây là thao tác bỏ dữ liệu đã thu.
+        campaignGroup.MapPost("/course-section-surveys/{courseSectionSurveyId:int}/clear-responses", async (
+            int courseSectionSurveyId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.ClearSectionSurveyResponsesAsync(courseSectionSurveyId, cancellationToken)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
         operationalReadGroup.MapGet("/responses/{responseId:int}", async (
             int responseId,
             ISurveyService service,
@@ -361,6 +370,7 @@ public static class SurveyEndpoints
             SurveyErrorCodes.TemplateInUse => StatusCodes.Status409Conflict,
             SurveyErrorCodes.SemesterSurveyHasResponses => StatusCodes.Status409Conflict,
             SurveyErrorCodes.ScopeSectionsAlreadyAdded => StatusCodes.Status409Conflict,
+            SurveyErrorCodes.SectionSurveyHasNoResponses => StatusCodes.Status409Conflict,
             SurveyErrorCodes.LinkNotOpen => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status400BadRequest
         };

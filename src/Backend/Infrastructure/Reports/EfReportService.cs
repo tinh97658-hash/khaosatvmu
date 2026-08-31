@@ -7,7 +7,10 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace Infrastructure.Reports;
 
-public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IReportService
+public sealed class EfReportService(
+    AppDbContext db,
+    IMemoryCache cache,
+    SchoolOverviewCacheVersion cacheVersion) : IReportService
 {
     /// <summary>Prefix key cache cho báo cáo tổng quan toàn trường (theo học kỳ).</summary>
     private const string SchoolOverviewCachePrefix = "school-overview:";
@@ -975,7 +978,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
         int? comparisonSemesterSurveyId = null,
         CancellationToken cancellationToken = default)
     {
-        string cacheKey = $"{SchoolOverviewCachePrefix}{semesterId}"
+        // Số phiên bản nằm ngay đầu khoá: huỷ phiếu của một lớp là tăng số đó, mọi
+        // khoá cũ lập tức thành không ai hỏi tới, khỏi phải dò xoá từng khoá.
+        string cacheKey = $"{SchoolOverviewCachePrefix}v{cacheVersion.Current}:{semesterId}"
             + $":survey:{semesterSurveyId?.ToString() ?? "all"}"
             + $":compare-semester:{comparisonSemesterId?.ToString() ?? "auto"}"
             + $":compare-survey:{comparisonSemesterSurveyId?.ToString() ?? "auto"}";

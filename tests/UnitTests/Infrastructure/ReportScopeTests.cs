@@ -5,6 +5,7 @@ using Application.Auth;
 using Domain;
 using FluentAssertions;
 using global::Infrastructure.Persistence;
+using global::Infrastructure.Reports;
 using global::Infrastructure.Surveys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -56,7 +57,7 @@ public class ReportScopeTests
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var cache = scope.ServiceProvider.GetRequiredService<IMemoryCache>();
 
-        await body(db, userScope => new EfSurveyService(db, cache, new FixedScopeResolver(userScope)));
+        await body(db, userScope => new EfSurveyService(db, cache, new FixedScopeResolver(userScope), new SchoolOverviewCacheVersion()));
     }
 
     private static UserScope Admin => UserScope.Unrestricted(RoleCodes.Admin);
