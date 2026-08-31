@@ -9,6 +9,8 @@ import { surveyApi, surveyErrorMessage } from '../services/surveyApi';
 import type { SemesterSurvey } from '../types';
 import type { SectionStatisticsRow, SemesterSurveyStatistics } from '../services/surveyApi';
 import { useColumnFilters, type FilterableColumn } from '../hooks/useColumnFilters';
+import { useAuth } from '../auth/authContext';
+import { isUnrestrictedRole } from '../auth/roles';
 import {
   COMPLETED_COMPLETION_RATE,
   hasEnoughResponsesToScore,
@@ -125,6 +127,9 @@ export const SurveyStatisticsPage: React.FC = () => {
 
   // Bám vào chính statistics chứ không vào mảng dẫn xuất, vì mảng dẫn xuất tạo
   // tham chiếu mới mỗi lần render nên useMemo sẽ chạy lại vô ích.
+  const { activeProfile } = useAuth();
+  const canRecalculate = isUnrestrictedRole(activeProfile?.roleCode);
+
   const columns = useMemo(() => statistics?.questionColumns ?? [], [statistics]);
   const rows = useMemo(() => statistics?.rows ?? [], [statistics]);
 
@@ -457,19 +462,24 @@ export const SurveyStatisticsPage: React.FC = () => {
             <RefreshCw aria-hidden="true" size={16} />
             Tải lại
           </button>
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            onClick={() => void handleRecalculate()}
-            disabled={!semesterSurveyId || recalculating}
-          >
-            {recalculating ? (
-              <LoaderCircle className="auth-spin" aria-hidden="true" size={16} />
-            ) : (
-              <Calculator aria-hidden="true" size={16} />
-            )}
-            {recalculating ? 'Đang tính...' : 'Tính lại điểm'}
-          </button>
+          {/* Tính lại điểm ghi đè điểm của MỌI lớp trong đợt, không cắt được theo
+              bộ môn — nên chỉ quản trị toàn hệ thống mới thấy nút. Backend cũng
+              chặn, đây chỉ là để người không có quyền khỏi bấm rồi ăn lỗi. */}
+          {canRecalculate && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => void handleRecalculate()}
+              disabled={!semesterSurveyId || recalculating}
+            >
+              {recalculating ? (
+                <LoaderCircle className="auth-spin" aria-hidden="true" size={16} />
+              ) : (
+                <Calculator aria-hidden="true" size={16} />
+              )}
+              {recalculating ? 'Đang tính...' : 'Tính lại điểm'}
+            </button>
+          )}
         </div>
       </section>
 

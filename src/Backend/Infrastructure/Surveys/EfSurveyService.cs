@@ -1029,14 +1029,32 @@ public sealed class EfSurveyService(
             clearedAt));
     }
 
+    /// <summary>
+    /// Người dùng hiện tại có được xem bài khảo sát của lớp này không. Đi qua chính
+    /// hàm danh sách đã lọc phạm vi thay vì viết lại điều kiện lần nữa: chỉ cần một
+    /// chỗ định nghĩa "lớp nào thuộc về ai".
+    ///
+    /// Cần thiết vì danh sách phiếu nhận thẳng courseSectionSurveyId từ URL. Không
+    /// kiểm thì một giảng viên chỉ việc đổi số trên thanh địa chỉ là đọc được nhận
+    /// xét sinh viên viết về lớp của đồng nghiệp.
+    /// </summary>
+    private async Task<bool> CanSeeSectionSurveyAsync(
+        CourseSectionSurvey sectionSurvey,
+        CancellationToken cancellationToken) =>
+        (await GetCourseSectionSurveysAsync(sectionSurvey.SemesterSurveyId, cancellationToken))
+            .Any(x => x.CourseSectionSurveyId == sectionSurvey.CourseSectionSurveyId);
+
     public async Task<SurveyOperationResult<IReadOnlyList<SurveyResponseSummaryDto>>> GetSurveyResponsesAsync(
         int courseSectionSurveyId,
         CancellationToken cancellationToken = default)
     {
         var sectionSurvey = await db.CourseSectionSurveys
             .FirstOrDefaultAsync(x => x.CourseSectionSurveyId == courseSectionSurveyId, cancellationToken);
-        if (sectionSurvey is null)
+        if (sectionSurvey is null
+            || !await CanSeeSectionSurveyAsync(sectionSurvey, cancellationToken))
         {
+            // Ngoài phạm vi thì trả "không tìm thấy" chứ không phải "không có quyền":
+            // đừng để người gọi dò ra lớp nào có thật bằng cách so hai mã lỗi.
             return Failed<IReadOnlyList<SurveyResponseSummaryDto>>(SurveyErrorCodes.SectionSurveyNotFound);
         }
 
@@ -1103,6 +1121,11 @@ public sealed class EfSurveyService(
 
         var sectionSurvey = await db.CourseSectionSurveys
             .FirstOrDefaultAsync(x => x.CourseSectionSurveyId == response.CourseSectionSurveyId, cancellationToken);
+        if (sectionSurvey is not null
+            && !await CanSeeSectionSurveyAsync(sectionSurvey, cancellationToken))
+        {
+            return Failed<SurveyResponseDetailDto>(SurveyErrorCodes.ResponseNotFound);
+        }
         if (sectionSurvey is null)
         {
             return Failed<SurveyResponseDetailDto>(SurveyErrorCodes.SectionSurveyNotFound);
@@ -1575,6 +1598,15 @@ public sealed class EfSurveyService(
         int semesterSurveyId,
         CancellationToken cancellationToken = default)
     {
+        // Ghi đè điểm của MỌI lớp trong đợt, không có cách nào giới hạn theo đơn vị.
+        // Cùng mức quyền với tạo/xoá đợt: trưởng bộ môn không được chốt điểm cho cả
+        // trường chỉ vì họ mở được trang bảng dữ liệu.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.SeesEverything)
+        {
+            return Failed<RecalculateScoresDto>(SurveyErrorCodes.OutOfScope);
+        }
+
         var exists = await db.SemesterSurveys
             .AnyAsync(x => x.SemesterSurveyId == semesterSurveyId, cancellationToken);
         if (!exists)
@@ -1688,6 +1720,8 @@ public sealed class EfSurveyService(
         int semesterSurveyId,
         CancellationToken cancellationToken = default)
     {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+
         var semesterSurvey = await db.SemesterSurveys.AsNoTracking()
             .FirstOrDefaultAsync(x => x.SemesterSurveyId == semesterSurveyId, cancellationToken);
         if (semesterSurvey is null)
@@ -1733,9 +1767,33 @@ public sealed class EfSurveyService(
             .Select(x => x.Order)
             .ToList();
 
-        var sectionSurveys = await db.CourseSectionSurveys.AsNoTracking()
-            .Where(x => x.SemesterSurveyId == semesterSurveyId)
-            .ToListAsync(cancellationToken);
+        // Bảng dữ liệu đi theo lớp nên thừa hưởng đúng phạm vi của lớp, giống hệt
+        // GetCourseSectionSurveysAsync: giảng viên chỉ thấy lớp mình dạy, trưởng bộ
+        // môn chỉ thấy lớp có học phần thuộc bộ môn mình. Bảng này không có con số
+        // mặt bằng nào để giữ — dòng "Tổng kết" là tổng của đúng phần đang hiện —
+        // nên lọc thẳng ở đây chứ không phải lọc ở bước cuối như các sheet phân tích.
+        var sectionSurveyQuery = db.CourseSectionSurveys.AsNoTracking()
+            .Where(x => x.SemesterSurveyId == semesterSurveyId);
+        if (scope.SeesNothing)
+        {
+            sectionSurveyQuery = sectionSurveyQuery.Where(_ => false);
+        }
+        else if (scope.SeesOnlyOwn)
+        {
+            sectionSurveyQuery = sectionSurveyQuery.Where(x => db.CourseSections
+                .Any(section => section.CourseSectionId == x.CourseSectionId
+                                && section.LecturerId == scope.LecturerId));
+        }
+        else if (!scope.SeesEverything)
+        {
+            sectionSurveyQuery = sectionSurveyQuery.Where(x => db.CourseSections
+                .Any(section => section.CourseSectionId == x.CourseSectionId
+                                && db.Courses.Any(course =>
+                                    course.CourseId == section.CourseId
+                                    && course.DepartmentId == scope.DepartmentId)));
+        }
+
+        var sectionSurveys = await sectionSurveyQuery.ToListAsync(cancellationToken);
         var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
 
         var sections = await db.CourseSections.AsNoTracking()
@@ -2501,6 +2559,10 @@ public sealed class EfSurveyService(
         int semesterSurveyId,
         CancellationToken cancellationToken = default)
     {
+        // CỐ Ý không lọc phạm vi. Mọi con số ở đây là tổng hợp cấp đợt, không có dữ
+        // liệu của riêng lớp hay giảng viên nào. Hệ thống vốn đã chủ trương cho
+        // trưởng bộ môn thấy mặt bằng toàn trường để còn có cái mà so — xem dòng
+        // tổng của SemesterSurveyDepartmentSummaryDto và congviec2.md mục D6.
         var header = await LoadSurveyHeaderAsync(semesterSurveyId, cancellationToken);
         if (header is null)
         {
@@ -2623,6 +2685,22 @@ public sealed class EfSurveyService(
         if (sections.Count == 0)
         {
             return Failed<SurveyScopeAnalysisDto>(SurveyErrorCodes.ScopeNotFound);
+        }
+
+        // Phạm vi lấy thẳng từ query string nên phải kiểm: không có chỗ này thì
+        // trưởng bộ môn chỉ việc đổi scopeId là đọc được phân tích của khoa khác.
+        //
+        // Đòi hỏi TOÀN BỘ lớp của phạm vi phải nằm trong tầm nhìn, không phải chỉ
+        // một phần — trả về nửa số lớp của một khoa mà vẫn gắn nhãn "phân tích khoa"
+        // là đưa ra con số sai chứ không phải con số hẹp.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.SeesEverything)
+        {
+            var visible = VisibleTo(scope, sections);
+            if (visible.Count != sections.Count)
+            {
+                return Failed<SurveyScopeAnalysisDto>(SurveyErrorCodes.ScopeNotFound);
+            }
         }
 
         var scopeName = normalizedScopeType switch
@@ -2883,6 +2961,23 @@ public sealed class EfSurveyService(
         if (mine.Count == 0)
         {
             return Failed<LecturerReportDto>(SurveyErrorCodes.LecturerHasNoSections);
+        }
+
+        // Báo cáo cá nhân là dữ liệu nhạy cảm nhất của một giảng viên. Trưởng bộ môn
+        // chỉ xem được người trong bộ môn mình, giảng viên chỉ xem được chính mình.
+        // Trả "không có lớp nào" chứ không phải "không có quyền": không để người gọi
+        // dò ra ai đang dạy gì bằng cách so hai mã lỗi.
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.SeesEverything)
+        {
+            var allowed = scope.SeesOnlyOwn
+                ? scope.LecturerId == lecturerId
+                : scope.DepartmentId is { } departmentId
+                    && mine.All(x => x.DepartmentId == departmentId);
+            if (!allowed)
+            {
+                return Failed<LecturerReportDto>(SurveyErrorCodes.LecturerHasNoSections);
+            }
         }
 
         var facultyName = mine[0].FacultyName;
