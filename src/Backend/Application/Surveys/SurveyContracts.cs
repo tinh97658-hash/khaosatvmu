@@ -62,6 +62,8 @@ public sealed record SaveSurveyTemplateCommand(
 /// <summary>Một đợt khảo sát của học kỳ, kèm số lớp và số phiếu đã thu.</summary>
 public sealed record SemesterSurveyDto(
     int SemesterSurveyId,
+    /// <summary>Tên đợt do quản trị đặt lúc tạo. Không trùng khái niệm với TemplateName.</summary>
+    string SurveyName,
     int SemesterId,
     string SemesterName,
     string AcademicYearName,
@@ -74,22 +76,14 @@ public sealed record SemesterSurveyDto(
     int SectionSurveyCount,
     int ResponseCount,
     /// <summary>
-    /// Số lớp của học kỳ chưa có bài khảo sát trong đợt này. Khác 0 khi lớp được
-    /// thêm vào kỳ sau lúc tạo đợt; bù bằng
-    /// <see cref="ISurveyService.BackfillSemesterSurveySectionsAsync"/>.
+    /// Số lớp còn thiếu SO VỚI PHẠM VI CỦA CHÍNH ĐỢT NÀY, không phải so với cả kỳ.
+    /// Phạm vi được suy ra từ tập bộ môn mà các lớp đang có trong đợt thuộc về, nên
+    /// một đợt cố ý chỉ phát cho một khoa sẽ không bị coi là thiếu hàng nghìn lớp
+    /// của khoa khác. Khác 0 khi lớp mới của chính các bộ môn đó được nhập sau lúc
+    /// tạo đợt; bù bằng <see cref="ISurveyService.AddSectionsToSemesterSurveyAsync"/>
+    /// với đúng phạm vi của đợt.
     /// </summary>
     int MissingSectionCount);
-
-/// <summary>
-/// Kết quả bù bài khảo sát cho những lớp thêm vào học kỳ sau khi đợt đã tạo.
-/// Khung giờ lấy đúng theo các bài khảo sát đã có của đợt.
-/// </summary>
-public sealed record BackfillSectionSurveysDto(
-    int SemesterSurveyId,
-    /// <summary>Số lớp vừa được tạo bù bài khảo sát.</summary>
-    int CreatedSectionCount,
-    DateTime StartTime,
-    DateTime EndTime);
 
 // ------------------------------------------- Sheet 1: chuẩn hoá điểm (Z-score)
 
@@ -472,9 +466,80 @@ public sealed record CourseSectionSurveyDto(
     /// <summary>Số phiếu bị bộ lọc loại. Bằng ResponseCount trừ ValidResponseCount.</summary>
     int InvalidResponseCount);
 
+/// <summary>
+/// Phạm vi lớp được phát phiếu. Dùng chung cho lúc tạo đợt và lúc bổ sung thêm
+/// vào đợt đã có, để hai luồng không bao giờ hiểu "khoa X" theo hai kiểu.
+/// </summary>
+public static class SurveyScopeTypes
+{
+    /// <summary>Mọi lớp học phần của học kỳ. <c>ScopeId</c> bị bỏ qua.</summary>
+    public const string All = "all";
+
+    /// <summary>Lớp quy về một khoa/viện, theo chuỗi quy thuộc đơn vị của hệ thống.</summary>
+    public const string Faculty = "faculty";
+
+    /// <summary>Lớp quy về một bộ môn.</summary>
+    public const string Department = "department";
+
+    /// <summary>
+    /// Đúng một lớp học phần. Lưu ý mịn hơn một bậc so với <c>course</c> của
+    /// <see cref="ISurveyService.GetSurveyScopeAnalysisAsync"/> — API đó phân tích
+    /// theo học phần, còn ở đây là chọn từng lớp để phát phiếu.
+    /// </summary>
+    public const string Section = "section";
+
+    public static bool IsValid(string? scopeType) =>
+        scopeType is All or Faculty or Department or Section;
+
+    /// <summary>Chỉ <see cref="All"/> mới được thiếu <c>ScopeId</c>.</summary>
+    public static bool RequiresScopeId(string scopeType) => scopeType != All;
+}
+
 public sealed record CreateSemesterSurveyCommand(
+    string SurveyName,
     int SemesterId,
     int SurveyTemplateId,
+    DateTime StartTime,
+    DateTime EndTime,
+    /// <summary>Một trong <see cref="SurveyScopeTypes"/>. Mặc định phát cho cả kỳ.</summary>
+    string ScopeType = SurveyScopeTypes.All,
+    /// <summary>Mã khoa / bộ môn / lớp học phần tuỳ theo <paramref name="ScopeType"/>.</summary>
+    int? ScopeId = null);
+
+/// <summary>
+/// Bổ sung lớp vào một đợt đã có, theo cùng bộ phạm vi lúc tạo. Lớp đã có bài
+/// trong đợt thì bỏ qua chứ không báo lỗi, nên chồng phạm vi lên nhau vẫn an toàn.
+/// </summary>
+public sealed record AddSectionsToSemesterSurveyCommand(
+    string ScopeType,
+    int? ScopeId,
+    DateTime StartTime,
+    DateTime EndTime);
+
+/// <summary>
+/// Số lớp rơi vào một phạm vi, để màn hình xem trước trước khi bấm tạo. Tính ở
+/// server chứ không đếm ở client: quy lớp về khoa/bộ môn là chuỗi fallback, chép
+/// sang TypeScript là chắc chắn có ngày hai bên ra hai con số khác nhau.
+/// </summary>
+public sealed record SurveyScopePreviewDto(
+    string ScopeType,
+    int? ScopeId,
+    /// <summary>Số lớp của học kỳ thuộc phạm vi này.</summary>
+    int ScopeSectionCount,
+    /// <summary>
+    /// Trong đó bao nhiêu lớp chưa có bài trong đợt đang xét. Bằng
+    /// <paramref name="ScopeSectionCount"/> khi không truyền đợt nào.
+    /// </summary>
+    int NewSectionCount);
+
+/// <summary>Kết quả một lần bổ sung phạm vi vào đợt đã có.</summary>
+public sealed record AddSectionsToSemesterSurveyDto(
+    int SemesterSurveyId,
+    string SurveyName,
+    /// <summary>Số lớp vừa được tạo bài khảo sát.</summary>
+    int CreatedSectionCount,
+    /// <summary>Số lớp thuộc phạm vi nhưng đã có bài từ trước nên bỏ qua.</summary>
+    int SkippedSectionCount,
     DateTime StartTime,
     DateTime EndTime);
 
@@ -631,12 +696,27 @@ public interface ISurveyService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Bù bài khảo sát cho những lớp của học kỳ chưa có bài trong đợt — trường hợp
-    /// lớp được thêm vào kỳ sau khi đợt đã tạo. Mỗi lớp bù vẫn có LinkToken riêng,
-    /// khung giờ lấy đúng theo các bài khảo sát đã có của đợt.
+    /// Bổ sung lớp vào đợt đã có theo một phạm vi tự chọn (cả kỳ / khoa / bộ môn /
+    /// một lớp). Lớp đã có bài thì bỏ qua, nên gọi chồng phạm vi vẫn an toàn. Mỗi
+    /// lớp thêm vào vẫn có LinkToken riêng.
+    ///
+    /// Thay luôn cơ chế "tạo bù" cũ: bù lớp nhập thiếu giờ chỉ là gọi lại đúng phạm
+    /// vi của đợt, có thêm quyền đặt khung giờ riêng cho đám lớp mới.
     /// </summary>
-    Task<SurveyOperationResult<BackfillSectionSurveysDto>> BackfillSemesterSurveySectionsAsync(
+    Task<SurveyOperationResult<AddSectionsToSemesterSurveyDto>> AddSectionsToSemesterSurveyAsync(
         int semesterSurveyId,
+        AddSectionsToSemesterSurveyCommand command,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Đếm trước số lớp của một phạm vi. Truyền <paramref name="semesterSurveyId"/>
+    /// để biết thêm bao nhiêu lớp trong đó chưa có bài trong đợt.
+    /// </summary>
+    Task<SurveyOperationResult<SurveyScopePreviewDto>> PreviewSectionScopeAsync(
+        int semesterId,
+        string scopeType,
+        int? scopeId,
+        int? semesterSurveyId,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<CourseSectionSurveyDto>> GetCourseSectionSurveysAsync(
@@ -792,13 +872,17 @@ public static class SurveyErrorCodes
     public const string SemesterHasNoSections = "SURVEY_SEMESTER_HAS_NO_SECTIONS";
     public const string ScheduleInvalid = "SURVEY_SCHEDULE_INVALID";
     public const string SemesterSurveyNotFound = "SURVEY_SEMESTER_SURVEY_NOT_FOUND";
+    /// <summary>Tên đợt để trống hoặc chỉ có khoảng trắng.</summary>
+    public const string SemesterSurveyNameRequired = "SURVEY_SEMESTER_SURVEY_NAME_REQUIRED";
+    /// <summary>Kiểu phạm vi không nằm trong <see cref="SurveyScopeTypes"/>.</summary>
+    public const string ScopeTypeUnsupported = "SURVEY_SCOPE_TYPE_UNSUPPORTED";
+    /// <summary>Kiểu phạm vi cần mã đơn vị nhưng không truyền lên.</summary>
+    public const string ScopeIdRequired = "SURVEY_SCOPE_ID_REQUIRED";
+    /// <summary>Phạm vi hợp lệ nhưng không có lớp nào của kỳ rơi vào.</summary>
+    public const string ScopeHasNoSections = "SURVEY_SCOPE_HAS_NO_SECTIONS";
+    /// <summary>Mọi lớp của phạm vi đều đã có bài khảo sát trong đợt.</summary>
+    public const string ScopeSectionsAlreadyAdded = "SURVEY_SCOPE_SECTIONS_ALREADY_ADDED";
     public const string SemesterSurveyHasResponses = "SURVEY_SEMESTER_SURVEY_HAS_RESPONSES";
-
-    /// <summary>Mọi lớp của học kỳ đều đã có bài khảo sát, không còn gì để bù.</summary>
-    public const string SemesterSurveySectionsUpToDate = "SURVEY_SEMESTER_SURVEY_SECTIONS_UP_TO_DATE";
-
-    /// <summary>Đợt chưa có bài khảo sát nào nên không suy ra được khung giờ để bù theo.</summary>
-    public const string SemesterSurveyScheduleUnknown = "SURVEY_SEMESTER_SURVEY_SCHEDULE_UNKNOWN";
 
     public const string SectionSurveyNotFound = "SURVEY_SECTION_SURVEY_NOT_FOUND";
 

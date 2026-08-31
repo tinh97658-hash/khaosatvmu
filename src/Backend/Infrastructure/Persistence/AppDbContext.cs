@@ -344,6 +344,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.ToTable("SemesterSurveys");
             entity.HasKey(x => x.SemesterSurveyId);
+            entity.Property(x => x.SurveyName).IsRequired();
             entity.HasIndex(x => x.SemesterId);
             entity.HasIndex(x => x.SurveyTemplateId);
             entity.HasOne<Semester>()

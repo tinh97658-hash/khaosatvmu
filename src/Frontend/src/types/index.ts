@@ -178,6 +178,8 @@ export interface SurveyTemplate {
 /** Bảng "SemesterSurveys", kèm số lớp và số phiếu đã thu của đợt. */
 export interface SemesterSurvey {
   semesterSurveyId: number;
+  /** Tên đợt do quản trị đặt lúc tạo. Khác `templateName` là tên bộ câu hỏi. */
+  surveyName: string;
   semesterId: number;
   semesterName: string;
   academicYearName: string;

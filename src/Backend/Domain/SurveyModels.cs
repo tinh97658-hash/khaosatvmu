@@ -95,6 +95,14 @@ public sealed class SemesterSurvey : ISoftDeletable
 {
     public int SemesterSurveyId { get; set; }
 
+    /// <summary>
+    /// Tên đợt do quản trị đặt lúc tạo, vd "Khảo sát giữa kỳ 2025-2026 đợt 1".
+    /// NOT NULL nhưng không UNIQUE: cùng một kỳ vẫn được đặt trùng tên nếu muốn.
+    /// Có tên riêng thì hai đợt cùng học kỳ, cùng bộ câu hỏi mới phân biệt được —
+    /// trước đây màn hình chỉ hiện tên bộ câu hỏi nên chúng trông y hệt nhau.
+    /// </summary>
+    public string SurveyName { get; set; } = string.Empty;
+
     /// <summary>NOT NULL, ON DELETE CASCADE.</summary>
     public int SemesterId { get; set; }
 

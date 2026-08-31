@@ -367,14 +367,15 @@ public sealed class EfSurveyService(
             sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList(),
             cancellationToken);
 
-        // Lớp thêm vào kỳ sau khi đợt đã tạo thì chưa có bài khảo sát nào. Đếm ra đây
-        // để màn hình Khảo sát học phần mời quản trị bù cho đủ.
-        var semesterSectionIds = (await db.CourseSections
-                .Where(x => semesterIds.Contains(x.SemesterId))
-                .Select(x => new { x.SemesterId, x.CourseSectionId })
-                .ToListAsync(cancellationToken))
-            .GroupBy(x => x.SemesterId)
-            .ToDictionary(group => group.Key, group => group.Select(x => x.CourseSectionId).ToList());
+        // Lớp thêm vào kỳ sau khi đợt đã tạo thì chưa có bài khảo sát nào. Chỉ đếm
+        // trong PHẠM VI của chính đợt, không đếm cả kỳ: một đợt cố ý chỉ phát cho
+        // một khoa mà đem so với toàn kỳ thì lúc nào cũng "thiếu" hàng nghìn lớp.
+        // Phạm vi không được lưu ở đâu cả, nên suy ngược từ tập bộ môn mà các lớp
+        // đang có trong đợt thuộc về.
+        var allUnits = await ResolveSectionUnitsAsync(semesterIds, cancellationToken);
+        var unitsBySemester = allUnits.ToLookup(x => x.SemesterId);
+        var departmentOfSection = allUnits
+            .ToDictionary(x => x.CourseSectionId, x => x.DepartmentId);
         var sectionSurveysBySurveyId = sectionSurveys.ToLookup(x => x.SemesterSurveyId);
 
         return surveys
@@ -385,12 +386,20 @@ public sealed class EfSurveyService(
                     .FirstOrDefault(x => x.AcademicYearId == semester?.AcademicYearId);
                 var sections = sectionSurveysBySurveyId[survey.SemesterSurveyId].ToList();
                 var coveredSectionIds = sections.Select(x => x.CourseSectionId).ToHashSet();
-                var missingSectionCount = semesterSectionIds
-                    .GetValueOrDefault(survey.SemesterId, [])
-                    .Count(sectionId => !coveredSectionIds.Contains(sectionId));
+                var coveredDepartmentIds = coveredSectionIds
+                    .Select(id => departmentOfSection.GetValueOrDefault(id))
+                    .OfType<int>()
+                    .ToHashSet();
+                // Lớp không quy được về bộ môn nào thì không phạm vi nào với tới, nên
+                // cũng không bao giờ bị tính là thiếu.
+                var missingSectionCount = unitsBySemester[survey.SemesterId]
+                    .Count(unit => !coveredSectionIds.Contains(unit.CourseSectionId)
+                        && unit.DepartmentId is { } departmentId
+                        && coveredDepartmentIds.Contains(departmentId));
 
                 return new SemesterSurveyDto(
                     survey.SemesterSurveyId,
+                    survey.SurveyName,
                     survey.SemesterId,
                     semester?.SemesterName ?? string.Empty,
                     academicYear?.AcademicYearName ?? string.Empty,
@@ -424,6 +433,18 @@ public sealed class EfSurveyService(
             return Failed<SemesterSurveyDto>(SurveyErrorCodes.OutOfScope);
         }
 
+        var surveyName = command.SurveyName?.Trim() ?? string.Empty;
+        if (surveyName.Length == 0)
+        {
+            return Failed<SemesterSurveyDto>(SurveyErrorCodes.SemesterSurveyNameRequired);
+        }
+
+        var scopeType = (command.ScopeType ?? string.Empty).Trim().ToLowerInvariant();
+        if (ValidateScope(scopeType, command.ScopeId) is { } scopeError)
+        {
+            return Failed<SemesterSurveyDto>(scopeError);
+        }
+
         var startTime = ToUtc(command.StartTime);
         var endTime = ToUtc(command.EndTime);
         if (endTime <= startTime)
@@ -441,18 +462,24 @@ public sealed class EfSurveyService(
             return Failed<SemesterSurveyDto>(SurveyErrorCodes.TemplateNotFound);
         }
 
-        var sectionIds = await db.CourseSections
-            .Where(x => x.SemesterId == command.SemesterId)
-            .Select(x => x.CourseSectionId)
-            .ToListAsync(cancellationToken);
-        if (sectionIds.Count == 0)
+        var units = await ResolveSectionUnitsAsync([command.SemesterId], cancellationToken);
+        if (units.Count == 0)
         {
             return Failed<SemesterSurveyDto>(SurveyErrorCodes.SemesterHasNoSections);
+        }
+
+        // Kỳ có lớp nhưng phạm vi được chọn lại rỗng là hai chuyện khác nhau, báo
+        // tách ra để người dùng biết là chọn nhầm khoa chứ không phải kỳ trống.
+        var sectionIds = SectionIdsInScope(units, scopeType, command.ScopeId);
+        if (sectionIds.Count == 0)
+        {
+            return Failed<SemesterSurveyDto>(SurveyErrorCodes.ScopeHasNoSections);
         }
 
         var now = DateTime.UtcNow;
         var survey = new SemesterSurvey
         {
+            SurveyName = surveyName,
             SemesterId = command.SemesterId,
             SurveyTemplateId = command.SurveyTemplateId,
             CreatedAt = now,
@@ -517,56 +544,218 @@ public sealed class EfSurveyService(
         return Succeeded(true);
     }
 
-    // Đợt phát phiếu cho toàn bộ lớp của kỳ tại thời điểm tạo. Lớp thêm vào sau đó
-    // — thường do nhập thiếu rồi bổ sung — bị bỏ lại không có bài. Hàm này bù cho
-    // đúng những lớp đó, giữ nguyên khung giờ của đợt. Cùng mức quyền với tạo/xoá đợt.
-    public async Task<SurveyOperationResult<BackfillSectionSurveysDto>> BackfillSemesterSurveySectionsAsync(
-        int semesterSurveyId,
+    // --------------------------------------- Phạm vi lớp được phát phiếu
+
+    /// <summary>
+    /// Một lớp học phần cùng đơn vị đã quy được. <c>DepartmentId</c> / <c>FacultyId</c>
+    /// vẫn có thể null khi cả học phần lẫn giảng viên đều không ghi đơn vị.
+    /// </summary>
+    private readonly record struct SectionUnit(
+        int SemesterId,
+        int CourseSectionId,
+        int? DepartmentId,
+        int? FacultyId);
+
+    /// <summary>
+    /// Quy từng lớp của các học kỳ về bộ môn và khoa. Không có khoá ngoại trực tiếp
+    /// từ lớp lên đơn vị, nên phải lần theo học phần rồi mới tới giảng viên — GIỮ
+    /// ĐÚNG thứ tự của <see cref="LoadAnalysedSectionsAsync"/> và trang Lớp học phần,
+    /// nếu không cùng một lớp sẽ bị xếp vào hai khoa khác nhau ở hai màn hình.
+    ///
+    /// Khác hai chỗ kia ở chỗ chạy trên toàn bộ lớp của kỳ, không lọc theo phiếu đã
+    /// thu — vì lúc chọn phạm vi thì chưa có phiếu nào.
+    /// </summary>
+    private async Task<List<SectionUnit>> ResolveSectionUnitsAsync(
+        IReadOnlyCollection<int> semesterIds,
+        CancellationToken cancellationToken)
+    {
+        if (semesterIds.Count == 0) return [];
+
+        var sections = await db.CourseSections.AsNoTracking()
+            .Where(x => semesterIds.Contains(x.SemesterId))
+            .Select(x => new { x.CourseSectionId, x.SemesterId, x.CourseId, x.LecturerId })
+            .ToListAsync(cancellationToken);
+        if (sections.Count == 0) return [];
+
+        var courseIds = sections.Select(x => x.CourseId).Distinct().ToList();
+        var courses = await db.Courses.AsNoTracking()
+            .Where(x => courseIds.Contains(x.CourseId))
+            .Select(x => new { x.CourseId, x.DepartmentId, x.FacultyId })
+            .ToDictionaryAsync(x => x.CourseId, x => x, cancellationToken);
+
+        var lecturerIds = sections
+            .Where(x => x.LecturerId != null)
+            .Select(x => x.LecturerId!.Value)
+            .Distinct()
+            .ToList();
+        var lecturers = await db.Lecturers.AsNoTracking()
+            .Where(x => lecturerIds.Contains(x.LecturerId))
+            .Select(x => new { x.LecturerId, x.DepartmentId, x.FacultyId })
+            .ToDictionaryAsync(x => x.LecturerId, x => x, cancellationToken);
+
+        var facultyOfDepartment = await db.Departments.AsNoTracking()
+            .Select(x => new { x.DepartmentId, x.FacultyId })
+            .ToDictionaryAsync(x => x.DepartmentId, x => x.FacultyId, cancellationToken);
+
+        var units = new List<SectionUnit>(sections.Count);
+        foreach (var section in sections)
+        {
+            int? courseDepartmentId = null;
+            int? courseFacultyId = null;
+            if (courses.TryGetValue(section.CourseId, out var course))
+            {
+                courseDepartmentId = course.DepartmentId;
+                courseFacultyId = course.FacultyId;
+            }
+
+            int? lecturerDepartmentId = null;
+            int? lecturerFacultyId = null;
+            if (section.LecturerId is { } lecturerId && lecturers.TryGetValue(lecturerId, out var lecturer))
+            {
+                lecturerDepartmentId = lecturer.DepartmentId;
+                lecturerFacultyId = lecturer.FacultyId;
+            }
+
+            var departmentId = courseDepartmentId ?? lecturerDepartmentId;
+            var facultyId = courseFacultyId;
+            if (facultyId is null && departmentId is { } dId
+                && facultyOfDepartment.TryGetValue(dId, out var owningFacultyId))
+            {
+                facultyId = owningFacultyId;
+            }
+            facultyId ??= lecturerFacultyId;
+
+            units.Add(new SectionUnit(section.SemesterId, section.CourseSectionId, departmentId, facultyId));
+        }
+
+        return units;
+    }
+
+    /// <summary>Trả mã lỗi nếu phạm vi không dùng được, null nếu hợp lệ.</summary>
+    private static string? ValidateScope(string scopeType, int? scopeId)
+    {
+        if (!SurveyScopeTypes.IsValid(scopeType)) return SurveyErrorCodes.ScopeTypeUnsupported;
+        if (SurveyScopeTypes.RequiresScopeId(scopeType) && scopeId is null)
+        {
+            return SurveyErrorCodes.ScopeIdRequired;
+        }
+        return null;
+    }
+
+    private static List<int> SectionIdsInScope(
+        IEnumerable<SectionUnit> units,
+        string scopeType,
+        int? scopeId) =>
+        scopeType switch
+        {
+            SurveyScopeTypes.All => units.Select(x => x.CourseSectionId).ToList(),
+            SurveyScopeTypes.Faculty => units
+                .Where(x => x.FacultyId == scopeId).Select(x => x.CourseSectionId).ToList(),
+            SurveyScopeTypes.Department => units
+                .Where(x => x.DepartmentId == scopeId).Select(x => x.CourseSectionId).ToList(),
+            SurveyScopeTypes.Section => units
+                .Where(x => x.CourseSectionId == scopeId).Select(x => x.CourseSectionId).ToList(),
+            _ => []
+        };
+
+    public async Task<SurveyOperationResult<SurveyScopePreviewDto>> PreviewSectionScopeAsync(
+        int semesterId,
+        string scopeType,
+        int? scopeId,
+        int? semesterSurveyId,
         CancellationToken cancellationToken = default)
     {
         var scope = await userScope.ResolveAsync(cancellationToken);
         if (!scope.SeesEverything)
         {
-            return Failed<BackfillSectionSurveysDto>(SurveyErrorCodes.OutOfScope);
+            return Failed<SurveyScopePreviewDto>(SurveyErrorCodes.OutOfScope);
+        }
+
+        var normalized = (scopeType ?? string.Empty).Trim().ToLowerInvariant();
+        if (ValidateScope(normalized, scopeId) is { } scopeError)
+        {
+            return Failed<SurveyScopePreviewDto>(scopeError);
+        }
+
+        var units = await ResolveSectionUnitsAsync([semesterId], cancellationToken);
+        var scopedSectionIds = SectionIdsInScope(units, normalized, scopeId);
+
+        var newSectionCount = scopedSectionIds.Count;
+        if (semesterSurveyId is { } surveyId)
+        {
+            var covered = (await db.CourseSectionSurveys.AsNoTracking()
+                    .Where(x => x.SemesterSurveyId == surveyId)
+                    .Select(x => x.CourseSectionId)
+                    .ToListAsync(cancellationToken))
+                .ToHashSet();
+            newSectionCount = scopedSectionIds.Count(id => !covered.Contains(id));
+        }
+
+        return Succeeded(new SurveyScopePreviewDto(
+            normalized,
+            scopeId,
+            scopedSectionIds.Count,
+            newSectionCount));
+    }
+
+    // Bổ sung lớp vào đợt đã có theo phạm vi tự chọn. Khung giờ do người gọi quyết
+    // định chứ không ép theo đợt: thêm một khoa vào đợt đã chạy quá nửa mà dùng lại
+    // khung giờ cũ thì lớp mới mở ra đã hết hạn.
+    public async Task<SurveyOperationResult<AddSectionsToSemesterSurveyDto>> AddSectionsToSemesterSurveyAsync(
+        int semesterSurveyId,
+        AddSectionsToSemesterSurveyCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.SeesEverything)
+        {
+            return Failed<AddSectionsToSemesterSurveyDto>(SurveyErrorCodes.OutOfScope);
+        }
+
+        var scopeType = (command.ScopeType ?? string.Empty).Trim().ToLowerInvariant();
+        if (ValidateScope(scopeType, command.ScopeId) is { } scopeError)
+        {
+            return Failed<AddSectionsToSemesterSurveyDto>(scopeError);
+        }
+
+        var startTime = ToUtc(command.StartTime);
+        var endTime = ToUtc(command.EndTime);
+        if (endTime <= startTime)
+        {
+            return Failed<AddSectionsToSemesterSurveyDto>(SurveyErrorCodes.ScheduleInvalid);
         }
 
         var survey = await db.SemesterSurveys
             .FirstOrDefaultAsync(x => x.SemesterSurveyId == semesterSurveyId, cancellationToken);
         if (survey is null)
         {
-            return Failed<BackfillSectionSurveysDto>(SurveyErrorCodes.SemesterSurveyNotFound);
+            return Failed<AddSectionsToSemesterSurveyDto>(SurveyErrorCodes.SemesterSurveyNotFound);
         }
 
-        var existingSectionSurveys = await db.CourseSectionSurveys
+        var units = await ResolveSectionUnitsAsync([survey.SemesterId], cancellationToken);
+        var scopedSectionIds = SectionIdsInScope(units, scopeType, command.ScopeId);
+        if (scopedSectionIds.Count == 0)
+        {
+            return Failed<AddSectionsToSemesterSurveyDto>(SurveyErrorCodes.ScopeHasNoSections);
+        }
+
+        // Phạm vi chồng nhau là chuyện bình thường (thêm bộ môn sau khi đã thêm cả
+        // khoa), nên lớp đã có bài thì bỏ qua chứ không báo lỗi.
+        var coveredSectionIds = await db.CourseSectionSurveys.AsNoTracking()
             .Where(x => x.SemesterSurveyId == semesterSurveyId)
-            .Select(x => new { x.CourseSectionId, x.StartTime, x.EndTime })
+            .Select(x => x.CourseSectionId)
             .ToListAsync(cancellationToken);
-        if (existingSectionSurveys.Count == 0)
+        var covered = coveredSectionIds.ToHashSet();
+        var newSectionIds = scopedSectionIds.Where(id => !covered.Contains(id)).ToList();
+        if (newSectionIds.Count == 0)
         {
-            return Failed<BackfillSectionSurveysDto>(SurveyErrorCodes.SemesterSurveyScheduleUnknown);
-        }
-
-        // Từng lớp sửa được giờ riêng, nên khung giờ của đợt là bao ngoài của các lớp
-        // đã có — đúng khoảng đang hiện trên màn hình danh sách đợt.
-        var startTime = existingSectionSurveys.Min(x => x.StartTime);
-        var endTime = existingSectionSurveys.Max(x => x.EndTime);
-
-        var coveredSectionIds = existingSectionSurveys.Select(x => x.CourseSectionId).ToHashSet();
-        var missingSectionIds = (await db.CourseSections
-                .Where(x => x.SemesterId == survey.SemesterId)
-                .Select(x => x.CourseSectionId)
-                .ToListAsync(cancellationToken))
-            .Where(sectionId => !coveredSectionIds.Contains(sectionId))
-            .ToList();
-        if (missingSectionIds.Count == 0)
-        {
-            return Failed<BackfillSectionSurveysDto>(SurveyErrorCodes.SemesterSurveySectionsUpToDate);
+            return Failed<AddSectionsToSemesterSurveyDto>(SurveyErrorCodes.ScopeSectionsAlreadyAdded);
         }
 
         var now = DateTime.UtcNow;
-        db.CourseSectionSurveys.AddRange(missingSectionIds.Select(sectionId => new CourseSectionSurvey
+        db.CourseSectionSurveys.AddRange(newSectionIds.Select(sectionId => new CourseSectionSurvey
         {
-            SemesterSurveyId = survey.SemesterSurveyId,
+            SemesterSurveyId = semesterSurveyId,
             CourseSectionId = sectionId,
             LinkToken = Guid.NewGuid().ToString("N"),
             StartTime = startTime,
@@ -575,9 +764,11 @@ public sealed class EfSurveyService(
         }));
         await db.SaveChangesAsync(cancellationToken);
 
-        return Succeeded(new BackfillSectionSurveysDto(
-            survey.SemesterSurveyId,
-            missingSectionIds.Count,
+        return Succeeded(new AddSectionsToSemesterSurveyDto(
+            semesterSurveyId,
+            survey.SurveyName,
+            newSectionIds.Count,
+            scopedSectionIds.Count - newSectionIds.Count,
             startTime,
             endTime));
     }
