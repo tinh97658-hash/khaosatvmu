@@ -106,7 +106,8 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
         setMetrics({
           sectionCount: sections.length,
           surveyedCount: sectionSurveys.length,
-          responseCount: sectionSurveys.reduce((total, item) => total + item.responseCount, 0),
+          // Tiến độ đo bằng phiếu HỢP LỆ, giống bảng tiến độ và báo cáo.
+          responseCount: sectionSurveys.reduce((total, item) => total + item.validResponseCount, 0),
           targetCount: sectionSurveys.reduce((total, item) => total + item.classSize, 0),
         });
       } catch {
@@ -136,7 +137,7 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
       setMetrics({
         sectionCount: sections.length,
         surveyedCount: sectionSurveys.length,
-        responseCount: sectionSurveys.reduce((total, item) => total + item.responseCount, 0),
+        responseCount: sectionSurveys.reduce((total, item) => total + item.validResponseCount, 0),
         targetCount: sectionSurveys.reduce((total, item) => total + item.classSize, 0),
       });
     } catch {

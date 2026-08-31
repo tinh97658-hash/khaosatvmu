@@ -21,6 +21,10 @@ import { WeakestQuestionsPanel } from './WeakestQuestionsPanel';
 import { LaggingDepartmentsTable } from './LaggingDepartmentsTable';
 import { formatNumber } from './theme';
 import type { ReportAnalysisView } from '../../pages/reportRoute';
+import {
+  COMPLETED_COMPLETION_RATE,
+  LAGGING_COMPLETION_RATE,
+} from '../../utils/reportThresholds';
 
 export interface SchoolOverviewDrillDown {
   facultyId?: number;
@@ -161,8 +165,8 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
         'Tổng số lớp khảo sát': formatNumber(data.totalSections),
         'Tiến độ thu phiếu toàn trường': `${data.completionRate.toFixed(1)}% (${formatNumber(data.totalResponses)} / ${formatNumber(data.totalTargetResponses)})`,
         'Điểm hài lòng trung bình': `${data.overallAverageScore.toFixed(2)} / 5.0`,
-        'Lớp hoàn thành (≥80%)': data.completedSectionCount,
-        'Lớp đang thu (20-80%)': data.inProgressSectionCount,
+        [`Lớp hoàn thành (≥${COMPLETED_COMPLETION_RATE}%)`]: data.completedSectionCount,
+        [`Lớp đang thu (${LAGGING_COMPLETION_RATE}-${COMPLETED_COMPLETION_RATE - 1}%)`]: data.inProgressSectionCount,
         'Lớp chậm tiến độ (<20%)': data.laggingSectionCount,
       },
       summaryNotes: [
@@ -297,13 +301,13 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
               <small>/ 5.0</small>
             </span>
 
-            <span className="reports-exec-stat" title="Lớp đạt từ 80% phiếu hợp lệ">
+            <span className="reports-exec-stat" title={`Lớp đạt từ ${COMPLETED_COMPLETION_RATE}% phiếu hợp lệ`}>
               <span className="legend-dot" style={{ background: '#137b3b' }} />
               Hoàn thành
               <strong>{data.completedSectionCount}</strong>
             </span>
 
-            <span className="reports-exec-stat" title="Lớp đạt 20-80% phiếu hợp lệ">
+            <span className="reports-exec-stat" title={`Lớp đạt ${LAGGING_COMPLETION_RATE}-${COMPLETED_COMPLETION_RATE - 1}% phiếu hợp lệ`}>
               <span className="legend-dot" style={{ background: '#0788b8' }} />
               Đang thu
               <strong>{data.inProgressSectionCount}</strong>

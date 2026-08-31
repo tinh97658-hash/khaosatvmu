@@ -254,7 +254,8 @@ function DashboardApp() {
       totalCourses: courses.length,
       totalClasses: sections.length,
       activeCampaigns: campaigns.filter((campaign) => campaign.status === 'Đang diễn ra').length,
-      totalResponses: sectionSurveys.reduce((total, item) => total + item.responseCount, 0),
+      // Chỉ phiếu hợp lệ, giống mọi chỗ khác đo tiến độ.
+      totalResponses: sectionSurveys.reduce((total, item) => total + item.validResponseCount, 0),
       totalTargetResponses: sectionSurveys.reduce((total, item) => total + item.classSize, 0),
       overallSatisfaction: 0,
       qrScanCount: surveyCounters.qrScanCount,

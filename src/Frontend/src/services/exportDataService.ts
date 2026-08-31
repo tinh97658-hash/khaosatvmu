@@ -10,6 +10,15 @@ export interface ExportColumn<T = any> {
   format?: (value: any, row: T, index: number) => string | number | boolean | null | undefined;
   /** Kiểu dữ liệu ô Excel: 'string' | 'number' | 'boolean' | 'date' */
   type?: 'string' | 'number' | 'boolean' | 'date';
+  /**
+   * Mã định dạng số của Excel, chỉ áp cho ô kiểu Number. Dùng cho cột phần trăm
+   * và cột điểm: giữ giá trị là SỐ để Excel sắp xếp đúng, nhưng vẫn hiển thị kèm
+   * đơn vị. Ví dụ `'0.0"%"'` cho ô mang giá trị 18.2 sẽ hiện "18.2%".
+   *
+   * Đừng dùng `'0.0%'` — Excel tự nhân 100 với mã đó, giá trị 18.2 sẽ hiện thành
+   * "1820.0%". Muốn dùng nó thì phải lưu 0.182.
+   */
+  numberFormat?: string;
   /** Căn lề dữ liệu: 'left' | 'center' | 'right' */
   align?: 'left' | 'center' | 'right';
   /** Độ rộng cột tương đối (Excel character count / mm trong PDF) */
@@ -234,27 +243,39 @@ export async function exportToExcel(options: AnyExportOptions): Promise<void> {
     // Dòng trống trước bảng
     rows.push(new Array(colCount).fill({ value: '', type: String }));
 
-    // Header của bảng dữ liệu
+    // Header của bảng dữ liệu. Nền sáng chữ đậm thay vì nền xanh đặc chữ trắng:
+    // bảng rộng mấy chục cột mà cả dải tiêu đề tối om thì nhìn nặng và in ra tốn
+    // mực. Viền dưới đậm là đủ để tách tiêu đề khỏi phần dữ liệu.
+    const headerFill = '#e3edf5';
+    const headerText = '#14415c';
     const headerRow = [
       {
         value: 'STT',
         type: String,
         fontWeight: 'bold',
         align: 'center',
-        backgroundColor: '#0f4c81',
-        color: '#ffffff',
+        backgroundColor: headerFill,
+        color: headerText,
+        bottomBorderColor: '#0f4c81',
+        bottomBorderStyle: 'medium',
       },
       ...columns.map((col) => ({
         value: col.header,
         type: String,
         fontWeight: 'bold',
         align: col.align || (col.type === 'number' ? 'right' : 'left'),
-        backgroundColor: '#0f4c81',
-        color: '#ffffff',
+        backgroundColor: headerFill,
+        color: headerText,
+        bottomBorderColor: '#0f4c81',
+        bottomBorderStyle: 'medium',
         wrap: true,
       })),
     ];
     rows.push(headerRow);
+
+    // Bề rộng thật của từng cột, đo dần ngay trong vòng lặp dựng dòng để không
+    // phải quét lại toàn bộ dữ liệu lần thứ hai. Khởi tạo bằng độ dài tiêu đề.
+    const measuredWidths = columns.map((col) => col.header.length);
 
     // Dòng dữ liệu
     for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
@@ -272,10 +293,20 @@ export async function exportToExcel(options: AnyExportOptions): Promise<void> {
           align: 'center',
           backgroundColor: bgColor,
         },
-        ...columns.map((col) => {
+        ...columns.map((col, colIndex) => {
           let rawVal = (row as any)[col.key];
           if (col.format) {
             rawVal = col.format(rawVal, row, rowIndex);
+          }
+
+          // Ô số hiển thị theo numberFormat nên chuỗi hiện ra có thể dài hơn giá
+          // trị thô (thêm dấu %, thêm số lẻ). Cộng thêm phần đuôi của mã định dạng
+          // để cột không bị hụt đúng vài ký tự.
+          const displayLength = rawVal === null || rawVal === undefined
+            ? 0
+            : String(rawVal).length + (col.numberFormat ? 1 : 0);
+          if (displayLength > measuredWidths[colIndex]) {
+            measuredWidths[colIndex] = displayLength;
           }
 
           let cellType: any = String;
@@ -305,6 +336,10 @@ export async function exportToExcel(options: AnyExportOptions): Promise<void> {
             type: cellType,
             align,
             backgroundColor: bgColor,
+            // Chỉ ô số mới nhận mã định dạng; gắn vào ô chữ là Excel báo hỏng tệp.
+            ...(cellType === Number && col.numberFormat
+              ? { format: col.numberFormat }
+              : {}),
           };
         }),
       ];
@@ -328,11 +363,20 @@ export async function exportToExcel(options: AnyExportOptions): Promise<void> {
       });
     }
 
-    // Cấu hình độ rộng cột
+    // Bề rộng cột co theo nội dung thật. Trước đây chỉ đoán theo độ dài TIÊU ĐỀ
+    // nên cột chứa tên học phần dài luôn bị cắt, còn tiêu đề dài như "Phiếu hợp
+    // lệ" thì bị xuống dòng dù dữ liệu bên dưới chỉ có hai chữ số.
+    //
+    // `col.width` khai báo sẵn không còn là con số cuối cùng mà thành mức SÀN, để
+    // các cột hẹp không dính sát nhau. Chặn trên 46 ký tự: ô ghi chú dài lê thê
+    // mà cho nở tự do thì kéo cả trang giấy in ra ngoài khổ.
     const columnWidths = [
       { width: 6 }, // STT
-      ...columns.map((col) => ({
-        width: col.width || Math.max(col.header.length * 1.4, 12),
+      ...columns.map((col, colIndex) => ({
+        width: Math.min(
+          46,
+          Math.max(measuredWidths[colIndex] + 2, col.width ?? 0, 8)
+        ),
       })),
     ];
 

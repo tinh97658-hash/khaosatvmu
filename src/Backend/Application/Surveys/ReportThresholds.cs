@@ -37,6 +37,44 @@ public static class ReportThresholds
     /// không tồn tại (mẫu số n−1 bằng 0), nên hai là mức thấp nhất còn tính được.
     /// </summary>
     public const int MinimumSectionsForNormalization = 2;
+
+    /// <summary>
+    /// Tỷ lệ PHIẾU HỢP LỆ trên sĩ số để một lớp được coi là thu đủ. Dùng cho cả
+    /// hai việc, vì thực chất là cùng một câu hỏi "lớp này đã đủ phiếu để tin
+    /// chưa": nhãn "Hoàn thành" trên bảng tiến độ, và điều kiện để lớp được tính
+    /// vào điểm.
+    ///
+    /// Mẫu số là sĩ số chứ không phải số phiếu nộp, và tử số chỉ đếm phiếu qua
+    /// được bộ lọc nhiễu — phiếu bị loại vẫn là một lượt nộp nhưng không dùng
+    /// được vào kết quả nào.
+    /// </summary>
+    public const decimal CompletedCompletionRate = 50m;
+
+    /// <summary>
+    /// Dưới mức này thì lớp bị coi là chậm tiến độ, cần đôn đốc. Giữa hai mốc là
+    /// "đang thu". Chỉ dùng để gắn nhãn tiến độ, không dính gì tới việc lớp có
+    /// được tính điểm hay không.
+    /// </summary>
+    public const decimal LaggingCompletionRate = 20m;
+
+    /// <summary>
+    /// Lớp thu đủ phiếu hay không quyết định lớp đó có được gộp vào điểm hay
+    /// không. Điểm của một lớp hai người đánh giá không so được với lớp ba mươi
+    /// người, gộp chung là kéo lệch mọi con số tổng hợp phía trên.
+    ///
+    /// Vế thứ hai <paramref name="totalResponseCount"/> ≥ sĩ số là lưới an toàn
+    /// cho lớp nộp đủ nhưng phần lớn phiếu bị bộ lọc loại: cả lớp đã làm rồi thì
+    /// không còn ai để thu thêm, chờ nữa cũng vô ích.
+    /// </summary>
+    public static bool HasEnoughResponsesToScore(
+        int classSize,
+        int totalResponseCount,
+        int validResponseCount)
+    {
+        if (classSize <= 0) return false;
+        if (totalResponseCount >= classSize) return true;
+        return (decimal)validResponseCount / classSize * 100 >= CompletedCompletionRate;
+    }
 }
 
 /// <summary>Mã kết luận chẩn đoán khi so các lớp trong cùng một học phần.</summary>

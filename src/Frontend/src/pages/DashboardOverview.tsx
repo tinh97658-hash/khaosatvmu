@@ -34,6 +34,10 @@ import type {
   CourseSectionSurvey,
   SemesterSurvey,
 } from '../types';
+import {
+  COMPLETED_COMPLETION_RATE,
+  LAGGING_COMPLETION_RATE,
+} from '../utils/reportThresholds';
 import '../styles/reports.css';
 import '../styles/dashboard.css';
 
@@ -61,7 +65,7 @@ const getRatingLabel = (score: number): { label: string; tone: string } => {
 };
 
 /** Dưới ngưỡng này thì một đơn vị bị coi là chậm tiến độ, khớp với các trang khác. */
-const LAGGING_THRESHOLD = 20;
+const LAGGING_THRESHOLD = LAGGING_COMPLETION_RATE;
 
 const MIN_RESPONSES_FOR_PUBLISHED_SCORE = 30;
 const MIN_COMPLETION_RATE_FOR_PUBLISHED_SCORE = 5;
@@ -270,9 +274,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       const matchesSearch = f.facultyName.toLowerCase().includes(searchTerm.toLowerCase().trim());
       if (!matchesSearch) return false;
 
-      if (filterStatus === 'good') return f.completionRate >= 80;
+      if (filterStatus === 'good') return f.completionRate >= COMPLETED_COMPLETION_RATE;
       if (filterStatus === 'progress') {
-        return f.completionRate >= LAGGING_THRESHOLD && f.completionRate < 80;
+        return f.completionRate >= LAGGING_THRESHOLD
+          && f.completionRate < COMPLETED_COMPLETION_RATE;
       }
       if (filterStatus === 'lagging') return f.completionRate < LAGGING_THRESHOLD;
       return true;
@@ -864,7 +869,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 className={`executive-chip ${filterStatus === 'good' ? 'is-active' : ''}`}
                 onClick={() => setFilterStatus('good')}
               >
-                Đạt chuẩn ≥80% ({overviewData.faculties.filter((f) => f.completionRate >= 80).length})
+                Đạt chuẩn ≥{COMPLETED_COMPLETION_RATE}% (
+                {overviewData.faculties.filter(
+                  (f) => f.completionRate >= COMPLETED_COMPLETION_RATE
+                ).length}
+                )
               </button>
               <button
                 type="button"
@@ -946,7 +955,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                           </span>
                         </td>
                         <td>
-                          {faculty.completionRate >= 80 ? (
+                          {faculty.completionRate >= COMPLETED_COMPLETION_RATE ? (
                             <span className="executive-status-pill is-good">Đạt chuẩn</span>
                           ) : faculty.completionRate >= LAGGING_THRESHOLD ? (
                             <span className="executive-status-pill is-ok">Đang thu</span>

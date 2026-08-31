@@ -1491,24 +1491,37 @@ public sealed class EfSurveyService(
         // Một câu UPDATE ... FROM chạy trọn trong Postgres: dù đợt có bao nhiêu
         // nghìn phiếu cũng không kéo dòng nào về bộ nhớ ứng dụng.
         // LEFT JOIN để lớp chưa có phiếu nào cũng được ghi về 0 thay vì giữ số cũ.
+        //
+        // Số ĐẾM phiếu ghi cho mọi lớp — đếm thì không méo. Riêng ĐIỂM chỉ chốt cho
+        // lớp đã thu đủ phiếu: điểm của lớp hai người đánh giá không so được với lớp
+        // ba mươi người, gộp vào là kéo lệch mọi con số tổng hợp phía trên. Lớp chưa
+        // đủ nhận NULL, bảng đọc ra "chưa đủ phiếu".
+        // Điều kiện phải trùng khít ReportThresholds.HasEnoughResponsesToScore.
+        var completedRate = ReportThresholds.CompletedCompletionRate;
         var updated = await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE "CourseSectionSurveys" AS css
             SET "TotalResponseCount"   = agg.total_count,
                 "ValidResponseCount"   = agg.valid_count,
                 "InvalidResponseCount" = agg.total_count - agg.valid_count,
-                "AverageScore"         = agg.average_score,
+                "AverageScore"         = CASE WHEN agg.has_enough THEN agg.average_score END,
                 "ScoreCalculatedAt"    = {calculatedAt}
             FROM (
                 SELECT c."CourseSectionSurveyId" AS id,
                        count(r.*)                                        AS total_count,
                        count(r.*) FILTER (WHERE r."IsValid")             AS valid_count,
-                       round(avg(r."Score") FILTER (WHERE r."IsValid"), 2) AS average_score
+                       round(avg(r."Score") FILTER (WHERE r."IsValid"), 2) AS average_score,
+                       s."ClassSize" > 0 AND (
+                           count(r.*) >= s."ClassSize"
+                           OR count(r.*) FILTER (WHERE r."IsValid")::numeric
+                              / s."ClassSize" * 100 >= {completedRate}
+                       ) AS has_enough
                 FROM "CourseSectionSurveys" c
+                JOIN "CourseSections" s ON s."CourseSectionId" = c."CourseSectionId"
                 LEFT JOIN "SurveyResponses" r
                        ON r."CourseSectionSurveyId" = c."CourseSectionSurveyId"
                 WHERE c."SemesterSurveyId" = {semesterSurveyId}
                   AND NOT c."IsDeleted"
-                GROUP BY c."CourseSectionSurveyId"
+                GROUP BY c."CourseSectionSurveyId", s."ClassSize"
             ) AS agg
             WHERE css."CourseSectionSurveyId" = agg.id
             """, cancellationToken);
@@ -1525,6 +1538,11 @@ public sealed class EfSurveyService(
         // Gộp điểm từng câu ngay trong Postgres. Cùng bộ điều kiện với điểm phiếu:
         // chỉ phiếu hợp lệ, bỏ câu bẫy và câu tự nhập chữ. Câu chưa ai trả lời thì
         // không sinh dòng — bảng hiển thị sẽ đọc ra "chưa có số".
+        //
+        // Điều kiện đủ phiếu đọc lại từ "AverageScore" mà câu UPDATE ở trên vừa ghi,
+        // chứ không viết lại phép so ngưỡng lần thứ hai: hai câu nằm trong cùng một
+        // transaction, nên lớp nào bị bỏ điểm tổng hợp thì cũng bị bỏ điểm từng câu,
+        // không có cách nào lệch nhau.
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO "CourseSectionSurveyQuestionScores"
                 ("CourseSectionSurveyId", "QuestionId", "AverageScore", "AnswerCount")
@@ -1539,6 +1557,7 @@ public sealed class EfSurveyService(
             JOIN "AnswerScales" AS s ON s."AnswerScaleId" = q."AnswerScaleId"
             WHERE c."SemesterSurveyId" = {semesterSurveyId}
               AND NOT c."IsDeleted"
+              AND c."AverageScore" IS NOT NULL
               AND r."IsValid"
               AND q."AttentionCheckValue" IS NULL
               AND s."ScaleKind" = {AnswerScaleKinds.Options}
@@ -1715,8 +1734,10 @@ public sealed class EfSurveyService(
                 totalResponses,
                 validResponses,
                 totalResponses - validResponses,
-                // Tỷ lệ phản hồi là số liệu tiến độ nên chia trên tổng lượt nộp.
-                classSize > 0 ? Math.Round((decimal)totalResponses / classSize * 100, 1) : 0m,
+                // Chỉ đếm phiếu hợp lệ: phiếu bị bộ lọc nhiễu loại vẫn là một lượt
+                // nộp nhưng không dùng được vào kết quả nào, tính nó vào tỷ lệ là
+                // tự huyễn hoặc. Cùng cách tính với bảng tiến độ và tra cứu chi tiết.
+                classSize > 0 ? Math.Round((decimal)validResponses / classSize * 100, 1) : 0m,
                 css.AverageScore,
                 css.ScoreCalculatedAt,
                 commentCounts.GetValueOrDefault(css.CourseSectionSurveyId),
@@ -1803,7 +1824,12 @@ public sealed class EfSurveyService(
     /// Nạp các lớp của một đợt kèm điểm tính TRỰC TIẾP từ phiếu hợp lệ. Cố ý
     /// không đọc cột <c>AverageScore</c> đã lưu, vì đó là ảnh chụp của lần bấm
     /// nút gần nhất; báo cáo thì phải phản ánh dữ liệu tại thời điểm xem.
-    /// Lớp chưa có phiếu hợp lệ nào bị loại khỏi mọi phép tính mặt bằng.
+    ///
+    /// Lớp chưa thu đủ phiếu bị loại khỏi MỌI phép tính mặt bằng, theo đúng
+    /// <see cref="ReportThresholds.HasEnoughResponsesToScore"/> — cùng ngưỡng với
+    /// nút tính điểm theo mẻ. Một lớp hai người đánh giá mà đứng ngang hàng với
+    /// lớp ba mươi người thì trung bình khoa, độ lệch chuẩn và mọi z-score dựng
+    /// trên đó đều lệch.
     /// </summary>
     private async Task<List<AnalysedSection>> LoadAnalysedSectionsAsync(
         int semesterSurveyId,
@@ -1852,6 +1878,16 @@ public sealed class EfSurveyService(
             }
 
             var section = sections.FirstOrDefault(x => x.CourseSectionId == css.CourseSectionId);
+
+            // Chưa thu đủ phiếu thì lớp không được góp vào bất kỳ con số nào.
+            if (!ReportThresholds.HasEnoughResponsesToScore(
+                    section?.ClassSize ?? 0,
+                    tally.TotalCount,
+                    tally.ValidCount))
+            {
+                continue;
+            }
+
             var course = section is not null && courses.TryGetValue(section.CourseId, out var c) ? c : null;
             var lecturer = section?.LecturerId is { } lecId && lecturers.TryGetValue(lecId, out var l) ? l : null;
 
@@ -2317,10 +2353,11 @@ public sealed class EfSurveyService(
         static decimal CompletionRateOf(IReadOnlyList<AnalysedSection> sections)
         {
             var withClassSize = sections.Where(x => x.ClassSize > 0).ToList();
+            // Phiếu HỢP LỆ chia sĩ số, giống mọi tỷ lệ hoàn thành khác trong hệ thống.
             return withClassSize.Count == 0
                 ? 0m
                 : Math.Round(
-                    withClassSize.Average(x => (decimal)x.ResponseCount / x.ClassSize) * 100, 1);
+                    withClassSize.Average(x => (decimal)x.ValidResponseCount / x.ClassSize) * 100, 1);
         }
 
         static decimal? AverageScoreOf(IReadOnlyList<AnalysedSection> sections) =>

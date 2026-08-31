@@ -8,7 +8,9 @@ public sealed record SectionProgressDetailDto(
     string SectionName,
     string LecturerName,
     int ClassSize,
+    /// <summary>Số phiếu HỢP LỆ. Phiếu bị bộ lọc nhiễu loại không được tính.</summary>
     int ResponseCount,
+    /// <summary>Phiếu hợp lệ chia sĩ số, theo phần trăm.</summary>
     decimal CompletionRate,
     string Status);
 
@@ -18,6 +20,7 @@ public sealed record OperationalProgressReportDto(
     string SemesterName,
     string AcademicYearName,
     int TotalTargetResponses,
+    /// <summary>Tổng phiếu HỢP LỆ đã thu, không đếm phiếu bị bộ lọc loại.</summary>
     int TotalActualResponses,
     decimal OverallCompletionRate,
     int CompletedSectionCount,

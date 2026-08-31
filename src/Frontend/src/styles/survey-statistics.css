@@ -208,16 +208,49 @@
   border-right: 1px solid #cfd7dc;
 }
 
-/* Năm cột phải, đánh số từ mép phải vào trong. */
-.statistics-table .col-right-1 { right: 0; min-width: 104px; }
-.statistics-table .col-right-2 { right: 104px; min-width: 84px; }
-.statistics-table .col-right-3 { right: 188px; min-width: 100px; }
-.statistics-table .col-right-4 { right: 288px; min-width: 100px; }
-.statistics-table .col-right-5 {
-  right: 388px;
-  min-width: 104px;
+/*
+  Bốn cột phải, đánh số từ mép phải vào trong. `right` của cột sau là TỔNG bề
+  rộng các cột trước nó, nên cả ba thuộc tính width/min/max phải khớp đúng con số
+  dùng để cộng — trước đây chỉ đặt min-width nên tiêu đề dài (nhất là sau khi
+  thêm nút lọc) đẩy ô rộng ra, cột nọ trườn lên cột kia.
+*/
+.statistics-table .col-right-1 {
+  right: 0;
+  width: 116px;
+  min-width: 116px;
+  max-width: 116px;
+}
+
+.statistics-table .col-right-2 {
+  right: 116px;
+  width: 116px;
+  min-width: 116px;
+  max-width: 116px;
+}
+
+.statistics-table .col-right-3 {
+  right: 232px;
+  width: 116px;
+  min-width: 116px;
+  max-width: 116px;
+}
+
+.statistics-table .col-right-4 {
+  right: 348px;
+  width: 124px;
+  min-width: 124px;
+  max-width: 124px;
   border-left: 1px solid #cfd7dc;
 }
+
+/*
+  Cột giữa cũng phải chốt bề rộng. Không chốt thì trình duyệt chia phần dư của
+  bảng cho các cột tự do, và cột cuối trước nhóm ghim phải — tức C30 — lãnh trọn
+  chỗ thừa nên phình to hơn hẳn các cột câu khác.
+*/
+.statistics-table .col-meta { width: 150px; min-width: 150px; max-width: 150px; }
+.statistics-table .col-metric { width: 108px; min-width: 108px; max-width: 108px; }
+.statistics-table .col-question { width: 64px; min-width: 64px; max-width: 64px; }
 
 /* Dòng tổng kết ghim đáy bảng. z-index cao hơn ô thân, và ô vừa ghim trái/phải
    vừa ghim đáy thì phải cao hơn nữa để không bị ô thường đè lên. */
@@ -682,6 +715,17 @@
 .statistics-table .is-flagged {
   color: #b42318;
   font-weight: 650;
+}
+
+/*
+  Lớp cố ý không được chốt điểm vì chưa thu đủ phiếu. Làm mờ để phân biệt với ô
+  trống do cả đợt chưa bấm tính — hai lý do khác hẳn nhau, lý do cụ thể nằm ở
+  thuộc tính title của ô.
+*/
+.statistics-table .is-muted {
+  color: #98a2b3;
+  font-weight: 400;
+  cursor: help;
 }
 
 @media (max-width: 900px) {

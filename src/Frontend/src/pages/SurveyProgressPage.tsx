@@ -13,6 +13,10 @@ import { useSemester } from '../context/semesterContext';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import type { CourseSectionSurvey, SemesterSurvey } from '../types';
+import {
+  COMPLETED_COMPLETION_RATE,
+  LAGGING_COMPLETION_RATE,
+} from '../utils/reportThresholds';
 import '../styles/survey-operations.css';
 
 interface SurveyProgressPageProps {
@@ -52,12 +56,14 @@ const progressColumns = [
   { key: 'invalidCount', header: 'Phiếu lỗi', width: 10, type: 'number' as const, align: 'right' as const },
   { key: 'validCount', header: 'Hợp lệ', width: 10, type: 'number' as const, align: 'right' as const },
   {
+    // Xuất SỐ kèm mã định dạng chứ không xuất chuỗi "18%": ô chữ thì Excel sắp
+    // theo bảng chữ cái, 100% rơi xuống dưới 18%.
     key: 'rate',
     header: 'Tỷ lệ',
     width: 10,
-    type: 'string' as const,
+    type: 'number' as const,
     align: 'right' as const,
-    format: (val: any) => `${val}%`,
+    numberFormat: '0"%"',
   },
   { key: 'status', header: 'Trạng thái', width: 14, align: 'center' as const },
 ];
@@ -104,7 +110,11 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
         validCount: section.validResponseCount,
         invalidCount: section.invalidResponseCount,
         rate,
-        status: rate >= 80 ? 'Hoàn thành' : rate >= 20 ? 'Đang thu' : 'Chậm tiến độ',
+        status: rate >= COMPLETED_COMPLETION_RATE
+          ? 'Hoàn thành'
+          : rate >= LAGGING_COMPLETION_RATE
+            ? 'Đang thu'
+            : 'Chậm tiến độ',
       };
     });
   }, [displayedSections, semesterSurveys]);
@@ -139,8 +149,8 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
         'Tổng số lớp khảo sát': progressItems.length,
         'Tổng chỉ tiêu (sĩ số)': totalTarget,
         'Tổng phiếu hợp lệ đã thu': `${totalValid} (đạt ${overallRate}%)`,
-        'Lớp hoàn thành (≥80%)': completedCount,
-        'Lớp chậm tiến độ (<20%)': laggingCount,
+        [`Lớp hoàn thành (≥${COMPLETED_COMPLETION_RATE}%)`]: completedCount,
+        [`Lớp chậm tiến độ (<${LAGGING_COMPLETION_RATE}%)`]: laggingCount,
       },
       summaryNotes: [
         'Tiến độ tính dựa trên tỷ lệ phiếu hợp lệ so với sĩ số sinh viên lớp học phần.',
@@ -156,7 +166,7 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
         {
           sheetName: 'Lop cham tien do',
           title: `2. DANH SÁCH LỚP CHẬM TIẾN ĐỘ CẦN ĐÔN ĐỐC (${laggingItems.length} LỚP)`,
-          subtitle: 'Các lớp có tỷ lệ thu phiếu dưới 20% chỉ tiêu - cần gửi thông báo nhắc nhở',
+          subtitle: `Các lớp có tỷ lệ phiếu hợp lệ dưới ${LAGGING_COMPLETION_RATE}% chỉ tiêu - cần gửi thông báo nhắc nhở`,
           columns: progressColumns,
           data: laggingItems,
           summaryNotes: ['Đề nghị các Khoa/Viện và Bộ môn thông báo đến giảng viên nhắc nhở sinh viên tham gia khảo sát.'],
@@ -164,7 +174,7 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
         {
           sheetName: 'Lop da hoan thanh',
           title: `3. DANH SÁCH LỚP ĐẠT CHỈ TIÊU XUẤT SẮC (${completedItems.length} LỚP)`,
-          subtitle: 'Các lớp đã đạt tỷ lệ thu phiếu từ 80% trở lên',
+          subtitle: `Các lớp đã đạt tỷ lệ phiếu hợp lệ từ ${COMPLETED_COMPLETION_RATE}% trở lên`,
           columns: progressColumns,
           data: completedItems,
         },
@@ -245,17 +255,25 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
       filterValue: (item) => String(item.rate),
       numeric: true,
       quickFilters: [
-        { label: 'Hoàn thành (≥80%)', match: (value) => Number(value) >= 80 },
         {
-          label: 'Đang thu (20-79%)',
-          match: (value) => Number(value) >= 20 && Number(value) < 80,
+          label: `Hoàn thành (≥${COMPLETED_COMPLETION_RATE}%)`,
+          match: (value) => Number(value) >= COMPLETED_COMPLETION_RATE,
         },
-        { label: 'Chậm tiến độ (<20%)', match: (value) => Number(value) < 20 },
+        {
+          label: `Đang thu (${LAGGING_COMPLETION_RATE}-${COMPLETED_COMPLETION_RATE - 1}%)`,
+          match: (value) =>
+            Number(value) >= LAGGING_COMPLETION_RATE
+            && Number(value) < COMPLETED_COMPLETION_RATE,
+        },
+        {
+          label: `Chậm tiến độ (<${LAGGING_COMPLETION_RATE}%)`,
+          match: (value) => Number(value) < LAGGING_COMPLETION_RATE,
+        },
       ],
       render: (item) => {
-        const progressClass = item.rate >= 80
+        const progressClass = item.rate >= COMPLETED_COMPLETION_RATE
           ? 'operations-progress-fill--success'
-          : item.rate >= 20
+          : item.rate >= LAGGING_COMPLETION_RATE
             ? 'operations-progress-fill--warning'
             : '';
 
@@ -354,7 +372,7 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
             </div>
             <div className="operation-metric operation-metric--warning">
               <span className="operation-metric-icon"><CheckCircle2 className="operation-icon" aria-hidden="true" /></span>
-              <span className="operation-metric-label">Nhóm đạt từ 80%</span>
+              <span className="operation-metric-label">Nhóm đạt từ {COMPLETED_COMPLETION_RATE}%</span>
               <strong className="operation-metric-value">{completedCount} / {progressItems.length}</strong>
               <span className="operation-metric-note">Nhóm hoàn thành thu phiếu</span>
             </div>

@@ -387,8 +387,9 @@ public sealed record SectionQuestionScoreDto(int QuestionId, decimal AverageScor
 
 /// <summary>
 /// Một dòng của bảng thống kê: toàn bộ số liệu khảo sát của một lớp học phần.
-/// Số về tiến độ (<paramref name="TotalResponseCount"/>, <paramref name="CompletionRate"/>)
-/// đếm cả phiếu bị lọc; số về chất lượng chỉ gộp phiếu hợp lệ.
+/// Chỉ <paramref name="TotalResponseCount"/> đếm cả phiếu bị lọc — nó là số lượt
+/// nộp. Mọi thứ còn lại, kể cả <paramref name="CompletionRate"/>, chỉ gộp phiếu
+/// hợp lệ.
 /// </summary>
 public sealed record SectionStatisticsRowDto(
     int CourseSectionId,
@@ -403,8 +404,13 @@ public sealed record SectionStatisticsRowDto(
     int TotalResponseCount,
     int ValidResponseCount,
     int InvalidResponseCount,
+    /// <summary>Phiếu hợp lệ chia sĩ số, theo phần trăm.</summary>
     decimal CompletionRate,
-    /// <summary>Ảnh chụp lần bấm tính gần nhất; null là chưa tính lần nào.</summary>
+    /// <summary>
+    /// Ảnh chụp lần bấm tính gần nhất. Null có hai nghĩa, phân biệt bằng
+    /// <see cref="ReportThresholds.HasEnoughResponsesToScore"/>: đợt chưa được bấm
+    /// tính lần nào, hoặc lớp chưa thu đủ phiếu nên cố ý không chốt điểm.
+    /// </summary>
     decimal? AverageScore,
     DateTime? ScoreCalculatedAt,
     /// <summary>Số phiếu có điền ô "Ý kiến khác" ở cuối bài.</summary>

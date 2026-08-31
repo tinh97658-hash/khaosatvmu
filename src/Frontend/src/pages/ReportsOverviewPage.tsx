@@ -42,6 +42,10 @@ import type {
   SemesterSurvey,
   SurveyResultDetail,
 } from '../types';
+import {
+  COMPLETED_COMPLETION_RATE,
+  LAGGING_COMPLETION_RATE,
+} from '../utils/reportThresholds';
 import '../styles/survey-operations.css';
 import '../styles/reports.css';
 
@@ -66,7 +70,11 @@ const scoreColor = (score: number): string =>
   score >= 4.5 ? '#137b3b' : score >= 4.0 ? '#0788b8' : '#b86216';
 
 const completionColor = (rate: number): string =>
-  rate >= 80 ? '#137b3b' : rate >= 20 ? '#0788b8' : '#b86216';
+  rate >= COMPLETED_COMPLETION_RATE
+    ? '#137b3b'
+    : rate >= LAGGING_COMPLETION_RATE
+      ? '#0788b8'
+      : '#b86216';
 
 interface RankedUnitTableProps {
   title: string;
@@ -695,6 +703,10 @@ export const ReportsOverviewPage: React.FC = () => {
       // Điểm TB phải gộp theo tổng điểm chứ không lấy trung bình của trung bình,
       // nên cộng dồn riêng tử số rồi mới chia ở cuối.
       const scoreSums = new Map<number, number>();
+      // Mẫu số của điểm chỉ đếm phiếu của lớp ĐÃ THU ĐỦ. Lớp chưa đủ về đây với
+      // averageScore = 0; cộng phiếu của nó vào mẫu số mà tử số bằng 0 thì cả khoa
+      // bị kéo tụt xuống bởi đúng những lớp lẽ ra không được tính.
+      const scoredResponseCounts = new Map<number, number>();
 
       for (const item of results) {
         const id = key === 'faculty' ? item.facultyId : item.departmentId;
@@ -722,14 +734,21 @@ export const ReportsOverviewPage: React.FC = () => {
           group.invalidResponseCount += item.invalidResponseCount;
           group.sectionCount += 1;
         }
-        scoreSums.set(id, (scoreSums.get(id) ?? 0) + item.averageScore * item.validResponseCount);
+        if (item.averageScore > 0) {
+          scoreSums.set(id, (scoreSums.get(id) ?? 0) + item.averageScore * item.validResponseCount);
+          scoredResponseCounts.set(
+            id,
+            (scoredResponseCounts.get(id) ?? 0) + item.validResponseCount,
+          );
+        }
       }
 
       const ranked: RankedUnit[] = [];
       for (const group of groups.values()) {
-        // Cùng cách tính với bảng tra cứu chi tiết: chỉ phiếu hợp lệ.
-        group.averageScore = group.validResponseCount > 0
-          ? (scoreSums.get(group.id) ?? 0) / group.validResponseCount
+        // Chỉ phiếu hợp lệ, và chỉ của lớp đã thu đủ phiếu.
+        const scoredResponses = scoredResponseCounts.get(group.id) ?? 0;
+        group.averageScore = scoredResponses > 0
+          ? (scoreSums.get(group.id) ?? 0) / scoredResponses
           : 0;
         group.completionRate = group.classSize > 0
           ? (group.validResponseCount / group.classSize) * 100

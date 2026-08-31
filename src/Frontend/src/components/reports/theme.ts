@@ -2,14 +2,22 @@
  * Màu sắc dùng chung cho bảng tổng quan toàn trường.
  * Tái sử dụng token của module báo cáo (reports.css) và quy ước thang điểm hiện có.
  */
+import {
+  COMPLETED_COMPLETION_RATE,
+  LAGGING_COMPLETION_RATE,
+} from '../../utils/reportThresholds';
 
 /** Màu theo điểm trung bình (thang 5): ≥4.5 xanh lá, ≥4.0 xanh dương, còn lại cam. */
 export const scoreColor = (score: number): string =>
   score >= 4.5 ? '#137b3b' : score >= 4.0 ? '#0788b8' : '#b86216';
 
-/** Màu theo tỷ lệ hoàn thành: ≥80% xanh lá, ≥20% xanh dương, còn lại cam. */
+/** Màu theo tỷ lệ hoàn thành: đạt ngưỡng thu đủ thì xanh lá, còn lại xanh dương / cam. */
 export const completionColor = (rate: number): string =>
-  rate >= 80 ? '#137b3b' : rate >= 20 ? '#0788b8' : '#b86216';
+  rate >= COMPLETED_COMPLETION_RATE
+    ? '#137b3b'
+    : rate >= LAGGING_COMPLETION_RATE
+      ? '#0788b8'
+      : '#b86216';
 
 /** Màu cho từng nhóm điểm trong phân bố (band 5..2). */
 export const bandColor = (band: number): string => {

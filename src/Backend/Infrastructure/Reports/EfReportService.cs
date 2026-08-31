@@ -1,4 +1,5 @@
 using Application.Reports;
+using Application.Surveys;
 using Domain;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -92,13 +93,19 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
         var sectionSurveyIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
 
-        // CỐ Ý đếm cả phiếu bị lọc nhiễu: đây là báo cáo tiến độ thu phiếu, một em
-        // nộp phiếu ẩu thì vẫn là đã tham gia, không thể coi như chưa làm.
+        // Tiến độ tính trên PHIẾU HỢP LỆ, giống bảng tiến độ và tổng quan toàn
+        // trường. Trước đây chỗ này cố ý đếm cả phiếu bị lọc với lý do "nộp ẩu vẫn
+        // là đã tham gia"; lý do đó đã bị bỏ khi cả hệ thống chuyển sang đo bằng
+        // phiếu hợp lệ, chỉ riêng đây bị sót vì không màn hình nào gọi tới.
         var responseCounts = await db.SurveyResponses
             .AsNoTracking()
             .Where(x => sectionSurveyIds.Contains(x.CourseSectionSurveyId))
             .GroupBy(x => x.CourseSectionSurveyId)
-            .Select(g => new { CourseSectionSurveyId = g.Key, Count = g.Count() })
+            .Select(g => new
+            {
+                CourseSectionSurveyId = g.Key,
+                Count = g.Count(x => x.IsValid),
+            })
             .ToDictionaryAsync(x => x.CourseSectionSurveyId, x => x.Count, cancellationToken);
 
         var sectionIds = sectionSurveys.Select(x => x.CourseSectionId).Distinct().ToList();
@@ -140,12 +147,12 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             decimal rate = classSize > 0 ? Math.Round((decimal)responseCount / classSize * 100, 2) : 0;
 
             string status;
-            if (rate >= 80)
+            if (rate >= ReportThresholds.CompletedCompletionRate)
             {
                 status = "Hoàn thành";
                 completedCount++;
             }
-            else if (rate >= 40)
+            else if (rate >= ReportThresholds.LaggingCompletionRate)
             {
                 status = "Đang thu";
                 inProgressCount++;
@@ -262,7 +269,12 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             // loại không dùng được vào kết quả nào nên cũng không tính là đã thu.
             int totalResponses = 0;
             int validResponses = 0;
-            decimal validScoreSum = 0;
+
+            // Điểm trung bình gộp riêng, chỉ từ lớp đã thu đủ phiếu. Số ĐẾM phiếu ở
+            // trên vẫn cộng mọi lớp — đó là tiến độ, lớp thiếu phiếu cũng phải hiện
+            // ra thì giảng viên mới biết lớp nào cần nhắc sinh viên làm.
+            int scoredValidResponses = 0;
+            decimal scoredScoreSum = 0;
 
             var sectionSummaries = new List<LecturerSectionSummaryDto>();
             foreach (var css in lecCss)
@@ -274,9 +286,15 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
 
                 totalResponses += tally.TotalCount;
                 validResponses += tally.ValidCount;
-                validScoreSum += tally.ValidTotalScore;
 
                 int classSize = sec?.ClassSize ?? 0;
+                if (ReportThresholds.HasEnoughResponsesToScore(
+                        classSize, tally.TotalCount, tally.ValidCount))
+                {
+                    scoredValidResponses += tally.ValidCount;
+                    scoredScoreSum += tally.ValidTotalScore;
+                }
+
                 sectionSummaries.Add(new LecturerSectionSummaryDto(
                     css.CourseSectionSurveyId,
                     crs?.CourseCode ?? string.Empty,
@@ -291,7 +309,9 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 ));
             }
 
-            decimal avgScore = validResponses > 0 ? Math.Round(validScoreSum / validResponses, 2) : 0;
+            decimal avgScore = scoredValidResponses > 0
+                ? Math.Round(scoredScoreSum / scoredValidResponses, 2)
+                : 0;
 
             reports.Add(new LecturerPerformanceReportDto(
                 lec.LecturerId,
@@ -441,6 +461,14 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             .Where(x => x.LecturerId.HasValue)
             .ToLookup(x => x.LecturerId!.Value);
         var sectionSurveysBySectionId = sectionSurveys.ToLookup(x => x.CourseSectionId);
+        var classSizeBySectionId = sections.ToDictionary(x => x.CourseSectionId, x => x.ClassSize);
+
+        // Lớp chưa thu đủ phiếu vẫn được đếm vào tiến độ nhưng không góp vào điểm.
+        bool CountsTowardScore(int courseSectionId, ResponseTally tally) =>
+            ReportThresholds.HasEnoughResponsesToScore(
+                classSizeBySectionId.GetValueOrDefault(courseSectionId),
+                tally.TotalCount,
+                tally.ValidCount);
 
         var facultyReports = new List<FacultyDepartmentReportDto>();
 
@@ -461,16 +489,21 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             int facValidResponses = 0;
             decimal facValidScoreSum = 0;
 
+            int facScoredResponses = 0;
             foreach (var css in facCss)
             {
                 var tally = responseStats.GetValueOrDefault(css.CourseSectionSurveyId, ResponseTally.Empty);
                 facResponses += tally.TotalCount;
                 facValidResponses += tally.ValidCount;
-                facValidScoreSum += tally.ValidTotalScore;
+                if (CountsTowardScore(css.CourseSectionId, tally))
+                {
+                    facScoredResponses += tally.ValidCount;
+                    facValidScoreSum += tally.ValidTotalScore;
+                }
             }
 
-            decimal facAvgScore = facValidResponses > 0
-                ? Math.Round(facValidScoreSum / facValidResponses, 2)
+            decimal facAvgScore = facScoredResponses > 0
+                ? Math.Round(facValidScoreSum / facScoredResponses, 2)
                 : 0;
 
             var deptSummaries = new List<DepartmentSummaryDto>();
@@ -485,18 +518,21 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                     .ToList();
 
                 int deptResponses = 0;
-                int deptValidResponses = 0;
+                int deptScoredResponses = 0;
                 decimal deptValidScoreSum = 0;
                 foreach (var css in deptCss)
                 {
                     var tally = responseStats.GetValueOrDefault(css.CourseSectionSurveyId, ResponseTally.Empty);
                     deptResponses += tally.TotalCount;
-                    deptValidResponses += tally.ValidCount;
-                    deptValidScoreSum += tally.ValidTotalScore;
+                    if (CountsTowardScore(css.CourseSectionId, tally))
+                    {
+                        deptScoredResponses += tally.ValidCount;
+                        deptValidScoreSum += tally.ValidTotalScore;
+                    }
                 }
 
-                decimal deptAvg = deptValidResponses > 0
-                    ? Math.Round(deptValidScoreSum / deptValidResponses, 2)
+                decimal deptAvg = deptScoredResponses > 0
+                    ? Math.Round(deptValidScoreSum / deptScoredResponses, 2)
                     : 0;
 
                 deptSummaries.Add(new DepartmentSummaryDto(
@@ -868,7 +904,13 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             decimal completionRate = classSize > 0
                 ? Math.Round((decimal)tally.ValidCount / classSize * 100, 1)
                 : 0;
-            decimal averageScore = tally.AverageScore;
+            // Lớp chưa thu đủ phiếu thì không có điểm để đọc: trả 0 và bảng hiện
+            // gạch ngang. Điểm của lớp hai người đánh giá đặt cạnh lớp ba mươi
+            // người trong cùng một bảng xếp hạng là so hai thứ không so được.
+            decimal averageScore = ReportThresholds.HasEnoughResponsesToScore(
+                classSize, tally.TotalCount, tally.ValidCount)
+                ? tally.AverageScore
+                : 0m;
 
             results.Add(new SurveyResultDetailDto(
                 css.CourseSectionSurveyId,
@@ -1054,8 +1096,8 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 .ToList();
 
         // Duyệt từng lớp để gộp theo Khoa / Bộ môn và phân loại trạng thái thu phiếu.
-        var facultyStats = new Dictionary<int, (int SectionCount, int Target, int Responses, int ValidResponses, decimal ScoreSum)>();
-        var deptStats = new Dictionary<int, (int SectionCount, int Target, int Responses, int ValidResponses, decimal ScoreSum)>();
+        var facultyStats = new Dictionary<int, (int SectionCount, int Target, int Responses, int ScoredResponses, decimal ScoreSum)>();
+        var deptStats = new Dictionary<int, (int SectionCount, int Target, int Responses, int ScoredResponses, decimal ScoreSum)>();
         int completedCount = 0;
         int inProgressCount = 0;
         int laggingCount = 0;
@@ -1085,29 +1127,41 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             // lượt nộp nhưng không dùng được vào kết quả nào.
             decimal rate = classSize > 0 ? Math.Round((decimal)cnt / classSize * 100, 2) : 0;
 
-            if (rate >= 80) completedCount++;
-            else if (rate >= 20) inProgressCount++;
+            if (rate >= ReportThresholds.CompletedCompletionRate) completedCount++;
+            else if (rate >= ReportThresholds.LaggingCompletionRate) inProgressCount++;
             else laggingCount++;
+
+            // Lớp chưa thu đủ phiếu vẫn được đếm vào tiến độ (Target, Responses) —
+            // đó chính là những lớp cần nhắc. Nhưng không góp vào điểm: mẫu số của
+            // điểm chỉ cộng phiếu của lớp đã đủ.
+            var scored = ReportThresholds.HasEnoughResponsesToScore(
+                classSize, tally.TotalCount, tally.ValidCount);
 
             if (reportFacultyId is { } fId)
             {
-                var f = facultyStats.TryGetValue(fId, out var fs) ? fs : (SectionCount: 0, Target: 0, Responses: 0, ValidResponses: 0, ScoreSum: 0m);
+                var f = facultyStats.TryGetValue(fId, out var fs) ? fs : (SectionCount: 0, Target: 0, Responses: 0, ScoredResponses: 0, ScoreSum: 0m);
                 f.SectionCount++;
                 f.Target += classSize;
                 f.Responses += cnt;
-                f.ValidResponses += tally.ValidCount;
-                f.ScoreSum += tally.ValidTotalScore;
+                if (scored)
+                {
+                    f.ScoredResponses += tally.ValidCount;
+                    f.ScoreSum += tally.ValidTotalScore;
+                }
                 facultyStats[fId] = f;
             }
 
             if (reportDepartmentId is { } dId)
             {
-                var d = deptStats.TryGetValue(dId, out var ds) ? ds : (SectionCount: 0, Target: 0, Responses: 0, ValidResponses: 0, ScoreSum: 0m);
+                var d = deptStats.TryGetValue(dId, out var ds) ? ds : (SectionCount: 0, Target: 0, Responses: 0, ScoredResponses: 0, ScoreSum: 0m);
                 d.SectionCount++;
                 d.Target += classSize;
                 d.Responses += cnt;
-                d.ValidResponses += tally.ValidCount;
-                d.ScoreSum += tally.ValidTotalScore;
+                if (scored)
+                {
+                    d.ScoredResponses += tally.ValidCount;
+                    d.ScoreSum += tally.ValidTotalScore;
+                }
                 deptStats[dId] = d;
             }
         }
@@ -1119,8 +1173,8 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
             var fac = faculties.TryGetValue(fId, out var f) ? f : null;
             int deptCount = departments.Values.Count(d => d.FacultyId == fId);
             int responses = stats.Responses;
-            decimal avg = stats.ValidResponses > 0
-                ? Math.Round(stats.ScoreSum / stats.ValidResponses, 2)
+            decimal avg = stats.ScoredResponses > 0
+                ? Math.Round(stats.ScoreSum / stats.ScoredResponses, 2)
                 : 0;
             decimal completion = stats.Target > 0 ? Math.Round((decimal)responses / stats.Target * 100, 2) : 0;
             facultyList.Add(new FacultyOverviewDto(
@@ -1143,8 +1197,8 @@ public sealed class EfReportService(AppDbContext db, IMemoryCache cache) : IRepo
                 ? ff.FacultyName
                 : "Chưa thuộc khoa";
             int responses = stats.Responses;
-            decimal avg = stats.ValidResponses > 0
-                ? Math.Round(stats.ScoreSum / stats.ValidResponses, 2)
+            decimal avg = stats.ScoredResponses > 0
+                ? Math.Round(stats.ScoreSum / stats.ScoredResponses, 2)
                 : 0;
             decimal completion = stats.Target > 0 ? Math.Round((decimal)responses / stats.Target * 100, 2) : 0;
             deptList.Add(new DepartmentOverviewDto(
