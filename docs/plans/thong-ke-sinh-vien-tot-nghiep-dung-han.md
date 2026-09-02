@@ -1,5 +1,9 @@
 # Kế hoạch — Thống kê sinh viên tốt nghiệp đúng hạn
 
+> **Lưu ý phiên bản:** tài liệu này mô tả phiên bản 19 cột đã triển khai. Yêu cầu mới
+> “mỗi file = một đợt”, bỏ cột 7–9 và thiết kế lại ba tab được đặc tả tại
+> [Kế hoạch nâng cấp thống kê tốt nghiệp theo đợt](./nang-cap-thong-ke-tot-nghiep-theo-dot.md).
+
 Trạng thái: **đã hoàn thành phạm vi MVP import → preview → lưu → dashboard → xác minh**
 
 Nguồn dữ liệu đã khảo sát: `C:\Users\hieuu\Downloads\Biểu mẫu SV tốt nghiệp.xlsx`

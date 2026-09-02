@@ -3,9 +3,11 @@ namespace Application.GraduationAnalytics;
 public static class GraduationAnalyticsErrorCodes
 {
     public const string InvalidImport = "GRADUATION_IMPORT_INVALID";
-    public const string DuplicateImport = "GRADUATION_IMPORT_DUPLICATE";
     public const string TooManyRows = "GRADUATION_IMPORT_TOO_LARGE";
-    public const string DatasetNotFound = "GRADUATION_DATASET_NOT_FOUND";
+    public const string MultipleReviewPeriods = "MULTIPLE_REVIEW_PERIODS";
+    public const string LegacyStructureUnsupported = "LEGACY_STRUCTURE_UNSUPPORTED";
+    public const string PeriodExists = "GRADUATION_PERIOD_EXISTS";
+    public const string PeriodNotFound = "GRADUATION_PERIOD_NOT_FOUND";
     public const string InvalidQuery = "GRADUATION_QUERY_INVALID";
 }
 
@@ -13,6 +15,12 @@ public sealed class GraduationAnalyticsException(string errorCode, string messag
     : Exception(message)
 {
     public string ErrorCode { get; } = errorCode;
+}
+
+public static class GraduationAnalysisScopes
+{
+    public const string Cumulative = "cumulative";
+    public const string Period = "period";
 }
 
 public sealed record GraduationImportRowCommand(
@@ -23,9 +31,6 @@ public sealed record GraduationImportRowCommand(
     string Cohort,
     int? InitialEnrollmentCount,
     string ReviewPeriodText,
-    int? EligibleGraduateCount,
-    int? OnTimeGraduateCount,
-    decimal? OnTimeGraduateRate,
     int? ExcellentCount,
     decimal? ExcellentRate,
     int? VeryGoodCount,
@@ -37,23 +42,22 @@ public sealed record GraduationImportRowCommand(
     int? WorkStudyTransferCount,
     decimal? WorkStudyTransferRate);
 
-public sealed record ImportGraduationDatasetCommand(
-    string DatasetName,
+public sealed record ImportGraduationPeriodCommand(
     string OriginalFileName,
     string SourceSheetName,
     IReadOnlyList<GraduationImportRowCommand> Rows);
 
-public sealed record GraduationDatasetDto(
-    long DatasetId,
-    string DatasetName,
+public sealed record GraduationPeriodDto(
+    long PeriodId,
+    string Label,
+    int ReviewMonth,
+    int ReviewYear,
     string OriginalFileName,
     string ImportedByName,
     DateTime ImportedAtUtc,
-    int RowCount,
-    DateOnly? MinimumReviewDate,
-    DateOnly? MaximumReviewDate);
+    int RowCount);
 
-public sealed record GraduationImportResultDto(GraduationDatasetDto Dataset);
+public sealed record GraduationImportResultDto(GraduationPeriodDto Period);
 
 public sealed record GraduationProgramOptionDto(
     string Value,
@@ -68,7 +72,7 @@ public sealed record GraduationAnalyticsFacetsDto(
 
 public sealed record GraduationAnalyticsRowDto(
     long RowId,
-    long DatasetId,
+    long PeriodId,
     string SourceSheetName,
     int SourceRowNumber,
     string FacultyName,
@@ -79,9 +83,6 @@ public sealed record GraduationAnalyticsRowDto(
     string ReviewPeriodText,
     int? ReviewMonth,
     int? ReviewYear,
-    int? EligibleGraduateCount,
-    int? OnTimeGraduateCount,
-    decimal? OnTimeGraduateRate,
     int? ExcellentCount,
     decimal? ExcellentRate,
     int? VeryGoodCount,
@@ -94,12 +95,11 @@ public sealed record GraduationAnalyticsRowDto(
     decimal? WorkStudyTransferRate);
 
 public sealed record GraduationRowsQuery(
-    long DatasetId,
+    long PeriodId,
     string? Search,
     string? Faculty,
     string? Program,
     string? Cohort,
-    int? ReviewYear,
     int Page,
     int PageSize);
 
@@ -110,15 +110,14 @@ public sealed record GraduationRowsPageDto(
     int TotalCount);
 
 public sealed record GraduationAnalyticsQueryCommand(
-    IReadOnlyList<long> DatasetIds,
+    string Scope,
+    long? PeriodId,
     string MetricId,
     string GroupBy,
     string? SeriesBy,
     string? Faculty,
     string? Program,
-    string? Cohort,
-    int? ReviewYear,
-    int? ReviewMonth);
+    string? Cohort);
 
 public sealed record GraduationAnalyticsPointDto(
     string Group,
@@ -147,18 +146,77 @@ public sealed record GraduationAnalyticsMetadataDto(
     IReadOnlyList<GraduationDimensionDto> Dimensions,
     IReadOnlyList<GraduationMetricDto> Metrics);
 
+public sealed record GraduationOverviewQuery(
+    string? Faculty,
+    string? Program,
+    string? Cohort,
+    int? FromYear,
+    int? ToYear);
+
+public sealed record GraduationOutcomeSummaryDto(
+    string MetricId,
+    string Label,
+    decimal Count,
+    decimal? Rate,
+    int IncludedRows,
+    int TotalRows);
+
+public sealed record GraduationOutcomeGroupDto(
+    string Group,
+    decimal TotalOutcome,
+    decimal ExcellentCount,
+    decimal? ExcellentRate,
+    decimal VeryGoodCount,
+    decimal? VeryGoodRate,
+    decimal GoodCount,
+    decimal? GoodRate,
+    decimal AverageCount,
+    decimal? AverageRate,
+    decimal WorkStudyTransferCount,
+    decimal? WorkStudyTransferRate,
+    int IncludedRows,
+    int TotalRows);
+
+public sealed record GraduationCohortYearPointDto(
+    int ReviewYear,
+    string Cohort,
+    decimal TotalOutcome,
+    decimal ExcellentCount,
+    decimal VeryGoodCount,
+    decimal GoodCount,
+    decimal AverageCount,
+    decimal WorkStudyTransferCount,
+    int IncludedRows,
+    int TotalRows);
+
+public sealed record GraduationOverviewDto(
+    decimal TotalOutcome,
+    int PeriodCount,
+    int CohortCount,
+    int ProgramCount,
+    int FacultyCount,
+    int IncludedRows,
+    int TotalRows,
+    IReadOnlyList<GraduationOutcomeSummaryDto> Composition,
+    IReadOnlyList<GraduationOutcomeGroupDto> ByCohort,
+    IReadOnlyList<GraduationCohortYearPointDto> CohortYear);
+
 public interface IGraduationAnalyticsService
 {
-    Task<IReadOnlyList<GraduationDatasetDto>> GetDatasetsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<GraduationPeriodDto>> GetPeriodsAsync(CancellationToken cancellationToken);
     Task<GraduationAnalyticsFacetsDto> GetFacetsAsync(
-        long datasetId,
+        string scope,
+        long? periodId,
         CancellationToken cancellationToken);
-    Task<GraduationImportResultDto> ImportDatasetAsync(
-        ImportGraduationDatasetCommand command,
+    Task<GraduationImportResultDto> ImportPeriodAsync(
+        ImportGraduationPeriodCommand command,
         CancellationToken cancellationToken);
     GraduationAnalyticsMetadataDto GetMetadata();
     Task<GraduationAnalyticsQueryResultDto> QueryAsync(
         GraduationAnalyticsQueryCommand command,
+        CancellationToken cancellationToken);
+    Task<GraduationOverviewDto> GetOverviewAsync(
+        GraduationOverviewQuery query,
         CancellationToken cancellationToken);
     Task<GraduationRowsPageDto> GetRowsAsync(
         GraduationRowsQuery query,

@@ -437,14 +437,26 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         // danh mục/khảo sát hiện tại để giữ nguyên snapshot của file nguồn.
         modelBuilder.Entity<GraduationAnalyticsDataset>(entity =>
         {
-            entity.ToTable("GraduationAnalyticsDatasets");
+            entity.ToTable("GraduationAnalyticsDatasets", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_GraduationAnalyticsDatasets_ReviewMonth",
+                    "\"ReviewMonth\" BETWEEN 1 AND 12");
+                table.HasCheckConstraint(
+                    "CK_GraduationAnalyticsDatasets_ReviewYear",
+                    "\"ReviewYear\" BETWEEN 1900 AND 2200");
+            });
             entity.HasKey(x => x.DatasetId);
             entity.Property(x => x.DatasetName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.ReviewPeriodText).HasMaxLength(100).IsRequired();
             entity.Property(x => x.OriginalFileName).HasMaxLength(255).IsRequired();
             entity.Property(x => x.ContentHash).HasMaxLength(64).IsFixedLength().IsRequired();
             entity.Property(x => x.ImportedByName).HasMaxLength(320).IsRequired();
             entity.HasIndex(x => x.ContentHash).IsUnique();
             entity.HasIndex(x => x.ImportedAtUtc);
+            entity.HasIndex(x => new { x.ReviewYear, x.ReviewMonth })
+                .IsUnique()
+                .IsDescending();
         });
 
         modelBuilder.Entity<GraduationAnalyticsRow>(entity =>
@@ -466,6 +478,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(x => new { x.DatasetId, x.SourceSheetName, x.SourceRowNumber }).IsUnique();
             entity.HasIndex(x => new { x.DatasetId, x.FacultyName });
             entity.HasIndex(x => new { x.DatasetId, x.ProgramCode, x.ProgramName });
+            entity.HasIndex(x => new { x.DatasetId, x.Cohort });
             entity.HasIndex(x => new { x.DatasetId, x.ReviewYear, x.ReviewMonth });
             entity.HasOne<GraduationAnalyticsDataset>()
                 .WithMany()

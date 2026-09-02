@@ -6,9 +6,6 @@ export interface GraduationImportRow {
   cohort: string;
   initialEnrollmentCount: number | null;
   reviewPeriodText: string;
-  eligibleGraduateCount: number | null;
-  onTimeGraduateCount: number | null;
-  onTimeGraduateRate: number | null;
   excellentCount: number | null;
   excellentRate: number | null;
   veryGoodCount: number | null;
@@ -21,18 +18,18 @@ export interface GraduationImportRow {
   workStudyTransferRate: number | null;
 }
 
-export interface GraduationDataset {
-  datasetId: number;
-  datasetName: string;
+export interface GraduationPeriod {
+  periodId: number;
+  label: string;
+  reviewMonth: number;
+  reviewYear: number;
   originalFileName: string;
   importedByName: string;
   importedAtUtc: string;
   rowCount: number;
-  minimumReviewDate: string | null;
-  maximumReviewDate: string | null;
 }
 
-export interface GraduationImportResult { dataset: GraduationDataset }
+export interface GraduationImportResult { period: GraduationPeriod }
 
 export interface GraduationProgramOption {
   value: string;
@@ -48,16 +45,16 @@ export interface GraduationFacets {
 }
 
 export interface GraduationDimension {
-  id: string;
+  id: 'faculty' | 'program' | 'cohort' | 'reviewYear';
   label: string;
-  type: 'category' | 'time' | 'dataset';
+  type: 'category' | 'time';
 }
 
 export interface GraduationMetric {
   id: string;
   label: string;
   unit: 'count' | 'percent';
-  aggregation: 'sum' | 'weighted-average';
+  aggregation: 'sum' | 'ratio-of-sums';
   chartTypes: GraduationChartType[];
 }
 
@@ -76,16 +73,17 @@ export interface GraduationMetadata {
   metrics: GraduationMetric[];
 }
 
+export type GraduationAnalysisScope = 'cumulative' | 'period';
+
 export interface GraduationQuery {
-  datasetIds: number[];
+  scope: GraduationAnalysisScope;
+  periodId?: number | null;
   metricId: string;
-  groupBy: string;
-  seriesBy?: string | null;
+  groupBy: GraduationDimension['id'];
+  seriesBy?: GraduationDimension['id'] | null;
   faculty?: string | null;
   program?: string | null;
   cohort?: string | null;
-  reviewYear?: number | null;
-  reviewMonth?: number | null;
 }
 
 export interface GraduationAnalyticsPoint {
@@ -93,7 +91,7 @@ export interface GraduationAnalyticsPoint {
   series: string | null;
   metricId: string;
   value: number | null;
-  aggregation: 'source' | 'sum' | 'weighted-average';
+  aggregation: 'sum' | 'ratio-of-sums';
   includedRows: number;
   totalRows: number;
 }
@@ -101,14 +99,87 @@ export interface GraduationAnalyticsPoint {
 export interface GraduationQueryResult {
   metricId: string;
   unit: 'count' | 'percent';
-  groupBy: string;
-  seriesBy: string | null;
+  groupBy: GraduationDimension['id'];
+  seriesBy: GraduationDimension['id'] | null;
   points: GraduationAnalyticsPoint[];
+}
+
+export interface GraduationOverviewQuery {
+  faculty?: string | null;
+  program?: string | null;
+  cohort?: string | null;
+  fromYear?: number | null;
+  toYear?: number | null;
+}
+
+export interface GraduationOutcomeSummary {
+  metricId: string;
+  label: string;
+  count: number;
+  rate: number | null;
+  includedRows: number;
+  totalRows: number;
+}
+
+export interface GraduationOutcomeGroup {
+  group: string;
+  totalOutcome: number;
+  excellentCount: number;
+  excellentRate: number | null;
+  veryGoodCount: number;
+  veryGoodRate: number | null;
+  goodCount: number;
+  goodRate: number | null;
+  averageCount: number;
+  averageRate: number | null;
+  workStudyTransferCount: number;
+  workStudyTransferRate: number | null;
+  includedRows: number;
+  totalRows: number;
+}
+
+export interface GraduationCohortYearPoint {
+  reviewYear: number;
+  cohort: string;
+  totalOutcome: number;
+  excellentCount: number;
+  veryGoodCount: number;
+  goodCount: number;
+  averageCount: number;
+  workStudyTransferCount: number;
+  includedRows: number;
+  totalRows: number;
+}
+
+export interface GraduationYearOverviewPoint {
+  reviewYear: number;
+  totalOutcome: number;
+  excellentCount: number;
+  veryGoodCount: number;
+  goodCount: number;
+  averageCount: number;
+  workStudyTransferCount: number;
+  includedRows: number;
+  totalRows: number;
+  complete: boolean;
+}
+
+export interface GraduationOverview {
+  totalOutcome: number;
+  periodCount: number;
+  cohortCount: number;
+  programCount: number;
+  facultyCount: number;
+  includedRows: number;
+  totalRows: number;
+  composition: GraduationOutcomeSummary[];
+  byCohort: GraduationOutcomeGroup[];
+  cohortYear: GraduationCohortYearPoint[];
 }
 
 export interface GraduationRow extends GraduationImportRow {
   rowId: number;
-  datasetId: number;
+  periodId: number;
   sourceSheetName: string;
   reviewMonth: number | null;
   reviewYear: number | null;

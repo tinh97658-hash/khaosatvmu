@@ -10,34 +10,34 @@ public static class GraduationAnalyticsEndpoints
         var group = app.MapGroup("/api/v1/graduation-analytics")
             .RequireAuthorization(AuthPolicies.GraduationAnalyticsAccess);
 
-        group.MapGet("/datasets", async (IGraduationAnalyticsService service, CancellationToken ct) =>
-            Results.Ok(await service.GetDatasetsAsync(ct)));
+        group.MapGet("/periods", async (IGraduationAnalyticsService service, CancellationToken ct) =>
+            Results.Ok(await service.GetPeriodsAsync(ct)));
 
         group.MapGet("/metadata", (IGraduationAnalyticsService service) =>
             Results.Ok(service.GetMetadata()));
 
-        group.MapGet("/datasets/{datasetId:long}/facets", async (
-            long datasetId,
+        group.MapGet("/facets", async (
+            string? scope,
+            long? periodId,
             IGraduationAnalyticsService service,
             CancellationToken ct) =>
         {
-            try { return Results.Ok(await service.GetFacetsAsync(datasetId, ct)); }
+            try { return Results.Ok(await service.GetFacetsAsync(scope ?? string.Empty, periodId, ct)); }
             catch (GraduationAnalyticsException exception) { return ToError(exception); }
         });
 
-        group.MapPost("/datasets", async (
-            ImportGraduationDatasetRequest request,
+        group.MapPost("/periods", async (
+            ImportGraduationPeriodRequest request,
             IGraduationAnalyticsService service,
             CancellationToken ct) =>
         {
             try
             {
-                var command = new ImportGraduationDatasetCommand(
-                    request.DatasetName ?? string.Empty,
+                var command = new ImportGraduationPeriodCommand(
                     request.OriginalFileName ?? string.Empty,
                     request.SourceSheetName ?? string.Empty,
                     request.Rows?.Select(x => x.ToCommand()).ToList() ?? []);
-                return Results.Ok(await service.ImportDatasetAsync(command, ct));
+                return Results.Ok(await service.ImportPeriodAsync(command, ct));
             }
             catch (GraduationAnalyticsException exception) { return ToError(exception); }
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
@@ -51,13 +51,21 @@ public static class GraduationAnalyticsEndpoints
             catch (GraduationAnalyticsException exception) { return ToError(exception); }
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        group.MapGet("/datasets/{datasetId:long}/rows", async (
-            long datasetId,
+        group.MapPost("/overview", async (
+            GraduationOverviewRequest request,
+            IGraduationAnalyticsService service,
+            CancellationToken ct) =>
+        {
+            try { return Results.Ok(await service.GetOverviewAsync(request.ToQuery(), ct)); }
+            catch (GraduationAnalyticsException exception) { return ToError(exception); }
+        }).AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        group.MapGet("/periods/{periodId:long}/rows", async (
+            long periodId,
             string? search,
             string? faculty,
             string? program,
             string? cohort,
-            int? reviewYear,
             int page,
             int pageSize,
             IGraduationAnalyticsService service,
@@ -66,7 +74,7 @@ public static class GraduationAnalyticsEndpoints
             try
             {
                 return Results.Ok(await service.GetRowsAsync(
-                    new GraduationRowsQuery(datasetId, search, faculty, program, cohort, reviewYear, page, pageSize),
+                    new GraduationRowsQuery(periodId, search, faculty, program, cohort, page, pageSize),
                     ct));
             }
             catch (GraduationAnalyticsException exception) { return ToError(exception); }
@@ -79,15 +87,14 @@ public static class GraduationAnalyticsEndpoints
     {
         var statusCode = exception.ErrorCode switch
         {
-            GraduationAnalyticsErrorCodes.DuplicateImport => StatusCodes.Status409Conflict,
-            GraduationAnalyticsErrorCodes.DatasetNotFound => StatusCodes.Status404NotFound,
+            GraduationAnalyticsErrorCodes.PeriodExists => StatusCodes.Status409Conflict,
+            GraduationAnalyticsErrorCodes.PeriodNotFound => StatusCodes.Status404NotFound,
             _ => StatusCodes.Status400BadRequest,
         };
         return Results.Json(new { errorCode = exception.ErrorCode, message = exception.Message }, statusCode: statusCode);
     }
 
-    public sealed record ImportGraduationDatasetRequest(
-        string? DatasetName,
+    public sealed record ImportGraduationPeriodRequest(
         string? OriginalFileName,
         string? SourceSheetName,
         IReadOnlyList<GraduationImportRowRequest>? Rows);
@@ -114,27 +121,45 @@ public static class GraduationAnalyticsEndpoints
         int? WorkStudyTransferCount,
         decimal? WorkStudyTransferRate)
     {
-        public GraduationImportRowCommand ToCommand() => new(
-            SourceRowNumber, FacultyName ?? string.Empty, ProgramCode, ProgramName ?? string.Empty,
-            Cohort ?? string.Empty, InitialEnrollmentCount, ReviewPeriodText ?? string.Empty,
-            EligibleGraduateCount, OnTimeGraduateCount, OnTimeGraduateRate, ExcellentCount,
-            ExcellentRate, VeryGoodCount, VeryGoodRate, GoodCount, GoodRate, AverageCount,
-            AverageRate, WorkStudyTransferCount, WorkStudyTransferRate);
+        public GraduationImportRowCommand ToCommand()
+        {
+            if (EligibleGraduateCount.HasValue || OnTimeGraduateCount.HasValue || OnTimeGraduateRate.HasValue)
+            {
+                throw new GraduationAnalyticsException(
+                    GraduationAnalyticsErrorCodes.LegacyStructureUnsupported,
+                    "File còn cấu trúc 19 cột cũ (cột 7–9). Hãy dùng biểu mẫu mới 16 cột.");
+            }
+
+            return new(
+                SourceRowNumber, FacultyName ?? string.Empty, ProgramCode, ProgramName ?? string.Empty,
+                Cohort ?? string.Empty, InitialEnrollmentCount, ReviewPeriodText ?? string.Empty,
+                ExcellentCount, ExcellentRate, VeryGoodCount, VeryGoodRate, GoodCount, GoodRate, AverageCount,
+                AverageRate, WorkStudyTransferCount, WorkStudyTransferRate);
+        }
     }
 
     public sealed record GraduationAnalyticsQueryRequest(
-        IReadOnlyList<long>? DatasetIds,
+        string? Scope,
+        long? PeriodId,
         string? MetricId,
         string? GroupBy,
         string? SeriesBy,
         string? Faculty,
         string? Program,
-        string? Cohort,
-        int? ReviewYear,
-        int? ReviewMonth)
+        string? Cohort)
     {
         public GraduationAnalyticsQueryCommand ToCommand() => new(
-            DatasetIds ?? [], MetricId ?? string.Empty, GroupBy ?? string.Empty, SeriesBy,
-            Faculty, Program, Cohort, ReviewYear, ReviewMonth);
+            Scope ?? string.Empty, PeriodId, MetricId ?? string.Empty, GroupBy ?? string.Empty,
+            SeriesBy, Faculty, Program, Cohort);
+    }
+
+    public sealed record GraduationOverviewRequest(
+        string? Faculty,
+        string? Program,
+        string? Cohort,
+        int? FromYear,
+        int? ToYear)
+    {
+        public GraduationOverviewQuery ToQuery() => new(Faculty, Program, Cohort, FromYear, ToYear);
     }
 }

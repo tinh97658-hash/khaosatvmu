@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { FileSpreadsheet, LoaderCircle, Upload } from 'lucide-react';
 import { Modal } from '../Modal';
-import type { GraduationDataset } from '../../types/graduationAnalytics';
+import type { GraduationPeriod } from '../../types/graduationAnalytics';
 import {
   GraduationImportFileError,
   parseGraduationImportFile,
@@ -12,22 +12,23 @@ interface GraduationImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onImport: (payload: {
-    datasetName: string;
     originalFileName: string;
     sourceSheetName: string;
     rows: GraduationParsedFile['rows'];
-  }) => Promise<GraduationDataset>;
+  }) => Promise<GraduationPeriod>;
 }
 
 const errorMessages: Record<string, string> = {
   FILE_TYPE: 'Chỉ chấp nhận file Excel định dạng .xlsx.',
   FILE_SIZE: 'File Excel không được lớn hơn 5 MB.',
   READ_FAILED: 'Không thể đọc file. Hãy kiểm tra file không bị hỏng hoặc đặt mật khẩu.',
-  SHEET_STRUCTURE_INVALID: 'Không tìm thấy đầy đủ 19 cột C–U của biểu mẫu.',
+  SHEET_STRUCTURE_INVALID: 'Không tìm thấy đúng bộ 16 cột C–R được đánh số 1–6, 10–19.',
+  LEGACY_STRUCTURE_UNSUPPORTED: 'File còn cấu trúc 19 cột cũ (cột 7–9). Hãy dùng biểu mẫu mới 16 cột.',
   NO_DATA_ROWS: 'File chưa có dòng dữ liệu nào.',
   TOO_MANY_ROWS: 'Mỗi lần chỉ được import tối đa 5.000 dòng.',
   VALUE_TYPE_INVALID: 'Có ô số lượng hoặc tỷ lệ không phải dạng số.',
   REVIEW_PERIOD_INVALID: 'Thời điểm xét tốt nghiệp phải có dạng như T7 - 2026.',
+  MULTIPLE_REVIEW_PERIODS: 'Mỗi file chỉ được chứa một đợt tốt nghiệp.',
 };
 
 const display = (value: string | number | null, percent = false) => {
@@ -39,7 +40,6 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState('');
-  const [datasetName, setDatasetName] = useState('');
   const [parsed, setParsed] = useState<GraduationParsedFile | null>(null);
   const [previewMode, setPreviewMode] = useState<'all' | 'metrics'>('all');
   const [parsing, setParsing] = useState(false);
@@ -49,7 +49,6 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
   const reset = () => {
     if (inputRef.current) inputRef.current.value = '';
     setFileName('');
-    setDatasetName('');
     setParsed(null);
     setPreviewMode('all');
     setError(null);
@@ -65,7 +64,6 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
     reset();
     if (!file) return;
     setFileName(file.name);
-    setDatasetName(file.name.replace(/\.xlsx$/i, ''));
     setParsing(true);
     try {
       setParsed(await parseGraduationImportFile(file));
@@ -74,7 +72,10 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
       const row = caught instanceof GraduationImportFileError && caught.rowNumber
         ? ` Dòng ${caught.rowNumber}.`
         : '';
-      setError(`${errorMessages[code] ?? errorMessages.READ_FAILED}${row}`);
+      const periods = caught instanceof GraduationImportFileError && caught.periods?.length
+        ? ` Các đợt tìm thấy: ${caught.periods.join(', ')}.`
+        : '';
+      setError(`${errorMessages[code] ?? errorMessages.READ_FAILED}${row}${periods}`);
     } finally {
       setParsing(false);
     }
@@ -86,7 +87,6 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
     setError(null);
     try {
       await onImport({
-        datasetName: datasetName.trim(),
         originalFileName: fileName,
         sourceSheetName: parsed.sheetName,
         rows: parsed.rows,
@@ -95,9 +95,9 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
       onClose();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : '';
-      setError(message === 'GRADUATION_IMPORT_DUPLICATE'
-        ? 'Nội dung file này đã được import trước đó.'
-        : 'Không thể lưu bộ dữ liệu. Dữ liệu preview vẫn được giữ để bạn thử lại.');
+      setError(message === 'GRADUATION_PERIOD_EXISTS'
+        ? `Đợt ${parsed.reviewPeriod.label} đã tồn tại. Hãy dùng thao tác thay thế đợt khi cần sửa dữ liệu.`
+        : 'Không thể lưu đợt tốt nghiệp. Dữ liệu preview vẫn được giữ để bạn thử lại.');
     } finally {
       setImporting(false);
     }
@@ -107,7 +107,7 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Import dữ liệu tốt nghiệp"
+      title="Import đợt tốt nghiệp"
       size={parsed ? 'data-preview' : 'import'}
     >
       <div className="graduation-import" aria-busy={parsing || importing}>
@@ -117,7 +117,7 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
           </div>
           <div className="graduation-import__file-copy">
             <strong>{fileName || 'Chọn file dữ liệu tốt nghiệp'}</strong>
-            <span>Excel .xlsx · tối đa 5 MB · đọc đủ 19 cột C–U</span>
+            <span>Excel .xlsx · tối đa 5 MB · 16 cột C–R · một file là một đợt</span>
           </div>
           <label htmlFor={inputId} className="btn btn-secondary">
             {fileName ? 'Chọn file khác' : 'Chọn file Excel'}
@@ -138,14 +138,19 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
         {parsed && (
           <>
             <div className="graduation-import__summary">
-              <label>
-                Tên bộ dữ liệu
-                <input value={datasetName} onChange={(event) => setDatasetName(event.target.value)} />
-              </label>
+              <div><strong>{parsed.reviewPeriod.label}</strong><span>đợt phát hiện</span></div>
               <div><strong>{parsed.rows.length}</strong><span>dòng sẵn sàng import</span></div>
-              <div><strong>19</strong><span>cột dữ liệu nguồn</span></div>
+              <div><strong>16</strong><span>cột dữ liệu nguồn</span></div>
               <div><strong>{parsed.sheetName}</strong><span>sheet được đọc</span></div>
             </div>
+
+            {parsed.warnings.map((warning) => (
+              <div className="graduation-alert" role="status" key={warning.code}>
+                Có {warning.groups.length} nhóm trùng Khoa + CTĐT + Khóa. Các dòng nguồn vẫn được giữ
+                riêng và sẽ được cộng khi phân tích: {warning.groups.map((group) =>
+                  `${group.label} (dòng ${group.sourceRowNumbers.join(', ')})`).join('; ')}.
+              </div>
+            ))}
 
             <div className="graduation-preview-toolbar" aria-label="Tùy chọn cột xem trước">
               <span>Xem trước dữ liệu</span>
@@ -160,11 +165,11 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
                   <tr>
                     <th rowSpan={2}>Dòng</th>
                     {previewMode === 'all' && <th colSpan={6}>Thông tin chính</th>}
-                    <th colSpan={13}>Thông số trong đợt xét tốt nghiệp</th>
+                    <th colSpan={10}>Thông số trong đợt xét tốt nghiệp</th>
                   </tr>
                   <tr>
                     {previewMode === 'all' && <><th>Khoa</th><th>Mã CTĐT</th><th>Tên CTĐT</th><th>Khóa</th><th>Nhập học</th><th>Thời điểm</th></>}
-                    <th>Được xét</th><th>Đúng hạn</th><th>Tỷ lệ</th><th>XS</th><th>% XS</th>
+                    <th>XS</th><th>% XS</th>
                     <th>Giỏi</th><th>% Giỏi</th><th>Khá</th><th>% Khá</th><th>T.Bình</th><th>% T.Bình</th>
                     <th>VHVL</th><th>% VHVL</th>
                   </tr>
@@ -176,8 +181,6 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
                       {previewMode === 'all' && <><td>{row.facultyName}</td><td>{display(row.programCode)}</td>
                         <td>{row.programName}</td><td>{row.cohort}</td><td>{display(row.initialEnrollmentCount)}</td>
                         <td>{row.reviewPeriodText}</td></>}
-                      <td>{display(row.eligibleGraduateCount)}</td>
-                      <td>{display(row.onTimeGraduateCount)}</td><td>{display(row.onTimeGraduateRate, true)}</td>
                       <td>{display(row.excellentCount)}</td><td>{display(row.excellentRate, true)}</td>
                       <td>{display(row.veryGoodCount)}</td><td>{display(row.veryGoodRate, true)}</td>
                       <td>{display(row.goodCount)}</td><td>{display(row.goodRate, true)}</td>
@@ -198,10 +201,10 @@ export function GraduationImportDialog({ isOpen, onClose, onImport }: Graduation
             type="button"
             className="btn btn-primary"
             onClick={() => void handleImport()}
-            disabled={!parsed || importing || !datasetName.trim()}
+            disabled={!parsed || importing}
           >
             {importing ? <LoaderCircle className="spin" aria-hidden="true" /> : <Upload aria-hidden="true" size={17} />}
-            {importing ? 'Đang lưu...' : 'Import và tạo dashboard'}
+            {importing ? 'Đang lưu...' : `Import đợt ${parsed?.reviewPeriod.label ?? ''}`}
           </button>
         </div>
       </div>
