@@ -38,6 +38,7 @@ const ProfileSelectionPage = lazy(() => import('./pages/ProfileSelectionPage').t
 const UsersAdminPage = lazy(() => import('./pages/UsersAdminPage').then(m => ({ default: m.UsersAdminPage })));
 
 // Services & Types
+import { useSemester } from './context/semesterContext';
 import { ApiError } from './services/apiClient';
 import {
   catalogApi,
@@ -86,6 +87,7 @@ const EMPTY_PERMISSIONS: readonly string[] = [];
 
 function DashboardApp() {
   const auth = useAuth();
+  const { activeSemesterId } = useSemester();
   const [currentTab, setCurrentTabState] = useState<string>(getInitialTab);
   const [isStudentView, setIsStudentView] = useState<boolean>(false);
   const permissions = auth.access?.permissions ?? EMPTY_PERMISSIONS;
@@ -208,7 +210,7 @@ function DashboardApp() {
   const [surveyLoadError, setSurveyLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!canLoadSurveyOperations) {
+    if (!canLoadSurveyOperations || !activeSemesterId) {
       setSemesterSurveys([]);
       setSectionSurveys([]);
       setSurveyLoadError(null);
@@ -221,13 +223,13 @@ function DashboardApp() {
 
     const load = async () => {
       try {
-        const surveys = await surveyApi.semesterSurveys();
-        const sectionLists = await Promise.all(
-          surveys.map((survey) => surveyApi.courseSectionSurveys(survey.semesterSurveyId))
-        );
+        const [surveys, allSections] = await Promise.all([
+          surveyApi.semesterSurveys(activeSemesterId),
+          surveyApi.allCourseSectionSurveys({ semesterId: activeSemesterId }),
+        ]);
         if (cancelled) return;
         setSemesterSurveys(surveys);
-        setSectionSurveys(sectionLists.flat());
+        setSectionSurveys(allSections);
         setSurveyLoadError(null);
       } catch (error) {
         if (cancelled) return;
@@ -243,7 +245,7 @@ function DashboardApp() {
     return () => {
       cancelled = true;
     };
-  }, [canLoadSurveyOperations]);
+  }, [canLoadSurveyOperations, activeSemesterId]);
 
   const stats: SystemStats = useMemo(
     () => ({
@@ -252,7 +254,8 @@ function DashboardApp() {
       totalCourses: courses.length,
       totalClasses: sections.length,
       activeCampaigns: campaigns.filter((campaign) => campaign.status === 'Đang diễn ra').length,
-      totalResponses: sectionSurveys.reduce((total, item) => total + item.responseCount, 0),
+      // Chỉ phiếu hợp lệ, giống mọi chỗ khác đo tiến độ.
+      totalResponses: sectionSurveys.reduce((total, item) => total + item.validResponseCount, 0),
       totalTargetResponses: sectionSurveys.reduce((total, item) => total + item.classSize, 0),
       overallSatisfaction: 0,
       qrScanCount: surveyCounters.qrScanCount,
@@ -577,8 +580,10 @@ function DashboardApp() {
             {currentTab === 'overview' && (
               isUnrestrictedRole(auth.activeProfile?.roleCode) ? (
                 <DashboardOverview
-                  campaigns={campaigns}
-                  onOpenQR={handleOpenCampaignQR}
+                  semesterSurveys={semesterSurveys}
+                  sectionSurveys={sectionSurveys}
+                  surveyLoading={surveyLoading}
+                  surveyLoadError={surveyLoadError}
                   permissions={permissions}
                   onNavigateTab={(tab) => setCurrentTab(tab)}
                 />

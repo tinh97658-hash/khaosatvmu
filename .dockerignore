@@ -5,3 +5,6 @@
 .git
 .env
 *.log
+dulieu/
+artifacts/verify-api/
+artifacts/verify-tests/

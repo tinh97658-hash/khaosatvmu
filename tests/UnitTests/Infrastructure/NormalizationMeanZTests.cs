@@ -5,6 +5,7 @@ using Application.Auth;
 using Application.Surveys;
 using FluentAssertions;
 using global::Infrastructure.Persistence;
+using global::Infrastructure.Reports;
 using global::Infrastructure.Surveys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -55,7 +56,10 @@ public class NormalizationMeanZTests
         var cache = scope.ServiceProvider.GetRequiredService<IMemoryCache>();
 
         await body(db, new EfSurveyService(
-            db, cache, new FixedScopeResolver(UserScope.Unrestricted(RoleCodes.Admin))));
+            db,
+            cache,
+            new FixedScopeResolver(UserScope.Unrestricted(RoleCodes.Admin)),
+            new SchoolOverviewCacheVersion()));
     }
 
     private static async Task<int?> SurveyWithResponsesAsync(AppDbContext db) =>

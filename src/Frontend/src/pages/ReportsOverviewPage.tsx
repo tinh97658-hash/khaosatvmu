@@ -42,6 +42,10 @@ import type {
   SemesterSurvey,
   SurveyResultDetail,
 } from '../types';
+import {
+  COMPLETED_COMPLETION_RATE,
+  LAGGING_COMPLETION_RATE,
+} from '../utils/reportThresholds';
 import '../styles/survey-operations.css';
 import '../styles/reports.css';
 
@@ -66,7 +70,11 @@ const scoreColor = (score: number): string =>
   score >= 4.5 ? '#137b3b' : score >= 4.0 ? '#0788b8' : '#b86216';
 
 const completionColor = (rate: number): string =>
-  rate >= 80 ? '#137b3b' : rate >= 20 ? '#0788b8' : '#b86216';
+  rate >= COMPLETED_COMPLETION_RATE
+    ? '#137b3b'
+    : rate >= LAGGING_COMPLETION_RATE
+      ? '#0788b8'
+      : '#b86216';
 
 interface RankedUnitTableProps {
   title: string;
@@ -172,6 +180,36 @@ const RankedUnitTable: React.FC<RankedUnitTableProps> = ({
     },
   ];
 
+  const exportConfig = useMemo(() => ({
+    title: `BÁO CÁO XẾP HẠNG ${title.toUpperCase()}`,
+    fileName: `xep-hang-${title.toLowerCase().includes('khoa') ? 'khoa-vien' : 'bo-mon'}`,
+    subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+    columns: [
+      { key: 'name', header: 'Đơn vị', width: 28 },
+      { key: 'sectionCount', header: 'Số lớp HP', width: 12, type: 'number' as const, align: 'right' as const },
+      { key: 'classSize', header: 'Sĩ số', width: 10, type: 'number' as const, align: 'right' as const },
+      { key: 'responseCount', header: 'Phiếu thu', width: 10, type: 'number' as const, align: 'right' as const },
+      { key: 'invalidResponseCount', header: 'Phiếu lỗi', width: 10, type: 'number' as const, align: 'right' as const },
+      { key: 'validResponseCount', header: 'Hợp lệ', width: 12, type: 'number' as const, align: 'right' as const },
+      {
+        key: 'completionRate',
+        header: 'Hoàn thành',
+        width: 14,
+        type: 'string' as const,
+        align: 'right' as const,
+        format: (val: any) => `${Number(val).toFixed(0)}%`,
+      },
+      {
+        key: 'averageScore',
+        header: 'Điểm TB',
+        width: 12,
+        type: 'number' as const,
+        align: 'right' as const,
+        format: (val: any) => (Number(val) > 0 ? Number(val).toFixed(2) : '—'),
+      },
+    ],
+  }), [title]);
+
   return (
     <section className="reports-rank" aria-label={title}>
       <header className="reports-rank-header">
@@ -188,6 +226,7 @@ const RankedUnitTable: React.FC<RankedUnitTableProps> = ({
         onVisibleDataChange={onVisibleDataChange}
         showIndex={false}
         pageSize={10}
+        exportConfig={exportConfig}
         emptyMessage="Chưa có dữ liệu tổng hợp."
       />
     </section>
@@ -664,6 +703,10 @@ export const ReportsOverviewPage: React.FC = () => {
       // Điểm TB phải gộp theo tổng điểm chứ không lấy trung bình của trung bình,
       // nên cộng dồn riêng tử số rồi mới chia ở cuối.
       const scoreSums = new Map<number, number>();
+      // Mẫu số của điểm chỉ đếm phiếu của lớp ĐÃ THU ĐỦ. Lớp chưa đủ về đây với
+      // averageScore = 0; cộng phiếu của nó vào mẫu số mà tử số bằng 0 thì cả khoa
+      // bị kéo tụt xuống bởi đúng những lớp lẽ ra không được tính.
+      const scoredResponseCounts = new Map<number, number>();
 
       for (const item of results) {
         const id = key === 'faculty' ? item.facultyId : item.departmentId;
@@ -691,14 +734,21 @@ export const ReportsOverviewPage: React.FC = () => {
           group.invalidResponseCount += item.invalidResponseCount;
           group.sectionCount += 1;
         }
-        scoreSums.set(id, (scoreSums.get(id) ?? 0) + item.averageScore * item.validResponseCount);
+        if (item.averageScore > 0) {
+          scoreSums.set(id, (scoreSums.get(id) ?? 0) + item.averageScore * item.validResponseCount);
+          scoredResponseCounts.set(
+            id,
+            (scoredResponseCounts.get(id) ?? 0) + item.validResponseCount,
+          );
+        }
       }
 
       const ranked: RankedUnit[] = [];
       for (const group of groups.values()) {
-        // Cùng cách tính với bảng tra cứu chi tiết: chỉ phiếu hợp lệ.
-        group.averageScore = group.validResponseCount > 0
-          ? (scoreSums.get(group.id) ?? 0) / group.validResponseCount
+        // Chỉ phiếu hợp lệ, và chỉ của lớp đã thu đủ phiếu.
+        const scoredResponses = scoredResponseCounts.get(group.id) ?? 0;
+        group.averageScore = scoredResponses > 0
+          ? (scoreSums.get(group.id) ?? 0) / scoredResponses
           : 0;
         group.completionRate = group.classSize > 0
           ? (group.validResponseCount / group.classSize) * 100
@@ -1189,6 +1239,43 @@ export const ReportsOverviewPage: React.FC = () => {
               <DataTable
                 columns={sectionColumns}
                 data={lecturerDetail.sections ?? []}
+                exportConfig={{
+                  title: `BÁO CÁO KẾT QUẢ ĐÁNH GIÁ GIẢNG VIÊN ${lecturerDetail.fullName.toUpperCase()}`,
+                  fileName: `danh-gia-giang-vien-${lecturerDetail.fullName.toLowerCase().replace(/\s+/g, '-')}`,
+                  subtitle: `${lecturerDetail.departmentName} · ${lecturerDetail.facultyName}`,
+                  subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+                  info: {
+                    'Giảng viên': lecturerDetail.fullName,
+                    'Đơn vị': `${lecturerDetail.departmentName} · ${lecturerDetail.facultyName}`,
+                    'Điểm trung bình': `${lecturerDetail.averageScore.toFixed(2)} / 5.0`,
+                    'Tổng phiếu hợp lệ': lecturerDetail.totalResponses.toLocaleString('vi-VN'),
+                    'Số lớp học phần': lecturerDetail.courseSectionCount,
+                  },
+                  columns: [
+                    { key: 'sectionName', header: 'Lớp HP', width: 14, align: 'center' as const },
+                    { key: 'courseName', header: 'Tên môn học', width: 28 },
+                    { key: 'classSize', header: 'Sĩ số', width: 10, type: 'number' as const, align: 'right' as const },
+                    { key: 'responseCount', header: 'Phiếu thu', width: 10, type: 'number' as const, align: 'right' as const },
+                    { key: 'validResponseCount', header: 'Hợp lệ', width: 10, type: 'number' as const, align: 'right' as const },
+                    {
+                      key: 'completionRate',
+                      header: 'Tỷ lệ',
+                      width: 10,
+                      type: 'string' as const,
+                      align: 'right' as const,
+                      format: (_: any, item: any) =>
+                        `${Math.round((item.validResponseCount / (item.classSize || 1)) * 100)}%`,
+                    },
+                    {
+                      key: 'averageScore',
+                      header: 'Điểm TB',
+                      width: 12,
+                      type: 'number' as const,
+                      align: 'right' as const,
+                      format: (val: any) => (Number(val) > 0 ? Number(val).toFixed(2) : '—'),
+                    },
+                  ],
+                }}
                 emptyMessage="Giảng viên này chưa có lớp học phần nào trong học kỳ."
                 keyExtractor={(item) => String(item.courseSectionSurveyId)}
                 showIndex={false}
@@ -1308,6 +1395,79 @@ export const ReportsOverviewPage: React.FC = () => {
               searchValue={search}
               onSearchChange={setSearch}
               searchPlaceholder="Mã HP, tên HP, nhóm lớp, giảng viên..."
+              exportConfig={{
+                title: 'BÁO CÁO KẾT QUẢ KHẢO SÁT HỌC PHẦN CHI TIẾT',
+                fileName: 'ket-qua-khao-sat-chi-tiet',
+                subtitle: semesterLabel,
+                subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+                info: {
+                  'Học kỳ': semesterLabel,
+                  'Số lớp khảo sát': kpi.classCount,
+                  'Tổng chỉ tiêu (sĩ số)': kpi.totalTarget,
+                  'Tổng phiếu hợp lệ đã thu': `${kpi.totalCollected} (đạt ${kpi.completionRate.toFixed(1)}%)`,
+                },
+                summaryNotes: [
+                  'Điểm trung bình học phần được tính trên thang điểm 5.0 từ các phiếu đánh giá hợp lệ.',
+                  'Tỷ lệ hoàn thành = Tổng phiếu hợp lệ / Sĩ số sinh viên lớp học phần.',
+                ],
+                sheets: [
+                  {
+                    sheetName: 'Ket qua Lop HP',
+                    title: `1. DANH SÁCH KẾT QUẢ KHẢO SÁT LỚP HỌC PHẦN (${results.length} LỚP)`,
+                    columns: [
+                      { key: 'sectionCode', header: 'Mã lớp HP', width: 14, align: 'center' as const },
+                      { key: 'courseName', header: 'Tên học phần', width: 28 },
+                      { key: 'lecturerName', header: 'Giảng viên', width: 22 },
+                      { key: 'departmentName', header: 'Bộ môn', width: 20 },
+                      { key: 'facultyName', header: 'Khoa / Viện', width: 22 },
+                      { key: 'classSize', header: 'Sĩ số', width: 10, type: 'number' as const, align: 'right' as const },
+                      { key: 'responseCount', header: 'Phiếu thu', width: 10, type: 'number' as const, align: 'right' as const },
+                      { key: 'invalidResponseCount', header: 'Phiếu lỗi', width: 10, type: 'number' as const, align: 'right' as const },
+                      { key: 'validResponseCount', header: 'Hợp lệ', width: 10, type: 'number' as const, align: 'right' as const },
+                      {
+                        key: 'completionRate',
+                        header: 'Tỷ lệ',
+                        width: 10,
+                        type: 'string' as const,
+                        align: 'right' as const,
+                        format: (val: any) => `${Number(val).toFixed(0)}%`,
+                      },
+                      {
+                        key: 'averageScore',
+                        header: 'Điểm TB',
+                        width: 12,
+                        type: 'number' as const,
+                        align: 'right' as const,
+                        format: (val: any) => (Number(val) > 0 ? Number(val).toFixed(2) : '—'),
+                      },
+                    ],
+                    data: results,
+                  },
+                  {
+                    sheetName: 'Lop diem thap (<3.50)',
+                    title: '2. DANH SÁCH LỚP CÓ ĐIỂM TRUNG BÌNH THẤP (< 3.50)',
+                    subtitle: 'Các lớp cần ban chủ nhiệm khoa và bộ môn phối hợp rà soát',
+                    columns: [
+                      { key: 'sectionCode', header: 'Mã lớp HP', width: 14, align: 'center' as const },
+                      { key: 'courseName', header: 'Tên học phần', width: 28 },
+                      { key: 'lecturerName', header: 'Giảng viên', width: 22 },
+                      { key: 'departmentName', header: 'Bộ môn', width: 20 },
+                      { key: 'facultyName', header: 'Khoa / Viện', width: 22 },
+                      { key: 'classSize', header: 'Sĩ số', width: 10, type: 'number' as const, align: 'right' as const },
+                      { key: 'validResponseCount', header: 'Phiếu hợp lệ', width: 12, type: 'number' as const, align: 'right' as const },
+                      {
+                        key: 'averageScore',
+                        header: 'Điểm TB',
+                        width: 12,
+                        type: 'number' as const,
+                        align: 'right' as const,
+                        format: (val: any) => (Number(val) > 0 ? Number(val).toFixed(2) : '—'),
+                      },
+                    ],
+                    data: results.filter((r) => (r.averageScore ?? 0) > 0 && (r.averageScore ?? 0) < 3.5),
+                  },
+                ],
+              }}
               toolbarActions={scopeChips.length > 0 ? (
                 <div className="reports-scope-chips">
                   {scopeChips.map((chip) => (

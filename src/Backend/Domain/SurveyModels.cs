@@ -95,6 +95,14 @@ public sealed class SemesterSurvey : ISoftDeletable
 {
     public int SemesterSurveyId { get; set; }
 
+    /// <summary>
+    /// Tên đợt do quản trị đặt lúc tạo, vd "Khảo sát giữa kỳ 2025-2026 đợt 1".
+    /// NOT NULL nhưng không UNIQUE: cùng một kỳ vẫn được đặt trùng tên nếu muốn.
+    /// Có tên riêng thì hai đợt cùng học kỳ, cùng bộ câu hỏi mới phân biệt được —
+    /// trước đây màn hình chỉ hiện tên bộ câu hỏi nên chúng trông y hệt nhau.
+    /// </summary>
+    public string SurveyName { get; set; } = string.Empty;
+
     /// <summary>NOT NULL, ON DELETE CASCADE.</summary>
     public int SemesterId { get; set; }
 
@@ -183,7 +191,7 @@ public sealed class CourseSectionSurveyQuestionScore
 }
 
 /// <summary>Bảng "SurveyResponses". Phiếu trả lời ẩn danh của sinh viên.</summary>
-public sealed class SurveyResponse
+public sealed class SurveyResponse : ISoftDeletable
 {
     public int ResponseId { get; set; }
 
@@ -213,6 +221,20 @@ public sealed class SurveyResponse
     public string? RejectionReasons { get; set; }
 
     public DateTime SubmittedAt { get; set; }
+
+    /// <summary>
+    /// Xoá mềm cả loạt phiếu của một lớp khi thanh tra thấy số liệu không dùng
+    /// được (vd cả lớp nộp nhưng bộ lọc nhiễu loại sạch) và muốn lớp làm lại.
+    /// Dòng vẫn nằm nguyên trong bảng để còn lần lại được chuyện gì đã xảy ra.
+    ///
+    /// LƯU Ý: <see cref="Infrastructure"/> KHÔNG tự chuyển
+    /// <c>Remove()</c> thành xoá mềm cho loại này — AuditInterceptor loại
+    /// SurveyResponse khỏi vòng xử lý (phiếu ẩn danh, không ghi nội dung vào nhật
+    /// ký) nên gọi <c>Remove()</c> là xoá cứng thật. Phải gán tay hai cột này.
+    /// </summary>
+    public bool IsDeleted { get; set; }
+
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>Bảng "SurveyResponseAnswers". Khóa chính ghép (ResponseId, QuestionId).</summary>

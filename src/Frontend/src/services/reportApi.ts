@@ -3,6 +3,7 @@ import type {
   LecturerPerformanceReport,
   OperationalProgressReport,
   QuestionRating,
+  SchoolOverviewComparisonOption,
   SchoolSurveyOverview,
   SectionSurveyAnalysis,
   SurveyQuestionSummaryReport,
@@ -20,14 +21,23 @@ export const reportApi = {
     semesterId: number,
     comparisonSemesterId?: number,
     semesterSurveyId?: number,
+    comparisonSemesterSurveyId?: number,
   ) => {
     const query = new URLSearchParams({ semesterId: String(semesterId) });
     if (comparisonSemesterId) query.append('comparisonSemesterId', String(comparisonSemesterId));
     if (semesterSurveyId) query.append('semesterSurveyId', String(semesterSurveyId));
+    if (comparisonSemesterSurveyId) {
+      query.append('comparisonSemesterSurveyId', String(comparisonSemesterSurveyId));
+    }
     return apiRequest<SchoolSurveyOverview>(
       `/api/v1/reports/school-overview?${query.toString()}`,
     );
   },
+
+  schoolOverviewComparisonOptions: () =>
+    apiRequest<SchoolOverviewComparisonOption[]>(
+      '/api/v1/reports/school-overview/comparison-options',
+    ),
 
   /** Xếp hạng tiêu chí theo điểm: `lowest` = true lấy nhóm thấp nhất, false lấy cao nhất. */
   questionRanking: (params: {

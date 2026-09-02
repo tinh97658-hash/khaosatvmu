@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260831163354_AddSurveyResponseSoftDelete")]
+    partial class AddSurveyResponseSoftDelete
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -526,17 +529,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
-                    b.Property<int>("ReviewMonth")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ReviewPeriodText")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("ReviewYear")
-                        .HasColumnType("integer");
-
                     b.Property<int>("RowCount")
                         .HasColumnType("integer");
 
@@ -547,16 +539,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ImportedAtUtc");
 
-                    b.HasIndex("ReviewYear", "ReviewMonth")
-                        .IsUnique()
-                        .IsDescending();
-
-                    b.ToTable("GraduationAnalyticsDatasets", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_GraduationAnalyticsDatasets_ReviewMonth", "\"ReviewMonth\" BETWEEN 1 AND 12");
-
-                            t.HasCheckConstraint("CK_GraduationAnalyticsDatasets_ReviewYear", "\"ReviewYear\" BETWEEN 1900 AND 2200");
-                        });
+                    b.ToTable("GraduationAnalyticsDatasets", (string)null);
                 });
 
             modelBuilder.Entity("Domain.GraduationAnalyticsRow", b =>
@@ -651,8 +634,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(9,4)");
 
                     b.HasKey("RowId");
-
-                    b.HasIndex("DatasetId", "Cohort");
 
                     b.HasIndex("DatasetId", "FacultyName");
 

@@ -13,6 +13,8 @@ import {
 import { useSemester } from '../context/semesterContext';
 import { catalogApi, type UnidentifiedLecturerReport } from '../services/catalogApi';
 import { surveyApi, type DepartmentDashboard } from '../services/surveyApi';
+import type { SemesterSurvey } from '../types';
+import { ExportDropdown } from '../components/ExportDropdown';
 import '../styles/dashboard.css';
 
 interface DepartmentDashboardPageProps {
@@ -71,12 +73,16 @@ export const DepartmentDashboardPage: React.FC<DepartmentDashboardPageProps> = (
   onNavigateTab,
 }) => {
   const { activeSemesterId, activeSemesterLabel } = useSemester();
+  const [semesterSurveys, setSemesterSurveys] = useState<SemesterSurvey[]>([]);
+  const [selectedSurveyId, setSelectedSurveyId] = useState<number | null>(null);
   const [metrics, setMetrics] = useState<DepartmentDashboard | null>(null);
   const [unidentified, setUnidentified] = useState<UnidentifiedLecturerReport | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (activeSemesterId === null) {
+      setSemesterSurveys([]);
+      setSelectedSurveyId(null);
       setMetrics(null);
       setUnidentified(null);
       return;
@@ -86,20 +92,22 @@ export const DepartmentDashboardPage: React.FC<DepartmentDashboardPageProps> = (
     setLoading(true);
     void (async () => {
       try {
-        // Chỉ số gắn với ĐỢT khảo sát, còn danh sách lớp thiếu giảng viên gắn với HỌC
-        // KỲ. Học kỳ chưa mở đợt nào thì phần chỉ số để trống, phần thông báo vẫn chạy.
         const [surveys, report] = await Promise.all([
           surveyApi.semesterSurveys(activeSemesterId),
           catalogApi.unidentifiedLecturers(activeSemesterId),
         ]);
         if (cancelled) return;
+        setSemesterSurveys(surveys);
         setUnidentified(report);
-
-        const latest = surveys.at(-1) ?? null;
-        setMetrics(latest ? await surveyApi.departmentDashboard(latest.semesterSurveyId) : null);
+        setSelectedSurveyId((prev) => {
+          if (prev && surveys.some((s) => s.semesterSurveyId === prev)) return prev;
+          return surveys.length > 0 ? surveys[0].semesterSurveyId : null;
+        });
       } catch {
-        // Bảng điều khiển hỏng một phần thì vẫn hiện phần còn lại, không chặn cả trang.
-        if (!cancelled) setMetrics(null);
+        if (!cancelled) {
+          setSemesterSurveys([]);
+          setMetrics(null);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -109,6 +117,31 @@ export const DepartmentDashboardPage: React.FC<DepartmentDashboardPageProps> = (
       cancelled = true;
     };
   }, [activeSemesterId]);
+
+  useEffect(() => {
+    if (!selectedSurveyId) {
+      setMetrics(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    surveyApi
+      .departmentDashboard(selectedSurveyId)
+      .then((data) => {
+        if (!cancelled) setMetrics(data);
+      })
+      .catch(() => {
+        if (!cancelled) setMetrics(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSurveyId]);
 
   const unidentifiedCount = unidentified?.sectionCount ?? 0;
 
@@ -153,7 +186,7 @@ export const DepartmentDashboardPage: React.FC<DepartmentDashboardPageProps> = (
           tính trên toàn bộ dữ liệu, không tính lại trong phạm vi bộ môn — nếu không thì
           "so với mặt bằng" mất hết ý nghĩa. Xem congviec2.md mục D6. */}
       <section className="dashboard-block">
-        <div className="dashboard-block-heading">
+        <div className="dashboard-block-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h2>Chỉ số bộ môn</h2>
             <p>
@@ -161,6 +194,94 @@ export const DepartmentDashboardPage: React.FC<DepartmentDashboardPageProps> = (
                 ? `Đợt khảo sát: ${metrics.templateName}`
                 : 'Học kỳ này chưa có đợt khảo sát nào'}
             </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            {semesterSurveys.length > 0 && (
+              <div className="executive-compare-select" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label htmlFor="dept-dashboard-survey-select" style={{ fontSize: '12px', color: '#475569', fontWeight: 600 }}>Đợt khảo sát:</label>
+                <select
+                  id="dept-dashboard-survey-select"
+                  value={selectedSurveyId ?? ''}
+                  onChange={(e) => setSelectedSurveyId(e.target.value ? Number(e.target.value) : null)}
+                  style={{ height: '32px', padding: '0 8px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '3px' }}
+                >
+                  {semesterSurveys.map((survey) => (
+                    <option key={survey.semesterSurveyId} value={survey.semesterSurveyId}>
+                      {survey.templateName} ({survey.sectionSurveyCount} lớp)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          {metrics && (
+            <ExportDropdown
+              buttonLabel="Xuất báo cáo bộ môn"
+              size="sm"
+              options={{
+                fileName: `tong-quan-bo-mon-${(metrics.departmentName || 'bo-mon').toLowerCase().replace(/\s+/g, '-')}`,
+                metadata: {
+                  title: `BÁO CÁO TỔNG QUAN BỘ MÔN ${(metrics.departmentName || '').toUpperCase()}`,
+                  subtitle: `Học kỳ: ${activeSemesterLabel} — Đợt: ${metrics.templateName}`,
+                  subInstitution: 'TRƯỞNG BỘ MÔN',
+                  info: {
+                    'Bộ môn': metrics.departmentName || '—',
+                    'Học kỳ': activeSemesterLabel,
+                    'Đợt khảo sát': metrics.templateName,
+                    'Số lớp cần lưu ý': `${metrics.weakSectionCount} lớp`,
+                    'Số lớp chưa xác định GV': `${unidentifiedCount} lớp`,
+                  },
+                },
+                sheets: [
+                  {
+                    sheetName: 'Chi so Bo mon',
+                    title: '1. CHỈ SỐ KHẢO SÁT BỘ MÔN SO VỚI MẶT BẰNG TOÀN TRƯỜNG',
+                    columns: [
+                      { key: 'metricName', header: 'Chỉ tiêu đánh giá', width: 28 },
+                      { key: 'deptValue', header: 'Kết quả của bộ môn', width: 22, align: 'right' as const },
+                      { key: 'schoolValue', header: 'Mặt bằng toàn trường', width: 22, align: 'right' as const },
+                    ],
+                    data: [
+                      {
+                        metricName: 'Tiến độ thu phiếu khảo sát',
+                        deptValue: formatRate(metrics.completionRate),
+                        schoolValue: formatRate(metrics.schoolCompletionRate),
+                      },
+                      {
+                        metricName: 'Điểm hài lòng trung bình',
+                        deptValue: `${formatScore(metrics.averageScore)} / 5.0`,
+                        schoolValue: `${formatScore(metrics.schoolAverageScore)} / 5.0`,
+                      },
+                      {
+                        metricName: 'Số lớp học phần cần lưu ý',
+                        deptValue: `${metrics.weakSectionCount} lớp`,
+                        schoolValue: `Ngưỡng điểm < ${metrics.weakScoreThreshold.toFixed(2)}`,
+                      },
+                      {
+                        metricName: 'Số lớp chưa xác định giảng viên',
+                        deptValue: `${unidentifiedCount} lớp`,
+                        schoolValue: 'Yêu cầu cập nhật',
+                      },
+                    ],
+                  },
+                  ...(unidentified && unidentified.sections && unidentified.sections.length > 0 ? [
+                    {
+                      sheetName: 'Lop chua xac dinh GV',
+                      title: `2. DANH SÁCH LỚP CHƯA XÁC ĐỊNH GIẢNG VIÊN (${unidentified.sections.length} LỚP)`,
+                      subtitle: 'Các lớp cần bổ sung/cập nhật thông tin giảng viên và email để gửi khảo sát',
+                      columns: [
+                        { key: 'courseSectionCode', header: 'Mã lớp HP', width: 16, align: 'center' as const },
+                        { key: 'courseName', header: 'Tên học phần', width: 28 },
+                        { key: 'classSize', header: 'Sĩ số', width: 10, type: 'number' as const, align: 'right' as const },
+                        { key: 'unidentifiedReason', header: 'Lý do chưa xác định', width: 26 },
+                      ],
+                      data: unidentified.sections,
+                      summaryNotes: ['Đề nghị Trưởng bộ môn rà soát và phân công giảng viên phụ trách trên hệ thống.'],
+                    },
+                  ] : []),
+                ],
+              }}
+            />
+          )}
           </div>
         </div>
 

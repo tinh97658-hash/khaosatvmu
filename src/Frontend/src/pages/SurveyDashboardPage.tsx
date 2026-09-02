@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { useSemester } from '../context/semesterContext';
 import { NoteModalButton } from '../components/NoteModalButton';
+import { ExportDropdown } from '../components/ExportDropdown';
 import { ApiError } from '../services/apiClient';
 import { surveyApi, surveyErrorMessage } from '../services/surveyApi';
 import type {
@@ -158,6 +159,38 @@ export const SurveyDashboardPage: React.FC = () => {
         </label>
 
         <div className="statistics-toolbar-actions">
+          {data && (
+            <ExportDropdown
+              buttonLabel="Xuất báo cáo"
+              size="sm"
+              options={{
+                fileName: 'tong-quan-dot-khao-sat',
+                metadata: {
+                  title: 'BÁO CÁO TỔNG QUAN ĐỢT KHẢO SÁT HỌC PHẦN',
+                  subtitle: `${data.templateName} — ${data.semesterName} năm học ${data.academicYearName}`,
+                  subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+                  info: {
+                    'Bộ câu hỏi': data.templateName,
+                    'Học kỳ': `${data.semesterName} · ${data.academicYearName}`,
+                    'Số lớp học phần': data.sectionCount,
+                    'Tổng số phiếu thu': data.totalResponseCount,
+                    'Số phiếu hợp lệ': data.validResponseCount,
+                    'Tỷ lệ hoàn thành': `${data.averageCompletionRate.toFixed(1)}%`,
+                    'Điểm trung bình toàn trường': data.overallScore !== null ? data.overallScore.toFixed(2) : '—',
+                  },
+                  summaryNotes: [
+                    'Số liệu tính toán từ kết quả các phiếu khảo sát hợp lệ qua bộ lọc.',
+                  ],
+                },
+                columns: [
+                  { key: 'facultyName', header: 'Khoa / Viện', width: 28 },
+                  { key: 'averageScore', header: 'Điểm TB', width: 14, type: 'number' as const, align: 'right' as const, format: (v: any) => Number(v).toFixed(2) },
+                  { key: 'sectionsBelowThreshold', header: 'Số lớp dưới ngưỡng', width: 18, type: 'number' as const, align: 'right' as const },
+                ],
+                data: data.faculties,
+              }}
+            />
+          )}
           <button
             type="button"
             className="btn btn-secondary btn-sm"

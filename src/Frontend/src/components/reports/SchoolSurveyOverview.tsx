@@ -14,12 +14,17 @@ import type {
   QuestionRating,
   SchoolSurveyOverview as SchoolSurveyOverviewData,
 } from '../../types';
+import { ExportDropdown } from '../ExportDropdown';
 import { FacultyScoreChart } from './FacultyScoreChart';
 import { FacultyCompletionChart } from './FacultyCompletionChart';
 import { WeakestQuestionsPanel } from './WeakestQuestionsPanel';
 import { LaggingDepartmentsTable } from './LaggingDepartmentsTable';
 import { formatNumber } from './theme';
 import type { ReportAnalysisView } from '../../pages/reportRoute';
+import {
+  COMPLETED_COMPLETION_RATE,
+  LAGGING_COMPLETION_RATE,
+} from '../../utils/reportThresholds';
 
 export interface SchoolOverviewDrillDown {
   facultyId?: number;
@@ -149,6 +154,107 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
   );
   const laggingDepartmentCount = laggingDepartments.length;
 
+  const exportOverviewPayload = {
+    fileName: 'tong-quan-khao-sat-toan-truong',
+    metadata: {
+      title: 'BÁO CÁO TỔNG QUAN KẾT QUẢ KHẢO SÁT TOÀN TRƯỜNG',
+      subtitle: `${data.academicYearName} · ${data.semesterName}`,
+      subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+      info: {
+        'Năm học / Học kỳ': `${data.academicYearName} · ${data.semesterName}`,
+        'Tổng số lớp khảo sát': formatNumber(data.totalSections),
+        'Tiến độ thu phiếu toàn trường': `${data.completionRate.toFixed(1)}% (${formatNumber(data.totalResponses)} / ${formatNumber(data.totalTargetResponses)})`,
+        'Điểm hài lòng trung bình': `${data.overallAverageScore.toFixed(2)} / 5.0`,
+        [`Lớp hoàn thành (≥${COMPLETED_COMPLETION_RATE}%)`]: data.completedSectionCount,
+        [`Lớp đang thu (${LAGGING_COMPLETION_RATE}-${COMPLETED_COMPLETION_RATE - 1}%)`]: data.inProgressSectionCount,
+        'Lớp chậm tiến độ (<20%)': data.laggingSectionCount,
+      },
+      summaryNotes: [
+        'Báo cáo tổng hợp số liệu khảo sát học phần từ các phiếu đánh giá hợp lệ.',
+        'Tiến độ thu phiếu = Tổng phiếu hợp lệ / Tổng chỉ tiêu sĩ số toàn trường.',
+      ],
+    },
+    sheets: [
+      {
+        sheetName: 'Tong quan Khoa - Vien',
+        title: `1. TIẾN ĐỘ & ĐIỂM SỐ THEO KHOA / VIỆN (${data.faculties.length} ĐƠN VỊ)`,
+        columns: [
+          { key: 'facultyName', header: 'Khoa / Viện', width: 28 },
+          { key: 'sectionCount', header: 'Số lớp', width: 12, type: 'number' as const, align: 'right' as const },
+          { key: 'totalResponses', header: 'Phiếu hợp lệ', width: 14, type: 'number' as const, align: 'right' as const },
+          { key: 'totalTargetResponses', header: 'Chỉ tiêu', width: 12, type: 'number' as const, align: 'right' as const },
+          {
+            key: 'completionRate',
+            header: 'Tỷ lệ',
+            width: 12,
+            type: 'string' as const,
+            align: 'right' as const,
+            format: (val: any) => `${Number(val).toFixed(1)}%`,
+          },
+          {
+            key: 'averageScore',
+            header: 'Điểm TB',
+            width: 12,
+            type: 'number' as const,
+            align: 'right' as const,
+            format: (val: any) => (Number(val) > 0 ? Number(val).toFixed(2) : '—'),
+          },
+        ],
+        data: data.faculties,
+      },
+      {
+        sheetName: 'Bo mon cham tien do',
+        title: `2. DANH SÁCH BỘ MÔN CHẬM TIẾN ĐỘ THU PHIẾU (${laggingDepartments.length} BỘ MÔN)`,
+        subtitle: `Các bộ môn có tỷ lệ thu phiếu dưới ${laggingThreshold}% chỉ tiêu`,
+        columns: [
+          { key: 'departmentName', header: 'Bộ môn', width: 24 },
+          { key: 'facultyName', header: 'Khoa / Viện', width: 22 },
+          { key: 'sectionCount', header: 'Số lớp', width: 10, type: 'number' as const, align: 'right' as const },
+          { key: 'totalResponses', header: 'Phiếu thu', width: 12, type: 'number' as const, align: 'right' as const },
+          { key: 'totalTargetResponses', header: 'Chỉ tiêu', width: 12, type: 'number' as const, align: 'right' as const },
+          {
+            key: 'completionRate',
+            header: 'Tỷ lệ',
+            width: 12,
+            type: 'string' as const,
+            align: 'right' as const,
+            format: (val: any) => `${Number(val).toFixed(1)}%`,
+          },
+          {
+            key: 'averageScore',
+            header: 'Điểm TB',
+            width: 12,
+            type: 'number' as const,
+            align: 'right' as const,
+            format: (val: any) => (Number(val) > 0 ? Number(val).toFixed(2) : '—'),
+          },
+        ],
+        data: laggingDepartments,
+        summaryNotes: ['Đề nghị các Khoa chủ quản đôn đốc các bộ môn tăng cường hướng dẫn sinh viên làm khảo sát.'],
+      },
+      {
+        sheetName: 'Tieu chi can cai thien',
+        title: '3. DANH SÁCH CÁC TIÊU CHÍ CÂU HỎI CẦN CẢI THIỆN TOÀN TRƯỜNG',
+        subtitle: 'Các câu hỏi khảo sát có điểm trung bình đánh giá thấp nhất trong kỳ',
+        columns: [
+          { key: 'order', header: 'Mã câu', width: 10, align: 'center' as const, format: (v: any) => `C${v}` },
+          { key: 'content', header: 'Nội dung tiêu chí câu hỏi', width: 45 },
+          { key: 'groupName', header: 'Nhóm tiêu chí', width: 24, format: (v: any) => v || 'Tiêu chuẩn chung' },
+          {
+            key: 'averageScore',
+            header: 'Điểm TB',
+            width: 12,
+            type: 'number' as const,
+            align: 'right' as const,
+            format: (val: any) => Number(val).toFixed(2),
+          },
+          { key: 'responseCount', header: 'Số lượt đánh giá', width: 16, type: 'number' as const, align: 'right' as const },
+        ],
+        data: data.weakestQuestions || [],
+      },
+    ],
+  };
+
   return (
     <section className="reports-exec" aria-label="Bảng tổng quan kết quả khảo sát toàn trường">
       <header className="reports-exec-header">
@@ -161,6 +267,11 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
             </p>
           </div>
         </div>
+        {hasData && (
+          <div className="reports-exec-actions">
+            <ExportDropdown options={exportOverviewPayload} size="sm" buttonLabel="Xuất báo cáo tổng quan" />
+          </div>
+        )}
       </header>
 
       {!hasData ? (
@@ -190,13 +301,13 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
               <small>/ 5.0</small>
             </span>
 
-            <span className="reports-exec-stat" title="Lớp đạt từ 80% phiếu hợp lệ">
+            <span className="reports-exec-stat" title={`Lớp đạt từ ${COMPLETED_COMPLETION_RATE}% phiếu hợp lệ`}>
               <span className="legend-dot" style={{ background: '#137b3b' }} />
               Hoàn thành
               <strong>{data.completedSectionCount}</strong>
             </span>
 
-            <span className="reports-exec-stat" title="Lớp đạt 20-80% phiếu hợp lệ">
+            <span className="reports-exec-stat" title={`Lớp đạt ${LAGGING_COMPLETION_RATE}-${COMPLETED_COMPLETION_RATE - 1}% phiếu hợp lệ`}>
               <span className="legend-dot" style={{ background: '#0788b8' }} />
               Đang thu
               <strong>{data.inProgressSectionCount}</strong>

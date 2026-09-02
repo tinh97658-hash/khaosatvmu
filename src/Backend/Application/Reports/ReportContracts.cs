@@ -8,7 +8,9 @@ public sealed record SectionProgressDetailDto(
     string SectionName,
     string LecturerName,
     int ClassSize,
+    /// <summary>Số phiếu HỢP LỆ. Phiếu bị bộ lọc nhiễu loại không được tính.</summary>
     int ResponseCount,
+    /// <summary>Phiếu hợp lệ chia sĩ số, theo phần trăm.</summary>
     decimal CompletionRate,
     string Status);
 
@@ -18,6 +20,7 @@ public sealed record OperationalProgressReportDto(
     string SemesterName,
     string AcademicYearName,
     int TotalTargetResponses,
+    /// <summary>Tổng phiếu HỢP LỆ đã thu, không đếm phiếu bị bộ lọc loại.</summary>
     int TotalActualResponses,
     decimal OverallCompletionRate,
     int CompletedSectionCount,
@@ -182,13 +185,29 @@ public sealed record DepartmentOverviewDto(
 
 /// <summary>So sánh học kỳ hiện tại với một học kỳ được chọn.</summary>
 public sealed record SemesterComparisonDto(
+    string ComparisonType,
     int ComparisonSemesterId,
+    int? ComparisonSemesterSurveyId,
     string ComparisonSemesterName,
     string ComparisonAcademicYearName,
+    string? ComparisonTemplateName,
+    int ComparisonSectionCount,
+    int ComparisonTargetResponses,
+    int ComparisonResponseCount,
     decimal ComparisonCompletionRate,
     decimal ComparisonAverageScore,
     decimal CompletionRateDelta,
     decimal AverageScoreDelta);
+
+/// <summary>Metadata nhẹ của một đợt, dùng để chọn mốc đối chiếu mà không tải thống kê chi tiết.</summary>
+public sealed record SchoolOverviewComparisonOptionDto(
+    int SemesterSurveyId,
+    int SemesterId,
+    string SemesterName,
+    string AcademicYearName,
+    int SurveyTemplateId,
+    string TemplateName,
+    DateTime CreatedAt);
 
 /// <summary>Bảng tổng quan toàn trường (executive summary) của một học kỳ.</summary>
 public sealed record SchoolSurveyOverviewDto(
@@ -276,6 +295,10 @@ public interface IReportService
         int semesterId,
         int? comparisonSemesterId = null,
         int? semesterSurveyId = null,
+        int? comparisonSemesterSurveyId = null,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SchoolOverviewComparisonOptionDto>> GetSchoolOverviewComparisonOptionsAsync(
         CancellationToken cancellationToken = default);
 
     /// <summary>

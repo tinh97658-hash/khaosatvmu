@@ -1000,6 +1000,12 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
               searchValue={search}
               onSearchChange={setSearch}
               searchPlaceholder="Tìm tên lớp hoặc học phần..."
+              exportConfig={{
+                title: `DANH SÁCH LỚP HỌC PHẦN - ${selectedSemester.semesterName} (${selectedYear?.academicYearName || ''})`,
+                fileName: `danh-sach-lop-hoc-phan-${selectedSemester.semesterName.toLowerCase().replace(/\s+/g, '-')}`,
+                subtitle: `${selectedYear?.academicYearName || ''}`,
+                subInstitution: 'PHÒNG ĐÀO TẠO',
+              }}
               onAddNew={readOnly ? undefined : openCreateSection}
               addNewLabel="Thêm lớp học phần"
               toolbarActions={canManageAll ? (

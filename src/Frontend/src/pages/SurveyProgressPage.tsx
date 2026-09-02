@@ -1,18 +1,22 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
+  CalendarDays,
   CheckCircle2,
   CircleAlert,
   ClipboardCheck,
-  Download,
   LoaderCircle,
   Target,
   TriangleAlert,
   UserRound,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { useSemester } from '../context/semesterContext';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
 import type { CourseSectionSurvey, SemesterSurvey } from '../types';
+import {
+  COMPLETED_COMPLETION_RATE,
+  LAGGING_COMPLETION_RATE,
+} from '../utils/reportThresholds';
 import '../styles/survey-operations.css';
 
 interface SurveyProgressPageProps {
@@ -41,42 +45,79 @@ interface ProgressItem {
   status: 'Hoàn thành' | 'Đang thu' | 'Chậm tiến độ';
 }
 
+const progressColumns = [
+  { key: 'code', header: 'Mã lớp HP', width: 14, align: 'center' as const },
+  { key: 'name', header: 'Tên học phần', width: 28 },
+  { key: 'lecturerName', header: 'Giảng viên', width: 22 },
+  { key: 'departmentName', header: 'Bộ môn', width: 20 },
+  { key: 'facultyName', header: 'Khoa / Viện', width: 22 },
+  { key: 'targetCount', header: 'Sĩ số', width: 10, type: 'number' as const, align: 'right' as const },
+  { key: 'actualCount', header: 'Đã nộp', width: 10, type: 'number' as const, align: 'right' as const },
+  { key: 'invalidCount', header: 'Phiếu lỗi', width: 10, type: 'number' as const, align: 'right' as const },
+  { key: 'validCount', header: 'Hợp lệ', width: 10, type: 'number' as const, align: 'right' as const },
+  {
+    // Xuất SỐ kèm mã định dạng chứ không xuất chuỗi "18%": ô chữ thì Excel sắp
+    // theo bảng chữ cái, 100% rơi xuống dưới 18%.
+    key: 'rate',
+    header: 'Tỷ lệ',
+    width: 10,
+    type: 'number' as const,
+    align: 'right' as const,
+    numberFormat: '0"%"',
+  },
+  { key: 'status', header: 'Trạng thái', width: 14, align: 'center' as const },
+];
+
 export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
   semesterSurveys,
   sectionSurveys,
   isLoading,
   loadError,
 }) => {
+  const { activeSemesterLabel } = useSemester();
+  const [selectedSurveyId, setSelectedSurveyId] = useState<string>('all');
   const [search, setSearch] = useState('');
+
+  const displayedSections = useMemo(() => {
+    if (selectedSurveyId === 'all') return sectionSurveys;
+    const targetId = Number(selectedSurveyId);
+    return sectionSurveys.filter((s) => s.semesterSurveyId === targetId);
+  }, [sectionSurveys, selectedSurveyId]);
 
   // Mỗi lớp học phần đã được phát phiếu là một dòng theo dõi. Các số phiếu đều do
   // API khảo sát đếm sống từ bảng "SurveyResponses", không phải số tạm.
   //
   // Tiến độ tính trên PHIẾU HỢP LỆ: phiếu bị bộ lọc nhiễu loại vẫn là một lượt nộp
   // nhưng không dùng được vào kết quả nào, nên đếm nó vào tiến độ là tự huyễn hoặc.
-  const progressItems: ProgressItem[] = sectionSurveys.map((section) => {
-    const survey = semesterSurveys.find(
-      (item) => item.semesterSurveyId === section.semesterSurveyId
-    );
-    const rate = Math.round((section.validResponseCount / (section.classSize || 1)) * 100);
+  const progressItems: ProgressItem[] = useMemo(() => {
+    return displayedSections.map((section) => {
+      const survey = semesterSurveys.find(
+        (item) => item.semesterSurveyId === section.semesterSurveyId
+      );
+      const rate = Math.round((section.validResponseCount / (section.classSize || 1)) * 100);
 
-    return {
-      id: String(section.courseSectionSurveyId),
-      code: section.sectionName,
-      name: section.courseName,
-      groupCode: section.sectionName,
-      lecturerName: section.lecturerName || 'Chưa phân công',
-      departmentName: section.departmentName,
-      facultyName: section.facultyName,
-      semester: survey ? `${survey.semesterName} - ${survey.academicYearName}` : '—',
-      targetCount: section.classSize,
-      actualCount: section.responseCount,
-      validCount: section.validResponseCount,
-      invalidCount: section.invalidResponseCount,
-      rate,
-      status: rate >= 80 ? 'Hoàn thành' : rate >= 20 ? 'Đang thu' : 'Chậm tiến độ',
-    };
-  });
+      return {
+        id: String(section.courseSectionSurveyId),
+        code: section.sectionName,
+        name: section.courseName,
+        groupCode: section.sectionName,
+        lecturerName: section.lecturerName || 'Chưa phân công',
+        departmentName: section.departmentName,
+        facultyName: section.facultyName,
+        semester: survey ? `${survey.semesterName} - ${survey.academicYearName}` : '—',
+        targetCount: section.classSize,
+        actualCount: section.responseCount,
+        validCount: section.validResponseCount,
+        invalidCount: section.invalidResponseCount,
+        rate,
+        status: rate >= COMPLETED_COMPLETION_RATE
+          ? 'Hoàn thành'
+          : rate >= LAGGING_COMPLETION_RATE
+            ? 'Đang thu'
+            : 'Chậm tiến độ',
+      };
+    });
+  }, [displayedSections, semesterSurveys]);
 
   // Calculate Overall Progress Metrics
   const totalTarget = progressItems.reduce((acc, curr) => acc + curr.targetCount, 0);
@@ -95,38 +136,51 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
       item.lecturerName.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleExportCsv = () => {
-    const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
-    const rows = filtered.map((item) => [
-      item.code,
-      item.name,
-      item.lecturerName,
-      item.departmentName,
-      item.facultyName,
-      item.targetCount.toString(),
-      item.actualCount.toString(),
-      item.invalidCount.toString(),
-      item.validCount.toString(),
-      `${item.rate}%`,
-      item.status,
-    ]);
-    const csv = [
-      [
-        'Mã lớp', 'Tên học phần', 'Giảng viên', 'Bộ môn', 'Khoa / Viện',
-        'Chỉ tiêu', 'Đã nộp', 'Không hợp lệ', 'Hợp lệ', 'Tỷ lệ', 'Trạng thái',
+  const exportConfig = useMemo(() => {
+    const laggingItems = progressItems.filter((i) => i.status === 'Chậm tiến độ');
+    const completedItems = progressItems.filter((i) => i.status === 'Hoàn thành');
+
+    return {
+      fileName: 'bao-cao-tien-do-thu-phieu-khao-sat',
+      title: 'BÁO CÁO TIẾN ĐỘ THU PHIẾU KHẢO SÁT Ý KIẾN SINH VIÊN',
+      subtitle: 'Hệ thống Khảo sát & Đảm bảo Chất lượng Đào tạo VMU',
+      subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+      info: {
+        'Tổng số lớp khảo sát': progressItems.length,
+        'Tổng chỉ tiêu (sĩ số)': totalTarget,
+        'Tổng phiếu hợp lệ đã thu': `${totalValid} (đạt ${overallRate}%)`,
+        [`Lớp hoàn thành (≥${COMPLETED_COMPLETION_RATE}%)`]: completedCount,
+        [`Lớp chậm tiến độ (<${LAGGING_COMPLETION_RATE}%)`]: laggingCount,
+      },
+      summaryNotes: [
+        'Tiến độ tính dựa trên tỷ lệ phiếu hợp lệ so với sĩ số sinh viên lớp học phần.',
+        'Phiếu không hợp lệ (trả lời trùng 1 đáp án toàn bài, thời gian làm bài < 15 giây...) đã bị bộ lọc loại bỏ.',
       ],
-      ...rows,
-    ].map((row) => row.map(quote).join(',')).join('\r\n');
-    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'tien-do-thu-phieu-khao-sat.csv';
-    anchor.click();
-    URL.revokeObjectURL(url);
-    toast.success('Đã xuất báo cáo tiến độ', {
-      description: `${filtered.length} dòng theo bộ lọc hiện tại.`,
-    });
-  };
+      sheets: [
+        {
+          sheetName: 'Tien do toan bo lop',
+          title: `1. TIẾN ĐỘ THU PHIẾU TẤT CẢ CÁC LỚP HỌC PHẦN (${progressItems.length} LỚP)`,
+          columns: progressColumns,
+          data: progressItems,
+        },
+        {
+          sheetName: 'Lop cham tien do',
+          title: `2. DANH SÁCH LỚP CHẬM TIẾN ĐỘ CẦN ĐÔN ĐỐC (${laggingItems.length} LỚP)`,
+          subtitle: `Các lớp có tỷ lệ phiếu hợp lệ dưới ${LAGGING_COMPLETION_RATE}% chỉ tiêu - cần gửi thông báo nhắc nhở`,
+          columns: progressColumns,
+          data: laggingItems,
+          summaryNotes: ['Đề nghị các Khoa/Viện và Bộ môn thông báo đến giảng viên nhắc nhở sinh viên tham gia khảo sát.'],
+        },
+        {
+          sheetName: 'Lop da hoan thanh',
+          title: `3. DANH SÁCH LỚP ĐẠT CHỈ TIÊU XUẤT SẮC (${completedItems.length} LỚP)`,
+          subtitle: `Các lớp đã đạt tỷ lệ phiếu hợp lệ từ ${COMPLETED_COMPLETION_RATE}% trở lên`,
+          columns: progressColumns,
+          data: completedItems,
+        },
+      ],
+    };
+  }, [progressItems, totalTarget, totalValid, overallRate, completedCount, laggingCount]);
 
   const columns: Column<ProgressItem>[] = [
     {
@@ -201,17 +255,25 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
       filterValue: (item) => String(item.rate),
       numeric: true,
       quickFilters: [
-        { label: 'Hoàn thành (≥80%)', match: (value) => Number(value) >= 80 },
         {
-          label: 'Đang thu (20-79%)',
-          match: (value) => Number(value) >= 20 && Number(value) < 80,
+          label: `Hoàn thành (≥${COMPLETED_COMPLETION_RATE}%)`,
+          match: (value) => Number(value) >= COMPLETED_COMPLETION_RATE,
         },
-        { label: 'Chậm tiến độ (<20%)', match: (value) => Number(value) < 20 },
+        {
+          label: `Đang thu (${LAGGING_COMPLETION_RATE}-${COMPLETED_COMPLETION_RATE - 1}%)`,
+          match: (value) =>
+            Number(value) >= LAGGING_COMPLETION_RATE
+            && Number(value) < COMPLETED_COMPLETION_RATE,
+        },
+        {
+          label: `Chậm tiến độ (<${LAGGING_COMPLETION_RATE}%)`,
+          match: (value) => Number(value) < LAGGING_COMPLETION_RATE,
+        },
       ],
       render: (item) => {
-        const progressClass = item.rate >= 80
+        const progressClass = item.rate >= COMPLETED_COMPLETION_RATE
           ? 'operations-progress-fill--success'
-          : item.rate >= 20
+          : item.rate >= LAGGING_COMPLETION_RATE
             ? 'operations-progress-fill--warning'
             : '';
 
@@ -269,6 +331,30 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
         </div>
       ) : (
         <>
+          <section className="operations-toolbar" aria-label="Bộ lọc tiến độ" style={{ marginBottom: '14px' }}>
+            <div className="operations-filter-title">
+              <CalendarDays className="operation-icon" aria-hidden="true" />
+              <span>Học kỳ: <strong>{activeSemesterLabel}</strong></span>
+            </div>
+            {semesterSurveys.length > 0 && (
+              <div className="operations-field">
+                <label htmlFor="progress-survey-select">Đợt khảo sát</label>
+                <select
+                  id="progress-survey-select"
+                  value={selectedSurveyId}
+                  onChange={(e) => setSelectedSurveyId(e.target.value)}
+                >
+                  <option value="all">Tất cả đợt trong học kỳ ({sectionSurveys.length} lớp)</option>
+                  {semesterSurveys.map((survey) => (
+                    <option key={survey.semesterSurveyId} value={String(survey.semesterSurveyId)}>
+                      {survey.templateName} ({survey.sectionSurveyCount} lớp)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </section>
+
           <section className="operations-metrics" aria-label="Tổng quan tiến độ">
             <div className="operation-metric">
               <span className="operation-metric-icon"><Target className="operation-icon" aria-hidden="true" /></span>
@@ -286,7 +372,7 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
             </div>
             <div className="operation-metric operation-metric--warning">
               <span className="operation-metric-icon"><CheckCircle2 className="operation-icon" aria-hidden="true" /></span>
-              <span className="operation-metric-label">Nhóm đạt từ 80%</span>
+              <span className="operation-metric-label">Nhóm đạt từ {COMPLETED_COMPLETION_RATE}%</span>
               <strong className="operation-metric-value">{completedCount} / {progressItems.length}</strong>
               <span className="operation-metric-note">Nhóm hoàn thành thu phiếu</span>
             </div>
@@ -305,12 +391,7 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="Tìm mã lớp HP, nhóm N01/N02, tên môn hoặc giảng viên..."
-            toolbarActions={(
-              <button className="btn btn-primary btn-sm" onClick={handleExportCsv}>
-                <Download className="operation-icon" aria-hidden="true" />
-                Xuất báo cáo Excel
-              </button>
-            )}
+            exportConfig={exportConfig}
             emptyMessage="Chưa có lớp học phần nào được phát phiếu khảo sát."
             keyExtractor={(item) => item.id}
           />

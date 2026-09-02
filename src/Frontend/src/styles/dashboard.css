@@ -714,6 +714,95 @@
   height: 13px;
 }
 
+.executive-comparison-panel {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.75fr) minmax(0, 2fr);
+  gap: 18px;
+  padding: 14px 16px;
+  border: 1px solid #dbe4ea;
+  border-left: 4px solid #0f8a83;
+  background: #ffffff;
+}
+
+.executive-comparison-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.executive-comparison-heading > svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  color: #0f766e;
+}
+
+.executive-comparison-heading h2,
+.executive-comparison-heading p,
+.executive-comparison-sample p {
+  margin: 0;
+}
+
+.executive-comparison-heading h2 {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.executive-comparison-heading p {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.executive-comparison-heading strong {
+  color: #334155;
+}
+
+.executive-comparison-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.executive-comparison-metric,
+.executive-comparison-sample {
+  min-width: 0;
+  padding-left: 12px;
+  border-left: 1px solid #e2e8f0;
+}
+
+.executive-comparison-metric > span:first-child,
+.executive-comparison-sample > span:first-child {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.executive-comparison-metric > strong,
+.executive-comparison-sample > strong {
+  display: block;
+  margin: 3px 0 1px;
+  color: #0f172a;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.executive-comparison-metric > small,
+.executive-comparison-sample > small {
+  display: block;
+  margin-bottom: 7px;
+  color: #64748b;
+  font-size: 10px;
+}
+
+.executive-comparison-sample p {
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .executive-btn-primary {
   display: inline-flex;
   align-items: center;
@@ -1153,6 +1242,22 @@
     width: 100%;
     justify-content: space-between;
   }
+  .executive-comparison-panel {
+    grid-template-columns: 1fr;
+  }
+  .executive-comparison-metrics {
+    grid-template-columns: 1fr;
+  }
+  .executive-comparison-metric,
+  .executive-comparison-sample {
+    padding-top: 9px;
+    padding-left: 0;
+    border-top: 1px solid #e2e8f0;
+    border-left: 0;
+  }
+  }
+}
+
   /* ---------------------------------------------------------------------------
    Bảng điều khiển riêng của trưởng bộ môn. Dùng lại khung `dashboard-block` và
    hàng thẻ `dashboard-quick-*` của bản quản trị để hai trang trông là một hệ,

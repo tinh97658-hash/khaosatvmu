@@ -178,6 +178,8 @@ export interface SurveyTemplate {
 /** Bảng "SemesterSurveys", kèm số lớp và số phiếu đã thu của đợt. */
 export interface SemesterSurvey {
   semesterSurveyId: number;
+  /** Tên đợt do quản trị đặt lúc tạo. Khác `templateName` là tên bộ câu hỏi. */
+  surveyName: string;
   semesterId: number;
   semesterName: string;
   academicYearName: string;
@@ -669,13 +671,29 @@ export interface DepartmentOverview {
 
 /** So sánh học kỳ hiện tại với học kỳ được chọn. */
 export interface SemesterComparison {
+  comparisonType: 'semester' | 'campaign';
   comparisonSemesterId: number;
+  comparisonSemesterSurveyId: number | null;
   comparisonSemesterName: string;
   comparisonAcademicYearName: string;
+  comparisonTemplateName: string | null;
+  comparisonSectionCount: number;
+  comparisonTargetResponses: number;
+  comparisonResponseCount: number;
   comparisonCompletionRate: number;
   comparisonAverageScore: number;
   completionRateDelta: number;
   averageScoreDelta: number;
+}
+
+export interface SchoolOverviewComparisonOption {
+  semesterSurveyId: number;
+  semesterId: number;
+  semesterName: string;
+  academicYearName: string;
+  surveyTemplateId: number;
+  templateName: string;
+  createdAt: string;
 }
 
 /** Bảng tổng quan toàn trường (executive summary) của một học kỳ. */

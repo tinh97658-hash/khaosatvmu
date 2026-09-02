@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, Inbox, Plus, Search } from 'lucide-react';
 import { ColumnFilterMenu } from './ColumnFilterMenu';
 import { TablePagination } from './TablePagination';
+import { ExportDropdown } from './ExportDropdown';
+import type { AnyExportOptions, ExportColumn, ExportSheet } from '../services/exportDataService';
 import '../styles/catalogs.css';
 
 export interface Column<T> {
@@ -23,9 +25,25 @@ export interface Column<T> {
   /** Đặt true cho cột số để sắp xếp danh sách giá trị theo trị số. */
   numeric?: boolean;
   width?: string;
+  /** Tùy chọn hàm định dạng riêng khi xuất Excel / Word / PDF */
+  exportFormat?: (item: T) => string | number | boolean | null | undefined;
+  /** Ẩn cột này khi xuất dữ liệu */
+  exportable?: boolean;
 }
 
 export type DataTableSortDirection = 'asc' | 'desc';
+
+export interface DataTableExportConfig<T> {
+  fileName?: string;
+  title?: string;
+  subtitle?: string;
+  subInstitution?: string;
+  info?: Record<string, string | number | undefined | null>;
+  summaryNotes?: string[];
+  columns?: ExportColumn<T>[];
+  sheets?: ExportSheet<any>[];
+  scope?: 'filtered' | 'all';
+}
 
 interface DataTableProps<T> {
   columns: Column<T>[];
@@ -53,6 +71,9 @@ interface DataTableProps<T> {
   sortKey?: string;
   sortDirection?: DataTableSortDirection;
   onSortChange?: (key?: string, direction?: DataTableSortDirection) => void;
+  /** Bật tính năng xuất file .xlsx, .docx, .pdf. Mặc định: true */
+  enableExport?: boolean;
+  exportConfig?: DataTableExportConfig<T>;
 }
 
 export function DataTable<T>({
@@ -75,6 +96,8 @@ export function DataTable<T>({
   sortKey,
   sortDirection = 'asc',
   onSortChange,
+  enableExport = true,
+  exportConfig,
 }: DataTableProps<T>) {
   const resolvedAddLabel = addNewLabel.replace(/^\+\s*/, '');
 
@@ -172,6 +195,81 @@ export function DataTable<T>({
   const firstIndex = (page - 1) * pageSize;
   const visibleRows = sortedData.slice(firstIndex, firstIndex + pageSize);
 
+  const exportColumns = useMemo<ExportColumn<T>[]>(() => {
+    if (exportConfig?.columns) {
+      return exportConfig.columns;
+    }
+    return columns
+      .filter((col) => col.exportable !== false && col.key !== 'actions' && col.header.trim().length > 0)
+      .map((col) => ({
+        key: col.key,
+        header: col.header,
+        type: col.numeric ? 'number' : 'string',
+        align: col.numeric ? 'right' : 'left',
+        format: (val: any, item: T) => {
+          if (col.exportFormat) {
+            return col.exportFormat(item);
+          }
+          if (col.filterValue) {
+            return col.filterValue(item);
+          }
+          if (col.sortValue) {
+            const sv = col.sortValue(item);
+            return sv !== null && sv !== undefined ? sv : '';
+          }
+          if (val === null || val === undefined) return '';
+          if (typeof val === 'object') return '';
+          return val;
+        },
+      }));
+  }, [columns, exportConfig?.columns]);
+
+  const exportDataPayload = useMemo<AnyExportOptions<T>>(() => {
+    const exportDataset = exportConfig?.scope === 'all' ? data : sortedData;
+    const resolvedTitle =
+      exportConfig?.title ||
+      (searchPlaceholder && searchPlaceholder !== 'Tìm kiếm danh mục...'
+        ? searchPlaceholder.replace(/^Tìm kiếm\s*/i, 'DANH SÁCH ').toUpperCase()
+        : 'DANH SÁCH DỮ LIỆU');
+    const resolvedFileName =
+      exportConfig?.fileName ||
+      resolvedTitle
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') ||
+      'danh-sach-du-lieu';
+
+    if (exportConfig?.sheets && exportConfig.sheets.length > 0) {
+      return {
+        fileName: resolvedFileName,
+        metadata: {
+          title: resolvedTitle,
+          subtitle: exportConfig?.subtitle,
+          subInstitution: exportConfig?.subInstitution,
+          info: exportConfig?.info,
+          summaryNotes: exportConfig?.summaryNotes,
+        },
+        sheets: exportConfig.sheets,
+      };
+    }
+
+    return {
+      fileName: resolvedFileName,
+      metadata: {
+        title: resolvedTitle,
+        subtitle: exportConfig?.subtitle,
+        subInstitution: exportConfig?.subInstitution,
+        info: exportConfig?.info,
+        summaryNotes: exportConfig?.summaryNotes,
+      },
+      columns: exportColumns,
+      data: exportDataset,
+    };
+  }, [data, exportColumns, exportConfig, searchPlaceholder, sortedData]);
+
   const changeSort = (column: Column<T>) => {
     if (!column.sortValue) return;
     if (activeSortKey !== column.key) {
@@ -243,6 +341,10 @@ export function DataTable<T>({
                 ))}
               </select>
             </label>
+          )}
+
+          {enableExport && exportColumns.length > 0 && (
+            <ExportDropdown options={exportDataPayload} size="sm" />
           )}
 
           {onAddNew && (

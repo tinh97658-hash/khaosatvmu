@@ -937,13 +937,17 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         }
 
         var seenInFile = new HashSet<string>();
-        var items = new List<CatalogImportItemDto>(rows.Count);
+        var itemsByRow = new Dictionary<int, CatalogImportItemDto>();
         var unidentifiedLecturers = new List<UnidentifiedLecturerDto>();
         var createdSections = new List<CourseSection>();
         var createdCourseCount = 0;
         var createdLecturerCount = 0;
         var updatedSectionCount = 0;
 
+        var pendingCourses = new Dictionary<string, Course>();
+        var pendingLecturers = new Dictionary<string, Lecturer>();
+
+        // PASS 1: Kiểm tra hợp lệ và gom danh sách Học phần / Giảng viên mới cần tạo
         foreach (var row in rows)
         {
             var courseCode = row.CourseCode?.Trim() ?? string.Empty;
@@ -951,12 +955,12 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
 
             if (courseCode.Length == 0)
             {
-                items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, null, false, CatalogErrorCodes.CourseCodeRequired));
+                itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, null, false, CatalogErrorCodes.CourseCodeRequired);
                 continue;
             }
             if (sectionName.Length == 0)
             {
-                items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseSectionNameRequired));
+                itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseSectionNameRequired);
                 continue;
             }
 
@@ -964,12 +968,11 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             var classSize = 0;
             if (classSizeText.Length > 0 && (!int.TryParse(classSizeText, out classSize) || classSize < 0))
             {
-                items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseSectionSizeInvalid));
+                itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseSectionSizeInvalid);
                 continue;
             }
 
-            // Bộ môn: ưu tiên cột "Mã BM", trống thì mới tra theo tên. Bộ môn và
-            // khoa viện không tự tạo — không khớp thì bỏ qua dòng.
+            // Bộ môn: ưu tiên cột "Mã BM", trống thì mới tra theo tên.
             int? departmentId = null;
             var departmentCode = row.DepartmentCode?.Trim() ?? string.Empty;
             var departmentName = row.DepartmentName?.Trim() ?? string.Empty;
@@ -977,12 +980,12 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             {
                 if (!int.TryParse(departmentCode, out var parsedDepartmentId) || parsedDepartmentId <= 0)
                 {
-                    items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.DepartmentCodeInvalid));
+                    itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.DepartmentCodeInvalid);
                     continue;
                 }
                 if (!departmentNameById.ContainsKey(parsedDepartmentId))
                 {
-                    items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.DepartmentNotFound));
+                    itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.DepartmentNotFound);
                     continue;
                 }
                 departmentId = parsedDepartmentId;
@@ -991,7 +994,7 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             {
                 if (!departmentIdByName.TryGetValue(NormalizeKey(departmentName), out var foundDepartment))
                 {
-                    items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.DepartmentNotFound));
+                    itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.DepartmentNotFound);
                     continue;
                 }
                 departmentId = foundDepartment;
@@ -1003,20 +1006,19 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             {
                 if (!facultyIdByName.TryGetValue(NormalizeKey(facultyName), out var foundFaculty))
                 {
-                    items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.FacultyNotFound));
+                    itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.FacultyNotFound);
                     continue;
                 }
                 facultyId = foundFaculty;
             }
 
-            // Học phần chưa có trong danh mục thì tạo luôn: mỗi năm chương trình
-            // học lại bổ sung môn mới, không bắt người nhập phải sang trang học phần.
-            if (!courseIdByCode.TryGetValue(NormalizeKey(courseCode), out var courseId))
+            var courseKey = NormalizeKey(courseCode);
+            if (!courseIdByCode.ContainsKey(courseKey) && !pendingCourses.ContainsKey(courseKey))
             {
                 var courseName = row.CourseName?.Trim() ?? string.Empty;
                 if (courseName.Length == 0)
                 {
-                    items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseNameRequiredForAutoCreate));
+                    itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseNameRequiredForAutoCreate);
                     continue;
                 }
 
@@ -1024,32 +1026,106 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
                 var credits = 0;
                 if (creditsText.Length > 0 && (!int.TryParse(creditsText, out credits) || credits < 0))
                 {
-                    items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseCreditsInvalid));
+                    itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseCreditsInvalid);
                     continue;
                 }
 
-                var course = new Course
+                pendingCourses[courseKey] = new Course
                 {
                     CourseCode = courseCode,
                     CourseName = courseName,
                     Credits = credits,
-                    // Tệp lớp học phần không có cột loại học phần: để trống cho
-                    // quản trị vào trang Học phần điền bắt buộc hay tự chọn sau.
                     CourseType = null,
                     DepartmentId = departmentId,
                     FacultyId = facultyId
                 };
-                db.Courses.Add(course);
-                await db.SaveChangesAsync(cancellationToken);
-
-                courseId = course.CourseId;
-                courseIdByCode[NormalizeKey(courseCode)] = courseId;
-                courseInfoById[courseId] = (course.CourseName, course.Credits);
-                createdCourseCount++;
             }
 
-            // Giảng viên. Email là khoá định danh (NOT NULL UNIQUE) nên chỉ dòng
-            // có email mới gắn được vào bảng "Lecturers".
+            var lecturerFullName = row.LecturerFullName?.Trim() ?? string.Empty;
+            var lecturerEmail = row.LecturerEmail?.Trim() ?? string.Empty;
+            if (lecturerEmail.Length > 0)
+            {
+                var emailKey = NormalizeKey(lecturerEmail);
+                if (!lecturerIdByEmail.ContainsKey(emailKey) && !pendingLecturers.ContainsKey(emailKey))
+                {
+                    if (lecturerFullName.Length == 0)
+                    {
+                        itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.LecturerNameRequired);
+                        continue;
+                    }
+
+                    pendingLecturers[emailKey] = new Lecturer
+                    {
+                        FullName = lecturerFullName,
+                        Email = lecturerEmail,
+                        DepartmentId = departmentId,
+                        FacultyId = facultyId,
+                        PositionId = defaultPositionId
+                    };
+                }
+            }
+        }
+
+        // Tạo toàn bộ học phần mới trong 1 lượt lưu
+        if (pendingCourses.Count > 0)
+        {
+            db.Courses.AddRange(pendingCourses.Values);
+            await db.SaveChangesAsync(cancellationToken);
+            foreach (var (codeKey, course) in pendingCourses)
+            {
+                courseIdByCode[codeKey] = course.CourseId;
+                courseInfoById[course.CourseId] = (course.CourseName, course.Credits);
+            }
+            createdCourseCount = pendingCourses.Count;
+        }
+
+        // Tạo toàn bộ giảng viên mới & tài khoản người dùng theo mẻ (1 query + 1 save)
+        if (pendingLecturers.Count > 0)
+        {
+            db.Lecturers.AddRange(pendingLecturers.Values);
+            await db.SaveChangesAsync(cancellationToken);
+            foreach (var (emailKey, lecturer) in pendingLecturers)
+            {
+                lecturerIdByEmail[emailKey] = lecturer.LecturerId;
+            }
+            await EnsureUsersForLecturersAsync(pendingLecturers.Values.ToList(), cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+            createdLecturerCount = pendingLecturers.Count;
+        }
+
+        // PASS 2: Gắn và tạo danh sách lớp học phần
+        foreach (var row in rows)
+        {
+            if (itemsByRow.ContainsKey(row.RowNumber))
+            {
+                continue;
+            }
+
+            var courseCode = row.CourseCode?.Trim() ?? string.Empty;
+            var sectionName = row.SectionName?.Trim() ?? string.Empty;
+            var classSizeText = row.ClassSize?.Trim() ?? string.Empty;
+            int.TryParse(classSizeText, out var classSize);
+
+            int? departmentId = null;
+            var departmentCode = row.DepartmentCode?.Trim() ?? string.Empty;
+            var departmentName = row.DepartmentName?.Trim() ?? string.Empty;
+            if (departmentCode.Length > 0 && int.TryParse(departmentCode, out var parsedDepartmentId))
+            {
+                departmentId = parsedDepartmentId;
+            }
+            else if (departmentName.Length > 0 && departmentIdByName.TryGetValue(NormalizeKey(departmentName), out var foundDept))
+            {
+                departmentId = foundDept;
+            }
+
+            var facultyName = row.FacultyName?.Trim() ?? string.Empty;
+
+            if (!courseIdByCode.TryGetValue(NormalizeKey(courseCode), out var courseId))
+            {
+                itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseNameRequiredForAutoCreate);
+                continue;
+            }
+
             int? lecturerId = null;
             string? unidentifiedLecturerName = null;
             var lecturerFullName = row.LecturerFullName?.Trim() ?? string.Empty;
@@ -1062,39 +1138,9 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
                 {
                     lecturerId = foundLecturer;
                 }
-                else
-                {
-                    if (lecturerFullName.Length == 0)
-                    {
-                        items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.LecturerNameRequired));
-                        continue;
-                    }
-
-                    var lecturer = new Lecturer
-                    {
-                        FullName = lecturerFullName,
-                        Email = lecturerEmail,
-                        DepartmentId = departmentId,
-                        FacultyId = facultyId,
-                        PositionId = defaultPositionId
-                    };
-                    db.Lecturers.Add(lecturer);
-                    await db.SaveChangesAsync(cancellationToken);
-
-                    // Import lớp học phần cũng sinh giảng viên, nên cũng phải sinh
-                    // tài khoản đi kèm — một luật duy nhất, không có ngoại lệ.
-                    await EnsureUserForLecturerAsync(lecturer, cancellationToken);
-                    await db.SaveChangesAsync(cancellationToken);
-
-                    lecturerId = lecturer.LecturerId;
-                    lecturerIdByEmail[emailKey] = lecturer.LecturerId;
-                    createdLecturerCount++;
-                }
             }
             else if (lecturerFullName.Length > 0)
             {
-                // Thiếu email: vẫn tạo lớp học phần nhưng để trống mã giảng viên,
-                // tên đưa vào cột chưa xác định và gom lại để xuất tệp báo lỗi.
                 unidentifiedLecturerName = lecturerFullName;
                 var courseInfo = courseInfoById.TryGetValue(courseId, out var found)
                     ? found
@@ -1116,9 +1162,6 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
 
             var key = $"{courseId}|{NormalizeKey(sectionName)}";
 
-            // Lớp đã tồn tại: chỉ cập nhật khi bản ghi cũ đang chờ xác định giảng
-            // viên và dòng này đã tra ra được mã. Đây là đường quay lại sau khi
-            // trưởng bộ môn bổ sung email rồi import lần nữa.
             if (sectionByKey.TryGetValue(key, out var existingSection))
             {
                 if (existingSection.LecturerId is null && lecturerId is not null)
@@ -1126,17 +1169,18 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
                     existingSection.LecturerId = lecturerId;
                     existingSection.UnidentifiedLecturerName = null;
                     updatedSectionCount++;
-                    items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, true, null));
+                    itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, true, null);
                 }
                 else
                 {
-                    items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseSectionExists));
+                    itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseSectionExists);
                 }
                 continue;
             }
+
             if (!seenInFile.Add(key))
             {
-                items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseSectionDuplicateInFile));
+                itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.CourseSectionDuplicateInFile);
                 continue;
             }
 
@@ -1149,15 +1193,18 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
                 SectionName = sectionName,
                 ClassSize = classSize
             });
-            items.Add(new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, true, null));
+            itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, true, null);
         }
 
         if (createdSections.Count > 0)
         {
             db.CourseSections.AddRange(createdSections);
         }
-        // Lưu một lần cho cả bản ghi thêm mới lẫn bản ghi được cập nhật mã giảng viên.
         await db.SaveChangesAsync(cancellationToken);
+
+        var items = rows
+            .Select(r => itemsByRow.GetValueOrDefault(r.RowNumber, new CatalogImportItemDto(r.RowNumber, r.SectionName?.Trim() ?? string.Empty, r.CourseCode?.Trim(), false, null)))
+            .ToList();
 
         var succeededCount = createdSections.Count + updatedSectionCount;
         return Succeeded(new CourseSectionImportDto(
@@ -1667,11 +1714,8 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             db.Lecturers.AddRange(created);
             await db.SaveChangesAsync(cancellationToken);
 
-            // Lưu xong cả mẻ mới có LecturerId thật, giờ mới tạo tài khoản đi kèm.
-            foreach (var lecturer in created)
-            {
-                await EnsureUserForLecturerAsync(lecturer, cancellationToken);
-            }
+            // Lưu xong cả mẻ mới có LecturerId thật, giờ mới tạo tài khoản đi kèm trong 1 lần duy nhất.
+            await EnsureUsersForLecturersAsync(created, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
         }
 
@@ -2009,69 +2053,98 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
     /// <c>LecturerId</c> vẫn là 0.
     /// <para>
     /// Cố ý KHÔNG tạo <c>UserProfiles</c>. Không có profile thì đăng nhập vẫn bị từ
-    /// chối, nên thêm giảng viên không cấp quyền cho ai — cấp quyền vẫn là việc
-    /// admin làm tay. Xem mục G1-b của congviec2.md.
+    /// chối, nên thêm giảng viên không cấp quyền cho ai — cấp quyền vẫn là việc riêng của quản trị viên.
+    /// </para>
+    /// <para>
+    /// Tạo hoặc đồng bộ tài khoản cho một mẻ giảng viên trong 1 truy vấn SQL duy nhất.
     /// </para>
     /// </summary>
-    private async Task EnsureUserForLecturerAsync(
-        Lecturer lecturer,
+    private async Task EnsureUsersForLecturersAsync(
+        IReadOnlyList<Lecturer> lecturers,
         CancellationToken cancellationToken)
     {
-        var email = lecturer.Email?.Trim() ?? string.Empty;
-        // Phòng thủ: validate ở trên đã bắt buộc có email, nhưng dữ liệu cũ có thể
-        // còn bản ghi rỗng. Không có email thì không có gì để tạo tài khoản.
-        if (email.Length == 0) return;
+        var validLecturers = lecturers
+            .Where(x => !string.IsNullOrWhiteSpace(x.Email))
+            .ToList();
+        if (validLecturers.Count == 0) return;
 
-        var normalizedEmail = email.ToLowerInvariant();
-        var linked = await db.Users
-            .FirstOrDefaultAsync(x => x.LecturerId == lecturer.LecturerId, cancellationToken);
+        var lecturerIds = validLecturers.Select(x => x.LecturerId).Distinct().ToList();
+        var normalizedEmails = validLecturers
+            .Select(x => x.Email!.Trim().ToLowerInvariant())
+            .Distinct()
+            .ToList();
 
-        if (linked is not null)
-        {
-            // Đổi email giảng viên thì tài khoản phải đổi theo, nhưng CHỈ khi người
-            // đó chưa từng đăng nhập. Đăng nhập rồi thì email là danh tính thật của
-            // họ, sửa vào là khoá cửa của người ta. Bỏ qua nếu email mới đã thuộc về
-            // tài khoản khác, để không vỡ UNIQUE index.
-            if (linked.GoogleSubject is null
-                && !string.Equals(linked.Email, email, StringComparison.OrdinalIgnoreCase)
-                && !await db.Users.AnyAsync(
-                    x => x.Id != linked.Id && x.Email.ToLower() == normalizedEmail,
-                    cancellationToken))
-            {
-                linked.Email = email;
-                linked.UpdatedAt = DateTime.UtcNow;
-            }
-            return;
-        }
+        // 1 query duy nhất để lấy toàn bộ tài khoản liên quan
+        var existingUsers = await db.Users
+            .Where(x => (x.LecturerId != null && lecturerIds.Contains(x.LecturerId.Value))
+                     || normalizedEmails.Contains(x.Email.ToLower()))
+            .ToListAsync(cancellationToken);
 
-        var existing = await db.Users
-            .FirstOrDefaultAsync(x => x.Email.ToLower() == normalizedEmail, cancellationToken);
-        if (existing is not null)
-        {
-            // Đã có tài khoản trùng email, thường là admin tự tạo trước. Nối vào,
-            // nhưng chỉ khi nó chưa thuộc về giảng viên nào — không kéo tài khoản
-            // của người khác về.
-            if (existing.LecturerId is null)
-            {
-                existing.LecturerId = lecturer.LecturerId;
-                existing.UpdatedAt = DateTime.UtcNow;
-            }
-            return;
-        }
+        var userByLecturerId = existingUsers
+            .Where(x => x.LecturerId != null)
+            .ToDictionary(x => x.LecturerId!.Value);
+        var userByEmail = existingUsers
+            .ToDictionary(x => x.Email.Trim().ToLowerInvariant(), x => x);
 
         var now = DateTime.UtcNow;
-        db.Users.Add(new User
+        var newUsers = new List<User>();
+
+        foreach (var lecturer in validLecturers)
         {
-            Id = Guid.NewGuid(),
-            Email = email,
-            DisplayName = lecturer.FullName,
-            GoogleSubject = null,
-            IsActive = true,
-            CreatedAt = now,
-            UpdatedAt = now,
-            LecturerId = lecturer.LecturerId
-        });
+            var email = lecturer.Email!.Trim();
+            var normalizedEmail = email.ToLowerInvariant();
+
+            if (userByLecturerId.TryGetValue(lecturer.LecturerId, out var linked))
+            {
+                if (linked.GoogleSubject is null
+                    && !string.Equals(linked.Email, email, StringComparison.OrdinalIgnoreCase)
+                    && !userByEmail.ContainsKey(normalizedEmail))
+                {
+                    userByEmail.Remove(linked.Email.Trim().ToLowerInvariant());
+                    linked.Email = email;
+                    linked.UpdatedAt = now;
+                    userByEmail[normalizedEmail] = linked;
+                }
+                continue;
+            }
+
+            if (userByEmail.TryGetValue(normalizedEmail, out var existing))
+            {
+                if (existing.LecturerId is null)
+                {
+                    existing.LecturerId = lecturer.LecturerId;
+                    existing.UpdatedAt = now;
+                    userByLecturerId[lecturer.LecturerId] = existing;
+                }
+                continue;
+            }
+
+            var newUser = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = email,
+                DisplayName = lecturer.FullName,
+                GoogleSubject = null,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+                LecturerId = lecturer.LecturerId
+            };
+            newUsers.Add(newUser);
+            userByEmail[normalizedEmail] = newUser;
+            userByLecturerId[lecturer.LecturerId] = newUser;
+        }
+
+        if (newUsers.Count > 0)
+        {
+            db.Users.AddRange(newUsers);
+        }
     }
+
+    private Task EnsureUserForLecturerAsync(
+        Lecturer lecturer,
+        CancellationToken cancellationToken) =>
+        EnsureUsersForLecturersAsync([lecturer], cancellationToken);
 
     /// <summary>
     /// Khoá hoặc mở lại tài khoản theo trạng thái của giảng viên. Xoá giảng viên là

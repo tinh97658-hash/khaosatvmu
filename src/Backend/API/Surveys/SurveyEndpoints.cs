@@ -121,19 +121,47 @@ public static class SurveyEndpoints
             ToResult(await service.DeleteSemesterSurveyAsync(semesterSurveyId, cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
-        // Bù bài khảo sát cho lớp thêm vào kỳ sau khi đợt đã tạo.
-        campaignGroup.MapPost("/semester-surveys/{semesterSurveyId:int}/backfill-sections", async (
-            int semesterSurveyId,
+        // Đếm trước số lớp của một phạm vi, để hộp thoại nói rõ sẽ tạo bao nhiêu bài
+        // trước khi người dùng bấm xác nhận.
+        campaignGroup.MapGet("/section-scope-preview", async (
+            int semesterId,
+            string scopeType,
+            int? scopeId,
+            int? semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
-            ToResult(await service.BackfillSemesterSurveySectionsAsync(semesterSurveyId, cancellationToken)))
+            ToResult(await service.PreviewSectionScopeAsync(
+                semesterId,
+                scopeType,
+                scopeId,
+                semesterSurveyId,
+                cancellationToken)));
+
+        // Bổ sung lớp vào đợt đã có theo phạm vi tự chọn: cả kỳ, một khoa/viện, một
+        // bộ môn, hoặc đúng một lớp học phần.
+        campaignGroup.MapPost("/semester-surveys/{semesterSurveyId:int}/add-sections", async (
+            int semesterSurveyId,
+            AddSectionsToSemesterSurveyRequest request,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.AddSectionsToSemesterSurveyAsync(
+                semesterSurveyId,
+                request.ToCommand(),
+                cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
         operationalReadGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/sections", async (
             int semesterSurveyId,
             ISurveyService service,
             CancellationToken cancellationToken) =>
-            Results.Ok(await service.GetCourseSectionSurveysAsync(semesterSurveyId, cancellationToken)));
+            Results.Ok(await service.GetCourseSectionSurveysAsync(semesterSurveyId, null, cancellationToken)));
+
+        operationalReadGroup.MapGet("/course-section-surveys", async (
+            int? semesterSurveyId,
+            int? semesterId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetCourseSectionSurveysAsync(semesterSurveyId, semesterId, cancellationToken)));
 
         operationalReadGroup.MapGet("/course-section-surveys/{courseSectionSurveyId:int}", async (
             int courseSectionSurveyId,
@@ -146,6 +174,15 @@ public static class SurveyEndpoints
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSurveyResponsesAsync(courseSectionSurveyId, cancellationToken)));
+
+        // Huỷ toàn bộ phiếu của một lớp để lớp làm lại. Nằm ở campaignGroup chứ
+        // không phải nhóm chỉ đọc: đây là thao tác bỏ dữ liệu đã thu.
+        campaignGroup.MapPost("/course-section-surveys/{courseSectionSurveyId:int}/clear-responses", async (
+            int courseSectionSurveyId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.ClearSectionSurveyResponsesAsync(courseSectionSurveyId, cancellationToken)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
 
         operationalReadGroup.MapGet("/responses/{responseId:int}", async (
             int responseId,
@@ -203,6 +240,18 @@ public static class SurveyEndpoints
             ISurveyService service,
             CancellationToken cancellationToken) =>
             ToResult(await service.GetSemesterSurveyCourseDiagnosisAsync(semesterSurveyId, cancellationToken)));
+
+        surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/scope-analysis", async (
+            int semesterSurveyId,
+            string scopeType,
+            int scopeId,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.GetSurveyScopeAnalysisAsync(
+                semesterSurveyId,
+                scopeType,
+                scopeId,
+                cancellationToken)));
 
         surveyAnalysisGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/lecturers", async (
             int semesterSurveyId,
@@ -320,8 +369,8 @@ public static class SurveyEndpoints
             SurveyErrorCodes.AnswerScaleKindLocked => StatusCodes.Status409Conflict,
             SurveyErrorCodes.TemplateInUse => StatusCodes.Status409Conflict,
             SurveyErrorCodes.SemesterSurveyHasResponses => StatusCodes.Status409Conflict,
-            SurveyErrorCodes.SemesterSurveySectionsUpToDate => StatusCodes.Status409Conflict,
-            SurveyErrorCodes.SemesterSurveyScheduleUnknown => StatusCodes.Status409Conflict,
+            SurveyErrorCodes.ScopeSectionsAlreadyAdded => StatusCodes.Status409Conflict,
+            SurveyErrorCodes.SectionSurveyHasNoResponses => StatusCodes.Status409Conflict,
             SurveyErrorCodes.LinkNotOpen => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status400BadRequest
         };
@@ -368,13 +417,34 @@ public static class SurveyEndpoints
     }
 
     public sealed record CreateSemesterSurveyRequest(
+        string SurveyName,
         int SemesterId,
         int SurveyTemplateId,
         DateTime StartTime,
-        DateTime EndTime)
+        DateTime EndTime,
+        string? ScopeType,
+        int? ScopeId)
     {
         public CreateSemesterSurveyCommand ToCommand() =>
-            new(SemesterId, SurveyTemplateId, StartTime, EndTime);
+            new(
+                SurveyName,
+                SemesterId,
+                SurveyTemplateId,
+                StartTime,
+                EndTime,
+                // Client cũ không gửi phạm vi thì giữ nguyên hành vi cũ: phát cả kỳ.
+                ScopeType ?? SurveyScopeTypes.All,
+                ScopeId);
+    }
+
+    public sealed record AddSectionsToSemesterSurveyRequest(
+        string ScopeType,
+        int? ScopeId,
+        DateTime StartTime,
+        DateTime EndTime)
+    {
+        public AddSectionsToSemesterSurveyCommand ToCommand() =>
+            new(ScopeType, ScopeId, StartTime, EndTime);
     }
 
     public sealed record SaveSurveyScheduleRequest(DateTime StartTime, DateTime EndTime);

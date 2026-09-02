@@ -6,19 +6,22 @@ import {
   Building2,
   ChevronRight,
   CircleAlert,
+  GitCompareArrows,
   Info,
   Layers,
   Lightbulb,
   LoaderCircle,
-  QrCode,
   RadioTower,
   Search,
   ShieldAlert,
   Star,
   Target,
+  TrendingDown,
+  TrendingUp,
 } from 'lucide-react';
 import { useSemester } from '../context/semesterContext';
 import { reportApi } from '../services/reportApi';
+import { surveyApi } from '../services/surveyApi';
 import { buildReportHash } from './reportRoute';
 import { FacultyScoreChart } from '../components/reports/FacultyScoreChart';
 import { FacultyCompletionChart } from '../components/reports/FacultyCompletionChart';
@@ -27,26 +30,30 @@ import { WeakestQuestionsPanel } from '../components/reports/WeakestQuestionsPan
 import { formatNumber, scoreColor, completionColor } from '../components/reports/theme';
 import type {
   SchoolSurveyOverview as SchoolSurveyOverviewData,
-  SurveyCampaign,
+  SchoolOverviewComparisonOption,
+  CourseSectionSurvey,
+  SemesterSurvey,
 } from '../types';
+import {
+  COMPLETED_COMPLETION_RATE,
+  LAGGING_COMPLETION_RATE,
+} from '../utils/reportThresholds';
 import '../styles/reports.css';
 import '../styles/dashboard.css';
 
 interface DashboardOverviewProps {
-  campaigns: SurveyCampaign[];
-  onOpenQR: (campaign: SurveyCampaign) => void;
+  semesterSurveys: SemesterSurvey[];
+  sectionSurveys: CourseSectionSurvey[];
+  surveyLoading: boolean;
+  surveyLoadError: string | null;
   onNavigateTab: (tab: string) => void;
   permissions: readonly string[];
 }
 
 const formatDate = (value: string) => {
-  const [year, month, day] = value.split('-');
-  return year && month && day ? `${day}/${month}/${year}` : value;
-};
-
-const getProgress = (campaign: SurveyCampaign) => {
-  if (campaign.totalTargetResponses <= 0) return 0;
-  return Math.min(100, Math.round((campaign.actualResponses / campaign.totalTargetResponses) * 100));
+  if (!value) return '—';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('vi-VN');
 };
 
 const getRatingLabel = (score: number): { label: string; tone: string } => {
@@ -58,7 +65,7 @@ const getRatingLabel = (score: number): { label: string; tone: string } => {
 };
 
 /** Dưới ngưỡng này thì một đơn vị bị coi là chậm tiến độ, khớp với các trang khác. */
-const LAGGING_THRESHOLD = 20;
+const LAGGING_THRESHOLD = LAGGING_COMPLETION_RATE;
 
 const MIN_RESPONSES_FOR_PUBLISHED_SCORE = 30;
 const MIN_COMPLETION_RATE_FOR_PUBLISHED_SCORE = 5;
@@ -73,17 +80,80 @@ const formatLoadedAt = (value: Date | null): string =>
     : '—';
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
-  campaigns,
-  onOpenQR,
+  semesterSurveys,
+  sectionSurveys,
+  surveyLoading,
+  surveyLoadError,
   onNavigateTab,
 }) => {
   const { academicYears, activeSemesterId, setActiveSemesterId } = useSemester();
+  const [comparisonOptions, setComparisonOptions] = useState<SchoolOverviewComparisonOption[]>([]);
+  const [selectedSemesterSurveyId, setSelectedSemesterSurveyId] = useState<number | undefined>(undefined);
+  const [comparisonKey, setComparisonKey] = useState('auto');
   const [overviewData, setOverviewData] = useState<SchoolSurveyOverviewData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [selectionNotice, setSelectionNotice] = useState<string | null>(null);
   const hasResolvedInitialSemester = useRef(false);
+  const currentSemesterSurveys = useMemo(
+    () => semesterSurveys.filter((survey) => survey.semesterId === activeSemesterId),
+    [activeSemesterId, semesterSurveys],
+  );
+
+  // Giữ lựa chọn đồng bộ với danh sách đợt mà App đã nạp gộp cho học kỳ hiện tại.
+  useEffect(() => {
+    if (!activeSemesterId) {
+      setSelectedSemesterSurveyId(undefined);
+      return;
+    }
+    setSelectedSemesterSurveyId((prev) => {
+      if (prev && currentSemesterSurveys.some((survey) => survey.semesterSurveyId === prev)) {
+        return prev;
+      }
+      return currentSemesterSurveys[0]?.semesterSurveyId;
+    });
+  }, [activeSemesterId, currentSemesterSurveys]);
+
+  useEffect(() => {
+    let cancelled = false;
+    reportApi.schoolOverviewComparisonOptions()
+      .then((options) => {
+        if (!cancelled) setComparisonOptions(options);
+      })
+      .catch(() => {
+        if (!cancelled) setComparisonOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setComparisonKey('auto');
+  }, [activeSemesterId, selectedSemesterSurveyId]);
+
+  const selectedSurvey = useMemo(
+    () => currentSemesterSurveys.find((s) => s.semesterSurveyId === selectedSemesterSurveyId),
+    [currentSemesterSurveys, selectedSemesterSurveyId],
+  );
+
+  const compatibleComparisonSurveys = useMemo(() => {
+    if (!selectedSurvey) return [];
+    return comparisonOptions
+      .filter((survey) => survey.surveyTemplateId === selectedSurvey.surveyTemplateId
+        && survey.semesterSurveyId !== selectedSurvey.semesterSurveyId)
+      .sort((left, right) => right.semesterSurveyId - left.semesterSurveyId);
+  }, [comparisonOptions, selectedSurvey]);
+
+  const comparisonSelection = useMemo(() => {
+    const [kind, rawId] = comparisonKey.split(':');
+    const id = Number(rawId);
+    return {
+      semesterId: kind === 'semester' && Number.isFinite(id) ? id : undefined,
+      semesterSurveyId: kind === 'campaign' && Number.isFinite(id) ? id : undefined,
+    };
+  }, [comparisonKey]);
 
   // View state cho biểu đồ
   const [facultyChartView, setFacultyChartView] = useState<'completion' | 'score'>('completion');
@@ -101,7 +171,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     setLoading(true);
     setError(null);
     try {
-      let data = await reportApi.schoolOverview(activeSemesterId);
+      let data = await reportApi.schoolOverview(
+        activeSemesterId,
+        comparisonSelection.semesterId,
+        selectedSemesterSurveyId,
+        comparisonSelection.semesterSurveyId,
+      );
 
       // Trang điều hành không nên mở mặc định ở một kỳ hoàn toàn rỗng. Chỉ tự
       // tìm kỳ gần nhất có dữ liệu đúng một lần; các lựa chọn thủ công sau đó
@@ -117,13 +192,16 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           .filter((semester) => semester.semesterId !== activeSemesterId);
 
         for (const semester of semesterCandidates) {
-          const candidate = await reportApi.schoolOverview(semester.semesterId);
+          const candidateSurveys = await surveyApi.semesterSurveys(semester.semesterId);
+          const candidateSurveyId = candidateSurveys[0]?.semesterSurveyId;
+          const candidate = await reportApi.schoolOverview(semester.semesterId, undefined, candidateSurveyId);
           if (candidate.totalSections > 0 && candidate.totalTargetResponses > 0) {
             data = candidate;
             setSelectionNotice(
               `Học kỳ được chọn ban đầu chưa có đợt khảo sát. Hệ thống đang hiển thị ${candidate.academicYearName} · ${candidate.semesterName}, là học kỳ gần nhất có dữ liệu.`,
             );
             setActiveSemesterId(candidate.semesterId);
+            setSelectedSemesterSurveyId(candidateSurveyId);
             break;
           }
         }
@@ -138,7 +216,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [academicYears, activeSemesterId, setActiveSemesterId]);
+  }, [academicYears, activeSemesterId, comparisonSelection, selectedSemesterSurveyId, setActiveSemesterId]);
 
   useEffect(() => {
     void loadOverview();
@@ -153,6 +231,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     overviewData
     && overviewData.totalResponses >= MIN_RESPONSES_FOR_PUBLISHED_SCORE
     && overviewData.completionRate >= MIN_COMPLETION_RATE_FOR_PUBLISHED_SCORE,
+  );
+  const canPublishComparisonScore = Boolean(
+    canPublishScore
+    && overviewData?.semesterComparison
+    && overviewData.semesterComparison.comparisonResponseCount >= MIN_RESPONSES_FOR_PUBLISHED_SCORE
+    && overviewData.semesterComparison.comparisonCompletionRate >= MIN_COMPLETION_RATE_FOR_PUBLISHED_SCORE,
   );
   // Tóm tắt điều hành được suy ra trực tiếp từ số liệu báo cáo.
   const aiInsights = useMemo(() => {
@@ -190,14 +274,49 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       const matchesSearch = f.facultyName.toLowerCase().includes(searchTerm.toLowerCase().trim());
       if (!matchesSearch) return false;
 
-      if (filterStatus === 'good') return f.completionRate >= 80;
+      if (filterStatus === 'good') return f.completionRate >= COMPLETED_COMPLETION_RATE;
       if (filterStatus === 'progress') {
-        return f.completionRate >= LAGGING_THRESHOLD && f.completionRate < 80;
+        return f.completionRate >= LAGGING_THRESHOLD
+          && f.completionRate < COMPLETED_COMPLETION_RATE;
       }
       if (filterStatus === 'lagging') return f.completionRate < LAGGING_THRESHOLD;
       return true;
     });
   }, [overviewData?.faculties, searchTerm, filterStatus]);
+
+  // Dựng các đợt từ dữ liệu backend thật; gộp lớp bằng một danh sách đã tải sẵn, không gọi API theo từng đợt.
+  const displayedCampaigns = useMemo(() => {
+    const sectionsBySurvey = new Map<number, CourseSectionSurvey[]>();
+    sectionSurveys.forEach((section) => {
+      const sections = sectionsBySurvey.get(section.semesterSurveyId) ?? [];
+      sections.push(section);
+      sectionsBySurvey.set(section.semesterSurveyId, sections);
+    });
+
+    const now = Date.now();
+    return currentSemesterSurveys.map((survey) => {
+      const sections = sectionsBySurvey.get(survey.semesterSurveyId) ?? [];
+      const start = new Date(survey.startTime).getTime();
+      const end = new Date(survey.endTime).getTime();
+      const status = Number.isFinite(start) && now < start
+        ? 'Sắp diễn ra'
+        : Number.isFinite(end) && now > end
+          ? 'Đã kết thúc'
+          : 'Đang diễn ra';
+      return {
+        id: survey.semesterSurveyId,
+        title: survey.templateName,
+        semester: survey.semesterName,
+        academicYear: survey.academicYearName,
+        startDate: survey.startTime,
+        endDate: survey.endTime,
+        status,
+        totalTargetResponses: sections.reduce((sum, section) => sum + section.classSize, 0),
+        actualResponses: sections.reduce((sum, section) => sum + section.validResponseCount, 0),
+        sectionCount: sections.length,
+      };
+    });
+  }, [currentSemesterSurveys, sectionSurveys]);
 
   const handleDrillDownFaculty = (facultyId: number) => {
     if (activeSemesterId) {
@@ -205,6 +324,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         screen: 'overview',
         semesterId: activeSemesterId,
         facultyId,
+        semesterSurveyId: selectedSemesterSurveyId,
       });
       onNavigateTab('reports');
     }
@@ -222,7 +342,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <p>
             {overviewData ? (
               <>
-                <strong>{overviewData.academicYearName} · {overviewData.semesterName}</strong> — Số liệu điều hành toàn trường
+                <strong>{overviewData.academicYearName} · {overviewData.semesterName}</strong>
+                {selectedSurvey && (
+                  <>
+                    {' '}— Đợt: <strong>{selectedSurvey.templateName}</strong> ({selectedSurvey.sectionSurveyCount} lớp)
+                  </>
+                )}
               </>
             ) : (
               'Hệ thống Đánh giá & Khảo sát Chất lượng Dạy - Học Đại học Hàng hải Việt Nam'
@@ -231,10 +356,74 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
 
         <div className="executive-header-controls">
+          <div className="executive-compare-select">
+            <label htmlFor="dashboard-survey-campaign">Đợt khảo sát:</label>
+            <select
+              id="dashboard-survey-campaign"
+              value={selectedSemesterSurveyId ?? ''}
+              disabled={currentSemesterSurveys.length === 0}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedSemesterSurveyId(val ? Number(val) : undefined);
+              }}
+            >
+              {currentSemesterSurveys.length === 0 ? (
+                <option value="">Chưa có đợt khảo sát nào</option>
+              ) : (
+                <>
+                  <option value="">Tất cả đợt trong học kỳ</option>
+                  {currentSemesterSurveys.map((survey) => (
+                    <option key={survey.semesterSurveyId} value={survey.semesterSurveyId}>
+                      {survey.templateName} ({survey.sectionSurveyCount} lớp)
+                    </option>
+                  ))}
+                </>
+              )}
+            </select>
+          </div>
+
+          <div className="executive-compare-select">
+            <label htmlFor="dashboard-comparison">So sánh với:</label>
+            <select
+              id="dashboard-comparison"
+              value={comparisonKey}
+              onChange={(event) => setComparisonKey(event.target.value)}
+            >
+              <option value="auto">Tự động: mốc trước phù hợp</option>
+              {compatibleComparisonSurveys.length > 0 && (
+                <optgroup label="Đợt cùng bộ câu hỏi">
+                  {compatibleComparisonSurveys.map((survey) => (
+                    <option key={survey.semesterSurveyId} value={`campaign:${survey.semesterSurveyId}`}>
+                      {survey.academicYearName} · {survey.semesterName} · {survey.templateName}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label={selectedSurvey ? 'Học kỳ (cùng bộ câu hỏi)' : 'Toàn bộ học kỳ'}>
+                {academicYears.flatMap((year) => year.semesters
+                  .filter((semester) => semester.semesterId !== activeSemesterId)
+                  .map((semester) => (
+                    <option key={semester.semesterId} value={`semester:${semester.semesterId}`}>
+                      {year.academicYearName} · {semester.semesterName}
+                    </option>
+                  )))}
+              </optgroup>
+            </select>
+          </div>
+
           <button
             type="button"
             className="executive-btn-primary"
-            onClick={() => onNavigateTab('reports')}
+            onClick={() => {
+              if (activeSemesterId) {
+                window.location.hash = buildReportHash({
+                  screen: 'overview',
+                  semesterId: activeSemesterId,
+                  semesterSurveyId: selectedSemesterSurveyId,
+                });
+              }
+              onNavigateTab('reports');
+            }}
           >
             Báo cáo toàn diện
             <ArrowRight aria-hidden="true" />
@@ -482,6 +671,75 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </section>
       )}
 
+      {overviewData?.semesterComparison && !loading && !error && hasSurveyData && (
+        <section className="executive-comparison-panel" aria-labelledby="executive-comparison-title">
+          <div className="executive-comparison-heading">
+            <GitCompareArrows aria-hidden="true" />
+            <div>
+              <h2 id="executive-comparison-title">So sánh kết quả khảo sát</h2>
+              <p>
+                Mốc đối chiếu:{' '}
+                <strong>
+                  {overviewData.semesterComparison.comparisonAcademicYearName} ·{' '}
+                  {overviewData.semesterComparison.comparisonSemesterName}
+                  {overviewData.semesterComparison.comparisonTemplateName
+                    ? ` · ${overviewData.semesterComparison.comparisonTemplateName}`
+                    : ''}
+                </strong>
+              </p>
+            </div>
+          </div>
+
+          <div className="executive-comparison-metrics">
+            <div className="executive-comparison-metric">
+              <span>Tiến độ thu phiếu</span>
+              <strong>{overviewData.completionRate.toFixed(1)}%</strong>
+              <small>Đối chiếu {overviewData.semesterComparison.comparisonCompletionRate.toFixed(1)}%</small>
+              <span className={`executive-delta-badge ${overviewData.semesterComparison.completionRateDelta > 0 ? 'is-up' : overviewData.semesterComparison.completionRateDelta < 0 ? 'is-down' : 'is-flat'}`}>
+                {overviewData.semesterComparison.completionRateDelta > 0
+                  ? <TrendingUp aria-hidden="true" />
+                  : overviewData.semesterComparison.completionRateDelta < 0
+                    ? <TrendingDown aria-hidden="true" />
+                    : null}
+                {overviewData.semesterComparison.completionRateDelta > 0 ? '+' : ''}
+                {overviewData.semesterComparison.completionRateDelta.toFixed(1)} điểm %
+              </span>
+            </div>
+
+            <div className="executive-comparison-metric">
+              <span>Điểm micro-average</span>
+              <strong>{canPublishComparisonScore ? overviewData.overallAverageScore.toFixed(2) : '—'}</strong>
+              <small>
+                Đối chiếu {canPublishComparisonScore
+                  ? overviewData.semesterComparison.comparisonAverageScore.toFixed(2)
+                  : 'chưa đủ mẫu'}
+              </small>
+              {canPublishComparisonScore && (
+                <span className={`executive-delta-badge ${overviewData.semesterComparison.averageScoreDelta > 0 ? 'is-up' : overviewData.semesterComparison.averageScoreDelta < 0 ? 'is-down' : 'is-flat'}`}>
+                  {overviewData.semesterComparison.averageScoreDelta > 0
+                    ? <TrendingUp aria-hidden="true" />
+                    : overviewData.semesterComparison.averageScoreDelta < 0
+                      ? <TrendingDown aria-hidden="true" />
+                      : null}
+                  {overviewData.semesterComparison.averageScoreDelta > 0 ? '+' : ''}
+                  {overviewData.semesterComparison.averageScoreDelta.toFixed(2)} điểm
+                </span>
+              )}
+            </div>
+
+            <div className="executive-comparison-sample">
+              <span>Mẫu đối chiếu</span>
+              <strong>{formatNumber(overviewData.semesterComparison.comparisonResponseCount)}</strong>
+              <small>
+                / {formatNumber(overviewData.semesterComparison.comparisonTargetResponses)} phiếu ·{' '}
+                {overviewData.semesterComparison.comparisonSectionCount} lớp
+              </small>
+              <p>Tổng điểm phiếu hợp lệ / tổng số phiếu hợp lệ; không lấy trung bình của các trung bình lớp.</p>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* 4. 2-COLUMN ANALYTICS GRID (60% / 40%) */}
       {overviewData && !loading && !error && hasSurveyData && (
         <section className="executive-charts-row" aria-label="Phân tích chi tiết">
@@ -611,7 +869,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 className={`executive-chip ${filterStatus === 'good' ? 'is-active' : ''}`}
                 onClick={() => setFilterStatus('good')}
               >
-                Đạt chuẩn ≥80% ({overviewData.faculties.filter((f) => f.completionRate >= 80).length})
+                Đạt chuẩn ≥{COMPLETED_COMPLETION_RATE}% (
+                {overviewData.faculties.filter(
+                  (f) => f.completionRate >= COMPLETED_COMPLETION_RATE
+                ).length}
+                )
               </button>
               <button
                 type="button"
@@ -693,7 +955,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                           </span>
                         </td>
                         <td>
-                          {faculty.completionRate >= 80 ? (
+                          {faculty.completionRate >= COMPLETED_COMPLETION_RATE ? (
                             <span className="executive-status-pill is-good">Đạt chuẩn</span>
                           ) : faculty.completionRate >= LAGGING_THRESHOLD ? (
                             <span className="executive-status-pill is-ok">Đang thu</span>
@@ -726,18 +988,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         <header className="dashboard-block-heading dashboard-campaigns-heading">
           <div>
             <h2 id="dashboard-campaigns-title">Đợt khảo sát đang tiếp nhận phản hồi</h2>
-            <p>Theo dõi tiến độ phát phiếu và mã QR truy cập trực tiếp cho từng đợt</p>
+            <p>Theo dõi tiến độ phát phiếu và điều hướng trực tiếp tới từng đợt khảo sát</p>
           </div>
           <div className="dashboard-heading-actions">
-            <span className="dashboard-result-count">{campaigns.length} đợt khảo sát</span>
-            <button
-              type="button"
-              className="dashboard-manage-button"
-              onClick={() => onNavigateTab('course-campaigns')}
-            >
-              Quản lý đợt khảo sát
-              <ArrowRight aria-hidden="true" />
-            </button>
+            <span className="dashboard-result-count">
+              {surveyLoading ? 'Đang tải...' : `${displayedCampaigns.length} đợt khảo sát`}
+            </span>
           </div>
         </header>
 
@@ -750,11 +1006,27 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <th scope="col">Thời gian</th>
                 <th scope="col">Tiến độ thu phiếu</th>
                 <th scope="col">Trạng thái</th>
-                <th scope="col" className="dashboard-action-column">Mã QR</th>
+                <th scope="col" style={{ width: 120, textAlign: 'right' }}>Thao tác</th>
               </tr>
             </thead>
             <tbody>
-              {campaigns.length === 0 ? (
+              {surveyLoading ? (
+                <tr>
+                  <td colSpan={6} className="dashboard-empty-cell">
+                    <LoaderCircle className="auth-spin" aria-hidden="true" />
+                    <strong>Đang nạp các đợt khảo sát</strong>
+                    <span>Hệ thống đang tổng hợp tiến độ phiếu hợp lệ của học kỳ.</span>
+                  </td>
+                </tr>
+              ) : surveyLoadError ? (
+                <tr>
+                  <td colSpan={6} className="dashboard-empty-cell">
+                    <CircleAlert aria-hidden="true" />
+                    <strong>Không tải được dữ liệu đợt khảo sát</strong>
+                    <span>{surveyLoadError}</span>
+                  </td>
+                </tr>
+              ) : displayedCampaigns.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="dashboard-empty-cell">
                     <RadioTower aria-hidden="true" />
@@ -763,22 +1035,30 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   </td>
                 </tr>
               ) : (
-                campaigns.map((campaign) => {
-                  const progress = getProgress(campaign);
+                displayedCampaigns.map((campaign) => {
+                  const progress = campaign.totalTargetResponses > 0
+                    ? Math.min(100, Math.round(
+                        (campaign.actualResponses / campaign.totalTargetResponses) * 100,
+                      ))
+                    : 0;
                   return (
-                    <tr key={campaign.id}>
+                    <tr
+                      key={campaign.id}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => onNavigateTab('course-campaigns')}
+                    >
                       <td className="dashboard-campaign-name">
                         <strong title={campaign.title}>{campaign.title}</strong>
                         <span>
-                          {campaign.semester} · {campaign.academicYear}
+                          {campaign.semester} · {campaign.academicYear} · {campaign.sectionCount} lớp
                         </span>
                       </td>
                       <td>
-                        <span className="dashboard-type-label">{campaign.type}</span>
+                        <span className="dashboard-type-label">Học phần</span>
                       </td>
                       <td className="dashboard-date-cell">
                         {formatDate(campaign.startDate)}
-                        <span aria-hidden="true">-</span>
+                        <span aria-hidden="true"> - </span>
                         {formatDate(campaign.endDate)}
                       </td>
                       <td>
@@ -801,16 +1081,19 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                           {campaign.status}
                         </span>
                       </td>
-                      <td className="dashboard-action-column">
+                      <td style={{ textAlign: 'right' }}>
                         <button
                           type="button"
-                          className="dashboard-qr-button"
-                          aria-label={`Mở mã QR cho ${campaign.title}`}
-                          title="Mở mã QR"
-                          onClick={() => onOpenQR(campaign)}
+                          className="executive-action-link"
+                          aria-label={`Vào đợt khảo sát ${campaign.title}`}
+                          title="Vào đợt khảo sát"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onNavigateTab('course-campaigns');
+                          }}
                         >
-                          <QrCode aria-hidden="true" />
-                          <span>Mã QR</span>
+                          Vào khảo sát
+                          <ChevronRight style={{ width: 14, height: 14 }} aria-hidden="true" />
                         </button>
                       </td>
                     </tr>

@@ -15,6 +15,10 @@ import type { FacultyOverview } from '../../types';
 import { completionColor } from './theme';
 import { FacultyNameAxisTick } from './FacultyNameAxisTick';
 import { wrapFacultyName } from './facultyChartLabels';
+import {
+  COMPLETED_COMPLETION_RATE,
+  LAGGING_COMPLETION_RATE,
+} from '../../utils/reportThresholds';
 
 interface FacultyCompletionChartProps {
   faculties: FacultyOverview[];
@@ -120,7 +124,10 @@ export const FacultyCompletionChart: React.FC<FacultyCompletionChartProps> = ({
       </ResponsiveContainer>
       <div className="reports-chart-note">
         <Timer className="operation-icon" aria-hidden="true" />
-        <span>≥80% hoàn thành · 20–80% đang thu · &lt;20% chậm tiến độ.</span>
+        <span>
+          ≥{COMPLETED_COMPLETION_RATE}% hoàn thành · {LAGGING_COMPLETION_RATE}–
+          {COMPLETED_COMPLETION_RATE - 1}% đang thu · &lt;{LAGGING_COMPLETION_RATE}% chậm tiến độ.
+        </span>
       </div>
     </div>
   );

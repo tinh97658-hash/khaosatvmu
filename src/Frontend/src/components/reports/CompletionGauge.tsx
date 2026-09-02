@@ -1,5 +1,9 @@
 import React from 'react';
 import { formatNumber } from './theme';
+import {
+  COMPLETED_COMPLETION_RATE,
+  LAGGING_COMPLETION_RATE,
+} from '../../utils/reportThresholds';
 
 interface CompletionGaugeProps {
   /** 0..100 */
@@ -13,7 +17,7 @@ interface CompletionGaugeProps {
 
 /**
  * Vòng tròn tiến độ thu phiếu (SVG) — hiển thị % hoàn thành toàn trường.
- * Màu theo ngưỡng: ≥80% xanh lá, ≥40% xanh dương, còn lại cam.
+ * Màu theo ngưỡng thu đủ phiếu: đạt thì xanh lá, giữa là xanh dương, thấp là cam.
  */
 export const CompletionGauge: React.FC<CompletionGaugeProps> = ({
   value,
@@ -65,5 +69,9 @@ export const CompletionGauge: React.FC<CompletionGaugeProps> = ({
 };
 
 function completionColor(rate: number): string {
-  return rate >= 80 ? '#137b3b' : rate >= 40 ? '#0788b8' : '#b86216';
+  return rate >= COMPLETED_COMPLETION_RATE
+    ? '#137b3b'
+    : rate >= LAGGING_COMPLETION_RATE
+      ? '#0788b8'
+      : '#b86216';
 }

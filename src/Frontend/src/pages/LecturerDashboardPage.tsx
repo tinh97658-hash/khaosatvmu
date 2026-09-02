@@ -10,6 +10,8 @@ import {
 import { useSemester } from '../context/semesterContext';
 import { catalogApi } from '../services/catalogApi';
 import { surveyApi } from '../services/surveyApi';
+import type { SemesterSurvey } from '../types';
+import { ExportDropdown } from '../components/ExportDropdown';
 import '../styles/dashboard.css';
 
 interface LecturerDashboardPageProps {
@@ -56,7 +58,7 @@ const quickActions: QuickAction[] = [
 interface LecturerMetrics {
   /** Lớp mình dạy trong học kỳ, kể cả lớp chưa được phát phiếu. */
   sectionCount: number;
-  /** Lớp đã được phát phiếu trong đợt mới nhất. */
+  /** Lớp đã được phát phiếu trong đợt được chọn. */
   surveyedCount: number;
   responseCount: number;
   targetCount: number;
@@ -66,11 +68,15 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
   onNavigateTab,
 }) => {
   const { activeSemesterId, activeSemesterLabel } = useSemester();
+  const [semesterSurveys, setSemesterSurveys] = useState<SemesterSurvey[]>([]);
+  const [selectedSurveyId, setSelectedSurveyId] = useState<number | null>(null);
   const [metrics, setMetrics] = useState<LecturerMetrics | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (activeSemesterId === null) {
+      setSemesterSurveys([]);
+      setSelectedSurveyId(null);
       setMetrics(null);
       return;
     }
@@ -79,30 +85,36 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
     setLoading(true);
     void (async () => {
       try {
-        // Cả hai lời gọi đều đã được backend lọc về lớp của chính người đang đăng
-        // nhập, nên trang này không phải biết gì về chuyện phân quyền.
         const [sections, surveys] = await Promise.all([
           catalogApi.courseSections(activeSemesterId),
           surveyApi.semesterSurveys(activeSemesterId),
         ]);
         if (cancelled) return;
+        let chosenSurveyId: number | null = null;
+        setSelectedSurveyId((current) => {
+          chosenSurveyId = current && surveys.some((s) => s.semesterSurveyId === current)
+            ? current
+            : surveys[0]?.semesterSurveyId ?? null;
+          return chosenSurveyId;
+        });
 
-        // Danh sách đợt trả về đã sắp mới nhất lên đầu.
-        const latest = surveys[0] ?? null;
-        const sectionSurveys = latest
-          ? await surveyApi.courseSectionSurveys(latest.semesterSurveyId)
+        const sectionSurveys = chosenSurveyId
+          ? await surveyApi.courseSectionSurveys(chosenSurveyId)
           : [];
         if (cancelled) return;
 
         setMetrics({
           sectionCount: sections.length,
           surveyedCount: sectionSurveys.length,
-          responseCount: sectionSurveys.reduce((total, item) => total + item.responseCount, 0),
+          // Tiến độ đo bằng phiếu HỢP LỆ, giống bảng tiến độ và báo cáo.
+          responseCount: sectionSurveys.reduce((total, item) => total + item.validResponseCount, 0),
           targetCount: sectionSurveys.reduce((total, item) => total + item.classSize, 0),
         });
       } catch {
-        // Hỏng một phần thì vẫn hiện ba thẻ, không chặn cả trang.
-        if (!cancelled) setMetrics(null);
+        if (!cancelled) {
+          setSemesterSurveys([]);
+          setMetrics(null);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -113,6 +125,29 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
     };
   }, [activeSemesterId]);
 
+  const handleSelectSurvey = async (surveyId: number | null) => {
+    setSelectedSurveyId(surveyId);
+    if (!activeSemesterId) return;
+    setLoading(true);
+    try {
+      const [sections, sectionSurveys] = await Promise.all([
+        catalogApi.courseSections(activeSemesterId),
+        surveyId ? surveyApi.courseSectionSurveys(surveyId) : Promise.resolve([]),
+      ]);
+      setMetrics({
+        sectionCount: sections.length,
+        surveyedCount: sectionSurveys.length,
+        responseCount: sectionSurveys.reduce((total, item) => total + item.validResponseCount, 0),
+        targetCount: sectionSurveys.reduce((total, item) => total + item.classSize, 0),
+      });
+    } catch {
+      setMetrics(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectedSurvey = semesterSurveys.find((s) => s.semesterSurveyId === selectedSurveyId);
   const completionRate = metrics && metrics.targetCount > 0
     ? (metrics.responseCount / metrics.targetCount) * 100
     : null;
@@ -154,14 +189,76 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
       {/* Hai ô, không có ô điểm và không có số toàn trường để so: câu H-e chốt giảng
           viên chỉ xem tiến độ thu phiếu. Xem congviec3.md mục I3. */}
       <section className="dashboard-block">
-        <div className="dashboard-block-heading">
+        <div className="dashboard-block-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h2>Lớp của tôi</h2>
             <p>
-              {metrics && metrics.surveyedCount > 0
-                ? 'Số liệu của đợt khảo sát mới nhất trong học kỳ'
+              {selectedSurvey
+                ? `Đợt khảo sát: ${selectedSurvey.templateName}`
                 : 'Học kỳ này chưa có đợt khảo sát nào cho lớp của bạn'}
             </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            {semesterSurveys.length > 0 && (
+              <div className="executive-compare-select" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label htmlFor="lec-dashboard-survey-select" style={{ fontSize: '12px', color: '#475569', fontWeight: 600 }}>Đợt khảo sát:</label>
+                <select
+                  id="lec-dashboard-survey-select"
+                  value={selectedSurveyId ?? ''}
+                  onChange={(e) => void handleSelectSurvey(e.target.value ? Number(e.target.value) : null)}
+                  style={{ height: '32px', padding: '0 8px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '3px' }}
+                >
+                  {semesterSurveys.map((survey) => (
+                    <option key={survey.semesterSurveyId} value={survey.semesterSurveyId}>
+                      {survey.templateName} ({survey.sectionSurveyCount} lớp)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          {metrics && (
+            <ExportDropdown
+              buttonLabel="Xuất số liệu"
+              size="sm"
+              options={{
+                fileName: 'tien-do-khao-sat-giang-vien',
+                metadata: {
+                  title: 'BÁO CÁO TIẾN ĐỘ THU PHIẾU KHẢO SÁT CÁ NHÂN GIẢNG VIÊN',
+                  subtitle: `Học kỳ: ${activeSemesterLabel}${selectedSurvey ? ` — Đợt: ${selectedSurvey.templateName}` : ''}`,
+                  subInstitution: 'GIẢNG VIÊN',
+                  info: {
+                    'Học kỳ': activeSemesterLabel,
+                    'Đợt khảo sát': selectedSurvey?.templateName || '—',
+                    'Tổng số lớp giảng dạy': metrics.sectionCount,
+                    'Số lớp đã phát phiếu': metrics.surveyedCount,
+                    'Tiến độ thu phiếu': completionRate !== null ? `${completionRate.toFixed(1)}%` : '—',
+                  },
+                },
+                columns: [
+                  { key: 'metricName', header: 'Chỉ tiêu theo dõi', width: 30 },
+                  { key: 'metricValue', header: 'Kết quả thực tế', width: 25, align: 'right' as const },
+                ],
+                data: [
+                  {
+                    metricName: 'Tổng số lớp học phần giảng dạy',
+                    metricValue: `${metrics.sectionCount} lớp`,
+                  },
+                  {
+                    metricName: 'Số lớp học phần đã phát phiếu khảo sát',
+                    metricValue: `${metrics.surveyedCount} lớp`,
+                  },
+                  {
+                    metricName: 'Tổng số phiếu khảo sát đã thu / Tổng sĩ số',
+                    metricValue: `${metrics.responseCount} / ${metrics.targetCount} phiếu`,
+                  },
+                  {
+                    metricName: 'Tỷ lệ hoàn thành thu phiếu',
+                    metricValue: completionRate !== null ? `${completionRate.toFixed(1)}%` : '—',
+                  },
+                ],
+              }}
+            />
+          )}
           </div>
         </div>
 
