@@ -16,7 +16,10 @@ import {
 import { toast } from 'sonner';
 import { GraduationEChart } from '../components/graduation/GraduationEChart';
 import { GraduationImportDialog } from '../components/graduation/GraduationImportDialog';
-import { GraduationOutcomeTrendChart } from '../components/graduation/GraduationYearTrendCharts';
+import {
+  GraduationOutcomeTrendChart,
+  GraduationYearVolumeChart,
+} from '../components/graduation/GraduationYearTrendCharts';
 import { graduationAnalyticsApi } from '../services/graduationAnalyticsApi';
 import type {
   GraduationAnalysisScope,
@@ -42,11 +45,11 @@ const reviewYearDimension: GraduationDimension = {
 };
 
 const bucketSeries = [
-  { key: 'excellent', countKey: 'excellentCount', label: 'Xuất sắc', color: '#0788b8' },
-  { key: 'veryGood', countKey: 'veryGoodCount', label: 'Giỏi', color: '#38a3a5' },
-  { key: 'good', countKey: 'goodCount', label: 'Khá', color: '#86b049' },
-  { key: 'average', countKey: 'averageCount', label: 'Trung bình', color: '#e2a23a' },
-  { key: 'workStudyTransfer', countKey: 'workStudyTransferCount', label: 'Chuyển VHVL', color: '#9b6eb2' },
+  { key: 'excellent', countKey: 'excellentCount', label: 'Xuất sắc', color: '#087a3b' },
+  { key: 'veryGood', countKey: 'veryGoodCount', label: 'Giỏi', color: '#8fce68' },
+  { key: 'good', countKey: 'goodCount', label: 'Khá', color: '#2f9de0' },
+  { key: 'average', countKey: 'averageCount', label: 'Trung bình', color: '#ed8c22' },
+  { key: 'workStudyTransfer', countKey: 'workStudyTransferCount', label: 'Chuyển VHVL', color: '#8054b4' },
 ] as const;
 
 const chartOptions: Array<{ id: GraduationChartType; label: string; icon: typeof BarChart3 }> = [
@@ -439,6 +442,19 @@ export function GraduationAnalyticsPage() {
           </footer>
         </article>
         : !panelLoading && <div className="graduation-overview-empty">Không có dữ liệu phù hợp với bộ lọc.</div>}
+      {overview && overview.cohortYear.length > 0 && <article className="graduation-cohort-comparison graduation-year-volume">
+        <header>
+          <div><span>QUY MÔ VÀ THÀNH PHẦN</span><h2>Số lượng kết quả tốt nghiệp theo năm</h2><p>Cột chồng thể hiện năm nhóm kết quả; đường phía trên thể hiện tổng số sinh viên trong năm.</p></div>
+        </header>
+        <div className="graduation-year-volume__chart">
+          <GraduationYearVolumeChart data={overviewYearModel} />
+        </div>
+        <footer>
+          <span>Rê chuột vào từng phần cột để xem số lượng và cơ cấu; rê vào đường để xem tổng của năm.</span>
+          {overviewYearModel.some((point) => !point.complete)
+            && <strong>Năm thiếu một hoặc nhiều nhóm dữ liệu sẽ không hiển thị trên biểu đồ.</strong>}
+        </footer>
+      </article>}
     </section>}
 
     {view === 'explore' && <section className="graduation-tab-panel" aria-busy={panelLoading}>

@@ -288,27 +288,29 @@ cần thu hẹp báo cáo.
   VHVL trong phạm vi đang lọc.
 - Hiển thị tổng số sinh viên, số lượng và tỉ trọng từng nhóm cùng coverage dòng
   nguồn; tỉ trọng luôn tính lại từ số lượng.
-- Đây là phần tổng hợp chung trước khi người dùng đi xuống biểu đồ so sánh năm–khóa.
+- Đây là phần tổng hợp chung trước khi người dùng đi xuống hai biểu đồ xu hướng theo năm.
 
 ### 6.2. Biểu đồ mặc định
 
-Một **biểu đồ cột chồng theo nhóm năm–khóa** thay cho năm biểu đồ đường:
+Hai biểu đồ cùng dùng trục X là năm xét và không đưa khóa thành chuỗi:
 
-- Trục X chỉ hiển thị năm xét. Trong mỗi năm, mỗi khóa có một cột chồng riêng và
-  tên khóa đặt trên đỉnh cột; tổ hợp không có dữ liệu không sinh cột giả.
-- Đây là dạng kết hợp `grouped + stacked column`: mỗi cột chồng năm nhóm Xuất sắc,
-  Giỏi, Khá, Trung bình và Chuyển VHVL; màu cố định theo nhóm kết quả thay vì theo khóa.
-- Chế độ `Số lượng` thể hiện quy mô thực tế; chế độ `Tỷ lệ` quy mỗi cột đủ dữ liệu
-  về 100% để so sánh cơ cấu giữa các khóa.
-- Tổ hợp thiếu một hoặc nhiều nhóm vẫn hiện số lượng nguồn nhưng không bị suy
-  diễn thành tỷ lệ; giao diện phải cảnh báo coverage.
+- **Biến động cơ cấu kết quả tốt nghiệp**: năm đường tương ứng Xuất sắc, Giỏi, Khá,
+  Trung bình và Chuyển VHVL. Trục Y tự co theo miền tỷ lệ thực tế; mỗi điểm hiển thị
+  tỷ lệ, tooltip cho biết cả số lượng và mẫu số của năm.
+- **Số lượng kết quả tốt nghiệp theo năm**: cột chồng năm nhóm kết quả kết hợp đường
+  tổng sinh viên. Số lượng từng nhóm đặt trong cột, tổng năm đặt trên đường; tooltip
+  chỉ hiển thị đúng phần đang được trỏ tới.
+- Màu của năm nhóm được giữ nhất quán giữa Góc nhìn nhanh và hai biểu đồ.
+- Năm thiếu một hoặc nhiều nhóm không bị suy diễn thành tỷ lệ hoặc tổng hoàn chỉnh;
+  giao diện phải cảnh báo coverage.
 
-Cách biểu diễn này phù hợp với dữ liệu chỉ có ít mốc năm, tránh hàm ý xu hướng
-liên tục và cho phép đọc đồng thời tổng số lẫn cơ cấu năm nhóm trên một biểu đồ.
+Cách biểu diễn này tách rõ hai câu hỏi: cơ cấu thay đổi thế nào qua các năm và quy mô
+tổng thể tăng hay giảm. Khóa vẫn là bộ lọc hoặc chiều phân tích trong Khám phá chi tiết,
+không làm rối biểu đồ Tổng quan.
 
-Các chart theo khoa/CTĐT không bị loại bỏ hoàn toàn: filter khoa/CTĐT thay đổi
-phạm vi của toàn bộ Tổng quan. Mục tiêu chính của layout là nhìn được kết quả theo
-khóa xuyên nhiều năm, không quay lại so sánh theo từng đợt.
+Các chart theo khoa/CTĐT không bị loại bỏ hoàn toàn: filter khoa/CTĐT/khóa thay đổi
+phạm vi của toàn bộ Tổng quan. Mục tiêu chính của layout là nhìn được xu hướng tích
+lũy qua các năm, không quay lại so sánh theo từng đợt.
 
 Backend nên có endpoint overview chuyên dụng trả toàn bộ KPI/chart model trong
 một response nhất quán, thay vì frontend gọi nhiều request metric rời như hiện tại.
@@ -443,7 +445,7 @@ trong cùng lần deploy vì đây là module nội bộ.
 ### Giai đoạn 4 — Ba tab UI
 
 - [x] Bỏ dataset picker chung, thêm switch ba tab.
-- [x] Làm lại Tổng quan bằng Góc nhìn nhanh và cột chồng năm–khóa, có chế độ số lượng/tỷ lệ.
+- [x] Làm lại Tổng quan bằng Góc nhìn nhanh, đường cơ cấu theo năm và cột chồng kết hợp đường tổng.
 - [x] Thêm box dữ liệu phân tích vào Khám phá chi tiết.
 - [x] Chuyển bảng nguồn thành tab Bảng với period picker.
 - [x] Đồng bộ URL, loading/empty/error/no-result và responsive.
@@ -482,8 +484,8 @@ Kết quả kiểm thử local ngày 30/08/2026:
 7. Năm nhóm kết quả hiển thị đủ số lượng, tỉ trọng và coverage.
 8. Tổng/tỉ lệ tích lũy dùng ratio-of-sums; không cộng hoặc average tỉ lệ nguồn.
 9. `InitialEnrollmentCount` không bị cộng lặp qua các đợt.
-10. Tổng quan chỉ đặt năm trên trục X, ghi khóa trên từng cột chồng, chuyển được số lượng/tỷ lệ
-    và hoạt động với filter khoa/CTĐT.
+10. Tổng quan chỉ đặt năm trên trục X; có đường cơ cấu năm nhóm và cột chồng số lượng kết hợp
+    đường tổng, đồng thời hoạt động với filter khoa/CTĐT/khóa.
 11. Khám phá cho group/series theo khoa, CTĐT, khóa; thêm năm xét khi chọn scope tích lũy.
 12. Tab Bảng hiển thị đúng dữ liệu nguồn của đợt được chọn, đủ truy vết file/dòng.
 13. Dữ liệu legacy được audit/migrate mà không âm thầm gộp các đợt trùng; row
