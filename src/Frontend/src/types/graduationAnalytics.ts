@@ -151,6 +151,19 @@ export interface GraduationCohortYearPoint {
   totalRows: number;
 }
 
+export interface GraduationYearOverviewPoint {
+  reviewYear: number;
+  totalOutcome: number;
+  excellentCount: number;
+  veryGoodCount: number;
+  goodCount: number;
+  averageCount: number;
+  workStudyTransferCount: number;
+  includedRows: number;
+  totalRows: number;
+  complete: boolean;
+}
+
 export interface GraduationOverview {
   totalOutcome: number;
   periodCount: number;

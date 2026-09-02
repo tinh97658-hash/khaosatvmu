@@ -16,6 +16,7 @@ import {
 import { toast } from 'sonner';
 import { GraduationEChart } from '../components/graduation/GraduationEChart';
 import { GraduationImportDialog } from '../components/graduation/GraduationImportDialog';
+import { GraduationOutcomeTrendChart } from '../components/graduation/GraduationYearTrendCharts';
 import { graduationAnalyticsApi } from '../services/graduationAnalyticsApi';
 import type {
   GraduationAnalysisScope,
@@ -27,12 +28,12 @@ import type {
   GraduationPeriod,
   GraduationQueryResult,
   GraduationRow,
+  GraduationYearOverviewPoint,
 } from '../types/graduationAnalytics';
 import '../styles/graduation-analytics.css';
 
 type GraduationView = 'overview' | 'explore' | 'table';
 type ChartSort = 'auto' | 'value-desc' | 'value-asc' | 'label-asc';
-type OverviewMeasure = 'count' | 'percent';
 
 const reviewYearDimension: GraduationDimension = {
   id: 'reviewYear',
@@ -65,7 +66,6 @@ const initialView = (): GraduationView => {
   return value === 'explore' || value === 'table' ? value : 'overview';
 };
 const initialScope = (): GraduationAnalysisScope => queryValue('gaScope') === 'period' ? 'period' : 'cumulative';
-const initialOverviewMeasure = (): OverviewMeasure => queryValue('gaOverviewMeasure') === 'percent' ? 'percent' : 'count';
 const initialChartType = (): GraduationChartType => {
   const value = queryValue('gaChart');
   return chartOptions.some((item) => item.id === value) ? value as GraduationChartType : 'bar';
@@ -132,7 +132,6 @@ export function GraduationAnalyticsPage() {
   const [cohort, setCohort] = useState(() => queryValue('gaCohort'));
   const [fromYear, setFromYear] = useState(() => queryValue('gaFrom'));
   const [toYear, setToYear] = useState(() => queryValue('gaTo'));
-  const [overviewMeasure, setOverviewMeasure] = useState<OverviewMeasure>(initialOverviewMeasure);
   const [metricId, setMetricId] = useState(() => queryValue('gaMetric') || 'excellentRate');
   const [groupBy, setGroupBy] = useState<GraduationDimension['id']>(() => {
     const value = queryValue('gaGroup');
@@ -206,7 +205,6 @@ export function GraduationAnalyticsPage() {
     setOrDelete('gaCohort', cohort);
     setOrDelete('gaFrom', view === 'overview' ? fromYear : '');
     setOrDelete('gaTo', view === 'overview' ? toYear : '');
-    setOrDelete('gaOverviewMeasure', view === 'overview' && overviewMeasure === 'percent' ? overviewMeasure : '');
     setOrDelete('gaMetric', view === 'explore' ? metricId : '');
     setOrDelete('gaGroup', view === 'explore' && groupBy !== 'faculty' ? groupBy : '');
     setOrDelete('gaSeries', view === 'explore' ? seriesBy : '');
@@ -216,7 +214,7 @@ export function GraduationAnalyticsPage() {
     setOrDelete('gaLabels', view === 'explore' && showLabels ? '1' : '');
     const nextUrl = `${window.location.pathname}${query.size ? `?${query}` : ''}${window.location.hash}`;
     window.history.replaceState(window.history.state, '', nextUrl);
-  }, [chartSort, chartType, cohort, faculty, fromYear, groupBy, metricId, overviewMeasure, periodId, program, scope, seriesBy, showLabels, toYear, topN, view]);
+  }, [chartSort, chartType, cohort, faculty, fromYear, groupBy, metricId, periodId, program, scope, seriesBy, showLabels, toYear, topN, view]);
 
   const facetScope: GraduationAnalysisScope = view === 'overview'
     ? 'cumulative'
@@ -318,57 +316,34 @@ export function GraduationAnalyticsPage() {
     }
   }, [availableChartTypes, chartType]);
 
-  const overviewComparisonModel = useMemo(() => {
-    const points = [...(overview?.cohortYear ?? [])].sort((a, b) =>
-      a.reviewYear - b.reviewYear || a.cohort.localeCompare(b.cohort, 'vi', { numeric: true }));
-    const years = [...new Set(points.map((point) => point.reviewYear))].sort((a, b) => a - b);
-    const cohorts = [...new Set(points.map((point) => point.cohort))]
-      .sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
-    const dataByYear = new Map<number, Record<string, string | number | null>>(
-      years.map((year) => [year, { name: String(year) }]),
-    );
-    const series = cohorts.flatMap((cohort, cohortIndex) => bucketSeries.map((bucket, bucketIndex) => ({
-      key: `cohort${cohortIndex}-${bucket.key}`,
-      label: `${cohort} · ${bucket.label}`,
-      stack: `cohort${cohortIndex}`,
-      stackLabelKey: bucketIndex === bucketSeries.length - 1 ? `cohort${cohortIndex}-label` : undefined,
-      tooltipCountKey: `cohort${cohortIndex}-${bucket.key}-count`,
-      tooltipTotalKey: `cohort${cohortIndex}-total`,
-      color: bucket.color,
-      countKey: bucket.countKey,
-      cohort,
-    })));
-    points.forEach((point) => {
-      const row = dataByYear.get(point.reviewYear)!;
-      const cohortIndex = cohorts.indexOf(point.cohort);
-      row[`cohort${cohortIndex}-label`] = overviewMeasure === 'percent'
-        ? `${point.cohort}\nn=${formatValue(point.totalOutcome)}`
-        : point.cohort;
-      row[`cohort${cohortIndex}-total`] = point.totalOutcome;
-      series.filter((item) => item.cohort === point.cohort).forEach((item) => {
-        const count = point[item.countKey];
-        row[item.tooltipCountKey] = count;
-        row[item.key] = overviewMeasure === 'count'
-          ? count
-          : point.includedRows === point.totalRows && point.totalOutcome > 0
-            ? count / point.totalOutcome * 100
-            : null;
-      });
+  const overviewYearModel = useMemo(() => {
+    const byYear = new Map<number, GraduationYearOverviewPoint>();
+    (overview?.cohortYear ?? []).forEach((point) => {
+      const current = byYear.get(point.reviewYear) ?? {
+        reviewYear: point.reviewYear,
+        totalOutcome: 0,
+        excellentCount: 0,
+        veryGoodCount: 0,
+        goodCount: 0,
+        averageCount: 0,
+        workStudyTransferCount: 0,
+        includedRows: 0,
+        totalRows: 0,
+        complete: true,
+      };
+      current.totalOutcome += point.totalOutcome;
+      current.excellentCount += point.excellentCount;
+      current.veryGoodCount += point.veryGoodCount;
+      current.goodCount += point.goodCount;
+      current.averageCount += point.averageCount;
+      current.workStudyTransferCount += point.workStudyTransferCount;
+      current.includedRows += point.includedRows;
+      current.totalRows += point.totalRows;
+      current.complete = current.complete && point.includedRows === point.totalRows;
+      byYear.set(point.reviewYear, current);
     });
-    return {
-      data: years.map((year) => dataByYear.get(year)!),
-      series: series.map(({ key, label, stack, stackLabelKey, tooltipCountKey, tooltipTotalKey }) => ({
-        key,
-        label,
-        stack,
-        stackLabelKey,
-        tooltipCountKey,
-        tooltipTotalKey,
-      })),
-      colors: series.map((item) => item.color),
-      incompletePointCount: points.filter((point) => point.includedRows < point.totalRows).length,
-    };
-  }, [overview?.cohortYear, overviewMeasure]);
+    return [...byYear.values()].sort((a, b) => a.reviewYear - b.reviewYear);
+  }, [overview?.cohortYear]);
   const selectedPeriod = periods.find((item) => item.periodId === periodId) ?? null;
   const rowPageCount = Math.max(1, Math.ceil(rowTotal / 25));
 
@@ -450,37 +425,17 @@ export function GraduationAnalyticsPage() {
         </> : <div className="graduation-composition__empty">Không có dữ liệu phù hợp với bộ lọc.</div>}
       </article>}
       {overview && overview.cohortYear.length > 0
-        ? <article className="graduation-cohort-comparison">
+        ? <article className="graduation-cohort-comparison graduation-year-trends">
           <header>
-            <div><span>CỘT CHỒNG THEO NHÓM</span><h2>Cơ cấu kết quả theo năm và khóa</h2><p>Trục ngang chỉ hiển thị năm; tên khóa nằm trên từng cột chồng.</p></div>
-            <div className="graduation-measure-switch" role="group" aria-label="Đơn vị biểu đồ">
-              <button type="button" className={overviewMeasure === 'count' ? 'is-selected' : ''} aria-pressed={overviewMeasure === 'count'} onClick={() => setOverviewMeasure('count')}>Số lượng</button>
-              <button type="button" className={overviewMeasure === 'percent' ? 'is-selected' : ''} aria-pressed={overviewMeasure === 'percent'} onClick={() => setOverviewMeasure('percent')}>Cơ cấu %</button>
-            </div>
+            <div><span>XU HƯỚNG QUA CÁC NĂM</span><h2>Biến động cơ cấu kết quả tốt nghiệp</h2><p>Mỗi đường là một nhóm kết quả; tỷ lệ được tính trên tổng số sinh viên của từng năm.</p></div>
           </header>
-          <div className="graduation-outcome-legend" aria-label="Chú giải nhóm kết quả">
-            {bucketSeries.map((bucket) => <span key={bucket.key}><i style={{ background: bucket.color }} />{bucket.label}</span>)}
-          </div>
-          <div className="graduation-cohort-comparison__chart">
-            <GraduationEChart
-              type="stacked-column"
-              data={overviewComparisonModel.data}
-              series={overviewComparisonModel.series}
-              unit={overviewMeasure}
-              showLabels={false}
-              showLegend={false}
-              tooltipTrigger="item"
-              colors={overviewComparisonModel.colors}
-              xAxisName="Năm xét"
-              yAxisName={overviewMeasure === 'count' ? 'Số sinh viên' : 'Cơ cấu (%)'}
-            />
+          <div className="graduation-year-trends__chart">
+            <GraduationOutcomeTrendChart data={overviewYearModel} />
           </div>
           <footer>
-            {overviewMeasure === 'count'
-              ? 'Chiều cao cột thể hiện tổng số sinh viên; rê chuột để xem số lượng từng nhóm.'
-              : 'Mỗi cột là cơ cấu năm nhóm trong chính cặp năm–khóa đó; n là tổng số sinh viên dùng làm mẫu số, không phải số nhập học.'}
-            {overviewMeasure === 'percent' && overviewComparisonModel.incompletePointCount > 0
-              && <strong>{overviewComparisonModel.incompletePointCount} tổ hợp năm–khóa thiếu một hoặc nhiều nhóm nên không tính tỷ lệ.</strong>}
+            <span>Rê chuột vào từng điểm để xem tỷ lệ, số lượng và mẫu số của đúng nhóm đang chọn.</span>
+            {overviewYearModel.some((point) => !point.complete)
+              && <strong>Năm thiếu một hoặc nhiều nhóm dữ liệu sẽ không hiển thị tỷ lệ.</strong>}
           </footer>
         </article>
         : !panelLoading && <div className="graduation-overview-empty">Không có dữ liệu phù hợp với bộ lọc.</div>}
