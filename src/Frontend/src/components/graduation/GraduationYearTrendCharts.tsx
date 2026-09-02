@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as echarts from 'echarts/core';
 import { BarChart, LineChart } from 'echarts/charts';
 import { AriaComponent, GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
@@ -19,14 +19,14 @@ echarts.use([
 ]);
 
 const outcomeSeries = [
-  { key: 'excellentCount', label: 'Xuất sắc', color: '#087a3b', labelPosition: 'top' },
-  { key: 'veryGoodCount', label: 'Giỏi', color: '#8fce68', labelPosition: 'top' },
-  { key: 'goodCount', label: 'Khá', color: '#2f9de0', labelPosition: 'top' },
-  { key: 'averageCount', label: 'Trung bình', color: '#ed8c22', labelPosition: 'bottom' },
-  { key: 'workStudyTransferCount', label: 'Chuyển VHVL', color: '#8054b4', labelPosition: 'bottom' },
+  { key: 'excellentCount', label: 'Xuất sắc', color: '#137b3b', labelPosition: 'top' },
+  { key: 'veryGoodCount', label: 'Giỏi', color: '#6f9f45', labelPosition: 'top' },
+  { key: 'goodCount', label: 'Khá', color: '#0788b8', labelPosition: 'top' },
+  { key: 'averageCount', label: 'Trung bình', color: '#b86216', labelPosition: 'top' },
+  { key: 'workStudyTransferCount', label: 'Chuyển VHVL', color: '#76558f', labelPosition: 'top' },
 ] as const;
 
-const totalSeries = { label: 'Tổng sinh viên', color: '#3267e8' } as const;
+const totalSeries = { label: 'Tổng sinh viên', color: '#275dad' } as const;
 
 const formatNumber = (value: number) => value.toLocaleString('vi-VN', { maximumFractionDigits: 0 });
 const formatPercent = (value: number) => `${value.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%`;
@@ -42,17 +42,29 @@ interface GraduationOutcomeTrendChartProps {
   data: GraduationYearOverviewPoint[];
 }
 
+const useCompactChart = () => {
+  const [compact, setCompact] = useState(() => window.matchMedia('(max-width: 560px)').matches);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 560px)');
+    const handleChange = (event: MediaQueryListEvent) => setCompact(event.matches);
+    media.addEventListener('change', handleChange);
+    return () => media.removeEventListener('change', handleChange);
+  }, []);
+  return compact;
+};
+
 export function GraduationOutcomeTrendChart({ data }: GraduationOutcomeTrendChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const compact = useCompactChart();
   const option = useMemo<EChartsOption>(() => {
     const maximumRate = Math.max(0, ...data.flatMap((point) => outcomeSeries.map((item) =>
       point.complete && point.totalOutcome > 0 ? point[item.key] / point.totalOutcome * 100 : 0)));
     const axisMaximum = Math.min(100, Math.max(10, Math.ceil(maximumRate * 1.2 / 10) * 10));
 
     return {
-      animationDuration: 350,
+      animationDuration: 180,
       aria: { enabled: true },
-      color: outcomeSeries.map((item) => item.color),
+      color: [...outcomeSeries.map((item) => item.color), totalSeries.color],
       tooltip: {
         trigger: 'item',
         formatter: (rawParams: CallbackDataParams | CallbackDataParams[]) => {
@@ -78,14 +90,14 @@ export function GraduationOutcomeTrendChart({ data }: GraduationOutcomeTrendChar
         itemHeight: 3,
         textStyle: { color: '#52606a', fontSize: 11 },
       },
-      grid: { top: 28, right: 142, bottom: 48, left: 58 },
+      grid: { top: 34, right: 138, bottom: 46, left: 58 },
       xAxis: {
         type: 'category',
         data: data.map((point) => String(point.reviewYear)),
         name: 'Năm xét',
         nameLocation: 'middle',
         nameGap: 30,
-        boundaryGap: false,
+        boundaryGap: true,
         axisTick: { alignWithLabel: true },
         axisLabel: { color: '#59636c', fontSize: 11 },
       },
@@ -107,33 +119,48 @@ export function GraduationOutcomeTrendChart({ data }: GraduationOutcomeTrendChar
         symbol: 'circle',
         symbolSize: 7,
         connectNulls: false,
-        data: data.map((point) => point.complete && point.totalOutcome > 0
-          ? point[item.key] / point.totalOutcome * 100
-          : null),
+        data: data.map((point, index) => {
+          if (!point.complete || point.totalOutcome <= 0) return null;
+          const value = point[item.key] / point.totalOutcome * 100;
+          if (!compact) return value;
+          const isFirst = index === 0;
+          const isLast = index === data.length - 1;
+          const show = isFirst || isLast;
+          return {
+            value,
+            label: item.key === 'workStudyTransferCount' && show
+              ? { show, position: isFirst ? 'right' : 'left', distance: 6 }
+              : { show, offset: [isFirst ? 8 : isLast ? -8 : 0, 0] },
+          };
+        }),
         lineStyle: { width: 2.3, cap: 'round', join: 'round' },
         itemStyle: { color: item.color, borderColor: '#fff', borderWidth: 1.5 },
         label: {
-          show: true,
+          show: !compact,
           position: item.labelPosition,
-          distance: 7,
+          distance: compact ? 7 : 11,
           color: item.color,
           fontSize: 10,
           fontWeight: 650,
+          backgroundColor: 'rgba(255, 255, 255, .92)',
+          borderRadius: 2,
+          padding: [2, 3],
           formatter: (params: CallbackDataParams) => typeof params.value === 'number'
             ? formatPercent(params.value)
             : '',
         },
+        labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' },
         emphasis: { focus: 'series' },
       })),
       media: [{
         query: { maxWidth: 720 },
         option: {
           legend: { orient: 'horizontal', left: 'center', right: 'auto', top: 0 },
-          grid: { top: 68, right: 22, bottom: 48, left: 52 },
+          grid: { top: 72, right: 20, bottom: 46, left: 52 },
         },
       }],
     };
-  }, [data]);
+  }, [compact, data]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -159,9 +186,9 @@ export function GraduationYearVolumeChart({ data }: GraduationOutcomeTrendChartP
     const axisMaximum = Math.max(axisStep, Math.ceil(maximumTotal * 1.18 / axisStep) * axisStep);
 
     return {
-      animationDuration: 350,
+      animationDuration: 180,
       aria: { enabled: true },
-      color: [...outcomeSeries.map((item) => item.color), totalSeries.color],
+      color: outcomeSeries.map((item) => item.color),
       tooltip: {
         trigger: 'item',
         formatter: (rawParams: CallbackDataParams | CallbackDataParams[]) => {
@@ -188,13 +215,14 @@ export function GraduationYearVolumeChart({ data }: GraduationOutcomeTrendChartP
         },
       },
       legend: {
+        data: [...outcomeSeries.map((item) => item.label), totalSeries.label],
         bottom: 0,
         left: 'center',
         itemWidth: 13,
         itemHeight: 8,
         textStyle: { color: '#52606a', fontSize: 11 },
       },
-      grid: { top: 46, right: 66, bottom: 68, left: 68 },
+      grid: { top: 52, right: 28, bottom: 68, left: 68 },
       xAxis: {
         type: 'category',
         data: data.map((point) => String(point.reviewYear)),
@@ -204,28 +232,16 @@ export function GraduationYearVolumeChart({ data }: GraduationOutcomeTrendChartP
         axisTick: { alignWithLabel: true },
         axisLabel: { color: '#59636c', fontSize: 11 },
       },
-      yAxis: [
-        {
-          type: 'value',
-          min: 0,
-          max: axisMaximum,
-          interval: axisStep,
-          name: 'Số lượng sinh viên',
-          nameTextStyle: { color: '#68737d', fontSize: 11 },
-          axisLabel: { formatter: (value: number) => formatNumber(value), color: '#59636c' },
-          splitLine: { lineStyle: { color: '#d9dfe3', type: 'dashed' } },
-        },
-        {
-          type: 'value',
-          min: 0,
-          max: axisMaximum,
-          interval: axisStep,
-          name: 'Tổng sinh viên',
-          nameTextStyle: { color: '#68737d', fontSize: 11 },
-          axisLabel: { formatter: (value: number) => formatNumber(value), color: totalSeries.color },
-          splitLine: { show: false },
-        },
-      ],
+      yAxis: {
+        type: 'value',
+        min: 0,
+        max: axisMaximum,
+        interval: axisStep,
+        name: 'Số sinh viên',
+        nameTextStyle: { color: '#68737d', fontSize: 11 },
+        axisLabel: { formatter: (value: number) => formatNumber(value), color: '#59636c' },
+        splitLine: { lineStyle: { color: '#d9dfe3', type: 'dashed' } },
+      },
       series: [
         ...outcomeSeries.map((item) => ({
           name: item.label,
@@ -242,16 +258,16 @@ export function GraduationYearVolumeChart({ data }: GraduationOutcomeTrendChartP
             fontWeight: 650,
             textBorderColor: 'rgba(0, 0, 0, .18)',
             textBorderWidth: 2,
-            formatter: (params: CallbackDataParams) => typeof params.value === 'number' && params.value > 0
-              ? formatNumber(params.value)
-              : '',
+            formatter: (params: CallbackDataParams) => {
+              if (typeof params.value !== 'number' || params.value <= 0) return '';
+              return params.value / axisMaximum >= 0.045 ? formatNumber(params.value) : '';
+            },
           },
           emphasis: { focus: 'self' as const },
         })),
         {
           name: totalSeries.label,
           type: 'line',
-          yAxisIndex: 1,
           smooth: 0.28,
           smoothMonotone: 'x',
           symbol: 'circle',
@@ -263,21 +279,25 @@ export function GraduationYearVolumeChart({ data }: GraduationOutcomeTrendChartP
           label: {
             show: true,
             position: 'top',
-            distance: 8,
+            distance: 12,
             color: totalSeries.color,
             fontSize: 10,
             fontWeight: 700,
+            backgroundColor: 'rgba(255, 255, 255, .92)',
+            borderRadius: 2,
+            padding: [2, 3],
             formatter: (params: CallbackDataParams) => typeof params.value === 'number'
               ? formatNumber(params.value)
               : '',
           },
-          emphasis: { focus: 'self' },
+          labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' },
+          emphasis: { focus: 'series' },
         },
       ],
       media: [{
         query: { maxWidth: 720 },
         option: {
-          grid: { top: 48, right: 54, bottom: 94, left: 58 },
+          grid: { top: 52, right: 20, bottom: 94, left: 58 },
           legend: { bottom: 0, width: '90%' },
         },
       }],

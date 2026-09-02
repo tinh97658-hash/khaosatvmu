@@ -45,11 +45,11 @@ const reviewYearDimension: GraduationDimension = {
 };
 
 const bucketSeries = [
-  { key: 'excellent', countKey: 'excellentCount', label: 'Xuất sắc', color: '#087a3b' },
-  { key: 'veryGood', countKey: 'veryGoodCount', label: 'Giỏi', color: '#8fce68' },
-  { key: 'good', countKey: 'goodCount', label: 'Khá', color: '#2f9de0' },
-  { key: 'average', countKey: 'averageCount', label: 'Trung bình', color: '#ed8c22' },
-  { key: 'workStudyTransfer', countKey: 'workStudyTransferCount', label: 'Chuyển VHVL', color: '#8054b4' },
+  { key: 'excellent', countKey: 'excellentCount', label: 'Xuất sắc', color: '#137b3b' },
+  { key: 'veryGood', countKey: 'veryGoodCount', label: 'Giỏi', color: '#6f9f45' },
+  { key: 'good', countKey: 'goodCount', label: 'Khá', color: '#0788b8' },
+  { key: 'average', countKey: 'averageCount', label: 'Trung bình', color: '#b86216' },
+  { key: 'workStudyTransfer', countKey: 'workStudyTransferCount', label: 'Chuyển VHVL', color: '#76558f' },
 ] as const;
 
 const chartOptions: Array<{ id: GraduationChartType; label: string; icon: typeof BarChart3 }> = [
@@ -444,7 +444,7 @@ export function GraduationAnalyticsPage() {
         : !panelLoading && <div className="graduation-overview-empty">Không có dữ liệu phù hợp với bộ lọc.</div>}
       {overview && overview.cohortYear.length > 0 && <article className="graduation-cohort-comparison graduation-year-volume">
         <header>
-          <div><span>QUY MÔ VÀ THÀNH PHẦN</span><h2>Số lượng kết quả tốt nghiệp theo năm</h2><p>Cột chồng thể hiện năm nhóm kết quả; đường phía trên thể hiện tổng số sinh viên trong năm.</p></div>
+          <div><span>QUY MÔ VÀ THÀNH PHẦN</span><h2>Số lượng kết quả tốt nghiệp theo năm</h2><p>Cột chồng thể hiện năm nhóm kết quả; đường phía trên cho biết xu hướng tổng số sinh viên tốt nghiệp.</p></div>
         </header>
         <div className="graduation-year-volume__chart">
           <GraduationYearVolumeChart data={overviewYearModel} />
