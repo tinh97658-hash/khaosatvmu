@@ -26,10 +26,12 @@
   flex: 0 0 auto;
 }
 
+/* Nhãn nằm CẠNH ô chọn, tiết kiệm một dòng chiều cao cho các trang có bảng cao. */
 .statistics-toolbar .form-group {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
   min-width: 240px;
   margin: 0;
 }
@@ -46,13 +48,42 @@
   margin-left: auto;
 }
 
+/* Hai ngưỡng đang áp và nút bánh răng, dồn về mép phải của dòng mô tả. */
+.statistics-threshold-note {
+  margin-left: auto;
+  color: #40505a;
+}
+
+.statistics-threshold-button {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #d7dee2;
+  border-radius: 3px;
+  background: #ffffff;
+  color: #52616b;
+  cursor: pointer;
+}
+
+.statistics-threshold-button:hover {
+  border-color: #0788b8;
+  color: #036e99;
+}
+
+.statistics-threshold-button svg {
+  width: 15px;
+  height: 15px;
+}
+
 .statistics-summary {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 20px;
-  margin-bottom: 12px;
-  padding: 10px 14px;
+  gap: 2px 16px;
+  margin-bottom: 8px;
+  padding: 5px 12px;
   border-left: 3px solid #0788b8;
   background: #f2f8fa;
   color: #40505a;
@@ -88,6 +119,28 @@
   border: 1px solid #dfe4e8;
   background: #ffffff;
   outline: none;
+
+  /*
+    Mốc quy chiếu cho bề rộng cột ghim. Bảng rộng gấp mấy lần màn hình vì mỗi câu
+    hỏi là một cột, nên `%` trong ô của bảng sẽ ăn theo bề rộng BẢNG chứ không
+    phải bề ngang nhìn thấy. Biến khung cuộn thành container thì 1cqw = 1% bề
+    ngang nhìn thấy, đúng cái cần.
+  */
+  container-type: inline-size;
+
+  /*
+    Hai nhóm ghim chiếm khoảng 50% bề ngang, nửa còn lại là vùng kéo ngang ở giữa.
+    Có sàn pixel để màn hình hẹp không bóp cột xuống mức không đọc nổi; sàn nằm
+    trong biến nên phép cộng offset bên dưới vẫn khớp tuyệt đối.
+  */
+  --col-left-1: max(64px, 6cqw);
+  --col-left-2: max(54px, 5cqw);
+  --col-left-3: max(150px, 13cqw);
+
+  --col-right-1: max(74px, 6cqw);
+  --col-right-2: max(74px, 6.5cqw);
+  --col-right-3: max(74px, 6.5cqw);
+  --col-right-4: max(84px, 7cqw);
 }
 
 .statistics-table-scroll:focus-visible {
@@ -138,18 +191,53 @@
   font-weight: 650;
 }
 
+/*
+  Tiêu đề xuống dòng và căn giữa, thân bảng vẫn một dòng. Nút lọc được nhấc khỏi
+  dòng chảy lên góc trên phải: để nó nằm cùng hàng với chữ thì 16px nút cộng 6px
+  khoảng cách ăn mất một phần tư bề ngang cột số, "Số phiếu không hợp lệ" phải
+  tràn xuống dòng thứ ba, mà kéo chữ sang trái so với tâm ô. Đưa nút lên góc thì
+  chữ dùng trọn bề ngang, vừa đúng hai dòng và căn giữa thật.
+
+  Chiều cao chốt cứng để mọi tiêu đề thẳng hàng: 15px chừa cho nút + hai dòng chữ.
+*/
+.statistics-table thead th {
+  height: 46px;
+  padding: 4px;
+  white-space: normal;
+  vertical-align: middle;
+  text-align: center;
+  line-height: 1.2;
+}
+
 /* Menu lọc kiểu Excel trên tiêu đề, dùng chung với các bảng của DataTable. */
 .statistics-table thead th .catalog-th-filterable {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: block;
 }
 
 .statistics-table thead th .catalog-th-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-right: auto;
+  display: block;
+  margin-right: 0;
+  white-space: normal;
+  text-align: center;
+}
+
+/*
+  Nút lọc nằm ở góc trên phải của ô. Ô tiêu đề đã là `position: sticky` nên tự làm
+  mốc cho định vị tuyệt đối, và offset 0 nghĩa là bám mép trong của padding — cách
+  viền đúng 4px. Không kéo âm cho sát viền: dính vào góc nhìn rất gắt.
+
+  Nút đứng ngoài dòng chảy nên chữ dùng trọn bề ngang và căn giữa được cả hai
+  chiều. Nút có nền trắng và viền riêng nên nếu dòng đầu có chạm tới góc thì nó
+  vẫn nổi rõ bên trên, không lẫn vào chữ.
+*/
+.statistics-table thead th .column-filter-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  margin-left: 0;
+  z-index: 1;
 }
 
 .statistics-table thead th .catalog-th-label > svg {
@@ -197,49 +285,65 @@
   text-overflow: ellipsis;
 }
 
-/* Ba cột trái của tab chuẩn hoá: Mã HP, Lớp, Học phần. */
-.statistics-table .col-left-1 { left: 0; width: 86px; min-width: 86px; max-width: 86px; }
-.statistics-table .col-left-2 { left: 86px; width: 66px; min-width: 66px; max-width: 66px; }
+/*
+  Ba cột trái: Mã HP, Lớp, Học phần. `left` của cột sau là TỔNG bề rộng các cột
+  trước, nên cộng thẳng từ chính các biến đã dùng để đặt width — đổi một con số ở
+  trên là mọi offset tự khớp lại, không còn cảnh sửa chỗ này quên chỗ kia.
+*/
+.statistics-table .col-left-1 {
+  left: 0;
+  width: var(--col-left-1);
+  min-width: var(--col-left-1);
+  max-width: var(--col-left-1);
+}
+
+.statistics-table .col-left-2 {
+  left: var(--col-left-1);
+  width: var(--col-left-2);
+  min-width: var(--col-left-2);
+  max-width: var(--col-left-2);
+}
+
 .statistics-table .col-left-3 {
-  left: 152px;
-  width: 190px;
-  min-width: 190px;
-  max-width: 190px;
+  left: calc(var(--col-left-1) + var(--col-left-2));
+  width: var(--col-left-3);
+  min-width: var(--col-left-3);
+  max-width: var(--col-left-3);
   border-right: 1px solid #cfd7dc;
 }
 
 /*
-  Bốn cột phải, đánh số từ mép phải vào trong. `right` của cột sau là TỔNG bề
-  rộng các cột trước nó, nên cả ba thuộc tính width/min/max phải khớp đúng con số
-  dùng để cộng — trước đây chỉ đặt min-width nên tiêu đề dài (nhất là sau khi
-  thêm nút lọc) đẩy ô rộng ra, cột nọ trườn lên cột kia.
+  Bốn cột phải, đánh số từ mép phải vào trong. Cùng nguyên tắc: width lấy từ biến,
+  `right` cộng dồn các biến đứng ngoài nó. Cả ba thuộc tính width/min/max phải
+  cùng một giá trị — trước đây chỉ đặt min-width nên tiêu đề dài đẩy ô rộng ra và
+  cột nọ trườn lên cột kia.
 */
 .statistics-table .col-right-1 {
   right: 0;
-  width: 116px;
-  min-width: 116px;
-  max-width: 116px;
+  width: var(--col-right-1);
+  min-width: var(--col-right-1);
+  max-width: var(--col-right-1);
 }
 
 .statistics-table .col-right-2 {
-  right: 116px;
-  width: 116px;
-  min-width: 116px;
-  max-width: 116px;
+  right: var(--col-right-1);
+  width: var(--col-right-2);
+  min-width: var(--col-right-2);
+  max-width: var(--col-right-2);
 }
 
 .statistics-table .col-right-3 {
-  right: 232px;
-  width: 116px;
-  min-width: 116px;
-  max-width: 116px;
+  right: calc(var(--col-right-1) + var(--col-right-2));
+  width: var(--col-right-3);
+  min-width: var(--col-right-3);
+  max-width: var(--col-right-3);
 }
 
 .statistics-table .col-right-4 {
-  right: 348px;
-  width: 124px;
-  min-width: 124px;
-  max-width: 124px;
+  right: calc(var(--col-right-1) + var(--col-right-2) + var(--col-right-3));
+  width: var(--col-right-4);
+  min-width: var(--col-right-4);
+  max-width: var(--col-right-4);
   border-left: 1px solid #cfd7dc;
 }
 
@@ -248,9 +352,12 @@
   bảng cho các cột tự do, và cột cuối trước nhóm ghim phải — tức C30 — lãnh trọn
   chỗ thừa nên phình to hơn hẳn các cột câu khác.
 */
-.statistics-table .col-meta { width: 150px; min-width: 150px; max-width: 150px; }
-.statistics-table .col-metric { width: 108px; min-width: 108px; max-width: 108px; }
-.statistics-table .col-question { width: 64px; min-width: 64px; max-width: 64px; }
+.statistics-table .col-meta { width: 140px; min-width: 140px; max-width: 140px; }
+
+/* Tên giảng viên có họ đệm dài, 140px là cắt cụt gần như dòng nào cũng cắt. */
+.statistics-table .col-meta--lecturer { width: 190px; min-width: 190px; max-width: 190px; }
+.statistics-table .col-metric { width: 78px; min-width: 78px; max-width: 78px; }
+.statistics-table .col-question { width: 56px; min-width: 56px; max-width: 56px; }
 
 /* Dòng tổng kết ghim đáy bảng. z-index cao hơn ô thân, và ô vừa ghim trái/phải
    vừa ghim đáy thì phải cao hơn nữa để không bị ô thường đè lên. */
@@ -317,7 +424,17 @@
   box-shadow: inset 0 2px 0 #0788b8;
 }
 
-/* Gợi ý của tab bên trái, nút chú thích của tab dồn sang phải cùng một hàng. */
+.statistics-toolbar .form-group > span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.statistics-toolbar .form-group > select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Chỉ còn nút chú thích của tab, dồn sang phải. */
 .analysis-hint-row {
   display: flex;
   align-items: center;
@@ -327,15 +444,11 @@
   flex: 0 0 auto;
 }
 
-.analysis-hint-row .note-modal-button {
+/* Nút chú thích nằm cuối dòng tóm tắt của tab, dồn sát mép phải. Hàng riêng chỉ
+   dùng khi tab không có dòng tóm tắt (chưa có dữ liệu, hoặc đang xem chi tiết). */
+.analysis-hint-row .note-modal-button,
+.statistics-summary .note-modal-button {
   margin-left: auto;
-}
-
-.analysis-hint {
-  margin: 0;
-  min-width: 0;
-  color: #68737d;
-  font-size: 12px;
 }
 
 /* Bảng nhóm khoa/viện đứng riêng phía trên, không cần cuộn. */
@@ -737,4 +850,56 @@
     min-width: 0;
     flex: 1 1 200px;
   }
+}
+
+/* ----- Hai nhóm lớp: đủ / chưa đủ điều kiện tính điểm ----- */
+
+.statistics-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+  flex: 0 0 auto;
+}
+
+.statistics-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid #dfe4e8;
+  border-bottom: 0;
+  background: #f2f5f7;
+  color: #52616b;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.statistics-tab:hover {
+  background: #eef7fb;
+}
+
+.statistics-tab.is-active {
+  border-color: #0788b8;
+  background: #ffffff;
+  color: #036e99;
+  box-shadow: inset 0 2px 0 #0788b8;
+}
+
+/* Số lớp của nhóm, đọc được ngay mà không phải mở tab kia. */
+.statistics-tab-count {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e3e9ed;
+  color: #40505a;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.statistics-tab.is-active .statistics-tab-count {
+  background: #d6eef8;
+  color: #036e99;
 }

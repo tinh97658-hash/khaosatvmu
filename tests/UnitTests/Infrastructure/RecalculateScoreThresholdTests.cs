@@ -54,18 +54,20 @@ public class RecalculateScoreThresholdTests
         // Chép NGUYÊN VĂN biểu thức has_enough của câu UPDATE trong
         // EfSurveyService.RecalculateSemesterSurveyScoresAsync. Sửa bên kia mà quên
         // bên này thì test đỏ ngay.
-        var rate = ReportThresholds.CompletedCompletionRate;
+        var thresholds = ScoringThresholds.Default;
+        var minimumResponseRate = thresholds.MinimumResponseRate;
+        var minimumValidRate = thresholds.MinimumValidRate;
         var rows = await db.Database
             .SqlQuery<SectionTally>($"""
                 SELECT c."CourseSectionSurveyId"                     AS "CourseSectionSurveyId",
                        s."ClassSize"                                 AS "ClassSize",
                        count(r.*)::int                               AS "TotalCount",
                        count(r.*) FILTER (WHERE r."IsValid")::int    AS "ValidCount",
-                       (s."ClassSize" > 0 AND (
-                           count(r.*) >= s."ClassSize"
-                           OR count(r.*) FILTER (WHERE r."IsValid")::numeric
-                              / s."ClassSize" * 100 >= {rate}
-                       ))                                            AS "SqlSaysEnough"
+                       (s."ClassSize" > 0
+                        AND count(r.*) > 0
+                        AND count(r.*)::numeric / s."ClassSize" * 100 >= {minimumResponseRate}
+                        AND count(r.*) FILTER (WHERE r."IsValid")::numeric
+                            / count(r.*) * 100 >= {minimumValidRate})  AS "SqlSaysEnough"
                 FROM "CourseSectionSurveys" c
                 JOIN "CourseSections" s ON s."CourseSectionId" = c."CourseSectionId"
                 LEFT JOIN "SurveyResponses" r
@@ -85,18 +87,18 @@ public class RecalculateScoreThresholdTests
         if (rows is null || rows.Count == 0) return;
 
         var disagreements = rows
-            .Where(row => row.SqlSaysEnough != ReportThresholds.HasEnoughResponsesToScore(
+            .Where(row => row.SqlSaysEnough != ScoringThresholds.Default.HasEnoughResponsesToScore(
                 row.ClassSize, row.TotalCount, row.ValidCount))
             .Take(5)
             .Select(row =>
                 $"lớp {row.CourseSectionSurveyId}: sĩ số {row.ClassSize}, "
                 + $"nộp {row.TotalCount}, hợp lệ {row.ValidCount} — "
                 + $"SQL nói {row.SqlSaysEnough}, C# nói "
-                + $"{ReportThresholds.HasEnoughResponsesToScore(row.ClassSize, row.TotalCount, row.ValidCount)}")
+                + $"{ScoringThresholds.Default.HasEnoughResponsesToScore(row.ClassSize, row.TotalCount, row.ValidCount)}")
             .ToList();
 
         disagreements.Should().BeEmpty(
-            "câu UPDATE của nút tính điểm và ReportThresholds phải chọn cùng một tập lớp");
+            "câu UPDATE của nút tính điểm và ScoringThresholds phải chọn cùng một tập lớp");
     }
 
     [Fact]

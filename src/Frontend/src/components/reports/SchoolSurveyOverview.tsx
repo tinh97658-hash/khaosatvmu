@@ -3,9 +3,7 @@ import {
   AlertTriangle,
   BarChart3,
   CircleAlert,
-  Clock4,
   LoaderCircle,
-  Star,
   Target,
   Timer,
 } from 'lucide-react';
@@ -18,7 +16,6 @@ import { ExportDropdown } from '../ExportDropdown';
 import { FacultyScoreChart } from './FacultyScoreChart';
 import { FacultyCompletionChart } from './FacultyCompletionChart';
 import { WeakestQuestionsPanel } from './WeakestQuestionsPanel';
-import { LaggingDepartmentsTable } from './LaggingDepartmentsTable';
 import { formatNumber } from './theme';
 import type { ReportAnalysisView } from '../../pages/reportRoute';
 import {
@@ -37,6 +34,8 @@ interface SchoolSurveyOverviewProps {
   semesterSurveyId?: number;
   analysisView: ReportAnalysisView;
   onAnalysisViewChange: (view: ReportAnalysisView) => void;
+  /** Nội dung tab con "Tổng hợp đơn vị", do trang cha dựng và truyền xuống. */
+  unitsPanel?: React.ReactNode;
   onDrillDown?: (filter: SchoolOverviewDrillDown) => void;
 }
 
@@ -55,6 +54,7 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
   semesterSurveyId,
   analysisView,
   onAnalysisViewChange,
+  unitsPanel,
   onDrillDown,
 }) => {
   const [data, setData] = useState<SchoolSurveyOverviewData | null>(null);
@@ -152,7 +152,6 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
   const laggingDepartments = data.departments.filter(
     (department) => department.completionRate < laggingThreshold,
   );
-  const laggingDepartmentCount = laggingDepartments.length;
 
   const exportOverviewPayload = {
     fileName: 'tong-quan-khao-sat-toan-truong',
@@ -162,16 +161,16 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
       subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
       info: {
         'Năm học / Học kỳ': `${data.academicYearName} · ${data.semesterName}`,
-        'Tổng số lớp khảo sát': formatNumber(data.totalSections),
-        'Tiến độ thu phiếu toàn trường': `${data.completionRate.toFixed(1)}% (${formatNumber(data.totalResponses)} / ${formatNumber(data.totalTargetResponses)})`,
-        'Điểm hài lòng trung bình': `${data.overallAverageScore.toFixed(2)} / 5.0`,
+        'Điểm trung bình': `${data.overallAverageScore.toFixed(2)} / 5.0`,
+        'Lớp đủ điều kiện tính điểm':
+          `${formatNumber(data.scoredSectionCount)} / ${formatNumber(data.totalSections)} lớp`,
+        'Phiếu hợp lệ dùng để tính điểm': formatNumber(data.scoredValidResponseCount),
         [`Lớp hoàn thành (≥${COMPLETED_COMPLETION_RATE}%)`]: data.completedSectionCount,
         [`Lớp đang thu (${LAGGING_COMPLETION_RATE}-${COMPLETED_COMPLETION_RATE - 1}%)`]: data.inProgressSectionCount,
-        'Lớp chậm tiến độ (<20%)': data.laggingSectionCount,
       },
       summaryNotes: [
-        'Báo cáo tổng hợp số liệu khảo sát học phần từ các phiếu đánh giá hợp lệ.',
-        'Tiến độ thu phiếu = Tổng phiếu hợp lệ / Tổng chỉ tiêu sĩ số toàn trường.',
+        'Điểm trung bình chỉ gộp phiếu hợp lệ của lớp qua được hai vòng lọc tính điểm.',
+        'Lớp chưa đủ điều kiện vẫn được đếm vào tổng số lớp nhưng không góp vào điểm.',
       ],
     },
     sheets: [
@@ -262,9 +261,6 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
           <BarChart3 className="operation-icon" aria-hidden="true" />
           <div>
             <h2>Bảng tổng quan kết quả khảo sát toàn trường</h2>
-            <p>
-              {data.academicYearName} · {data.semesterName} — dữ liệu toàn trường, cập nhật gần thời gian thực
-            </p>
           </div>
         </div>
         {hasData && (
@@ -282,47 +278,54 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
         </div>
       ) : (
         <>
-          {/* Một dải KPI mỏng thay cho ba thẻ cao: cùng chừng ấy con số nhưng
-              không đẩy phần phân tích xuống dưới màn hình. */}
+          {/*
+            Dải số liệu nói đúng một chuyện: mặt bằng điểm được dựng trên tập lớp
+            nào. Tiến độ thu phiếu đã bỏ — xem ở trang Tiến độ thu phiếu là đủ, để
+            ở đây chỉ khiến người đọc lẫn hai câu chuyện khác nhau.
+          */}
           <div className="reports-exec-band">
-            <span className="reports-exec-stat" title="Phiếu hợp lệ trên tổng chỉ tiêu">
-              <Timer className="operation-icon" style={{ color: '#0788b8' }} aria-hidden="true" />
-              Tiến độ thu phiếu
-              <strong>{data.completionRate.toFixed(1)}%</strong>
-              <small>
-                {formatNumber(data.totalResponses)} / {formatNumber(data.totalTargetResponses)} phiếu hợp lệ
-              </small>
-            </span>
-
-            <span className="reports-exec-stat" title="Điểm hài lòng toàn trường">
-              <Star className="operation-icon" style={{ color: '#b86216' }} aria-hidden="true" />
-              Điểm hài lòng
+            <span
+              className="reports-exec-stat"
+              title="Điểm trung bình, chỉ gộp phiếu hợp lệ của lớp đủ điều kiện"
+            >
+              Điểm trung bình
               <strong>{data.overallAverageScore.toFixed(2)}</strong>
               <small>/ 5.0</small>
             </span>
 
-            <span className="reports-exec-stat" title={`Lớp đạt từ ${COMPLETED_COMPLETION_RATE}% phiếu hợp lệ`}>
-              <span className="legend-dot" style={{ background: '#137b3b' }} />
-              Hoàn thành
-              <strong>{data.completedSectionCount}</strong>
+            <span
+              className="reports-exec-stat"
+              title="Lớp qua được hai vòng lọc trên tổng số lớp đã phát phiếu"
+            >
+              Lớp đủ điều kiện
+              <strong>
+                {formatNumber(data.scoredSectionCount)} / {formatNumber(data.totalSections)}
+              </strong>
+              <small>
+                {data.totalSections > 0
+                  ? `${((data.scoredSectionCount / data.totalSections) * 100).toFixed(1)}%`
+                  : '—'}
+              </small>
             </span>
 
-            <span className="reports-exec-stat" title={`Lớp đạt ${LAGGING_COMPLETION_RATE}-${COMPLETED_COMPLETION_RATE - 1}% phiếu hợp lệ`}>
-              <span className="legend-dot" style={{ background: '#0788b8' }} />
-              Đang thu
-              <strong>{data.inProgressSectionCount}</strong>
+            <span
+              className="reports-exec-stat"
+              title="Số phiếu hợp lệ thực sự được dùng để tính điểm"
+            >
+              Phiếu dùng để tính điểm
+              <strong>{formatNumber(data.scoredValidResponseCount)}</strong>
+              <small>phiếu hợp lệ</small>
             </span>
 
-            <span className="reports-exec-stat" title="Lớp dưới 20% phiếu hợp lệ">
-              <span className="legend-dot" style={{ background: '#b86216' }} />
-              Chậm tiến độ
-              <strong>{data.laggingSectionCount}</strong>
-            </span>
-
-            <span className="reports-exec-stat" title="Tổng số lớp đã phát phiếu">
-              <Target className="operation-icon" style={{ color: '#20262c' }} aria-hidden="true" />
-              Tổng lớp
-              <strong>{formatNumber(data.totalSections)}</strong>
+            <span
+              className="reports-exec-stat"
+              title="Phiếu hợp lệ của những lớp không qua vòng lọc, không góp vào điểm"
+            >
+              Phiếu bị loại khỏi điểm
+              <strong>
+                {formatNumber(Math.max(0, data.totalResponses - data.scoredValidResponseCount))}
+              </strong>
+              <small>thuộc lớp chưa đủ điều kiện</small>
             </span>
           </div>
 
@@ -339,21 +342,20 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
             <button
               type="button"
               role="tab"
+              aria-selected={analysisView === 'units'}
+              className={analysisView === 'units' ? 'is-active' : ''}
+              onClick={() => onAnalysisViewChange('units')}
+            >
+              Tổng hợp khoa/viện
+            </button>
+            <button
+              type="button"
+              role="tab"
               aria-selected={analysisView === 'quality'}
               className={analysisView === 'quality' ? 'is-active' : ''}
               onClick={() => onAnalysisViewChange('quality')}
             >
               Chất lượng phản hồi
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={analysisView === 'progress'}
-              className={analysisView === 'progress' ? 'is-active' : ''}
-              onClick={() => onAnalysisViewChange('progress')}
-            >
-              Đơn vị chậm tiến độ
-              {laggingDepartmentCount > 0 && <span>{laggingDepartmentCount}</span>}
             </button>
           </div>
 
@@ -430,22 +432,8 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
           </div>
           )}
 
-          {/* Bảng bộ môn chậm tiến độ nhất */}
-          {analysisView === 'progress' && (
-          <div className="reports-exec-card reports-analysis-panel" role="tabpanel">
-            <header className="reports-exec-card-head">
-              <Clock4 className="operation-icon" aria-hidden="true" />
-              <h3>Bộ môn chậm tiến độ thu phiếu</h3>
-              <span className="reports-exec-card-note">
-                Đầy đủ Bộ môn dưới {laggingThreshold}% · sắp xếp tại tiêu đề cột
-              </span>
-            </header>
-            <LaggingDepartmentsTable
-              departments={laggingDepartments}
-              onSelect={onDrillDown ? (departmentId) => onDrillDown({ departmentId }) : undefined}
-            />
-          </div>
-          )}
+          {/* Tổng hợp đơn vị — trang cha dựng, ở đây chỉ đặt vào đúng tab. */}
+          {analysisView === 'units' && unitsPanel}
         </>
       )}
     </section>

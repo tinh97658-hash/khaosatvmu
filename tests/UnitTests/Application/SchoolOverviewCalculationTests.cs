@@ -101,12 +101,15 @@ public class SchoolOverviewCalculationTests
         var overview = new SchoolSurveyOverviewDto(
             3, "Học kỳ 2", "2025-2026",
             12, 700, 640, 91.43m, 8, 2, 2,
-            4.55m, [band],
+            // Điểm 4.55 dựng trên 9/12 lớp qua được hai vòng lọc, với 600 phiếu hợp lệ.
+            4.55m, 9, 600, [band],
             4.55m, [faculty],
             [dept],
             [],
             comparison);
 
+        overview.ScoredSectionCount.Should().Be(9);
+        overview.ScoredValidResponseCount.Should().Be(600);
         overview.TotalSections.Should().Be(12);
         overview.TotalTargetResponses.Should().Be(700);
         overview.TotalResponses.Should().Be(640);

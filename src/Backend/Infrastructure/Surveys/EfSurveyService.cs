@@ -12,6 +12,7 @@ public sealed class EfSurveyService(
     AppDbContext db,
     IMemoryCache cache,
     IUserScopeResolver userScope,
+    IScoringThresholdProvider scoringThresholds,
     SchoolOverviewCacheVersion schoolOverviewCache) : ISurveyService
 {
     private const int MaximumScaleOptions = 5;
@@ -1638,8 +1639,11 @@ public sealed class EfSurveyService(
         // lớp đã thu đủ phiếu: điểm của lớp hai người đánh giá không so được với lớp
         // ba mươi người, gộp vào là kéo lệch mọi con số tổng hợp phía trên. Lớp chưa
         // đủ nhận NULL, bảng đọc ra "chưa đủ phiếu".
-        // Điều kiện phải trùng khít ReportThresholds.HasEnoughResponsesToScore.
-        var completedRate = ReportThresholds.CompletedCompletionRate;
+        // Điều kiện phải trùng khít ScoringThresholds.HasEnoughResponsesToScore:
+        // hai vòng lọc, không có ngoại lệ nào khác.
+        var thresholds = await scoringThresholds.GetAsync(cancellationToken);
+        var minimumResponseRate = thresholds.MinimumResponseRate;
+        var minimumValidRate = thresholds.MinimumValidRate;
         var updated = await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE "CourseSectionSurveys" AS css
             SET "TotalResponseCount"   = agg.total_count,
@@ -1652,11 +1656,11 @@ public sealed class EfSurveyService(
                        count(r.*)                                        AS total_count,
                        count(r.*) FILTER (WHERE r."IsValid")             AS valid_count,
                        round(avg(r."Score") FILTER (WHERE r."IsValid"), 2) AS average_score,
-                       s."ClassSize" > 0 AND (
-                           count(r.*) >= s."ClassSize"
-                           OR count(r.*) FILTER (WHERE r."IsValid")::numeric
-                              / s."ClassSize" * 100 >= {completedRate}
-                       ) AS has_enough
+                       s."ClassSize" > 0
+                       AND count(r.*) > 0
+                       AND count(r.*)::numeric / s."ClassSize" * 100 >= {minimumResponseRate}
+                       AND count(r.*) FILTER (WHERE r."IsValid")::numeric
+                           / count(r.*) * 100 >= {minimumValidRate} AS has_enough
                 FROM "CourseSectionSurveys" c
                 JOIN "CourseSections" s ON s."CourseSectionId" = c."CourseSectionId"
                 LEFT JOIN "SurveyResponses" r
@@ -1819,22 +1823,14 @@ public sealed class EfSurveyService(
             .GroupBy(x => x.CourseSectionSurveyId)
             .ToDictionary(g => g.Key, g => g.ToDictionary(x => x.QuestionId, x => x));
 
-        // Số phiếu thu và số phiếu bị lọc: đếm thẳng từ "SurveyResponses" mỗi lần
-        // mở trang. Đây là số liệu tiến độ nên phải đúng ngay cả khi đợt chưa chốt
-        // điểm, và chỉ là COUNT trên một bảng đã có chỉ mục (CourseSectionSurveyId,
-        // IsValid) nên rẻ — khác hẳn việc gộp điểm từng câu.
-        var responseTallies = cssIds.Count == 0
-            ? []
-            : await db.SurveyResponses.AsNoTracking()
-                .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
-                .GroupBy(x => x.CourseSectionSurveyId)
-                .Select(g => new
-                {
-                    CourseSectionSurveyId = g.Key,
-                    Total = g.Count(),
-                    Valid = g.Count(x => x.IsValid),
-                })
-                .ToDictionaryAsync(x => x.CourseSectionSurveyId, x => x, cancellationToken);
+        // Số phiếu đọc từ ẢNH CHỤP đã ghi trên "CourseSectionSurveys", không đếm
+        // sống từ "SurveyResponses". Cả trang này lẫn mọi trang báo cáo phải cùng
+        // nói về một lần bấm "Tính lại điểm"; đếm sống thì cột số phiếu nhảy theo
+        // phiếu mới về trong khi cột điểm vẫn là số cũ, hai nửa của cùng một dòng
+        // thuộc hai thời điểm khác nhau.
+        var responseTallies = sectionSurveys.ToDictionary(
+            x => x.CourseSectionSurveyId,
+            x => new { Total = x.TotalResponseCount, Valid = x.ValidResponseCount });
 
         // Số phiếu có điền ô "Ý kiến khác" — chỉ đếm ô cuối bài, không đếm câu
         // thuộc thang tự nhập chữ.
@@ -2015,17 +2011,19 @@ public sealed class EfSurveyService(
 
         var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
 
-        var tallies = await db.SurveyResponses.AsNoTracking()
-            .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
-            .GroupBy(x => x.CourseSectionSurveyId)
-            .Select(g => new
+        // Ảnh chụp của lần chốt gần nhất, không gộp lại từ bảng phiếu — xem ghi chú
+        // ở GetSemesterSurveyStatisticsAsync. Lớp chưa được chốt điểm có
+        // AverageScore null và bị loại ngay bên dưới.
+        var tallies = sectionSurveys.ToDictionary(
+            x => x.CourseSectionSurveyId,
+            x => new
             {
-                CourseSectionSurveyId = g.Key,
-                TotalCount = g.Count(),
-                ValidCount = g.Count(x => x.IsValid),
-                ValidTotal = g.Sum(x => x.IsValid ? x.Score : 0m)
-            })
-            .ToDictionaryAsync(x => x.CourseSectionSurveyId, x => x, cancellationToken);
+                x.CourseSectionSurveyId,
+                TotalCount = x.TotalResponseCount,
+                ValidCount = x.ValidResponseCount,
+                ValidTotal = (x.AverageScore ?? 0m) * x.ValidResponseCount,
+                IsScored = x.AverageScore is not null,
+            });
 
         var sectionIds = sectionSurveys.Select(x => x.CourseSectionId).ToList();
         var sections = await db.CourseSections.AsNoTracking()
@@ -2052,11 +2050,9 @@ public sealed class EfSurveyService(
 
             var section = sections.FirstOrDefault(x => x.CourseSectionId == css.CourseSectionId);
 
-            // Chưa thu đủ phiếu thì lớp không được góp vào bất kỳ con số nào.
-            if (!ReportThresholds.HasEnoughResponsesToScore(
-                    section?.ClassSize ?? 0,
-                    tally.TotalCount,
-                    tally.ValidCount))
+            // Không được chốt điểm ở lần tính gần nhất thì lớp không góp vào bất kỳ
+            // con số nào của trang phân tích.
+            if (!tally.IsScored)
             {
                 continue;
             }

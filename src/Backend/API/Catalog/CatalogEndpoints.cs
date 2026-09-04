@@ -579,12 +579,9 @@ public static class CatalogEndpoints
 
     public sealed record ImportMajorRowRequest(int RowNumber, string MajorName, string? FacultyName);
 
-    public sealed record SaveAcademicYearRequest(
-        string AcademicYearName,
-        DateOnly StartDate,
-        DateOnly EndDate)
+    public sealed record SaveAcademicYearRequest(string AcademicYearName)
     {
-        public SaveAcademicYearCommand ToCommand() => new(AcademicYearName, StartDate, EndDate);
+        public SaveAcademicYearCommand ToCommand() => new(AcademicYearName);
     }
 
     public sealed record SaveSemesterRequest(string SemesterName, int AcademicYearId);

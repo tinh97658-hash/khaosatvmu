@@ -50,6 +50,12 @@ interface DashboardOverviewProps {
   permissions: readonly string[];
 }
 
+/**
+ * Tắt ô "So sánh với" và nút "Báo cáo toàn diện" trên thanh đầu trang. Tạm thời
+ * theo yêu cầu; đổi thành true là hiện lại y như cũ.
+ */
+const showComparisonControls = false;
+
 const formatDate = (value: string) => {
   if (!value) return '—';
   const parsed = new Date(value);
@@ -305,7 +311,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           : 'Đang diễn ra';
       return {
         id: survey.semesterSurveyId,
-        title: survey.templateName,
+        title: survey.surveyName,
         semester: survey.semesterName,
         academicYear: survey.academicYearName,
         startDate: survey.startTime,
@@ -345,7 +351,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <strong>{overviewData.academicYearName} · {overviewData.semesterName}</strong>
                 {selectedSurvey && (
                   <>
-                    {' '}— Đợt: <strong>{selectedSurvey.templateName}</strong> ({selectedSurvey.sectionSurveyCount} lớp)
+                    {' '}— Đợt: <strong>{selectedSurvey.surveyName}</strong> ({selectedSurvey.sectionSurveyCount} lớp)
                   </>
                 )}
               </>
@@ -371,10 +377,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <option value="">Chưa có đợt khảo sát nào</option>
               ) : (
                 <>
-                  <option value="">Tất cả đợt trong học kỳ</option>
                   {currentSemesterSurveys.map((survey) => (
                     <option key={survey.semesterSurveyId} value={survey.semesterSurveyId}>
-                      {survey.templateName} ({survey.sectionSurveyCount} lớp)
+                      {survey.surveyName} ({survey.sectionSurveyCount} lớp)
                     </option>
                   ))}
                 </>
@@ -382,6 +387,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </select>
           </div>
 
+          {/* Tạm ẩn theo yêu cầu. Giữ nguyên mã bên trong để bật lại chỉ bằng cách
+              đổi cờ này thành true, khỏi phải dựng lại toàn bộ. */}
+          {showComparisonControls && (
           <div className="executive-compare-select">
             <label htmlFor="dashboard-comparison">So sánh với:</label>
             <select
@@ -394,7 +402,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <optgroup label="Đợt cùng bộ câu hỏi">
                   {compatibleComparisonSurveys.map((survey) => (
                     <option key={survey.semesterSurveyId} value={`campaign:${survey.semesterSurveyId}`}>
-                      {survey.academicYearName} · {survey.semesterName} · {survey.templateName}
+                      {survey.academicYearName} · {survey.semesterName} · {survey.surveyName}
                     </option>
                   ))}
                 </optgroup>
@@ -410,7 +418,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               </optgroup>
             </select>
           </div>
+          )}
 
+          {showComparisonControls && (
           <button
             type="button"
             className="executive-btn-primary"
@@ -428,6 +438,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             Báo cáo toàn diện
             <ArrowRight aria-hidden="true" />
           </button>
+          )}
         </div>
       </header>
 

@@ -87,9 +87,6 @@ export interface Semester {
 export interface AcademicYear {
   academicYearId: number;
   academicYearName: string;
-  /** YYYY-MM-DD */
-  startDate: string;
-  endDate: string;
   semesters: Semester[];
 }
 
@@ -688,6 +685,8 @@ export interface SemesterComparison {
 
 export interface SchoolOverviewComparisonOption {
   semesterSurveyId: number;
+  /** Tên đợt do quản trị đặt. Khác `templateName` là tên bộ câu hỏi. */
+  surveyName: string;
   semesterId: number;
   semesterName: string;
   academicYearName: string;
@@ -709,6 +708,10 @@ export interface SchoolSurveyOverview {
   inProgressSectionCount: number;
   laggingSectionCount: number;
   overallAverageScore: number;
+  /** Số lớp qua được hai vòng lọc — nhóm "đủ điều kiện" của Bảng dữ liệu khảo sát. */
+  scoredSectionCount: number;
+  /** Số phiếu hợp lệ của riêng nhóm lớp trên, tức mẫu số của điểm trung bình. */
+  scoredValidResponseCount: number;
   scoreDistribution: ScoreBand[];
   schoolAverageScore: number;
   faculties: FacultyOverview[];

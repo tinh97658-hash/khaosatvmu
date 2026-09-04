@@ -256,3 +256,20 @@ public sealed class SurveyResponseAnswer
 
     public SurveyResponse? SurveyResponse { get; set; }
 }
+
+/// <summary>
+/// Bảng "SurveyScoringSettings". Chỉ có đúng một dòng (Id = 1): cặp ngưỡng lọc
+/// lớp được tính điểm, do quản trị đặt trên giao diện thay vì viết cứng trong mã.
+/// </summary>
+public sealed class SurveyScoringSetting
+{
+    public int SurveyScoringSettingId { get; set; }
+
+    /// <summary>Vòng 1 — Số phiếu đã thu ÷ Sĩ số, phần trăm.</summary>
+    public decimal MinimumResponseRate { get; set; }
+
+    /// <summary>Vòng 2 — Số phiếu hợp lệ ÷ Số phiếu đã thu, phần trăm.</summary>
+    public decimal MinimumValidRate { get; set; }
+
+    public DateTime UpdatedAt { get; set; }
+}

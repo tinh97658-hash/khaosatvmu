@@ -202,6 +202,8 @@ public sealed record SemesterComparisonDto(
 /// <summary>Metadata nhẹ của một đợt, dùng để chọn mốc đối chiếu mà không tải thống kê chi tiết.</summary>
 public sealed record SchoolOverviewComparisonOptionDto(
     int SemesterSurveyId,
+    /// <summary>Tên đợt do quản trị đặt. Khác TemplateName là tên bộ câu hỏi.</summary>
+    string SurveyName,
     int SemesterId,
     string SemesterName,
     string AcademicYearName,
@@ -224,8 +226,12 @@ public sealed record SchoolSurveyOverviewDto(
     int InProgressSectionCount,
     int LaggingSectionCount,
 
-    // Chất lượng kết quả
+    // Chất lượng kết quả — chỉ gộp lớp qua được hai vòng lọc tính điểm
     decimal OverallAverageScore,
+    /// <summary>Số lớp qua được hai vòng lọc, tức nhóm thật sự góp vào điểm.</summary>
+    int ScoredSectionCount,
+    /// <summary>Số phiếu hợp lệ của riêng nhóm lớp trên — mẫu số của điểm trung bình.</summary>
+    int ScoredValidResponseCount,
     IReadOnlyList<ScoreBandDto> ScoreDistribution,
 
     // So sánh theo Khoa (SchoolAverageScore dùng làm đường tham chiếu cho biểu đồ)

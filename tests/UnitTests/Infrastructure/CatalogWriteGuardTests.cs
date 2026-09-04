@@ -280,10 +280,8 @@ public class CatalogWriteGuardTests
             {
                 var service = serviceFor(scope);
 
-                (await service.CreateAcademicYearAsync(new SaveAcademicYearCommand(
-                    "2099-2100",
-                    new DateOnly(2099, 9, 1),
-                    new DateOnly(2100, 6, 30)))).ErrorCode
+                (await service.CreateAcademicYearAsync(
+                    new SaveAcademicYearCommand("2099-2100"))).ErrorCode
                     .Should().Be(CatalogErrorCodes.OutOfScope);
 
                 (await service.DeleteAcademicYearAsync(year.AcademicYearId)).ErrorCode

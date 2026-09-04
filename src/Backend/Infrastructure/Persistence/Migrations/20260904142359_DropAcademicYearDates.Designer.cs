@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260904142359_DropAcademicYearDates")]
+    partial class DropAcademicYearDates
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1019,28 +1022,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("QuestionId");
 
                     b.ToTable("SurveyResponseAnswers", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.SurveyScoringSetting", b =>
-                {
-                    b.Property<int>("SurveyScoringSettingId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("SurveyScoringSettingId"));
-
-                    b.Property<decimal>("MinimumResponseRate")
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<decimal>("MinimumValidRate")
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("SurveyScoringSettingId");
-
-                    b.ToTable("SurveyScoringSettings", (string)null);
                 });
 
             modelBuilder.Entity("Domain.SurveyTemplate", b =>

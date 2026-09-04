@@ -150,11 +150,13 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
     return matchesSearch && matchesFaculty;
   });
 
+  // Bề rộng theo phần trăm để tỷ lệ giữ nguyên trên mọi cỡ màn hình, thay vì để
+  // một cột nuốt hết phần dư như khi trộn pixel với cột không khai bề rộng.
   const columns: Column<Department>[] = [
     {
       key: 'departmentId',
       header: 'Mã bộ môn',
-      width: '110px',
+      width: '10%',
       filterValue: (row) => String(row.departmentId),
       numeric: true,
       render: (row) => <span className="catalog-cell-primary">{row.departmentId}</span>,
@@ -162,20 +164,21 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
     {
       key: 'departmentName',
       header: 'Tên bộ môn',
+      width: '26%',
       filterValue: (row) => row.departmentName,
       render: (row) => <span className="catalog-cell-primary">{row.departmentName}</span>,
     },
     {
       key: 'facultyId',
       header: 'Khoa viện',
-      width: '280px',
+      width: '28%',
       filterValue: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
       render: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
     },
     {
       key: 'courseCount',
       header: 'Số môn học',
-      width: '120px',
+      width: '12%',
       filterValue: (row) => String(courseCountOf(row.departmentId)),
       numeric: true,
       render: (row) => (
@@ -185,7 +188,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
     {
       key: 'lecturerCount',
       header: 'Số giảng viên',
-      width: '130px',
+      width: '14%',
       filterValue: (row) => String(lecturerCountOf(row.departmentId)),
       numeric: true,
       render: (row) => (
@@ -195,7 +198,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
     {
       key: 'actions',
       header: 'Hành động',
-      width: '92px',
+      width: '10%',
       render: (row) => (
         <div className="catalog-actions">
           <button

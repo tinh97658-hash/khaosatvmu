@@ -9,6 +9,7 @@ import type {
   SurveyResponseSummary,
   SurveyTemplate,
 } from '../types';
+import type { ScoringThresholds } from '../utils/reportThresholds';
 import { apiRequest, csrfRequest } from './apiClient';
 
 export interface SaveAnswerScaleOptionPayload {
@@ -531,6 +532,12 @@ export const surveyApi = {
     csrfRequest<SemesterSurvey>('/api/surveys/semester-surveys', 'POST', survey),
   deleteSemesterSurvey: (semesterSurveyId: number) =>
     csrfRequest<boolean>(`/api/surveys/semester-surveys/${semesterSurveyId}`, 'DELETE'),
+  /** Hai vòng lọc lớp được tính điểm, dùng chung cho mọi trang báo cáo. */
+  scoringThresholds: () =>
+    apiRequest<ScoringThresholds>('/api/surveys/scoring-thresholds'),
+  /** Chỉ quản trị mới đổi được; server tự chặn các vai trò khác. */
+  updateScoringThresholds: (thresholds: ScoringThresholds) =>
+    csrfRequest<ScoringThresholds>('/api/surveys/scoring-thresholds', 'PUT', thresholds),
   /** Đếm trước số lớp của một phạm vi, tính ở server để khớp đúng lúc tạo thật. */
   previewSectionScope: (params: {
     semesterId: number;

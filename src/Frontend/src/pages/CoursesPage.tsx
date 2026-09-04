@@ -190,20 +190,21 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     {
       key: 'courseCode',
       header: 'Mã học phần',
-      width: '130px',
+      width: '10%',
       filterValue: (item) => item.courseCode,
       render: (item) => <span className="catalog-code">{item.courseCode}</span>,
     },
     {
       key: 'courseName',
       header: 'Tên học phần',
+      width: '21%',
       filterValue: (item) => item.courseName,
       render: (item) => <span className="catalog-cell-primary">{item.courseName}</span>,
     },
     {
       key: 'credits',
       header: 'Số tín chỉ',
-      width: '100px',
+      width: '8%',
       filterValue: (item) => String(item.credits),
       numeric: true,
       render: (item) => <span className="catalog-cell-primary">{item.credits}</span>,
@@ -211,28 +212,28 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     {
       key: 'courseType',
       header: 'Loại học phần',
-      width: '130px',
+      width: '12%',
       filterValue: (item) => courseTypeLabelOf(item.courseType),
       render: (item) => courseTypeLabelOf(item.courseType),
     },
     {
       key: 'departmentId',
       header: 'Bộ môn',
-      width: '230px',
+      width: '15%',
       filterValue: (item) => (item.departmentId === null ? '—' : departmentNameOf(item.departmentId)),
       render: (item) => (item.departmentId === null ? '—' : departmentNameOf(item.departmentId)),
     },
     {
       key: 'facultyId',
       header: 'Khoa viện',
-      width: '230px',
+      width: '15%',
       filterValue: (item) => (item.facultyId === null ? '—' : facultyNameOf(item.facultyId)),
       render: (item) => (item.facultyId === null ? '—' : facultyNameOf(item.facultyId)),
     },
     {
       key: 'prerequisiteCourseId',
       header: 'Học phần tiên quyết',
-      width: '200px',
+      width: '12%',
       render: (item) =>
         item.prerequisiteCourseId === null ? '—' : courseCodeOf(item.prerequisiteCourseId),
     },
@@ -243,7 +244,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     columns.push({
       key: 'actions',
       header: 'Thao tác',
-      width: '92px',
+      width: '7%',
       render: (item) => (
         <div className="catalog-actions">
           <button

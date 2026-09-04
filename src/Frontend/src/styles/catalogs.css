@@ -160,26 +160,57 @@
   min-width: 1420px;
 }
 
+/*
+  Quy chuẩn tiêu đề cột dùng chung cho mọi bảng của hệ thống, lấy từ bảng ở trang
+  Bảng dữ liệu khảo sát: chữ căn giữa cả hai chiều, được xuống dòng, và nút lọc
+  nhấc khỏi dòng chảy lên góc trên phải của ô.
+
+  Để nút lọc nằm cùng hàng với chữ thì nó ăn mất 22px bề ngang, cột hẹp phải nới
+  rộng ra cho vừa một dòng chữ dài, đồng thời chữ bị kéo lệch trái so với tâm ô.
+  Đưa nút lên góc thì chữ dùng trọn bề ngang cột và căn giữa được thật.
+*/
 .catalog-table th {
   position: sticky;
   top: 0;
   z-index: 1;
-  height: 32px;
-  padding: 5px 10px;
+  height: 46px;
+  padding: 4px;
   border-right: 1px solid #e5e9ec;
   border-bottom: 1px solid #cfd7dc;
   background: #f7f9fa;
   color: #404a52;
   font-size: 11px;
   font-weight: 650;
-  line-height: 1.25;
+  line-height: 1.2;
   letter-spacing: 0;
-  white-space: nowrap;
+  white-space: normal;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.catalog-table th .catalog-th-label {
+  display: block;
+  margin-right: 0;
+  white-space: normal;
+  text-align: center;
+}
+
+/* Ô neo bằng chính nó (đang sticky), offset 0 nghĩa là bám mép trong của padding
+   — cách viền đúng 4px, không dính sát góc. */
+.catalog-table th .column-filter-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  margin-left: 0;
+  z-index: 1;
 }
 
 .catalog-sort-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   width: 100%;
   padding: 0;
@@ -188,21 +219,15 @@
   color: inherit;
   font: inherit;
   font-weight: inherit;
-  text-align: left;
-  white-space: nowrap;
+  text-align: center;
+  white-space: normal;
   cursor: pointer;
 }
 
-/* Tiêu đề cột có menu lọc: chữ bên trái, nút xổ đẩy sát mép phải của ô. Bọc
-   trong span thay vì đổi display của chính th, vì th đang position: sticky. */
+/* Bọc trong span thay vì đổi display của chính th, vì th đang position: sticky.
+   Khối chiếm trọn bề ngang ô để chữ bên trong căn giữa được. */
 .catalog-th-filterable {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.catalog-th-filterable .catalog-th-label {
-  margin-right: auto;
+  display: block;
 }
 
 /* Nút sắp xếp mặc định rộng 100%; trong ô có menu lọc thì phải co lại,
@@ -230,6 +255,7 @@
 .catalog-th-label {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
 }
 
@@ -1633,9 +1659,26 @@
   line-height: 1.5;
 }
 
-.answer-scale-code {
-  color: #68737d;
+/* Tiêu đề hai cột của bảng mức, khớp bề rộng với .answer-scale-option-row. */
+.answer-scale-options-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #52616b;
+  font-size: 11px;
   font-weight: 650;
+}
+
+.answer-scale-options-head-value {
+  flex: 0 0 58px;
+  text-align: center;
+}
+
+.answer-scale-option-value:disabled {
+  border-color: #e3e8eb;
+  background: #f2f5f7;
+  color: #52616b;
+  cursor: not-allowed;
 }
 
 .answer-scale-option-row input {

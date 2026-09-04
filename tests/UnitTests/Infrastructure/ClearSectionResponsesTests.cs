@@ -70,6 +70,7 @@ public class ClearSectionResponsesTests
                     db,
                     cache,
                     new FixedScopeResolver(userScope),
+                    new FixedScoringThresholdProvider(),
                     new SchoolOverviewCacheVersion()));
         }
         finally

@@ -12,8 +12,6 @@ public sealed record PositionDto(int PositionId, string PositionName);
 public sealed record AcademicYearDto(
     int AcademicYearId,
     string AcademicYearName,
-    DateOnly StartDate,
-    DateOnly EndDate,
     IReadOnlyList<SemesterDto> Semesters);
 
 public sealed record SemesterDto(int SemesterId, string SemesterName, int AcademicYearId);
@@ -31,7 +29,7 @@ public sealed record CourseSectionDto(
     int ClassSize,
     string? UnidentifiedLecturerName);
 
-public sealed record SaveAcademicYearCommand(string AcademicYearName, DateOnly StartDate, DateOnly EndDate);
+public sealed record SaveAcademicYearCommand(string AcademicYearName);
 
 public sealed record SaveSemesterCommand(string SemesterName, int AcademicYearId);
 
@@ -489,7 +487,7 @@ public static class CatalogErrorCodes
     public const string AcademicYearNotFound = "CATALOG_ACADEMIC_YEAR_NOT_FOUND";
     public const string AcademicYearNameRequired = "CATALOG_ACADEMIC_YEAR_NAME_REQUIRED";
     public const string AcademicYearNameExists = "CATALOG_ACADEMIC_YEAR_NAME_EXISTS";
-    public const string AcademicYearRangeInvalid = "CATALOG_ACADEMIC_YEAR_RANGE_INVALID";
+    public const string AcademicYearNameInvalid = "CATALOG_ACADEMIC_YEAR_NAME_INVALID";
 
     public const string SemesterNotFound = "CATALOG_SEMESTER_NOT_FOUND";
     public const string SemesterNameRequired = "CATALOG_SEMESTER_NAME_REQUIRED";

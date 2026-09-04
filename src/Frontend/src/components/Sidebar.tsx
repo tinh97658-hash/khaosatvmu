@@ -69,9 +69,9 @@ export function Sidebar({
         { id: 'overview', label: 'Bảng điều khiển', icon: LayoutDashboard },
         { id: 'survey-dashboard', label: 'Tổng quan khảo sát', icon: Gauge },
         { id: 'progress', label: 'Tiến độ thu phiếu', icon: ChartColumn },
-        { id: 'reports', label: 'Thống kê & Báo cáo', icon: BarChart3 },
         { id: 'survey-statistics', label: 'Bảng dữ liệu khảo sát', icon: Table2 },
-        { id: 'survey-analysis', label: 'Phân tích chuyên sâu', icon: Sigma },
+        { id: 'reports', label: 'Thống kê & Báo cáo', icon: BarChart3 },
+        { id: 'survey-analysis', label: 'Thống kê chi tiết', icon: Sigma },
         { id: 'graduation-analytics', label: 'Thống kê tốt nghiệp', icon: GraduationCap },
       ],
     },
@@ -89,10 +89,11 @@ export function Sidebar({
     {
       section: 'KHẢO SÁT HỌC PHẦN',
       items: [
-        { id: 'course-question-sets', label: 'Bộ câu hỏi khảo sát', icon: ListChecks },
+        { id: 'course-question-sets', 
+          label: 'Danh sách bộ khảo sát', icon: ListChecks },
         {
           id: 'course-campaigns',
-          label: 'Khảo sát học phần',
+          label: 'Danh sách đợt khảo sát',
           icon: ClipboardCheck,
           badge: activeCampaignsCount > 0 ? activeCampaignsCount : undefined,
         },
@@ -166,6 +167,12 @@ export function Sidebar({
           </button>
         </div>
 
+        {/* Học kỳ làm việc chi phối gần như mọi trang bên dưới, nên đứng ngay đầu
+            thanh điều hướng thay vì nằm cuối, nơi người dùng phải cuộn mới thấy. */}
+        <div className="sidebar-semester-bar">
+          <HeaderSemesterPicker />
+        </div>
+
         <nav className="sidebar-menu" aria-label="Điều hướng chính">
           {menuGroups.map((group) => (
             <section className="menu-section" key={group.section}>
@@ -195,10 +202,6 @@ export function Sidebar({
             </section>
           ))}
         </nav>
-
-        <div className="sidebar-footer">
-          <HeaderSemesterPicker />
-        </div>
       </aside>
     </>
   );

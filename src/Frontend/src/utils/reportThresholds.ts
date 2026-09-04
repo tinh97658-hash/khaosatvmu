@@ -6,8 +6,9 @@
  */
 
 /**
- * Tỷ lệ PHIẾU HỢP LỆ trên sĩ số để một lớp được coi là thu đủ. Vừa là mốc gắn nhãn
- * "Hoàn thành" trên bảng tiến độ, vừa là điều kiện để lớp được tính vào điểm.
+ * Từ mốc này trở lên thì lớp được gắn nhãn "Đạt chỉ tiêu" trên bảng tiến độ.
+ * CHỈ dùng để gắn nhãn tiến độ — điều kiện lớp có được tính vào điểm hay không
+ * nằm ở `ScoringThresholds` bên dưới và do quản trị đặt trên giao diện.
  */
 export const COMPLETED_COMPLETION_RATE = 50;
 
@@ -19,16 +20,44 @@ export const completionRateOf = (validResponseCount: number, classSize: number):
   classSize > 0 ? (validResponseCount / classSize) * 100 : 0;
 
 /**
- * Lớp đã thu đủ phiếu để điểm của nó dùng được hay chưa. Vế thứ hai là lưới an
- * toàn cho lớp nộp đủ nhưng phần lớn phiếu bị bộ lọc loại: cả lớp đã làm rồi thì
- * không còn ai để thu thêm.
+ * Hai vòng lọc quyết định một lớp có được tính vào điểm hay không, do quản trị
+ * đặt trên giao diện. Bản sao của `ScoringThresholds` bên backend.
+ */
+export interface ScoringThresholds {
+  /** Vòng 1 — Số phiếu đã thu ÷ Sĩ số, phần trăm. */
+  minimumResponseRate: number;
+  /** Vòng 2 — Số phiếu hợp lệ ÷ Số phiếu đã thu, phần trăm. */
+  minimumValidRate: number;
+}
+
+/**
+ * Mặc định của hệ thống. Dùng khi chưa tải được cấu hình từ API — phải trùng
+ * `ScoringThresholds.Default` bên backend.
+ */
+export const DEFAULT_SCORING_THRESHOLDS: ScoringThresholds = {
+  minimumResponseRate: 50,
+  minimumValidRate: 80,
+};
+
+/** Tỷ lệ phản hồi: số phiếu đã thu chia sĩ số, theo phần trăm. */
+export const responseRateOf = (totalResponseCount: number, classSize: number): number =>
+  classSize > 0 ? (totalResponseCount / classSize) * 100 : 0;
+
+/** Tỷ lệ phiếu hợp lệ: phiếu hợp lệ chia số phiếu đã thu, theo phần trăm. */
+export const validRateOf = (validResponseCount: number, totalResponseCount: number): number =>
+  totalResponseCount > 0 ? (validResponseCount / totalResponseCount) * 100 : 0;
+
+/**
+ * Lớp phải qua CẢ HAI vòng mới được gộp vào điểm. Vòng 1 loại lớp quá ít người
+ * trả lời, vòng 2 loại lớp nộp nhiều nhưng phần lớn phiếu bị bộ lọc đánh rớt.
  */
 export const hasEnoughResponsesToScore = (
   classSize: number,
   totalResponseCount: number,
   validResponseCount: number,
+  thresholds: ScoringThresholds = DEFAULT_SCORING_THRESHOLDS,
 ): boolean => {
-  if (classSize <= 0) return false;
-  if (totalResponseCount >= classSize) return true;
-  return completionRateOf(validResponseCount, classSize) >= COMPLETED_COMPLETION_RATE;
+  if (classSize <= 0 || totalResponseCount <= 0) return false;
+  if (responseRateOf(totalResponseCount, classSize) < thresholds.minimumResponseRate) return false;
+  return validRateOf(validResponseCount, totalResponseCount) >= thresholds.minimumValidRate;
 };

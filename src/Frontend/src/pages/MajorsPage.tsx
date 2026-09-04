@@ -158,20 +158,21 @@ export const MajorsPage: React.FC<MajorsPageProps> = ({
     {
       key: 'majorName',
       header: 'Tên ngành học',
+      width: '40%',
       filterValue: (item) => item.majorName,
       render: (item) => <span className="catalog-cell-primary">{item.majorName}</span>,
     },
     {
       key: 'facultyId',
       header: 'Khoa viện',
-      width: '300px',
+      width: '32%',
       filterValue: (item) => facultyNameOf(item.facultyId),
       render: (item) => facultyNameOf(item.facultyId),
     },
     {
       key: 'sectionCount',
       header: 'Số nhóm lớp',
-      width: '130px',
+      width: '16%',
       filterValue: (item) => String(sectionCountOf(item.majorId)),
       numeric: true,
       render: (item) => (
@@ -181,7 +182,7 @@ export const MajorsPage: React.FC<MajorsPageProps> = ({
     {
       key: 'actions',
       header: 'Hành động',
-      width: '92px',
+      width: '12%',
       render: (item) => (
         <div className="catalog-actions">
           <button

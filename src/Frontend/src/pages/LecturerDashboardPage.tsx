@@ -194,7 +194,7 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
             <h2>Lớp của tôi</h2>
             <p>
               {selectedSurvey
-                ? `Đợt khảo sát: ${selectedSurvey.templateName}`
+                ? `Đợt khảo sát: ${selectedSurvey.surveyName}`
                 : 'Học kỳ này chưa có đợt khảo sát nào cho lớp của bạn'}
             </p>
           </div>
@@ -210,7 +210,7 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
                 >
                   {semesterSurveys.map((survey) => (
                     <option key={survey.semesterSurveyId} value={survey.semesterSurveyId}>
-                      {survey.templateName} ({survey.sectionSurveyCount} lớp)
+                      {survey.surveyName} ({survey.sectionSurveyCount} lớp)
                     </option>
                   ))}
                 </select>
@@ -224,11 +224,11 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
                 fileName: 'tien-do-khao-sat-giang-vien',
                 metadata: {
                   title: 'BÁO CÁO TIẾN ĐỘ THU PHIẾU KHẢO SÁT CÁ NHÂN GIẢNG VIÊN',
-                  subtitle: `Học kỳ: ${activeSemesterLabel}${selectedSurvey ? ` — Đợt: ${selectedSurvey.templateName}` : ''}`,
+                  subtitle: `Học kỳ: ${activeSemesterLabel}${selectedSurvey ? ` — Đợt: ${selectedSurvey.surveyName}` : ''}`,
                   subInstitution: 'GIẢNG VIÊN',
                   info: {
                     'Học kỳ': activeSemesterLabel,
-                    'Đợt khảo sát': selectedSurvey?.templateName || '—',
+                    'Đợt khảo sát': selectedSurvey?.surveyName || '—',
                     'Tổng số lớp giảng dạy': metrics.sectionCount,
                     'Số lớp đã phát phiếu': metrics.surveyedCount,
                     'Tiến độ thu phiếu': completionRate !== null ? `${completionRate.toFixed(1)}%` : '—',

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   CalendarDays,
   ChevronDown,
@@ -33,7 +33,6 @@ import type {
   Department,
   Faculty,
   Lecturer,
-  Semester,
 } from '../types';
 import { useSemester } from '../context/semesterContext';
 import { useAuth } from '../auth/authContext';
@@ -54,8 +53,6 @@ interface ClassesPageProps {
 
 interface YearForm {
   academicYearName: string;
-  startDate: string;
-  endDate: string;
 }
 
 interface SectionForm {
@@ -67,8 +64,33 @@ interface SectionForm {
 
 const emptyYearForm: YearForm = {
   academicYearName: '',
-  startDate: '',
-  endDate: '',
+};
+
+/**
+ * Dải năm học sinh sẵn trong danh sách chọn, tính từ năm hiện tại: 5 năm đã qua
+ * để nhập bù dữ liệu cũ, 10 năm sắp tới để mở trước. Dải trượt theo năm hiện tại
+ * nên không có mốc cứng nào phải sửa lại về sau.
+ */
+const YEARS_BEFORE = 5;
+const YEARS_AFTER = 10;
+
+/**
+ * Năm học chỉ nhận khuôn "n-(n+1)", nên thay vì để gõ tay rồi lọt "2025-2027",
+ * danh sách được sinh quanh năm hiện tại. Tên đang sửa luôn có mặt, kể cả khi
+ * nó nằm ngoài dải, để mở hộp thoại sửa không làm mất giá trị cũ.
+ */
+const buildAcademicYearOptions = (currentName: string): string[] => {
+  const thisYear = new Date().getFullYear();
+  const generated = Array.from(
+    { length: YEARS_BEFORE + YEARS_AFTER + 1 },
+    (_, index) => {
+      const start = thisYear - YEARS_BEFORE + index;
+      return `${start}-${start + 1}`;
+    }
+  );
+  return currentName && !generated.includes(currentName)
+    ? [currentName, ...generated]
+    : generated;
 };
 
 const emptySectionForm: SectionForm = {
@@ -118,8 +140,6 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
   const [savingYear, setSavingYear] = useState(false);
 
   const [isSemesterModalOpen, setIsSemesterModalOpen] = useState(false);
-  const [editingSemester, setEditingSemester] = useState<Semester | null>(null);
-  const [semesterToDelete, setSemesterToDelete] = useState<Semester | null>(null);
   const [semesterName, setSemesterName] = useState('');
   const [semesterError, setSemesterError] = useState('');
   const [savingSemester, setSavingSemester] = useState(false);
@@ -165,6 +185,19 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
   }, [selectedSemesterId, academicYears]);
 
   const selectedYear = academicYears.find((year) => year.academicYearId === selectedYearId) ?? null;
+
+  // Năm học đã có trong danh mục thì bỏ khỏi danh sách chọn, khỏi để người dùng
+  // chọn xong mới nhận lỗi trùng tên từ API.
+  const yearNameOptions = useMemo(() => {
+    const editingName = editingYear?.academicYearName ?? '';
+    const taken = new Set(
+      academicYears
+        .filter((year) => year.academicYearId !== editingYear?.academicYearId)
+        .map((year) => year.academicYearName)
+    );
+    return buildAcademicYearOptions(editingName).filter((option) => !taken.has(option));
+  }, [academicYears, editingYear]);
+
   const selectedSemester =
     academicYears
       .flatMap((year) => year.semesters)
@@ -312,11 +345,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
 
   const openEditYear = (year: AcademicYear) => {
     setEditingYear(year);
-    setYearForm({
-      academicYearName: year.academicYearName,
-      startDate: year.startDate,
-      endDate: year.endDate,
-    });
+    setYearForm({ academicYearName: year.academicYearName });
     setYearError('');
     setIsYearModalOpen(true);
   };
@@ -325,16 +354,12 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     event.preventDefault();
     const name = yearForm.academicYearName.trim();
 
-    if (!name || !yearForm.startDate || !yearForm.endDate) {
-      setYearError('Vui lòng nhập tên năm học và khoảng thời gian.');
+    if (!name) {
+      setYearError('Vui lòng nhập tên năm học.');
       return;
     }
 
-    const payload: SaveAcademicYearPayload = {
-      academicYearName: name,
-      startDate: yearForm.startDate,
-      endDate: yearForm.endDate,
-    };
+    const payload: SaveAcademicYearPayload = { academicYearName: name };
 
     setSavingYear(true);
     try {
@@ -383,16 +408,10 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
 
   // ----- Học kỳ -------------------------------------------------------------
 
+  // Ba học kỳ được sinh tự động cùng năm học và không cho sửa hay xoá, tránh việc
+  // đổi nhầm tên hay xoá nhầm một học kỳ đang gánh lớp học phần.
   const openCreateSemester = () => {
-    setEditingSemester(null);
     setSemesterName('');
-    setSemesterError('');
-    setIsSemesterModalOpen(true);
-  };
-
-  const openEditSemester = (semester: Semester) => {
-    setEditingSemester(semester);
-    setSemesterName(semester.semesterName);
     setSemesterError('');
     setIsSemesterModalOpen(true);
   };
@@ -400,7 +419,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
   const handleSemesterSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const name = semesterName.trim();
-    const academicYearId = editingSemester?.academicYearId ?? selectedYearId;
+    const academicYearId = selectedYearId;
 
     if (!name) {
       setSemesterError('Vui lòng nhập tên học kỳ.');
@@ -413,20 +432,13 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
 
     setSavingSemester(true);
     try {
-      if (editingSemester) {
-        await catalogApi.updateSemester(editingSemester.semesterId, name, academicYearId);
-      } else {
-        await catalogApi.createSemester(name, academicYearId);
-      }
+      await catalogApi.createSemester(name, academicYearId);
       await reloadYears();
       setExpandedYearIds((current) =>
         current.includes(academicYearId) ? current : [...current, academicYearId]
       );
-      toast.success(editingSemester ? 'Đã cập nhật học kỳ' : 'Đã thêm học kỳ', {
-        description: name,
-      });
+      toast.success('Đã thêm học kỳ', { description: name });
       setIsSemesterModalOpen(false);
-      setEditingSemester(null);
       setSemesterName('');
       setSemesterError('');
     } catch (error) {
@@ -434,21 +446,6 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     } finally {
       setSavingSemester(false);
     }
-  };
-
-  const handleSemesterDelete = async () => {
-    if (!semesterToDelete) return;
-    try {
-      await catalogApi.deleteSemester(semesterToDelete.semesterId);
-      await reloadYears();
-      if (selectedSemesterId === semesterToDelete.semesterId) setSelectedSemesterId(null);
-      toast.success('Đã xóa học kỳ', { description: semesterToDelete.semesterName });
-    } catch (error) {
-      toast.error('Không thể xóa học kỳ', {
-        description: catalogErrorMessage(errorCodeOf(error)),
-      });
-    }
-    setSemesterToDelete(null);
   };
 
   // ----- Lớp học phần -------------------------------------------------------
@@ -640,7 +637,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     {
       key: 'courseId',
       header: 'Học phần',
-      width: '260px',
+      width: '22%',
       filterValue: (item) => courseOf(item.courseId)?.courseName ?? '—',
       render: (item) => {
         const course = courseOf(item.courseId);
@@ -655,14 +652,14 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     {
       key: 'sectionName',
       header: 'Tên lớp',
-      width: '160px',
+      width: '11%',
       filterValue: (item) => item.sectionName,
       render: (item) => <span className="catalog-cell-primary">{item.sectionName}</span>,
     },
     {
       key: 'departmentId',
       header: 'Bộ môn',
-      width: '200px',
+      width: '15%',
       filterValue: (item) => departmentOfSection(item)?.departmentName ?? 'Chưa thuộc bộ môn',
       render: (item) => {
         const department = departmentOfSection(item);
@@ -676,7 +673,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     {
       key: 'facultyId',
       header: 'Khoa / Viện',
-      width: '200px',
+      width: '15%',
       filterValue: (item) => facultyOfSection(item)?.facultyName ?? 'Chưa thuộc khoa',
       render: (item) => {
         const faculty = facultyOfSection(item);
@@ -690,7 +687,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     {
       key: 'classSize',
       header: 'Sĩ số',
-      width: '90px',
+      width: '6%',
       filterValue: (item) => String(item.classSize),
       numeric: true,
       render: (item) => item.classSize,
@@ -698,7 +695,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     {
       key: 'lecturerId',
       header: 'Giảng viên',
-      width: '260px',
+      width: '21%',
       // Lọc gộp cả giảng viên có mã lẫn tên chưa xác định, để admin lọc riêng
       // ra các lớp còn thiếu email.
       filterValue: (item) =>
@@ -736,7 +733,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     columns.push({
       key: 'actions',
       header: 'Hành động',
-      width: '128px',
+      width: '10%',
       render: (item) => (
         <div className="catalog-actions">
           {/* Chỉ lớp còn treo mới có nút này. Nó chỉ sửa đúng lớp đó, vì hai lớp
@@ -880,28 +877,6 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
                                   <Layers aria-hidden="true" size={13} />
                                   {semester.semesterName}
                                 </button>
-                                {canManageAll && (
-                                  <span className="term-tree__row-actions">
-                                    <button
-                                      type="button"
-                                      className="catalog-icon-button catalog-icon-button--sm"
-                                      onClick={() => openEditSemester(semester)}
-                                      aria-label={`Sửa ${semester.semesterName}`}
-                                      title="Sửa học kỳ"
-                                    >
-                                      <Pencil aria-hidden="true" size={12} />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="catalog-icon-button catalog-icon-button--sm catalog-icon-button--danger"
-                                      onClick={() => setSemesterToDelete(semester)}
-                                      aria-label={`Xóa ${semester.semesterName}`}
-                                      title="Xóa học kỳ"
-                                    >
-                                      <Trash2 aria-hidden="true" size={12} />
-                                    </button>
-                                  </span>
-                                )}
                               </div>
                             </li>
                           ))
@@ -1056,38 +1031,21 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
           {yearError && <div className="catalog-validation-error" role="alert">{yearError}</div>}
           <div className="form-group">
             <label htmlFor="year-name">Tên năm học</label>
-            <input
+            <select
               id="year-name"
-              type="text"
-              placeholder="VD: 2025-2026"
               value={yearForm.academicYearName}
               onChange={(event) =>
                 setYearForm((prev) => ({ ...prev, academicYearName: event.target.value }))
               }
               required
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="year-start">Ngày bắt đầu</label>
-            <input
-              id="year-start"
-              type="date"
-              value={yearForm.startDate}
-              onChange={(event) =>
-                setYearForm((prev) => ({ ...prev, startDate: event.target.value }))
-              }
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="year-end">Ngày kết thúc</label>
-            <input
-              id="year-end"
-              type="date"
-              value={yearForm.endDate}
-              onChange={(event) => setYearForm((prev) => ({ ...prev, endDate: event.target.value }))}
-              required
-            />
+            >
+              <option value="">-- Chọn năm học --</option>
+              {yearNameOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </div>
           {!editingYear && (
             <div className="catalog-context-band">
@@ -1109,20 +1067,14 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
       <Modal
         isOpen={isSemesterModalOpen}
         onClose={() => setIsSemesterModalOpen(false)}
-        title={editingSemester ? 'Sửa học kỳ' : 'Thêm học kỳ'}
+        title="Thêm học kỳ"
       >
         <form className="catalog-form" onSubmit={(event) => void handleSemesterSubmit(event)}>
           {semesterError && (
             <div className="catalog-validation-error" role="alert">{semesterError}</div>
           )}
           <div className="catalog-context-band">
-            Năm học:{' '}
-            <strong>
-              {editingSemester
-                ? academicYears.find((y) => y.academicYearId === editingSemester.academicYearId)
-                    ?.academicYearName ?? '—'
-                : selectedYear?.academicYearName ?? 'Chưa chọn'}
-            </strong>
+            Năm học: <strong>{selectedYear?.academicYearName ?? 'Chưa chọn'}</strong>
           </div>
           <div className="form-group">
             <label htmlFor="semester-name">Tên học kỳ</label>
@@ -1449,16 +1401,6 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
             ? `Xóa cùng: ${yearToDelete.semesters.length} học kỳ và toàn bộ lớp học phần thuộc các học kỳ đó.`
             : undefined
         }
-      />
-
-      <ConfirmDialog
-        isOpen={semesterToDelete !== null}
-        onClose={() => setSemesterToDelete(null)}
-        onConfirm={() => void handleSemesterDelete()}
-        title="Xóa học kỳ?"
-        recordName={semesterToDelete?.semesterName ?? ''}
-        confirmText="Xóa"
-        warning="Xóa cùng: toàn bộ lớp học phần thuộc học kỳ này."
       />
 
       <ConfirmDialog

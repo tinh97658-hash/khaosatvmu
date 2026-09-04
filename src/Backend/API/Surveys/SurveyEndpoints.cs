@@ -121,6 +121,23 @@ public static class SurveyEndpoints
             ToResult(await service.DeleteSemesterSurveyAsync(semesterSurveyId, cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
+        // Cặp ngưỡng lọc lớp được tính điểm. Đọc mở cho mọi vai trò đọc số liệu —
+        // các trang báo cáo cần in ra "đang tính theo x%/y%"; ghi thì provider tự
+        // chặn về quản trị.
+        operationalReadGroup.MapGet("/scoring-thresholds", async (
+            [FromServices] IScoringThresholdProvider provider,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await provider.GetAsync(cancellationToken)));
+
+        campaignGroup.MapPut("/scoring-thresholds", async (
+            SaveScoringThresholdsRequest request,
+            [FromServices] IScoringThresholdProvider provider,
+            CancellationToken cancellationToken) =>
+            ToResult(await provider.UpdateAsync(
+                new ScoringThresholds(request.MinimumResponseRate, request.MinimumValidRate),
+                cancellationToken)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
         // Đếm trước số lớp của một phạm vi, để hộp thoại nói rõ sẽ tạo bao nhiêu bài
         // trước khi người dùng bấm xác nhận.
         campaignGroup.MapGet("/section-scope-preview", async (
@@ -372,10 +389,16 @@ public static class SurveyEndpoints
             SurveyErrorCodes.ScopeSectionsAlreadyAdded => StatusCodes.Status409Conflict,
             SurveyErrorCodes.SectionSurveyHasNoResponses => StatusCodes.Status409Conflict,
             SurveyErrorCodes.LinkNotOpen => StatusCodes.Status409Conflict,
+            SurveyErrorCodes.ScoringThresholdInvalid => StatusCodes.Status400BadRequest,
             _ => StatusCodes.Status400BadRequest
         };
         return Results.Json(new { errorCode = result.ErrorCode }, statusCode: statusCode);
     }
+
+    /// <summary>Hai vòng lọc lớp được tính điểm, đơn vị phần trăm.</summary>
+    public sealed record SaveScoringThresholdsRequest(
+        decimal MinimumResponseRate,
+        decimal MinimumValidRate);
 
     public sealed record SaveAnswerScaleOptionRequest(int Value, string? DisplayText);
 

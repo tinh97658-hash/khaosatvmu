@@ -705,7 +705,12 @@ function DashboardApp() {
             )}
 
             {(currentTab === 'course-campaigns' || currentTab === 'campaigns') && (
-              <CourseSurveysPage onOpenSurveyReport={handleOpenSurveyReport} />
+              <CourseSurveysPage
+                onOpenSurveyReport={handleOpenSurveyReport}
+                onOpenClasses={
+                  canLoadCourseSections ? () => setCurrentTab('classes') : undefined
+                }
+              />
             )}
 
             {currentTab === 'program-campaigns' && (

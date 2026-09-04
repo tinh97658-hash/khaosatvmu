@@ -64,6 +64,7 @@ public class StatisticsScopeTests
                 db,
                 cache,
                 new FixedScopeResolver(userScope),
+                new FixedScoringThresholdProvider(),
                 new SchoolOverviewCacheVersion()));
     }
 

@@ -53,8 +53,6 @@ public sealed class AcademicYear : ISoftDeletable
     /// <summary>UNIQUE, vd '2025-2026'.</summary>
     public string AcademicYearName { get; set; } = string.Empty;
 
-    public DateOnly StartDate { get; set; }
-    public DateOnly EndDate { get; set; }
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAt { get; set; }
 }

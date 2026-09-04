@@ -145,6 +145,11 @@ export const DepartmentDashboardPage: React.FC<DepartmentDashboardPageProps> = (
 
   const unidentifiedCount = unidentified?.sectionCount ?? 0;
 
+  // Số liệu bộ môn chỉ trả về tên bộ câu hỏi, mà nhãn ở đây nói "Đợt khảo sát" —
+  // tên đợt phải lấy từ chính danh sách đang đổ vào ô chọn.
+  const selectedSurvey =
+    semesterSurveys.find((survey) => survey.semesterSurveyId === selectedSurveyId) ?? null;
+
   return (
     <div className="dashboard-page department-dashboard">
       <section className="dashboard-block">
@@ -190,8 +195,8 @@ export const DepartmentDashboardPage: React.FC<DepartmentDashboardPageProps> = (
           <div>
             <h2>Chỉ số bộ môn</h2>
             <p>
-              {metrics
-                ? `Đợt khảo sát: ${metrics.templateName}`
+              {selectedSurvey
+                ? `Đợt khảo sát: ${selectedSurvey.surveyName}`
                 : 'Học kỳ này chưa có đợt khảo sát nào'}
             </p>
           </div>
@@ -207,7 +212,7 @@ export const DepartmentDashboardPage: React.FC<DepartmentDashboardPageProps> = (
                 >
                   {semesterSurveys.map((survey) => (
                     <option key={survey.semesterSurveyId} value={survey.semesterSurveyId}>
-                      {survey.templateName} ({survey.sectionSurveyCount} lớp)
+                      {survey.surveyName} ({survey.sectionSurveyCount} lớp)
                     </option>
                   ))}
                 </select>
@@ -221,12 +226,12 @@ export const DepartmentDashboardPage: React.FC<DepartmentDashboardPageProps> = (
                 fileName: `tong-quan-bo-mon-${(metrics.departmentName || 'bo-mon').toLowerCase().replace(/\s+/g, '-')}`,
                 metadata: {
                   title: `BÁO CÁO TỔNG QUAN BỘ MÔN ${(metrics.departmentName || '').toUpperCase()}`,
-                  subtitle: `Học kỳ: ${activeSemesterLabel} — Đợt: ${metrics.templateName}`,
+                  subtitle: `Học kỳ: ${activeSemesterLabel} — Đợt: ${selectedSurvey?.surveyName ?? '—'}`,
                   subInstitution: 'TRƯỞNG BỘ MÔN',
                   info: {
                     'Bộ môn': metrics.departmentName || '—',
                     'Học kỳ': activeSemesterLabel,
-                    'Đợt khảo sát': metrics.templateName,
+                    'Đợt khảo sát': selectedSurvey?.surveyName ?? '—',
                     'Số lớp cần lưu ý': `${metrics.weakSectionCount} lớp`,
                     'Số lớp chưa xác định GV': `${unidentifiedCount} lớp`,
                   },

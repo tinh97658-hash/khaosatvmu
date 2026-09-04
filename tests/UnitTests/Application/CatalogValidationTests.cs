@@ -51,13 +51,10 @@ public class CatalogValidationTests
     }
 
     [Fact]
-    public void SaveAcademicYearCommand_DatesComparison_ShouldBeChronological()
+    public void SaveAcademicYearCommand_ShouldCarryOnlyTheName()
     {
-        var start = new DateOnly(2025, 9, 1);
-        var end = new DateOnly(2026, 6, 30);
-        var command = new SaveAcademicYearCommand("2025-2026", start, end);
+        var command = new SaveAcademicYearCommand("2025-2026");
 
-        command.EndDate.Should().BeAfter(command.StartDate);
         command.AcademicYearName.Should().Be("2025-2026");
     }
 }

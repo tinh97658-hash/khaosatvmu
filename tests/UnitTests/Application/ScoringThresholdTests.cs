@@ -5,48 +5,68 @@ using FluentAssertions;
 using Xunit;
 
 /// <summary>
-/// Điều kiện để một lớp được tính vào điểm. Quy tắc này quyết định lớp nào có mặt
-/// trong mọi con số tổng hợp, nên khoá lại bằng test thay vì tin vào trí nhớ.
+/// Hai vòng lọc quyết định một lớp có được tính vào điểm hay không. Quy tắc này
+/// quyết định lớp nào có mặt trong mọi con số tổng hợp, nên khoá lại bằng test
+/// thay vì tin vào trí nhớ.
 /// </summary>
 public class ScoringThresholdTests
 {
+    /// <summary>Mặc định hệ thống: 50% phản hồi và 80% phiếu hợp lệ.</summary>
+    private static readonly ScoringThresholds Default = ScoringThresholds.Default;
+
     [Theory]
-    // Đủ tỷ lệ phiếu hợp lệ.
-    [InlineData(40, 20, 20, true)]   // đúng 50%
-    [InlineData(40, 25, 21, true)]   // trên 50%
-    [InlineData(40, 30, 19, false)]  // nộp nhiều nhưng hợp lệ mới 47.5%
-    // Vế lưới an toàn: cả lớp đã nộp thì không còn ai để thu thêm.
-    [InlineData(10, 10, 3, true)]
-    [InlineData(10, 12, 1, true)]    // nộp vượt sĩ số (sĩ số nhập thiếu)
-    [InlineData(10, 9, 3, false)]    // thiếu một người, và hợp lệ mới 30%
+    // Qua cả hai vòng.
+    [InlineData(40, 20, 20, true)]   // phản hồi đúng 50%, hợp lệ 100%
+    [InlineData(40, 25, 20, true)]   // phản hồi 62.5%, hợp lệ đúng 80%
+    // Rớt vòng 1: quá ít người trả lời.
+    [InlineData(40, 19, 19, false)]  // phản hồi 47.5%
+    [InlineData(100, 49, 49, false)] // 49% không được làm tròn lên thành đạt
+    // Rớt vòng 2: nộp đủ nhưng phần lớn phiếu bị bộ lọc đánh rớt.
+    [InlineData(40, 30, 23, false)]  // phản hồi 75% nhưng hợp lệ mới 76.7%
+    [InlineData(10, 10, 3, false)]   // cả lớp nộp mà chỉ 30% hợp lệ
     // Trường hợp biên.
     [InlineData(0, 5, 5, false)]     // sĩ số 0 thì không có mẫu số nào để chia
     [InlineData(30, 0, 0, false)]    // chưa ai làm
-    public void HasEnoughResponsesToScore_ShouldFollowTheRule(
+    public void HasEnoughResponsesToScore_ShouldNeedBothGates(
         int classSize,
         int totalResponseCount,
         int validResponseCount,
         bool expected)
     {
-        ReportThresholds
+        Default
             .HasEnoughResponsesToScore(classSize, totalResponseCount, validResponseCount)
             .Should().Be(expected);
     }
 
     [Fact]
-    public void CompletedCompletionRate_ShouldStayInSyncWithTheFrontend()
+    public void Default_ShouldStayInSyncWithTheFrontend()
     {
-        // Bản sao ở src/Frontend/src/utils/reportThresholds.ts phải cùng con số này.
-        // Lệch nhau thì một lớp được gắn nhãn "Hoàn thành" ở trang tiến độ nhưng lại
-        // bị bỏ khỏi điểm ở trang báo cáo, không ai hiểu nổi tại sao.
-        ReportThresholds.CompletedCompletionRate.Should().Be(50m);
+        // Bản sao ở src/Frontend/src/utils/reportThresholds.ts phải cùng hai con số
+        // này, vì giao diện hiển thị mặc định trước khi tải được cấu hình từ API.
+        Default.MinimumResponseRate.Should().Be(50m);
+        Default.MinimumValidRate.Should().Be(80m);
+    }
+
+    [Theory]
+    [InlineData(-1, 80, false)]
+    [InlineData(50, 101, false)]
+    [InlineData(0, 0, true)]
+    [InlineData(100, 100, true)]
+    public void IsValid_ShouldRejectRatesOutsideZeroToOneHundred(
+        decimal responseRate,
+        decimal validRate,
+        bool expected)
+    {
+        new ScoringThresholds(responseRate, validRate).IsValid.Should().Be(expected);
     }
 
     [Fact]
-    public void AClassJustUnderTheThreshold_ShouldNotBeScored()
+    public void LooseningTheThresholds_ShouldLetMoreClassesIn()
     {
-        // 49% không được làm tròn lên thành đạt.
-        ReportThresholds.HasEnoughResponsesToScore(100, 49, 49).Should().BeFalse();
-        ReportThresholds.HasEnoughResponsesToScore(100, 50, 50).Should().BeTrue();
+        // Lớp phản hồi 40%, hợp lệ 75%: rớt cả hai vòng ở mức mặc định.
+        Default.HasEnoughResponsesToScore(100, 40, 30).Should().BeFalse();
+
+        var loose = new ScoringThresholds(30m, 70m);
+        loose.HasEnoughResponsesToScore(100, 40, 30).Should().BeTrue();
     }
 }

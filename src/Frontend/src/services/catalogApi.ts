@@ -216,9 +216,6 @@ export const catalogApi = {
 
 export interface SaveAcademicYearPayload {
   academicYearName: string;
-  /** YYYY-MM-DD */
-  startDate: string;
-  endDate: string;
 }
 
 export interface SaveCourseSectionPayload {
@@ -292,7 +289,8 @@ export const catalogErrorMessages: Record<string, string> = {
   CATALOG_ACADEMIC_YEAR_NOT_FOUND: 'Không tìm thấy năm học.',
   CATALOG_ACADEMIC_YEAR_NAME_REQUIRED: 'Thiếu tên năm học.',
   CATALOG_ACADEMIC_YEAR_NAME_EXISTS: 'Tên năm học đã tồn tại.',
-  CATALOG_ACADEMIC_YEAR_RANGE_INVALID: 'Ngày kết thúc phải sau ngày bắt đầu.',
+  CATALOG_ACADEMIC_YEAR_NAME_INVALID:
+    'Tên năm học phải có dạng năm liền nhau, ví dụ 2025-2026.',
   CATALOG_SEMESTER_NOT_FOUND: 'Không tìm thấy học kỳ.',
   CATALOG_SEMESTER_NAME_REQUIRED: 'Thiếu tên học kỳ.',
   CATALOG_SEMESTER_NAME_EXISTS: 'Năm học này đã có học kỳ trùng tên.',

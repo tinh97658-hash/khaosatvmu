@@ -227,6 +227,27 @@
   height: 22px;
 }
 
+/* Ô rỗng mang tính chặn: kỳ không có lớp học phần thì không tạo được đợt nào. */
+.operations-empty--warning {
+  border-color: #e4d3a5;
+  border-left: 3px solid #b7791f;
+  background: #fffbf0;
+  color: #7a5a12;
+}
+
+.operations-empty--warning strong {
+  color: #6b4e0f;
+}
+
+.operations-empty--warning .operation-icon {
+  color: #b7791f;
+}
+
+.operations-empty--warning span {
+  max-width: 620px;
+  line-height: 1.6;
+}
+
 .campaign-tree {
   display: grid;
   gap: 12px;
@@ -1814,4 +1835,16 @@
   padding: 0;
   border: 0;
   background: transparent;
+}
+
+/* Bảng lớp trong Danh sách đợt khảo sát dùng chung quy chuẩn tiêu đề với các bảng
+   còn lại: chữ căn giữa cả hai chiều và được xuống dòng. Bảng này viết tay, không
+   có menu lọc trên tiêu đề nên không cần chỗ cho nút ở góc. */
+.campaign-table th {
+  height: 46px;
+  padding: 4px 8px;
+  white-space: normal;
+  vertical-align: middle;
+  text-align: center;
+  line-height: 1.2;
 }

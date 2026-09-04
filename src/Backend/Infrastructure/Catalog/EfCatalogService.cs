@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Application.Auth;
 using Application.Catalog;
 using Domain;
@@ -6,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Catalog;
 
-public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userScope) : ICatalogService
+public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver userScope) : ICatalogService
 {
     // ---------------------------------------------------------------- Faculties
 
@@ -501,8 +502,7 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         CancellationToken cancellationToken = default)
     {
         var years = await db.AcademicYears
-            .OrderByDescending(x => x.StartDate)
-            .ThenBy(x => x.AcademicYearName)
+            .OrderByDescending(x => x.AcademicYearName)
             .ToListAsync(cancellationToken);
         var semesters = await db.Semesters
             .OrderBy(x => x.SemesterId)
@@ -512,8 +512,6 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             .Select(year => new AcademicYearDto(
                 year.AcademicYearId,
                 year.AcademicYearName,
-                year.StartDate,
-                year.EndDate,
                 semesters
                     .Where(semester => semester.AcademicYearId == year.AcademicYearId)
                     .Select(ToDto)
@@ -543,9 +541,7 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
 
         var year = new AcademicYear
         {
-            AcademicYearName = command.AcademicYearName.Trim(),
-            StartDate = command.StartDate,
-            EndDate = command.EndDate
+            AcademicYearName = command.AcademicYearName.Trim()
         };
         db.AcademicYears.Add(year);
         await db.SaveChangesAsync(cancellationToken);
@@ -559,8 +555,6 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         return Succeeded(new AcademicYearDto(
             year.AcademicYearId,
             year.AcademicYearName,
-            year.StartDate,
-            year.EndDate,
             semesters.Select(ToDto).ToList()));
     }
 
@@ -589,8 +583,6 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         }
 
         year.AcademicYearName = command.AcademicYearName.Trim();
-        year.StartDate = command.StartDate;
-        year.EndDate = command.EndDate;
         await db.SaveChangesAsync(cancellationToken);
 
         var semesters = await db.Semesters
@@ -601,8 +593,6 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
         return Succeeded(new AcademicYearDto(
             year.AcademicYearId,
             year.AcademicYearName,
-            year.StartDate,
-            year.EndDate,
             semesters.Select(ToDto).ToList()));
     }
 
@@ -2183,7 +2173,7 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
     {
         var name = command.AcademicYearName?.Trim() ?? string.Empty;
         if (name.Length == 0) return CatalogErrorCodes.AcademicYearNameRequired;
-        if (command.EndDate <= command.StartDate) return CatalogErrorCodes.AcademicYearRangeInvalid;
+        if (!IsAcademicYearNameWellFormed(name)) return CatalogErrorCodes.AcademicYearNameInvalid;
 
         var normalized = NormalizeKey(name);
         var exists = await db.AcademicYears
@@ -2191,6 +2181,21 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             .AnyAsync(x => x.AcademicYearName.Trim().ToLower() == normalized, cancellationToken);
         return exists ? CatalogErrorCodes.AcademicYearNameExists : null;
     }
+
+    /// <summary>
+    /// Tên năm học phải đúng khuôn "n-(n+1)", ví dụ 2025-2026. Giao diện đã cho chọn
+    /// sẵn nên chỉ còn API là đường vào, nhưng "2025-2027" hay "nam hoc 2025" lọt vào
+    /// đây là hỏng cả thứ tự sắp xếp lẫn cách người dùng đọc cây năm học.
+    /// </summary>
+    private static bool IsAcademicYearNameWellFormed(string name)
+    {
+        var match = AcademicYearNameRegex().Match(name);
+        return match.Success
+            && int.Parse(match.Groups[2].Value) == int.Parse(match.Groups[1].Value) + 1;
+    }
+
+    [GeneratedRegex(@"^(\d{4})-(\d{4})$")]
+    private static partial Regex AcademicYearNameRegex();
 
     private async Task<string?> ValidateSemesterAsync(
         int? semesterId,
@@ -2464,7 +2469,7 @@ public sealed class EfCatalogService(AppDbContext db, IUserScopeResolver userSco
             .OrderBy(x => x.SemesterId)
             .ToListAsync(cancellationToken);
         return Succeeded(new AcademicYearDto(
-            year.AcademicYearId, year.AcademicYearName, year.StartDate, year.EndDate,
+            year.AcademicYearId, year.AcademicYearName,
             semesters.Select(ToDto).ToList()));
     }
 

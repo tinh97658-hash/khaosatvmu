@@ -271,46 +271,47 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
     {
       key: 'fullName',
       header: 'Họ và tên',
+      width: '20%',
       filterValue: (row) => row.fullName,
       render: (row) => <span className="catalog-cell-primary">{row.fullName}</span>,
     },
     {
       key: 'departmentId',
       header: 'Bộ môn',
-      width: '250px',
+      width: '18%',
       filterValue: (row) => (row.departmentId === null ? '—' : departmentNameOf(row.departmentId)),
       render: (row) => (row.departmentId === null ? '—' : departmentNameOf(row.departmentId)),
     },
     {
       key: 'facultyId',
       header: 'Khoa viện',
-      width: '250px',
+      width: '18%',
       filterValue: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
       render: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
     },
     {
       key: 'positionId',
       header: 'Chức vụ',
-      width: '170px',
+      width: '12%',
       filterValue: (row) => (row.positionId === null ? '—' : positionNameOf(row.positionId)),
       render: (row) => (row.positionId === null ? '—' : positionNameOf(row.positionId)),
     },
     {
       key: 'email',
       header: 'Email',
-      width: '230px',
+      width: '15%',
       render: (row) => row.email ?? '—',
     },
     {
       key: 'phoneNumber',
       header: 'Số điện thoại',
-      width: '150px',
+      width: '10%',
       render: (row) => row.phoneNumber ?? '—',
     },
     {
       key: 'actions',
       header: 'Thao tác',
-      width: '92px',
+      width: '7%',
       render: (row) => (
         <div className="catalog-actions">
           <button

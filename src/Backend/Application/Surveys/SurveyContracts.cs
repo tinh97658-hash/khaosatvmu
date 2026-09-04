@@ -865,6 +865,9 @@ public static class SurveyErrorCodes
 {
     public const string InvalidRequest = "SURVEY_INVALID_REQUEST";
 
+    /// <summary>Ngưỡng lọc lớp tính điểm nằm ngoài khoảng 0–100.</summary>
+    public const string ScoringThresholdInvalid = "SURVEY_SCORING_THRESHOLD_INVALID";
+
     /// <summary>
     /// Bản ghi đích nằm ngoài phạm vi của người đang đăng nhập, hoặc hành động này
     /// không dành cho vai trò đó. Endpoint trả 403. Song song với

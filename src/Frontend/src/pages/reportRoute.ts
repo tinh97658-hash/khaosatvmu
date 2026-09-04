@@ -1,5 +1,6 @@
-export type ReportWorkspace = 'overview' | 'details' | 'rankings';
-export type ReportAnalysisView = 'faculties' | 'quality' | 'progress';
+export type ReportWorkspace = 'overview' | 'details';
+/** Tab con của Tổng quan. 'units' là bảng Tổng hợp đơn vị, trước đây là tab lớn. */
+export type ReportAnalysisView = 'faculties' | 'units' | 'quality';
 export type ReportScreen = ReportWorkspace | 'lecturer' | 'survey';
 /** Khóa sắp xếp của bảng tra cứu chi tiết — đúng bằng key các cột sắp xếp được. */
 export const reportResultSortKeys = [
@@ -55,8 +56,11 @@ export const parseReportRoute = (hash = window.location.hash): ReportRouteState 
   let lecturerId: number | undefined;
   let surveyId: number | undefined;
 
-  if (routeSegment === 'details' || routeSegment === 'rankings' || routeSegment === 'overview') {
+  if (routeSegment === 'details' || routeSegment === 'overview') {
     screen = routeSegment;
+  } else if (routeSegment === 'rankings') {
+    // Link cũ: 'rankings' từng là tab lớn, nay là tab con 'units' của Tổng quan.
+    screen = 'overview';
   } else if (routeSegment === 'lecturers') {
     lecturerId = positiveInt(segments[2]);
     screen = lecturerId ? 'lecturer' : 'details';
@@ -67,7 +71,7 @@ export const parseReportRoute = (hash = window.location.hash): ReportRouteState 
 
   const analysis = query.get('analysis');
   const analysisView: ReportAnalysisView | undefined =
-    analysis === 'quality' || analysis === 'progress' || analysis === 'faculties'
+    analysis === 'quality' || analysis === 'units' || analysis === 'faculties'
       ? analysis
       : undefined;
   const sort = query.get('sort');

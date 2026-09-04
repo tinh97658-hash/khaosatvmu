@@ -37,9 +37,22 @@ public sealed class EfReportService(
     /// <see cref="ValidCount"/> và <see cref="ValidTotalScore"/> chỉ gộp phiếu qua
     /// bộ lọc nhiễu, dùng cho mọi số liệu về chất lượng.
     /// </summary>
-    private sealed record ResponseTally(int TotalCount, int ValidCount, decimal ValidTotalScore)
+    /// <summary>
+    /// Số liệu của một lớp ĐỌC TỪ ẢNH CHỤP lần bấm "Tính lại điểm" gần nhất, không
+    /// đếm sống từ bảng phiếu.
+    ///
+    /// <paramref name="IsScored"/> chính là "lớp có được tính vào điểm ở lần chốt
+    /// đó không" — lấy từ việc AverageScore có null hay không, chứ không so lại
+    /// ngưỡng. So lại ngưỡng thì sửa ngưỡng xong mà chưa bấm tính là báo cáo lệch
+    /// ngay với bảng dữ liệu.
+    /// </summary>
+    private sealed record ResponseTally(
+        int TotalCount,
+        int ValidCount,
+        decimal ValidTotalScore,
+        bool IsScored)
     {
-        public static readonly ResponseTally Empty = new(0, 0, 0m);
+        public static readonly ResponseTally Empty = new(0, 0, 0m, false);
 
         public decimal AverageScore =>
             ValidCount > 0 ? Math.Round(ValidTotalScore / ValidCount, 2) : 0m;
@@ -54,19 +67,30 @@ public sealed class EfReportService(
     {
         if (courseSectionSurveyIds.Count == 0) return [];
 
-        return await db.SurveyResponses.AsNoTracking()
+        // Đọc ảnh chụp trên "CourseSectionSurveys" chứ không gộp lại từ
+        // "SurveyResponses": mọi trang báo cáo phải nói cùng một lần chốt với bảng
+        // dữ liệu khảo sát. Riêng trang Tiến độ thu phiếu vẫn đếm sống — tiến độ
+        // phải đúng ngay cả khi đợt chưa bấm tính lần nào.
+        //
+        // Tổng điểm dựng lại bằng AverageScore × ValidResponseCount. AverageScore
+        // đã làm tròn 2 chữ số nên tổng chỉ xấp xỉ, nhưng khi chia lại cho đúng số
+        // phiếu ấy thì ra lại chính con số đã chốt — đó mới là thứ cần khớp.
+        return await db.CourseSectionSurveys.AsNoTracking()
             .Where(x => courseSectionSurveyIds.Contains(x.CourseSectionSurveyId))
-            .GroupBy(x => x.CourseSectionSurveyId)
-            .Select(g => new
+            .Select(x => new
             {
-                CourseSectionSurveyId = g.Key,
-                TotalCount = g.Count(),
-                ValidCount = g.Count(x => x.IsValid),
-                ValidTotalScore = g.Sum(x => x.IsValid ? x.Score : 0m)
+                x.CourseSectionSurveyId,
+                x.TotalResponseCount,
+                x.ValidResponseCount,
+                x.AverageScore,
             })
             .ToDictionaryAsync(
                 x => x.CourseSectionSurveyId,
-                x => new ResponseTally(x.TotalCount, x.ValidCount, x.ValidTotalScore),
+                x => new ResponseTally(
+                    x.TotalResponseCount,
+                    x.ValidResponseCount,
+                    (x.AverageScore ?? 0m) * x.ValidResponseCount,
+                    x.AverageScore is not null),
                 cancellationToken);
     }
 
@@ -291,8 +315,7 @@ public sealed class EfReportService(
                 validResponses += tally.ValidCount;
 
                 int classSize = sec?.ClassSize ?? 0;
-                if (ReportThresholds.HasEnoughResponsesToScore(
-                        classSize, tally.TotalCount, tally.ValidCount))
+                if (tally.IsScored)
                 {
                     scoredValidResponses += tally.ValidCount;
                     scoredScoreSum += tally.ValidTotalScore;
@@ -466,12 +489,8 @@ public sealed class EfReportService(
         var sectionSurveysBySectionId = sectionSurveys.ToLookup(x => x.CourseSectionId);
         var classSizeBySectionId = sections.ToDictionary(x => x.CourseSectionId, x => x.ClassSize);
 
-        // Lớp chưa thu đủ phiếu vẫn được đếm vào tiến độ nhưng không góp vào điểm.
-        bool CountsTowardScore(int courseSectionId, ResponseTally tally) =>
-            ReportThresholds.HasEnoughResponsesToScore(
-                classSizeBySectionId.GetValueOrDefault(courseSectionId),
-                tally.TotalCount,
-                tally.ValidCount);
+        // Lớp chưa qua hai vòng lọc vẫn được đếm vào tiến độ nhưng không góp vào điểm.
+        bool CountsTowardScore(int courseSectionId, ResponseTally tally) => tally.IsScored;
 
         var facultyReports = new List<FacultyDepartmentReportDto>();
 
@@ -910,10 +929,7 @@ public sealed class EfReportService(
             // Lớp chưa thu đủ phiếu thì không có điểm để đọc: trả 0 và bảng hiện
             // gạch ngang. Điểm của lớp hai người đánh giá đặt cạnh lớp ba mươi
             // người trong cùng một bảng xếp hạng là so hai thứ không so được.
-            decimal averageScore = ReportThresholds.HasEnoughResponsesToScore(
-                classSize, tally.TotalCount, tally.ValidCount)
-                ? tally.AverageScore
-                : 0m;
+            decimal averageScore = tally.IsScored ? tally.AverageScore : 0m;
 
             results.Add(new SurveyResultDetailDto(
                 css.CourseSectionSurveyId,
@@ -962,6 +978,7 @@ public sealed class EfReportService(
                orderby survey.SemesterSurveyId descending
                select new SchoolOverviewComparisonOptionDto(
                    survey.SemesterSurveyId,
+                   survey.SurveyName,
                    semester.SemesterId,
                    semester.SemesterName,
                    year.AcademicYearName,
@@ -1028,7 +1045,7 @@ public sealed class EfReportService(
                 semester.SemesterId,
                 semester.SemesterName,
                 academicYear?.AcademicYearName ?? string.Empty,
-                0, 0, 0, 0m, 0, 0, 0, 0m, [], 0m, [], [], [], null);
+                0, 0, 0, 0m, 0, 0, 0, 0m, 0, 0, [], 0m, [], [], [], null);
         }
 
         var sectionSurveys = await db.CourseSectionSurveys
@@ -1107,6 +1124,14 @@ public sealed class EfReportService(
         int inProgressCount = 0;
         int laggingCount = 0;
 
+        // Mẫu số/tử số của điểm trung bình TOÀN TRƯỜNG. Cộng trực tiếp ở đây thay vì
+        // suy ngược từ facultyStats/deptStats, vì lớp chưa ánh xạ được khoa/bộ môn nào
+        // vẫn phải góp vào mặt bằng chung — cùng lý do totalTarget/totalResponses bên
+        // dưới cũng cộng trực tiếp từ sectionSurveys.
+        int schoolScoredResponses = 0;
+        int schoolScoredSectionCount = 0;
+        decimal schoolScoredScoreSum = 0;
+
         foreach (var ss in sectionSurveys)
         {
             var sec = sectionById.GetValueOrDefault(ss.CourseSectionId);
@@ -1139,8 +1164,13 @@ public sealed class EfReportService(
             // Lớp chưa thu đủ phiếu vẫn được đếm vào tiến độ (Target, Responses) —
             // đó chính là những lớp cần nhắc. Nhưng không góp vào điểm: mẫu số của
             // điểm chỉ cộng phiếu của lớp đã đủ.
-            var scored = ReportThresholds.HasEnoughResponsesToScore(
-                classSize, tally.TotalCount, tally.ValidCount);
+            var scored = tally.IsScored;
+            if (scored)
+            {
+                schoolScoredSectionCount++;
+                schoolScoredResponses += tally.ValidCount;
+                schoolScoredScoreSum += tally.ValidTotalScore;
+            }
 
             if (reportFacultyId is { } fId)
             {
@@ -1219,16 +1249,21 @@ public sealed class EfReportService(
         }
 
         // Tổng hợp trực tiếp từ toàn bộ bài khảo sát lớp. Không cộng ngược từ Khoa vì các lớp
-        // chưa ánh xạ đơn vị vẫn phải nằm trong mẫu số và điểm micro-average cấp trường.
+        // chưa ánh xạ đơn vị vẫn phải nằm trong mẫu số của tiến độ toàn trường.
         int totalTarget = sectionSurveys.Sum(x =>
             sectionById.TryGetValue(x.CourseSectionId, out var section) ? section.ClassSize : 0);
+        // Tiến độ (mẫu số ở đây) đếm MỌI lớp, kể cả lớp chưa đủ ngưỡng — đó chính là
+        // những lớp cần nhắc thu thêm phiếu.
         int totalResponses = sectionSurveys.Sum(x =>
             responseStats.GetValueOrDefault(x.CourseSectionSurveyId, ResponseTally.Empty).ValidCount);
-        decimal totalScoreSum = sectionSurveys.Sum(x =>
-            responseStats.GetValueOrDefault(x.CourseSectionSurveyId, ResponseTally.Empty).ValidTotalScore);
         decimal overallCompletion = totalTarget > 0 ? Math.Round((decimal)totalResponses / totalTarget * 100, 2) : 0;
-        decimal overallAvg = totalResponses > 0
-            ? Math.Round(totalScoreSum / totalResponses, 2)
+        // Điểm thì ngược lại: chỉ gộp lớp đã thu đủ phiếu (schoolScoredResponses ở
+        // vòng lặp trên), cùng ngưỡng và cùng công thức với facultyStats/deptStats —
+        // trước đây chỗ này cộng thẳng từ mọi lớp nên lớp hai người đánh giá vẫn lọt
+        // vào mặt bằng chung, kéo lệch con số so với chính bảng xếp hạng khoa ngay
+        // bên trên nó.
+        decimal overallAvg = schoolScoredResponses > 0
+            ? Math.Round(schoolScoredScoreSum / schoolScoredResponses, 2)
             : 0;
 
         var scoreDistribution = new List<ScoreBandDto>();
@@ -1281,6 +1316,8 @@ public sealed class EfReportService(
             inProgressCount,
             laggingCount,
             overallAvg,
+            schoolScoredSectionCount,
+            schoolScoredResponses,
             scoreDistribution,
             overallAvg,
             facultyList.OrderByDescending(x => x.AverageScore).ToList(),
@@ -1557,36 +1594,47 @@ public sealed class EfReportService(
             .ToListAsync(cancellationToken);
         if (ssIds.Count == 0) return (0, 0, 0, 0m);
 
-        var cssIds = await db.CourseSectionSurveys.AsNoTracking()
+        var sectionSurveys = await db.CourseSectionSurveys.AsNoTracking()
             .Where(x => ssIds.Contains(x.SemesterSurveyId))
-            .Select(x => x.CourseSectionSurveyId)
+            .Select(x => new { x.CourseSectionSurveyId, x.CourseSectionId })
             .ToListAsync(cancellationToken);
-        if (cssIds.Count == 0) return (0, 0, 0, 0m);
+        if (sectionSurveys.Count == 0) return (0, 0, 0, 0m);
 
-        int target = await (from sec in db.CourseSections.AsNoTracking()
-                            join css in db.CourseSectionSurveys.AsNoTracking()
-                                on sec.CourseSectionId equals css.CourseSectionId
-                            where cssIds.Contains(css.CourseSectionSurveyId)
-                            select (int?)sec.ClassSize)
-            .SumAsync(cancellationToken) ?? 0;
+        var cssIds = sectionSurveys.Select(x => x.CourseSectionSurveyId).ToList();
+        var sectionIds = sectionSurveys.Select(x => x.CourseSectionId).Distinct().ToList();
+        var classSizeBySectionId = await db.CourseSections.AsNoTracking()
+            .Where(x => sectionIds.Contains(x.CourseSectionId))
+            .ToDictionaryAsync(x => x.CourseSectionId, x => x.ClassSize, cancellationToken);
 
-        // Tiến độ và điểm đều dùng cùng tập phiếu hợp lệ để mốc đối chiếu nhất quán với kỳ hiện tại.
-        var agg = await db.SurveyResponses.AsNoTracking()
-            .Where(x => cssIds.Contains(x.CourseSectionSurveyId))
-            .GroupBy(x => 1)
-            .Select(g => new
+        int target = sectionSurveys.Sum(x => classSizeBySectionId.GetValueOrDefault(x.CourseSectionId));
+
+        var tallies = await ResponseTalliesAsync(cssIds, cancellationToken);
+
+        // Tiến độ đếm MỌI phiếu hợp lệ, giống hệt mẫu số toàn trường ở
+        // BuildSchoolSurveyOverviewAsync — mốc "kỳ trước có phiếu hay không" phải
+        // dùng đúng con số này chứ không phải con số đã lọc ngưỡng bên dưới.
+        int responses = tallies.Values.Sum(x => x.ValidCount);
+
+
+        // Điểm chỉ gộp lớp đã thu đủ phiếu — cùng ngưỡng và cùng công thức với mặt
+        // bằng hiện tại (overallAvg), để so sánh hai kỳ không bị lệch mốc vì mỗi bên
+        // tính theo một quy tắc khác nhau.
+        int scoredResponses = 0;
+        decimal scoredScoreSum = 0;
+        foreach (var section in sectionSurveys)
+        {
+            if (!tallies.TryGetValue(section.CourseSectionSurveyId, out var tally)) continue;
+            var classSize = classSizeBySectionId.GetValueOrDefault(section.CourseSectionId);
+            if (!tally.IsScored)
             {
-                Count = g.Count(),
-                ValidCount = g.Count(x => x.IsValid),
-                ValidTotalScore = g.Sum(x => x.IsValid ? x.Score : 0m)
-            })
-            .FirstOrDefaultAsync(cancellationToken);
+                continue;
+            }
+            scoredResponses += tally.ValidCount;
+            scoredScoreSum += tally.ValidTotalScore;
+        }
 
-        int responses = agg?.ValidCount ?? 0;
-        decimal avg = agg is null || agg.ValidCount == 0
-            ? 0m
-            : Math.Round(agg.ValidTotalScore / agg.ValidCount, 2);
-        return (cssIds.Count, target, responses, avg);
+        decimal avg = scoredResponses == 0 ? 0m : Math.Round(scoredScoreSum / scoredResponses, 2);
+        return (sectionSurveys.Count, target, responses, avg);
     }
 
     private static string ScoreBandLabel(int band) => band switch

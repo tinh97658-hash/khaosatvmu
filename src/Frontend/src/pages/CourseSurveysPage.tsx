@@ -10,10 +10,13 @@ import {
   LoaderCircle,
   Pencil,
   Plus,
+  Download,
   QrCode,
   Save,
   Trash2,
+  TriangleAlert,
   Users,
+  UsersRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../auth/authContext';
@@ -24,6 +27,7 @@ import { SurveyScopePicker } from '../components/SurveyScopePicker';
 import { QRCodeModal } from '../components/QRCodeModal';
 import { TablePagination } from '../components/TablePagination';
 import { useSemester } from '../context/semesterContext';
+import { exportCourseSurveyQrExcel } from '../utils/courseSurveyQrExcel';
 import { ApiError } from '../services/apiClient';
 import {
   surveyApi,
@@ -87,11 +91,17 @@ interface CourseSurveysPageProps {
   onOpenSurveyReport?: (courseSectionSurveyId: number) => void;
   /** Báo cho ứng dụng biết danh sách đợt khảo sát vừa thay đổi để cập nhật số liệu ngay lập tức. */
   onSurveysChanged?: () => void;
+  /**
+   * Mở trang Lớp học phần. Bỏ trống khi người dùng không có quyền vào trang đó —
+   * khi ấy phần hướng dẫn chỉ còn chữ, không kèm nút bấm dẫn tới chỗ vào không được.
+   */
+  onOpenClasses?: () => void;
 }
 
 export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
   onOpenSurveyReport,
   onSurveysChanged,
+  onOpenClasses,
 }) => {
   const {
     academicYears,
@@ -122,6 +132,9 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  /** Số lớp học phần của kỳ đang chọn. Null nghĩa là chưa đếm được. */
+  const [sectionCount, setSectionCount] = useState<number | null>(null);
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createSurveyName, setCreateSurveyName] = useState('');
   const [createTemplateId, setCreateTemplateId] = useState('');
@@ -138,6 +151,34 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
 
   const [deleting, setDeleting] = useState<SemesterSurvey | null>(null);
   const [qrTarget, setQrTarget] = useState<CourseSectionSurvey | null>(null);
+
+  // Xuất Excel kèm ảnh QR. Sinh QR cho từng lớp nên đợt vài nghìn lớp mất vài
+  // giây; khoá nút theo đúng đợt đang xuất để không bấm chồng.
+  const [exportingId, setExportingId] = useState<number | null>(null);
+
+  const handleExportQr = async (survey: SemesterSurvey) => {
+    setExportingId(survey.semesterSurveyId);
+    try {
+      // Bảng lớp chỉ được nạp khi mở rộng đợt, nên phải tự lấy nếu chưa có.
+      const rows = sectionSurveys[survey.semesterSurveyId]
+        ?? await surveyApi.courseSectionSurveys(survey.semesterSurveyId);
+      if (rows.length === 0) {
+        toast.error('Đợt này chưa có lớp nào để xuất');
+        return;
+      }
+      await exportCourseSurveyQrExcel({
+        surveyName: survey.surveyName,
+        semesterLabel: `${survey.semesterName} · ${survey.academicYearName}`,
+        sections: rows,
+        surveyLinkOf,
+      });
+      toast.success('Đã xuất tệp Excel', { description: `${rows.length} lớp kèm ảnh mã QR` });
+    } catch (error) {
+      toast.error('Không xuất được tệp Excel', { description: messageFrom(error) });
+    } finally {
+      setExportingId(null);
+    }
+  };
 
   // Bổ sung lớp vào đợt đã có: thêm khoa/bộ môn khác, hoặc bù lớp nhập thiếu.
   const [addTarget, setAddTarget] = useState<SemesterSurvey | null>(null);
@@ -204,6 +245,41 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
     setSectionSurveys({});
     void loadSemesterSurveys(semesterId, true);
   }, [semesterId, loadSemesterSurveys]);
+
+  // Bài khảo sát phát theo từng lớp học phần, nên kỳ không có lớp nào thì không
+  // tạo được gì cả. Đếm trước để nói thẳng điều đó, thay vì để người dùng mở hộp
+  // thoại, điền hết rồi mới nhận về một đợt trống. Dùng luôn endpoint đếm phạm vi
+  // của hộp thoại tạo để hai nơi không ra hai con số khác nhau.
+  //
+  // Vai trò chỉ đọc không có COURSE_CAMPAIGNS_ACCESS nên gọi vào là 403; họ cũng
+  // không có nút tạo để mà chặn, nên bỏ qua hẳn. Xem congviec3.md mục H6.
+  useEffect(() => {
+    if (readOnly || !semesterId) {
+      setSectionCount(null);
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const preview = await surveyApi.previewSectionScope({
+          semesterId: Number(semesterId),
+          scopeType: 'all',
+          scopeId: null,
+        });
+        if (!cancelled) setSectionCount(preview.scopeSectionCount);
+      } catch {
+        // Đếm hụt thì để nút mở như cũ, còn hơn khoá nhầm một kỳ vẫn có lớp.
+        if (!cancelled) setSectionCount(null);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [semesterId, readOnly]);
+
+  const hasNoSections = sectionCount === 0;
 
   const toggleExpanded = async (semesterSurveyId: number) => {
     const willExpand = !expanded[semesterSurveyId];
@@ -410,7 +486,12 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
             <button
               type="button"
               className="btn btn-primary"
-              disabled={!semesterId}
+              disabled={!semesterId || hasNoSections}
+              title={
+                hasNoSections
+                  ? 'Học kỳ này chưa có lớp học phần nào để phát phiếu'
+                  : undefined
+              }
               onClick={() => {
                 setCreateError(null);
                 setCreateSurveyName('');
@@ -453,7 +534,25 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
         </div>
       )}
 
-      {semesterId && !loading && semesterSurveys.length === 0 && (
+      {semesterId && !loading && hasNoSections && (
+        <div className="operations-empty operations-empty--warning" role="status">
+          <TriangleAlert className="operation-icon" aria-hidden="true" />
+          <strong>Học kỳ này chưa có lớp học phần nào</strong>
+          <span>
+            Phiếu khảo sát được tạo theo từng lớp học phần, nên chưa có lớp thì chưa tạo
+            được đợt khảo sát. Mở <strong>Danh mục đào tạo › Lớp học phần</strong>, chọn
+            đúng học kỳ này rồi <strong>Thêm lớp học phần</strong>.
+          </span>
+          {onOpenClasses && (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenClasses}>
+              <UsersRound className="operation-icon" aria-hidden="true" />
+              Mở trang Lớp học phần
+            </button>
+          )}
+        </div>
+      )}
+
+      {semesterId && !loading && !hasNoSections && semesterSurveys.length === 0 && (
         <div className="operations-empty">
           <QrCode className="operation-icon" aria-hidden="true" />
           <strong>Học kỳ này chưa có bài khảo sát nào</strong>
@@ -535,6 +634,25 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                     )}
                   </button>
                 )}
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => void handleExportQr(survey)}
+                  disabled={exportingId === survey.semesterSurveyId}
+                  title="Xuất Excel danh sách lớp kèm ảnh mã QR"
+                >
+                  {exportingId === survey.semesterSurveyId ? (
+                    <>
+                      <LoaderCircle className="operation-icon auth-spin" aria-hidden="true" />
+                      Đang xuất...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="operation-icon" aria-hidden="true" />
+                      Xuất Excel kèm QR
+                    </>
+                  )}
+                </button>
                 {!readOnly && (
                   <button
                     type="button"
@@ -552,18 +670,22 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
               <div className="campaign-table-scroll" id={`semester-survey-${survey.semesterSurveyId}`}>
                 <table className="campaign-table">
                   <thead>
+                    {/* Bề rộng theo phần trăm để tỷ lệ cột giữ nguyên ở mọi cỡ màn hình. */}
                     <tr>
-                      <th>Lớp học phần</th>
-                      <th>Đường dẫn riêng</th>
-                      <th>Thời gian mở</th>
-                      <th>Lượt trả lời</th>
-                      <th>Thao tác</th>
+                      <th style={{ width: '17%' }}>Lớp học phần</th>
+                      <th style={{ width: '11%' }}>Bộ môn</th>
+                      <th style={{ width: '11%' }}>Giảng viên</th>
+                      <th style={{ width: '5%' }}>Sĩ số</th>
+                      <th style={{ width: '20%' }}>Đường dẫn riêng</th>
+                      <th style={{ width: '14%' }}>Thời gian mở</th>
+                      <th style={{ width: '7%' }}>Lượt trả lời</th>
+                      <th style={{ width: '15%' }}>Thao tác</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sections.length === 0 && (
                       <tr>
-                        <td colSpan={5}>Đang tải danh sách lớp...</td>
+                        <td colSpan={8}>Đang tải danh sách lớp...</td>
                       </tr>
                     )}
                     {visibleSections.map((section) => (
@@ -575,12 +697,12 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                             </span>
                           </div>
                           <div className="campaign-secondary-value">
-                            <span>
-                              Lớp: <strong>{section.sectionName}</strong>; GV:{' '}
-                              {section.lecturerName || 'Chưa phân công'}; Sĩ số: {section.classSize}
-                            </span>
+                            <span>Lớp: <strong>{section.sectionName}</strong></span>
                           </div>
                         </td>
+                        <td>{section.departmentName}</td>
+                        <td>{section.lecturerName || 'Chưa phân công'}</td>
+                        <td className="campaign-number-cell">{section.classSize}</td>
                         <td className="campaign-link-cell">
                           <div className="campaign-link-row">
                             <input

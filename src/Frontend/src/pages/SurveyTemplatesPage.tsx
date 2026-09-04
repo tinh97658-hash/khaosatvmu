@@ -386,11 +386,26 @@ export const SurveyTemplatesPage: React.FC = () => {
     }
   };
 
+  /** Thang đã đủ mức thì không thêm được nữa và điểm chốt cứng 1 → 5. */
+  const scaleIsFull = scaleForm.options.length >= maximumAnswerScaleOptions;
+
+  /**
+   * Hai đáp án không được cùng điểm, nên ô chọn của mỗi dòng chỉ mời những mức
+   * chưa ai dùng, cộng mức của chính nó. Muốn đổi đáp án 2 điểm thành 3 điểm thì
+   * phải nhả 3 ra trước — nhờ vậy không bao giờ tạo được hai đáp án trùng điểm,
+   * thay vì để người dùng bấm Lưu rồi mới nhận thông báo lỗi.
+   */
+  const usedScaleValues = new Set(scaleForm.options.map((option) => Number(option.value)));
+  const scaleValueChoices = (ownValue: number) =>
+    Array.from({ length: maximumAnswerScaleOptions }, (_, offset) => offset + 1).filter(
+      (value) => value === ownValue || !usedScaleValues.has(value)
+    );
+
   const columns: Column<SurveyTemplate>[] = [
     {
       key: 'surveyTemplateId',
       header: 'Mã bộ',
-      width: '90px',
+      width: '8%',
       filterValue: (item) => String(item.surveyTemplateId),
       numeric: true,
       render: (item) => <span className="catalog-code">{item.surveyTemplateId}</span>,
@@ -398,20 +413,21 @@ export const SurveyTemplatesPage: React.FC = () => {
     {
       key: 'templateName',
       header: 'Tên bộ câu hỏi',
+      width: '28%',
       filterValue: (item) => item.templateName,
       render: (item) => <span className="catalog-cell-primary">{item.templateName}</span>,
     },
     {
       key: 'answerScales',
       header: 'Thang trả lời',
-      width: '260px',
+      width: '28%',
       filterValue: scaleNamesOf,
       render: (item) => <span className="catalog-cell-primary">{scaleNamesOf(item) || '—'}</span>,
     },
     {
       key: 'questions',
       header: 'Số câu hỏi',
-      width: '120px',
+      width: '11%',
       filterValue: (item) => String(item.questions.length),
       numeric: true,
       render: (item) => (
@@ -423,14 +439,14 @@ export const SurveyTemplatesPage: React.FC = () => {
     {
       key: 'createdAt',
       header: 'Ngày tạo',
-      width: '120px',
+      width: '12%',
       filterValue: (item) => formatDate(item.createdAt),
       render: (item) => <span className="catalog-cell-primary">{formatDate(item.createdAt)}</span>,
     },
     {
       key: 'actions',
       header: 'Thao tác',
-      width: '130px',
+      width: '13%',
       render: (item) => (
         <div className="catalog-actions">
           <button
@@ -702,10 +718,9 @@ export const SurveyTemplatesPage: React.FC = () => {
             {answerScales.map((scale) => (
               <div className="answer-scale-row" key={scale.answerScaleId}>
                 <div className="answer-scale-row-body">
-                  <strong>
-                    <span className="answer-scale-code">#{scale.answerScaleId}</span>{' '}
-                    {scale.answerScaleName}
-                  </strong>
+                  {/* Không in mã thang: "#4 Mức độ hài lòng" bị đọc nhầm thành thang
+                      có bốn mức. Mã chỉ dùng nội bộ, người tạo phiếu không cần biết. */}
+                  <strong>{scale.answerScaleName}</strong>
                   <span>
                     {scale.scaleKind === 'Text'
                       ? 'Người trả lời tự nhập chữ'
@@ -789,8 +804,8 @@ export const SurveyTemplatesPage: React.FC = () => {
                     }))
                   }
                 >
-                  <option value="Options">Chọn mức có sẵn</option>
-                  <option value="Text">Người trả lời tự nhập chữ</option>
+                  <option value="Options">Chọn đáp án có sẵn</option>
+                  <option value="Text">Nhập chữ</option>
                 </select>
               </div>
             </div>
@@ -803,13 +818,23 @@ export const SurveyTemplatesPage: React.FC = () => {
             ) : (
               <>
                 <div className="answer-scale-options">
+                  <div className="answer-scale-options-head" aria-hidden="true">
+                    <span className="answer-scale-options-head-value">Mức điểm</span>
+                    <span>Nội dung đáp án</span>
+                  </div>
                   {scaleForm.options.map((option, index) => (
                     // Số mức chỉ thay đổi ở cuối danh sách nên dùng vị trí làm key.
                     <div className="answer-scale-option-row" key={index}>
                       <select
                         className="answer-scale-option-value"
-                        aria-label={`Giá trị của mức thứ ${index + 1}`}
+                        aria-label={`Mức điểm của đáp án thứ ${index + 1}`}
                         value={option.value}
+                        disabled={scaleIsFull}
+                        title={
+                          scaleIsFull
+                            ? `Thang đủ ${maximumAnswerScaleOptions} đáp án nên điểm cố định 1 → ${maximumAnswerScaleOptions}.`
+                            : undefined
+                        }
                         onChange={(event) =>
                           setScaleForm((prev) => ({
                             ...prev,
@@ -821,18 +846,16 @@ export const SurveyTemplatesPage: React.FC = () => {
                           }))
                         }
                       >
-                        {Array.from({ length: maximumAnswerScaleOptions }, (_, offset) => offset + 1).map(
-                          (value) => (
-                            <option key={value} value={String(value)}>
-                              {value}
-                            </option>
-                          )
-                        )}
+                        {scaleValueChoices(Number(option.value)).map((value) => (
+                          <option key={value} value={String(value)}>
+                            {value}
+                          </option>
+                        ))}
                       </select>
                       <input
                         type="text"
-                        placeholder={`Nhãn của mức thứ ${index + 1}`}
-                        aria-label={`Nhãn của mức thứ ${index + 1}`}
+                        placeholder={`Nội dung đáp án thứ ${index + 1}`}
+                        aria-label={`Nội dung đáp án thứ ${index + 1}`}
                         value={option.displayText}
                         onChange={(event) =>
                           setScaleForm((prev) => ({
@@ -850,35 +873,63 @@ export const SurveyTemplatesPage: React.FC = () => {
                 </div>
 
                 <p className="answer-scale-hint">
-                  Giá trị quyết định điểm của mức đó. Thang chỉ có hai mức như "Có/Không" nên
-                  dùng 1 và 5 để cùng dải điểm với thang mức độ hài lòng.
+                  {scaleIsFull ? (
+                    <>
+                      Thang đã đủ {maximumAnswerScaleOptions} đáp án — mức cao nhất — nên điểm
+                      cố định 1 → {maximumAnswerScaleOptions} theo thứ tự trên. Bấm "Bớt đáp
+                      án" nếu muốn đổi lại điểm.
+                    </>
+                  ) : (
+                    <>
+                      Mức điểm là điểm mà đáp án đó được tính. Hai đáp án không được cùng điểm,
+                      nên ô chọn chỉ hiện những mức còn trống — muốn đổi một đáp án sang điểm
+                      đang có đáp án khác giữ thì phải đổi đáp án kia trước. Thang ít đáp án như
+                      "Có/Không" nên dùng 1 và {maximumAnswerScaleOptions} để cùng dải điểm với
+                      thang mức độ hài lòng.
+                    </>
+                  )}
                 </p>
 
                 <div className="answer-scale-option-actions">
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={() =>
-                      setScaleForm((prev) => {
-                        // Gợi ý giá trị chưa dùng nhỏ nhất để đỡ phải sửa tay.
-                        const used = new Set(prev.options.map((option) => Number(option.value)));
-                        const next =
-                          Array.from(
-                            { length: maximumAnswerScaleOptions },
-                            (_, offset) => offset + 1
-                          ).find((value) => !used.has(value)) ?? 1;
+                  {/* Đủ mức thì bỏ hẳn nút, không để nút xám nằm đó cho người dùng
+                      bấm thử rồi tự hỏi vì sao không ăn. */}
+                  {!scaleIsFull && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() =>
+                        setScaleForm((prev) => {
+                          // Gợi ý giá trị chưa dùng nhỏ nhất để đỡ phải sửa tay.
+                          const used = new Set(prev.options.map((option) => Number(option.value)));
+                          const next =
+                            Array.from(
+                              { length: maximumAnswerScaleOptions },
+                              (_, offset) => offset + 1
+                            ).find((value) => !used.has(value)) ?? 1;
+                          const options = [
+                            ...prev.options,
+                            { value: String(next), displayText: '' },
+                          ];
 
-                        return {
-                          ...prev,
-                          options: [...prev.options, { value: String(next), displayText: '' }],
-                        };
-                      })
-                    }
-                    disabled={scaleForm.options.length >= maximumAnswerScaleOptions}
-                  >
-                    <Plus aria-hidden="true" size={16} />
-                    Thêm mức
-                  </button>
+                          // Đủ mức thì cả 1..5 đều đã có chủ, nên xếp lại theo điểm
+                          // tăng dần: thứ tự dòng khớp thứ tự điểm, không còn cảnh
+                          // dòng 1 điểm nằm dưới dòng 5 điểm.
+                          return {
+                            ...prev,
+                            options:
+                              options.length === maximumAnswerScaleOptions
+                                ? options
+                                    .slice()
+                                    .sort((left, right) => Number(left.value) - Number(right.value))
+                                : options,
+                          };
+                        })
+                      }
+                    >
+                      <Plus aria-hidden="true" size={16} />
+                      Thêm đáp án
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
@@ -890,7 +941,7 @@ export const SurveyTemplatesPage: React.FC = () => {
                     }
                     disabled={scaleForm.options.length <= 2}
                   >
-                    Bớt mức
+                    Bớt đáp án
                   </button>
                 </div>
               </>

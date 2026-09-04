@@ -59,6 +59,7 @@ public class NormalizationMeanZTests
             db,
             cache,
             new FixedScopeResolver(UserScope.Unrestricted(RoleCodes.Admin)),
+            new FixedScoringThresholdProvider(),
             new SchoolOverviewCacheVersion()));
     }
 

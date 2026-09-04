@@ -20,7 +20,7 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 8px 20px;
+  padding: 10px 14px;
   background: var(--reports-muted-surface, #f7f9fa);
   border-bottom: 1px solid var(--reports-border);
 }
@@ -42,9 +42,26 @@
 
 .reports-scope-fields {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+/*
+  Nhãn nằm CẠNH ô chọn, cùng dáng với thanh công cụ các trang thống kê.
+  `.operations-field` mặc định là `display: grid`, nên phải đổi hẳn sang flex —
+  đặt mỗi `flex-direction` lên một grid container thì không có tác dụng gì.
+*/
+.reports-scope-fields .operations-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.reports-scope-fields .operations-field > label {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .reports-semester-field {
@@ -66,8 +83,8 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 4px;
-  min-height: 42px;
-  padding: 8px 20px;
+  min-height: 36px;
+  padding: 6px 14px;
   background: #ffffff;
   border-bottom: 1px solid var(--reports-border);
   font-size: 13px;
@@ -129,13 +146,19 @@
 }
 
 /* ---------- Bố cục drill-down ---------- */
+/*
+  Không chừa máng hai bên. Trang Bảng dữ liệu khảo sát để mọi khối chạy sát mép
+  vùng nội dung, khối nào cần giới hạn thì tự có viền của nó; ở đây thụt vào 20px
+  làm các thẻ trông như một trang khác hẳn. Nhịp dọc cũng hạ từ 16px xuống 12px
+  cho khớp margin của các trang kia.
+*/
 .reports-drill-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
   max-width: 100%;
-  padding: 16px 20px 24px;
+  padding: 0 0 12px;
 }
 
 /* ---------- Dải tóm tắt (giảng viên / đơn vị) ---------- */
@@ -881,45 +904,47 @@
 /* ---------- Thanh lọc kết quả ---------- */
 .reports-overview {
   display: grid;
-  gap: 16px;
-  padding: 16px 20px 24px;
+  gap: 12px;
+  padding: 0 0 12px;
 }
 
 /* Chia trang theo mục tiêu sử dụng để dữ liệu quan trọng không bị đẩy xuống dưới. */
+/*
+  Cùng một kiểu tab với trang Bảng dữ liệu khảo sát và trang Thống kê chi tiết:
+  tab dính đáy, tab đang mở nền trắng kèm vạch xanh trên. Trước đây đây là một
+  hộp segmented control chia đều ba phần — một ngôn ngữ giao diện thứ ba, không
+  trang nào khác trong hệ thống dùng.
+*/
 .reports-workspace-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  padding: 4px;
-  background: #ffffff;
-  border: 1px solid var(--reports-border);
-  border-radius: 4px;
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--reports-border);
 }
 
 .reports-workspace-tab {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
   min-width: 0;
-  padding: 6px 12px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
+  padding: 7px 14px;
+  border: 1px solid var(--reports-border);
+  border-bottom: 0;
+  background: var(--reports-muted-surface);
   color: var(--reports-text-muted);
   text-align: left;
   cursor: pointer;
 }
 
 .reports-workspace-tab:hover {
-  background: var(--reports-muted-surface);
+  background: #eef7fb;
   color: var(--reports-text);
 }
 
 .reports-workspace-tab.is-active {
-  border-color: #b9dfea;
-  background: #e8f5fa;
-  color: var(--reports-primary);
+  border-color: var(--reports-primary);
+  background: #ffffff;
+  color: #036e99;
+  box-shadow: inset 0 2px 0 var(--reports-primary);
 }
 
 .reports-workspace-tab:focus-visible,
@@ -1015,58 +1040,103 @@
 
 /* Khung cao cố định theo đúng một trang 10 dòng: lọc còn 1-2 dòng thì thẻ vẫn
    giữ nguyên kích thước, hai bên không so le và trang không nhảy. */
+/*
+  Không đặt padding lên thẻ. Padding ở đây đẩy cả bảng vào trong, để lại hai dải
+  trắng hai bên — trong khi bảng ở trang Bảng dữ liệu khảo sát chạy thẳng ra tới
+  viền. Thay vào đó từng khối bên trong (tiêu đề, thanh công cụ, phân trang) tự
+  giữ lề của nó, riêng bảng thì không.
+*/
 .reports-rank {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 616px;
   overflow: hidden;
   background: #ffffff;
   border: 1px solid var(--reports-border);
   border-radius: 4px;
-  padding: 14px 16px;
 }
 
+/*
+  Tiêu đề của thẻ và nút Xuất dữ liệu thuộc hai khối khác nhau — một cái là header
+  của thẻ, một cái nằm trong thanh công cụ của DataTable — nên mặc định xếp chồng
+  thành hai hàng, tốn chiều cao mà nhìn lại lệch.
+
+  `display: contents` gỡ khung bọc của DataTable khỏi cây bố cục, để thanh công cụ,
+  vùng cuộn và phân trang trở thành ô trực tiếp của lưới bên trên. Nhờ vậy tiêu đề
+  và nút xuất đứng chung một hàng mà không phải kéo margin âm hay dựng lại nút xuất
+  bên ngoài (dựng lại thì mất luôn tính năng chỉ xuất phần đang lọc).
+*/
 .reports-rank .catalog-table-shell {
-  flex: 1 1 auto;
-  min-height: 0;
-  border-bottom: 0;
+  display: contents;
 }
 
-.reports-rank .catalog-table-scroll {
-  flex: 1 1 auto;
-}
-
-/* Bảng nằm trong khung nửa màn hình nên hạ trần rộng tối thiểu xuống, nếu không
-   nó cuộn ngang ngay cả khi màn hình còn thừa chỗ. */
+/*
+  Bỏ hẳn trần rộng tối thiểu. Bảng nằm trong khung nửa màn hình, để 560px thì nó
+  vẫn cuộn ngang và bề rộng phần trăm của từng cột bị quy về 560px thay vì về bề
+  ngang thật của thẻ — chia tỷ lệ xong vẫn thấy cột chật.
+*/
 .reports-rank .catalog-table {
-  min-width: 560px;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+/*
+  Lưới kẻ chạy sát mép thẻ và hàng cuối cũng có nét dưới, cùng kiểu với bảng ở
+  trang Bảng dữ liệu khảo sát. Bảng danh mục mặc định bỏ nét phải của cột cuối và
+  nét dưới của hàng cuối — hợp lý khi bảng chiếm trọn chiều ngang trang, nhưng đặt
+  trong một thẻ có viền thì thành ra ô cuối hở, nhìn như bảng bị cắt dở.
+*/
+.reports-rank .catalog-table-scroll {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  border: 0;
+  border-top: 1px solid var(--reports-border);
+}
+
+.reports-rank .catalog-table th:last-child,
+.reports-rank .catalog-table td:last-child {
+  border-right: 0;
+}
+
+.reports-rank .catalog-table tbody tr:last-child td {
+  border-bottom: 1px solid #e3e7ea;
 }
 
 .reports-rank .catalog-toolbar {
+  grid-column: 2;
+  grid-row: 1;
   min-height: 0;
-  padding: 0 0 8px;
+  padding: 8px 14px 8px 0;
+  justify-content: flex-end;
 }
 
-/* Ô đơn vị và ô tiến độ đều là hai dòng; ép chúng không xuống dòng thêm để mọi
-   hàng cao bằng nhau, thay vì bên hai dòng bên ba dòng. */
+/* Ô tiến độ là hai dòng; ép các ô còn lại không xuống dòng để mọi hàng cao bằng
+   nhau, thay vì bên hai dòng bên ba dòng. */
 .reports-rank .catalog-table td {
-  height: 46px;
+  height: 44px;
 }
 
+/* Bảng đã là table-layout: fixed nên ô không nở ra được nữa; chữ dài phải cắt
+   bằng ba chấm thay vì tràn sang ô bên cạnh. */
 .reports-rank .catalog-cell-primary,
-.reports-rank .catalog-secondary-value {
+.reports-rank .catalog-secondary-value,
+.reports-rank .reports-progress-sub {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .reports-rank-header {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 0;
+  padding: 8px 0 8px 14px;
 }
 
 .reports-rank-title {
@@ -1087,11 +1157,6 @@
   letter-spacing: 0;
 }
 
-.reports-rank-note {
-  font-size: 11px;
-  color: var(--reports-text-muted);
-}
-
 .reports-rank-score {
   display: inline-flex;
   align-items: center;
@@ -1103,9 +1168,11 @@
 
 /* Nằm gọn trong thẻ, không thò ra ngoài mép rồi bị bo góc cắt mất. */
 .reports-rank .catalog-pagination {
+  grid-column: 1 / -1;
+  grid-row: 3;
   flex: 0 0 auto;
   margin: 0;
-  padding: 8px 0 0;
+  padding: 6px 14px;
 }
 
 /* ---------- Thanh tiến độ hoàn thành ---------- */
@@ -1176,11 +1243,7 @@
 
   .reports-drill-grid,
   .reports-overview {
-    padding: 12px 14px 20px;
-  }
-
-  .reports-breadcrumb {
-    padding: 8px 14px;
+    padding: 0 0 12px;
   }
 
   .reports-summary-metrics {
@@ -1237,8 +1300,8 @@
 .reports-exec {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 16px 20px 4px;
+  gap: 12px;
+  padding: 0;
 }
 
 .reports-exec--loading,
@@ -2166,4 +2229,33 @@
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+/* Ngưỡng lọc lớp đang áp cho toàn trang. Đứng ngay dưới thanh chọn để người xem
+   biết bảng bên dưới đang loại lớp theo tiêu chí nào. */
+.reports-threshold-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid #b9d9e5;
+  border-left: 3px solid #0788b8;
+  background: #f2f9fb;
+  color: #20262c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.reports-threshold-note svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  margin-top: 1px;
+  color: #0788b8;
+}
+
+/* Số lượng đã nằm trong tiêu đề bảng, không lặp lại ở thanh công cụ. */
+.reports-rank .catalog-result-count {
+  display: none;
 }

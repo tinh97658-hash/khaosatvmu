@@ -31,6 +31,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         Set<CourseSectionSurveyQuestionScore>();
     public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
     public DbSet<SurveyResponseAnswer> SurveyResponseAnswers => Set<SurveyResponseAnswer>();
+    public DbSet<SurveyScoringSetting> SurveyScoringSettings => Set<SurveyScoringSetting>();
     public DbSet<GraduationAnalyticsDataset> GraduationAnalyticsDatasets =>
         Set<GraduationAnalyticsDataset>();
     public DbSet<GraduationAnalyticsRow> GraduationAnalyticsRows => Set<GraduationAnalyticsRow>();
@@ -200,6 +201,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany()
                 .HasForeignKey(x => x.FacultyId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Bảng cấu hình một dòng: cặp ngưỡng lọc lớp được tính điểm.
+        modelBuilder.Entity<SurveyScoringSetting>(entity =>
+        {
+            entity.ToTable("SurveyScoringSettings");
+            entity.HasKey(x => x.SurveyScoringSettingId);
+            entity.Property(x => x.MinimumResponseRate).HasColumnType("numeric(5,2)");
+            entity.Property(x => x.MinimumValidRate).HasColumnType("numeric(5,2)");
         });
 
         modelBuilder.Entity<AcademicYear>(entity =>

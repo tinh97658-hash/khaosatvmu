@@ -109,17 +109,21 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
     (faculty) => !normalized || faculty.facultyName.toLowerCase().includes(normalized)
   );
 
+  // Bề rộng để theo phần trăm, không để pixel: bảng chỉ có bốn cột nên với màn
+  // hình rộng, cột tên khoa viện nhận hết phần dư và trông lệch hẳn so với ba cột
+  // còn lại. Theo phần trăm thì tỷ lệ giữ nguyên ở mọi cỡ màn hình.
   const columns: Column<Faculty>[] = [
     {
       key: 'facultyName',
       header: 'Tên khoa viện',
+      width: '40%',
       filterValue: (item) => item.facultyName,
       render: (item) => <span className="catalog-cell-primary">{item.facultyName}</span>,
     },
     {
       key: 'majorCount',
       header: 'Số ngành học',
-      width: '130px',
+      width: '22%',
       filterValue: (item) => String(majorCountOf(item.facultyId)),
       numeric: true,
       render: (item) => <span className="catalog-cell-primary">{majorCountOf(item.facultyId)}</span>,
@@ -127,7 +131,7 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
     {
       key: 'departmentCount',
       header: 'Số bộ môn',
-      width: '120px',
+      width: '22%',
       filterValue: (item) => String(departmentCountOf(item.facultyId)),
       numeric: true,
       render: (item) => (
@@ -137,7 +141,7 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
     {
       key: 'actions',
       header: 'Hành động',
-      width: '92px',
+      width: '16%',
       render: (item) => (
         <div className="catalog-actions">
           <button

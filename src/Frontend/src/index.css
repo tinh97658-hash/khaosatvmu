@@ -104,7 +104,7 @@ textarea:focus-visible {
   width: var(--sidebar-width);
   height: 100%;
   display: grid;
-  grid-template-rows: 56px minmax(0, 1fr) auto;
+  grid-template-rows: 56px auto minmax(0, 1fr);
   flex-shrink: 0;
   overflow: hidden;
   background: #FFFFFF;
@@ -285,10 +285,10 @@ textarea:focus-visible {
   color: #FFFFFF;
 }
 
-.sidebar-footer {
+.sidebar-semester-bar {
   min-width: 0;
   padding: 8px 10px;
-  border-top: 1px solid #DFE4E8;
+  border-bottom: 1px solid #DFE4E8;
   background: #F7F9FA;
 }
 
@@ -360,7 +360,7 @@ textarea:focus-visible {
   min-width: 0;
 }
 
-/* Global semester picker in the sidebar footer */
+/* Global semester picker at the top of the sidebar */
 .sidebar-semester-picker {
   width: 100%;
   min-width: 0;

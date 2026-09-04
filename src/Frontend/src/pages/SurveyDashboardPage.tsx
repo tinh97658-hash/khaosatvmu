@@ -152,7 +152,7 @@ export const SurveyDashboardPage: React.FC = () => {
             {semesterSurveys.length === 0 && <option value="">Chưa có đợt nào</option>}
             {semesterSurveys.map((survey) => (
               <option key={survey.semesterSurveyId} value={String(survey.semesterSurveyId)}>
-                {survey.templateName} · {survey.sectionSurveyCount} lớp
+                {survey.surveyName} · {survey.sectionSurveyCount} lớp
               </option>
             ))}
           </select>
