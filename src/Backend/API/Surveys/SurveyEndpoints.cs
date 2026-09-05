@@ -121,6 +121,26 @@ public static class SurveyEndpoints
             ToResult(await service.DeleteSemesterSurveyAsync(semesterSurveyId, cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
+        // Xuất Excel danh sách lớp kèm ảnh mã QR. Dựng ở server vì một đợt có thể
+        // tới vài nghìn lớp; để trình duyệt sinh chừng ấy ảnh QR rồi nén workbook
+        // là treo tab. Nằm ở nhóm chỉ-đọc vì giảng viên cũng cần lấy QR lớp mình.
+        operationalReadGroup.MapGet("/semester-surveys/{semesterSurveyId:int}/qr-export", async (
+            int semesterSurveyId,
+            [FromServices] ICourseSurveyQrExporter exporter,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await exporter.ExportAsync(semesterSurveyId, cancellationToken);
+            if (!result.Succeeded || result.Value is null)
+            {
+                return ToResult(result);
+            }
+
+            return Results.File(
+                result.Value.Content,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                result.Value.FileName);
+        });
+
         // Cặp ngưỡng lọc lớp được tính điểm. Đọc mở cho mọi vai trò đọc số liệu —
         // các trang báo cáo cần in ra "đang tính theo x%/y%"; ghi thì provider tự
         // chặn về quản trị.
@@ -388,6 +408,7 @@ public static class SurveyEndpoints
             SurveyErrorCodes.SemesterSurveyHasResponses => StatusCodes.Status409Conflict,
             SurveyErrorCodes.ScopeSectionsAlreadyAdded => StatusCodes.Status409Conflict,
             SurveyErrorCodes.SectionSurveyHasNoResponses => StatusCodes.Status409Conflict,
+            SurveyErrorCodes.SemesterSurveyHasNoSections => StatusCodes.Status409Conflict,
             SurveyErrorCodes.LinkNotOpen => StatusCodes.Status409Conflict,
             SurveyErrorCodes.ScoringThresholdInvalid => StatusCodes.Status400BadRequest,
             _ => StatusCodes.Status400BadRequest

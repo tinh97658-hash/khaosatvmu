@@ -172,6 +172,7 @@ builder.Services.AddScoped<IAuthSessionService, EfAuthSessionService>();
 builder.Services.AddScoped<IUserAdministrationService, EfUserAdministrationService>();
 builder.Services.AddScoped<ICatalogService, EfCatalogService>();
 builder.Services.AddScoped<ISurveyService, EfSurveyService>();
+builder.Services.AddScoped<ICourseSurveyQrExporter, ClosedXmlCourseSurveyQrExporter>();
 builder.Services.AddScoped<IScoringThresholdProvider, EfScoringThresholdProvider>();
 // Vé bắt đầu làm bài. Khóa ký khác nhau giữa máy dev và máy chạy thật, lấy từ
 // cấu hình chứ không viết trong mã. Đổi khóa thì mọi vé đang phát mất hiệu lực.

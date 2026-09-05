@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
-  Building2,
-  CheckCircle2,
   ChevronRight,
   Info,
   CircleAlert,
@@ -12,10 +10,6 @@ import {
   ListFilter,
   LoaderCircle,
   ShieldAlert,
-  Star,
-  Target,
-  TrendingUp,
-  Users,
   X,
 } from 'lucide-react';
 import { useAuth } from '../auth/authContext';
@@ -48,6 +42,7 @@ import {
   COMPLETED_COMPLETION_RATE,
   LAGGING_COMPLETION_RATE,
   hasEnoughResponsesToScore,
+  responseRateOf,
 } from '../utils/reportThresholds';
 import '../styles/survey-operations.css';
 import '../styles/reports.css';
@@ -81,7 +76,6 @@ const completionColor = (rate: number): string =>
 
 interface RankedUnitTableProps {
   title: string;
-  icon: React.ReactNode;
   data: RankedUnit[];
   /** Tên cột đầu tiên: "Khoa / Viện" hay "Bộ môn" tuỳ bảng. */
   unitHeader: string;
@@ -92,7 +86,6 @@ interface RankedUnitTableProps {
 
 const RankedUnitTable: React.FC<RankedUnitTableProps> = ({
   title,
-  icon,
   data,
   unitHeader,
   itemLabel,
@@ -225,7 +218,6 @@ const RankedUnitTable: React.FC<RankedUnitTableProps> = ({
     <section className="reports-rank" aria-label={title}>
       <header className="reports-rank-header">
         <span className="reports-rank-title">
-          {icon}
           <h3>{title} ({data.length} {itemLabel})</h3>
         </span>
       </header>
@@ -694,12 +686,35 @@ export const ReportsOverviewPage: React.FC = () => {
   ]);
 
   // KPI gộp từ kết quả đang lọc — cùng cách tính với cột "Hoàn thành": chỉ phiếu hợp lệ.
+  // Dải số liệu đứng ngay trên bảng nên phải nói đúng những cột của bảng: sĩ số,
+  // phiếu đã thu, phiếu hợp lệ, phiếu không hợp lệ và tỷ lệ phản hồi.
   const kpi = useMemo(() => {
     const totalTarget = results.reduce((sum, item) => sum + item.classSize, 0);
+    const totalResponses = results.reduce((sum, item) => sum + item.responseCount, 0);
     const totalCollected = results.reduce((sum, item) => sum + item.validResponseCount, 0);
+    const totalInvalid = results.reduce((sum, item) => sum + item.invalidResponseCount, 0);
+    const responseRate = totalTarget > 0 ? (totalResponses / totalTarget) * 100 : 0;
     const completionRate = totalTarget > 0 ? (totalCollected / totalTarget) * 100 : 0;
-    return { totalTarget, totalCollected, completionRate, classCount: results.length };
+    return {
+      totalTarget,
+      totalResponses,
+      totalCollected,
+      totalInvalid,
+      responseRate,
+      completionRate,
+      classCount: results.length,
+    };
   }, [results]);
+
+  // Bảng tính tỷ lệ phản hồi ngay lúc vẽ, còn tệp xuất cần một trường thật để đổ
+  // vào cột, nên gắn sẵn vào bản sao dùng riêng cho phần xuất.
+  const exportResults = useMemo(
+    () => results.map((item) => ({
+      ...item,
+      responseRate: responseRateOf(item.responseCount, item.classSize),
+    })),
+    [results],
+  );
 
   // Xếp hạng Khoa / Bộ môn từ kết quả.
   const buildRanking = useCallback(
@@ -815,7 +830,6 @@ export const ReportsOverviewPage: React.FC = () => {
     <div className="reports-rank-grid reports-analysis-panel" role="tabpanel">
       <RankedUnitTable
         title="Kết quả theo Khoa/Viện"
-        icon={<Building2 className="operation-icon" aria-hidden="true" />}
         data={facultyRankings}
         unitHeader="Khoa / Viện"
         itemLabel="khoa/viện"
@@ -823,7 +837,6 @@ export const ReportsOverviewPage: React.FC = () => {
       />
       <RankedUnitTable
         title="Kết quả theo Bộ môn"
-        icon={<Target className="operation-icon" aria-hidden="true" />}
         data={visibleDepartmentRankings}
         unitHeader="Bộ môn"
         itemLabel={visibleFacultyIds ? 'bộ môn theo Khoa đang lọc' : 'bộ môn'}
@@ -861,10 +874,12 @@ export const ReportsOverviewPage: React.FC = () => {
       <QuestionAnalysisChart
         questions={questions}
         overallAverageScore={lecturerDetail?.averageScore}
-        responseCount={lecturerDetail?.totalResponses}
+        // Mẫu số phải là phiếu của lớp đã chốt điểm, đúng bằng tập lớp dựng nên
+        // averageScore ngay bên trên — chứ không phải mọi phiếu hợp lệ của giảng viên.
+        responseCount={lecturerDetail?.scoredValidResponseCount}
         title="Phân tích kết quả theo câu hỏi"
         showDistributionTable={true}
-        emptyMessage="Chưa có phiếu trả lời cho giảng viên này trong học kỳ đã chọn."
+        emptyMessage="Chưa có lớp nào của giảng viên này đủ điều kiện tính điểm trong học kỳ đã chọn."
       />
     );
   };
@@ -875,7 +890,7 @@ export const ReportsOverviewPage: React.FC = () => {
     {
       key: 'courseCode',
       header: 'Mã Học phần',
-      width: '100px',
+      width: '5%',
       sortValue: (item) => item.courseCode,
       filterValue: (item) => item.courseCode,
       render: (item) => <span className="catalog-cell-primary">{item.courseCode}</span>,
@@ -883,6 +898,7 @@ export const ReportsOverviewPage: React.FC = () => {
     {
       key: 'courseName',
       header: 'Tên học phần',
+      width: '13%',
       sortValue: (item) => item.courseName,
       filterValue: (item) => item.courseName,
       render: (item) => <span className="catalog-cell-primary">{item.courseName}</span>,
@@ -890,15 +906,15 @@ export const ReportsOverviewPage: React.FC = () => {
     {
       key: 'sectionName',
       header: 'Nhóm lớp',
-      width: '90px',
+      width: '4%',
       sortValue: (item) => item.sectionName,
       filterValue: (item) => item.sectionName,
       render: (item) => <span className="operations-code">{item.sectionName}</span>,
     },
     {
       key: 'facultyName',
-      header: 'Khoa',
-      width: '130px',
+      header: 'Khoa / Viện',
+      width: '11%',
       sortValue: (item) => item.facultyName,
       filterValue: (item) => item.facultyName,
       render: (item) => <span className="catalog-cell-primary">{item.facultyName}</span>,
@@ -906,7 +922,7 @@ export const ReportsOverviewPage: React.FC = () => {
     {
       key: 'departmentName',
       header: 'Bộ môn',
-      width: '130px',
+      width: '11%',
       sortValue: (item) => item.departmentName,
       filterValue: (item) => item.departmentName,
       render: (item) => <span className="catalog-cell-primary">{item.departmentName}</span>,
@@ -914,7 +930,7 @@ export const ReportsOverviewPage: React.FC = () => {
     {
       key: 'lecturerName',
       header: 'Giảng viên',
-      width: '190px',
+      width: '14%',
       sortValue: (item) => item.lecturerName,
       filterValue: (item) => item.lecturerName,
       render: (item) => (
@@ -934,25 +950,34 @@ export const ReportsOverviewPage: React.FC = () => {
       sortValue: (item) => item.classSize,
       filterValue: (item) => String(item.classSize),
       numeric: true,
-      width: '64px',
+      width: '4%',
       render: (item) => <span className="catalog-cell-number">{item.classSize}</span>,
     },
     {
       key: 'responseCount',
-      header: 'Phiếu thu',
+      header: 'Số phiếu đã thu',
       sortValue: (item) => item.responseCount,
       filterValue: (item) => String(item.responseCount),
       numeric: true,
-      width: '92px',
+      width: '6%',
       render: (item) => <span className="catalog-cell-number">{item.responseCount}</span>,
     },
     {
+      key: 'validResponseCount',
+      header: 'Số phiếu hợp lệ',
+      sortValue: (item) => item.validResponseCount,
+      filterValue: (item) => String(item.validResponseCount),
+      numeric: true,
+      width: '6%',
+      render: (item) => <span className="catalog-cell-number">{item.validResponseCount}</span>,
+    },
+    {
       key: 'invalidResponseCount',
-      header: 'Phiếu lỗi',
+      header: 'Số phiếu không hợp lệ',
       sortValue: (item) => item.invalidResponseCount,
       filterValue: (item) => String(item.invalidResponseCount),
       numeric: true,
-      width: '84px',
+      width: '6%',
       render: (item) => (
         <span
           className={item.invalidResponseCount > 0
@@ -964,38 +989,41 @@ export const ReportsOverviewPage: React.FC = () => {
       ),
     },
     {
-      key: 'completionRate',
-      header: 'Hoàn thành',
-      sortValue: (item) => item.completionRate,
-      filterValue: (item) => String(Math.round(item.completionRate)),
+      /*
+        Tỷ lệ phản hồi = số phiếu đã thu / sĩ số, đúng vế thứ nhất của ngưỡng tính
+        điểm. Trước đây cột này lấy phiếu hợp lệ / sĩ số nhưng vẫn gọi là "Hoàn
+        thành", nên đọc ra không khớp với ngưỡng đang cấu hình ở phần cài đặt.
+        Dòng phụ "x/y hợp lệ" bỏ đi vì đã có cột Số phiếu hợp lệ riêng.
+      */
+      key: 'responseRate',
+      header: 'Tỷ lệ phản hồi',
+      sortValue: (item) => responseRateOf(item.responseCount, item.classSize),
+      filterValue: (item) => String(Math.round(responseRateOf(item.responseCount, item.classSize))),
       numeric: true,
-      width: '140px',
-      render: (item) => (
-        <>
+      width: '8%',
+      render: (item) => {
+        const rate = responseRateOf(item.responseCount, item.classSize);
+        return (
           <span className="reports-progress-cell">
             <span className="reports-progress">
-              <span style={{ width: `${Math.min(100, item.completionRate)}%`, background: completionColor(item.completionRate) }} />
+              <span style={{ width: `${Math.min(100, rate)}%`, background: completionColor(rate) }} />
             </span>
-            <span style={{ color: completionColor(item.completionRate), fontWeight: 700, fontSize: 12 }}>
-              {item.completionRate.toFixed(0)}%
+            <span style={{ color: completionColor(rate), fontWeight: 700, fontSize: 12 }}>
+              {rate.toFixed(0)}%
             </span>
           </span>
-          <span className="catalog-secondary-value reports-progress-sub">
-            {item.validResponseCount}/{item.classSize} hợp lệ
-          </span>
-        </>
-      ),
+        );
+      },
     },
     {
       key: 'averageScore',
-      header: 'Điểm TB',
+      header: 'Điểm trung bình',
       sortValue: (item) => item.averageScore,
       filterValue: (item) => item.averageScore.toFixed(2),
       numeric: true,
-      width: '96px',
+      width: '5%',
       render: (item) => (
         <span className="catalog-score" style={{ color: scoreColor(item.averageScore) }}>
-          <Star style={{ width: '13px', height: '13px', fill: 'currentColor' }} aria-hidden="true" />
           {item.averageScore > 0 ? item.averageScore.toFixed(2) : '—'}
         </span>
       ),
@@ -1003,7 +1031,7 @@ export const ReportsOverviewPage: React.FC = () => {
     {
       key: 'actions',
       header: 'Thao tác',
-      width: '96px',
+      width: '7%',
       render: (item) => (
         <button
           type="button"
@@ -1115,7 +1143,6 @@ export const ReportsOverviewPage: React.FC = () => {
       filterValue: (item) => item.averageScore.toFixed(2),
       render: (item) => (
         <span className="catalog-score" style={{ color: scoreColor(item.averageScore) }}>
-          <Star style={{ width: '13px', height: '13px', fill: 'currentColor' }} aria-hidden="true" />
           {item.averageScore > 0 ? item.averageScore.toFixed(2) : '—'}
         </span>
       ),
@@ -1267,22 +1294,26 @@ export const ReportsOverviewPage: React.FC = () => {
                     {lecturerDetail.departmentName} · {lecturerDetail.facultyName}
                   </p>
                 </div>
+                {/* Ba ô này và bảng phân tích bên dưới phải cùng một tập lớp: lớp đã
+                    chốt điểm ở lần bấm "Tính lại điểm" gần nhất. */}
                 <div className="reports-summary-metrics">
-                  <span className="reports-exec-stat" title="Chỉ gộp phiếu hợp lệ">
-                    <Star className="operation-icon" style={{ color: '#b86216' }} aria-hidden="true" />
+                  <span className="reports-exec-stat" title="Chỉ gộp phiếu hợp lệ của lớp đủ điều kiện">
                     Điểm trung bình
                     <strong style={{ color: scoreColor(lecturerDetail.averageScore) }}>
-                      {lecturerDetail.averageScore.toFixed(2)}
+                      {lecturerDetail.averageScore > 0
+                        ? lecturerDetail.averageScore.toFixed(2)
+                        : '—'}
                     </strong>
                     <small>/ 5.0</small>
                   </span>
-                  <span className="reports-exec-stat" title="Phiếu qua được bộ lọc nhiễu">
-                    <CheckCircle2 className="operation-icon" style={{ color: '#137b3b' }} aria-hidden="true" />
-                    Phiếu hợp lệ
-                    <strong>{lecturerDetail.totalResponses.toLocaleString('vi-VN')}</strong>
+                  <span className="reports-exec-stat" title="Phiếu hợp lệ của lớp đủ điều kiện, dùng để tính điểm">
+                    Phiếu dùng để tính điểm
+                    <strong>{lecturerDetail.scoredValidResponseCount.toLocaleString('vi-VN')}</strong>
+                    <small>
+                      / {lecturerDetail.totalResponses.toLocaleString('vi-VN')} phiếu hợp lệ
+                    </small>
                   </span>
                   <span className="reports-exec-stat" title="Số lớp học phần đã phát phiếu">
-                    <Target className="operation-icon" style={{ color: '#20262c' }} aria-hidden="true" />
                     Số lớp học phần
                     <strong>{lecturerDetail.courseSectionCount}</strong>
                   </span>
@@ -1382,28 +1413,37 @@ export const ReportsOverviewPage: React.FC = () => {
             />
           )}
 
-          {/* KPI — một dải mỏng, phần giải thích đưa vào tooltip để nhường chỗ cho bảng. */}
+          {/*
+            Dải số liệu là phần tổng của chính bảng bên dưới, nên từng ô ứng đúng
+            một cột của bảng và dùng đúng tên cột đó. Trước đây "Chỉ tiêu phiếu" và
+            "Đã thu nộp" không có cột nào cùng tên, mà "Đã thu nộp" lại đang cộng
+            phiếu hợp lệ chứ không phải phiếu đã thu.
+          */}
           {workspace === 'details' && (
           <div id="reports-detail-workspace" className="reports-kpi-band" aria-label="Tổng quan kết quả đang lọc">
-            <span className="reports-kpi-item" title="Sinh viên trong danh sách">
-              <Users className="operation-icon" style={{ color: '#0788b8' }} aria-hidden="true" />
-              Chỉ tiêu phiếu
+            <span className="reports-kpi-item" title="Số lớp học phần trong bộ lọc">
+              Số lớp khảo sát
+              <strong>{kpi.classCount.toLocaleString('vi-VN')}</strong>
+            </span>
+            <span className="reports-kpi-item" title="Tổng sĩ số của các lớp đang lọc">
+              Tổng sĩ số
               <strong>{kpi.totalTarget.toLocaleString('vi-VN')}</strong>
             </span>
-            <span className="reports-kpi-item" title="Phiếu hoàn thành hợp lệ">
-              <CheckCircle2 className="operation-icon" style={{ color: '#137b3b' }} aria-hidden="true" />
-              Đã thu nộp
+            <span className="reports-kpi-item" title="Mọi lượt nộp, kể cả phiếu bị lọc nhiễu">
+              Số phiếu đã thu
+              <strong>{kpi.totalResponses.toLocaleString('vi-VN')}</strong>
+            </span>
+            <span className="reports-kpi-item" title="Phiếu qua được bộ lọc nhiễu">
+              Số phiếu hợp lệ
               <strong>{kpi.totalCollected.toLocaleString('vi-VN')}</strong>
             </span>
-            <span className="reports-kpi-item" title="Phiếu hợp lệ / chỉ tiêu">
-              <TrendingUp className="operation-icon" style={{ color: '#b86216' }} aria-hidden="true" />
-              Tỷ lệ hoàn thành
-              <strong>{kpi.completionRate.toFixed(1)}%</strong>
+            <span className="reports-kpi-item" title="Phiếu bị bộ lọc nhiễu loại">
+              Số phiếu không hợp lệ
+              <strong>{kpi.totalInvalid.toLocaleString('vi-VN')}</strong>
             </span>
-            <span className="reports-kpi-item" title="Lớp học phần trong bộ lọc">
-              <Target className="operation-icon" style={{ color: '#20262c' }} aria-hidden="true" />
-              Số lớp khảo sát
-              <strong>{kpi.classCount}</strong>
+            <span className="reports-kpi-item" title="Số phiếu đã thu / tổng sĩ số">
+              Tỷ lệ phản hồi
+              <strong>{kpi.responseRate.toFixed(1)}%</strong>
             </span>
           </div>
           )}
@@ -1430,12 +1470,15 @@ export const ReportsOverviewPage: React.FC = () => {
                 info: {
                   'Học kỳ': semesterLabel,
                   'Số lớp khảo sát': kpi.classCount,
-                  'Tổng chỉ tiêu (sĩ số)': kpi.totalTarget,
-                  'Tổng phiếu hợp lệ đã thu': `${kpi.totalCollected} (đạt ${kpi.completionRate.toFixed(1)}%)`,
+                  'Tổng sĩ số': kpi.totalTarget,
+                  'Số phiếu đã thu': `${kpi.totalResponses} (đạt ${kpi.responseRate.toFixed(1)}%)`,
+                  'Số phiếu hợp lệ': kpi.totalCollected,
+                  'Số phiếu không hợp lệ': kpi.totalInvalid,
                 },
                 summaryNotes: [
                   'Điểm trung bình học phần được tính trên thang điểm 5.0 từ các phiếu đánh giá hợp lệ.',
-                  'Tỷ lệ hoàn thành = Tổng phiếu hợp lệ / Sĩ số sinh viên lớp học phần.',
+                  'Tỷ lệ phản hồi = Số phiếu đã thu / Sĩ số sinh viên lớp học phần.',
+                  'Phiếu không hợp lệ là phiếu bị bộ lọc nhiễu loại và không tham gia tính điểm.',
                 ],
                 sheets: [
                   {
@@ -1448,27 +1491,27 @@ export const ReportsOverviewPage: React.FC = () => {
                       { key: 'departmentName', header: 'Bộ môn', width: 20 },
                       { key: 'facultyName', header: 'Khoa / Viện', width: 22 },
                       { key: 'classSize', header: 'Sĩ số', width: 10, type: 'number' as const, align: 'right' as const },
-                      { key: 'responseCount', header: 'Phiếu thu', width: 10, type: 'number' as const, align: 'right' as const },
-                      { key: 'invalidResponseCount', header: 'Phiếu lỗi', width: 10, type: 'number' as const, align: 'right' as const },
-                      { key: 'validResponseCount', header: 'Hợp lệ', width: 10, type: 'number' as const, align: 'right' as const },
+                      { key: 'responseCount', header: 'Số phiếu đã thu', width: 14, type: 'number' as const, align: 'right' as const },
+                      { key: 'validResponseCount', header: 'Số phiếu hợp lệ', width: 14, type: 'number' as const, align: 'right' as const },
+                      { key: 'invalidResponseCount', header: 'Số phiếu không hợp lệ', width: 18, type: 'number' as const, align: 'right' as const },
                       {
-                        key: 'completionRate',
-                        header: 'Tỷ lệ',
-                        width: 10,
+                        key: 'responseRate',
+                        header: 'Tỷ lệ phản hồi',
+                        width: 14,
                         type: 'string' as const,
                         align: 'right' as const,
                         format: (val: any) => `${Number(val).toFixed(0)}%`,
                       },
                       {
                         key: 'averageScore',
-                        header: 'Điểm TB',
-                        width: 12,
+                        header: 'Điểm trung bình',
+                        width: 14,
                         type: 'number' as const,
                         align: 'right' as const,
                         format: (val: any) => (Number(val) > 0 ? Number(val).toFixed(2) : '—'),
                       },
                     ],
-                    data: results,
+                    data: exportResults,
                   },
                   {
                     sheetName: 'Lop diem thap (<3.50)',

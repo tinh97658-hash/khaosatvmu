@@ -27,9 +27,9 @@ import { SurveyScopePicker } from '../components/SurveyScopePicker';
 import { QRCodeModal } from '../components/QRCodeModal';
 import { TablePagination } from '../components/TablePagination';
 import { useSemester } from '../context/semesterContext';
-import { exportCourseSurveyQrExcel } from '../utils/courseSurveyQrExcel';
 import { ApiError } from '../services/apiClient';
 import {
+  downloadCourseSurveyQrExcel,
   surveyApi,
   surveyErrorMessage,
   surveyLinkOf,
@@ -152,27 +152,23 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
   const [deleting, setDeleting] = useState<SemesterSurvey | null>(null);
   const [qrTarget, setQrTarget] = useState<CourseSectionSurvey | null>(null);
 
-  // Xuất Excel kèm ảnh QR. Sinh QR cho từng lớp nên đợt vài nghìn lớp mất vài
-  // giây; khoá nút theo đúng đợt đang xuất để không bấm chồng.
+  // Xuất Excel kèm ảnh QR. Server dựng tệp nên trình duyệt chỉ chờ tải; khoá nút
+  // theo đúng đợt đang xuất để không bấm chồng.
   const [exportingId, setExportingId] = useState<number | null>(null);
 
   const handleExportQr = async (survey: SemesterSurvey) => {
     setExportingId(survey.semesterSurveyId);
     try {
-      // Bảng lớp chỉ được nạp khi mở rộng đợt, nên phải tự lấy nếu chưa có.
-      const rows = sectionSurveys[survey.semesterSurveyId]
-        ?? await surveyApi.courseSectionSurveys(survey.semesterSurveyId);
-      if (rows.length === 0) {
-        toast.error('Đợt này chưa có lớp nào để xuất');
-        return;
-      }
-      await exportCourseSurveyQrExcel({
-        surveyName: survey.surveyName,
-        semesterLabel: `${survey.semesterName} · ${survey.academicYearName}`,
-        sections: rows,
-        surveyLinkOf,
-      });
-      toast.success('Đã xuất tệp Excel', { description: `${rows.length} lớp kèm ảnh mã QR` });
+      const { blob, fileName } = await downloadCourseSurveyQrExcel(survey.semesterSurveyId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      toast.success('Đã xuất tệp Excel', { description: survey.surveyName });
     } catch (error) {
       toast.error('Không xuất được tệp Excel', { description: messageFrom(error) });
     } finally {

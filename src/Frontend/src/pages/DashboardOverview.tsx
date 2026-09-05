@@ -8,14 +8,12 @@ import {
   CircleAlert,
   GitCompareArrows,
   Info,
-  Layers,
   Lightbulb,
   LoaderCircle,
   RadioTower,
   Search,
   ShieldAlert,
   Star,
-  Target,
   TrendingDown,
   TrendingUp,
 } from 'lucide-react';
@@ -539,28 +537,32 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       {overviewData && !loading && !error && hasSurveyData && (
         <section className="executive-kpis-grid" aria-label="Các chỉ tiêu vĩ mô">
           {/* KPI 1: Completion Gauge */}
+          {/* Tỷ lệ PHẢN HỒI = phiếu đã thu / chỉ tiêu, cùng công thức với vế thứ nhất
+              của ngưỡng tính điểm. Trước đây ô này lấy phiếu hợp lệ chia chỉ tiêu mà
+              vẫn gọi là tiến độ thu phiếu, nên con số thấp hơn thực tế đã thu. */}
           <div className="executive-kpi-box">
             <div className="executive-kpi-header">
-              <span className="executive-kpi-title">Tiến độ thu phiếu toàn trường</span>
-              <Target className="operation-icon text-cyan-600" aria-hidden="true" />
+              <span className="executive-kpi-title">Tỷ lệ phản hồi toàn trường</span>
             </div>
             <div>
               <div className="executive-kpi-main-number">
-                {overviewData.completionRate.toFixed(1)}
+                {overviewData.responseRate.toFixed(1)}
                 <span className="executive-kpi-unit">%</span>
               </div>
               <div className="executive-mini-track" aria-hidden="true">
                 <div
                   className="executive-mini-fill"
                   style={{
-                    width: `${Math.min(100, overviewData.completionRate)}%`,
-                    background: completionColor(overviewData.completionRate),
+                    width: `${Math.min(100, overviewData.responseRate)}%`,
+                    background: completionColor(overviewData.responseRate),
                   }}
                 />
               </div>
               <div className="executive-kpi-desc">
-                <strong>{formatNumber(overviewData.totalResponses)}</strong> /{' '}
-                {formatNumber(overviewData.totalTargetResponses)} phiếu hợp lệ
+                <strong>{formatNumber(overviewData.totalSubmittedResponses)}</strong> phiếu đã thu
+                {' / '}
+                {formatNumber(overviewData.totalTargetResponses)} chỉ tiêu ·{' '}
+                <strong>{formatNumber(overviewData.totalResponses)}</strong> phiếu hợp lệ
               </div>
             </div>
           </div>
@@ -569,7 +571,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <div className="executive-kpi-box">
             <div className="executive-kpi-header">
               <span className="executive-kpi-title">Chỉ số chất lượng đào tạo (CSAT)</span>
-              <Star className="operation-icon text-amber-500" style={{ fill: 'currentColor' }} aria-hidden="true" />
             </div>
             <div className="executive-kpi-body">
               <div>
@@ -608,7 +609,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <div className="executive-kpi-box">
             <div className="executive-kpi-header">
               <span className="executive-kpi-title">Tiến độ theo lớp học phần</span>
-              <Layers className="operation-icon text-slate-600" aria-hidden="true" />
             </div>
             <div>
               <div className="executive-kpi-main-number">
@@ -653,7 +653,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <div className="executive-kpi-box">
             <div className="executive-kpi-header">
               <span className="executive-kpi-title">Đơn vị & Bộ môn cần lưu ý</span>
-              <AlertTriangle className="operation-icon text-amber-600" aria-hidden="true" />
             </div>
             <div>
               <div className="executive-kpi-main-number" style={{ color: (overviewData.departments.filter(d => d.completionRate < LAGGING_THRESHOLD).length > 0) ? '#b52d2d' : '#137b3b' }}>
@@ -682,7 +681,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </section>
       )}
 
-      {overviewData?.semesterComparison && !loading && !error && hasSurveyData && (
+      {/* Cùng công tắc với ô "So sánh với" trên thanh đầu trang: đã tắt phần chọn kỳ
+          đối chiếu thì bảng so sánh cũng không còn nghĩa. */}
+      {showComparisonControls && overviewData?.semesterComparison && !loading && !error && hasSurveyData && (
         <section className="executive-comparison-panel" aria-labelledby="executive-comparison-title">
           <div className="executive-comparison-heading">
             <GitCompareArrows aria-hidden="true" />
@@ -845,7 +846,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               ) : (
                 <WeakestQuestionsPanel
                   questions={overviewData.weakestQuestions}
-                  totalResponses={overviewData.totalResponses}
+                  validResponseCount={overviewData.scoredValidResponseCount}
                 />
               )}
             </div>

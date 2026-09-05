@@ -24,6 +24,7 @@ import type {
 import type { SemesterSurvey } from '../types';
 import '../styles/survey-operations.css';
 import '../styles/survey-statistics.css';
+import '../styles/catalogs.css';
 import '../styles/survey-dashboard.css';
 
 function messageFrom(error: unknown): string {
@@ -173,9 +174,10 @@ export const SurveyDashboardPage: React.FC = () => {
                     'Bộ câu hỏi': data.templateName,
                     'Học kỳ': `${data.semesterName} · ${data.academicYearName}`,
                     'Số lớp học phần': data.sectionCount,
-                    'Tổng số phiếu thu': data.totalResponseCount,
+                    'Tổng sĩ số': data.totalClassSize,
+                    'Số phiếu đã thu': data.totalResponseCount,
                     'Số phiếu hợp lệ': data.validResponseCount,
-                    'Tỷ lệ hoàn thành': `${data.averageCompletionRate.toFixed(1)}%`,
+                    'Tỷ lệ phản hồi': `${data.responseRate.toFixed(1)}%`,
                     'Điểm trung bình toàn trường': data.overallScore !== null ? data.overallScore.toFixed(2) : '—',
                   },
                   summaryNotes: [
@@ -270,6 +272,13 @@ const DashboardReport: React.FC<{ data: SemesterSurveyDashboard }> = ({ data }) 
 
 // -------------------------------------------------------- Khối chỉ số chính
 
+/*
+  Sáu chỉ số, dùng đúng bộ từ vựng của các trang còn lại: "Số phiếu đã thu" tách hẳn
+  khỏi "Số phiếu hợp lệ", và tỷ lệ là TỶ LỆ PHẢN HỒI (đã thu / sĩ số) — cùng công
+  thức với vế thứ nhất của ngưỡng tính điểm. "Tỷ lệ hoàn thành" cũ lấy phiếu hợp lệ
+  chia sĩ số nên đứng cạnh hai dòng phiếu ở trên là đọc ra một con số thứ ba không
+  suy được từ đâu.
+*/
 const MainIndicators: React.FC<{ data: SemesterSurveyDashboard }> = ({ data }) => (
   <section className="dashboard-report-block">
     <h3 className="dashboard-report-title">Chỉ số chính</h3>
@@ -279,7 +288,11 @@ const MainIndicators: React.FC<{ data: SemesterSurveyDashboard }> = ({ data }) =
         <dd>{data.sectionCount.toLocaleString('vi-VN')}</dd>
       </div>
       <div className="dashboard-kpi">
-        <dt>Tổng số phiếu thu được</dt>
+        <dt>Tổng sĩ số</dt>
+        <dd>{data.totalClassSize.toLocaleString('vi-VN')}</dd>
+      </div>
+      <div className="dashboard-kpi">
+        <dt>Số phiếu đã thu</dt>
         <dd>{data.totalResponseCount.toLocaleString('vi-VN')}</dd>
       </div>
       <div className="dashboard-kpi">
@@ -287,8 +300,8 @@ const MainIndicators: React.FC<{ data: SemesterSurveyDashboard }> = ({ data }) =
         <dd>{data.validResponseCount.toLocaleString('vi-VN')}</dd>
       </div>
       <div className="dashboard-kpi">
-        <dt>Tỷ lệ hoàn thành</dt>
-        <dd>{data.averageCompletionRate.toFixed(1)}%</dd>
+        <dt>Tỷ lệ phản hồi</dt>
+        <dd>{data.responseRate.toFixed(1)}%</dd>
       </div>
       <div className="dashboard-kpi">
         <dt>Điểm tổng hợp toàn trường</dt>
@@ -336,6 +349,7 @@ const QuestionChart: React.FC<{
     {questions.length === 0 ? (
       <p className="dashboard-report-note">Chưa có phiếu hợp lệ nào để dựng biểu đồ.</p>
     ) : (
+      <div className="dashboard-chart-frame">
       <ResponsiveContainer width="100%" height={300}>
         <BarChart
           data={questions.map((x) => ({ ...x, label: `C${x.questionOrder}` }))}
@@ -377,27 +391,30 @@ const QuestionChart: React.FC<{
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      </div>
     )}
   </section>
 );
 
 // ------------------------------------------------ Năm tiêu chí yếu nhất
 
+// Bảng dùng đúng theme .catalog-table, giống bảng phân bố ở màn phân tích.
 const WeakestQuestions: React.FC<{ rows: DashboardQuestionScore[] }> = ({ rows }) => (
   <section className="dashboard-report-block">
     <h3 className="dashboard-report-title">5 tiêu chí yếu nhất toàn trường</h3>
     {rows.length === 0 ? (
       <p className="dashboard-report-note">Chưa có phiếu hợp lệ nào để xếp hạng tiêu chí.</p>
     ) : (
-      <div className="dashboard-table-frame">
-        <table className="statistics-table statistics-table--alert">
+      <div className="catalog-table-scroll" tabIndex={0} aria-label="Tiêu chí yếu nhất">
+        <table className="catalog-table dashboard-weakest-table">
           <thead>
             <tr>
-              <th scope="col">Câu</th>
-              <th scope="col">Nội dung</th>
-              <th scope="col">Điểm TB</th>
+              <th scope="col" style={{ width: '8%' }}>Câu</th>
+              <th scope="col" style={{ width: '62%' }}>Nội dung</th>
+              <th scope="col" style={{ width: '15%' }}>Điểm trung bình</th>
               <th
                 scope="col"
+                style={{ width: '15%' }}
                 title="Lớp chấm câu này thấp hơn trung bình của chính câu đó từ 1 độ lệch chuẩn trở lên"
               >
                 Lớp cảnh báo
@@ -407,8 +424,10 @@ const WeakestQuestions: React.FC<{ rows: DashboardQuestionScore[] }> = ({ rows }
           <tbody>
             {rows.map((row) => (
               <tr key={row.questionOrder}>
-                <th scope="row">C{row.questionOrder}</th>
-                <td className="dashboard-question-text">{row.questionText}</td>
+                <td className="catalog-table__index">C{row.questionOrder}</td>
+                <td>
+                  <span className="catalog-cell-primary">{row.questionText}</span>
+                </td>
                 <td className="num">{row.averageScore.toFixed(2)}</td>
                 <td className={row.sectionsBelowThreshold > 0 ? 'num is-flagged' : 'num'}>
                   {row.sectionsBelowThreshold}
@@ -472,6 +491,7 @@ const FacultyChart: React.FC<{
     {faculties.length === 0 ? (
       <p className="dashboard-report-note">Chưa có khoa/viện nào thu được phiếu hợp lệ.</p>
     ) : (
+      <div className="dashboard-chart-frame">
       <ResponsiveContainer width="100%" height={Math.max(220, faculties.length * 34 + 40)}>
         <BarChart
           data={faculties}
@@ -506,6 +526,7 @@ const FacultyChart: React.FC<{
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      </div>
     )}
   </section>
 );

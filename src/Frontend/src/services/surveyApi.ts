@@ -10,7 +10,7 @@ import type {
   SurveyTemplate,
 } from '../types';
 import type { ScoringThresholds } from '../utils/reportThresholds';
-import { apiRequest, csrfRequest } from './apiClient';
+import { ApiError, apiRequest, csrfRequest } from './apiClient';
 
 export interface SaveAnswerScaleOptionPayload {
   /** 1..5, không bắt buộc liên tiếp (thang Có/Không dùng 1 và 5). */
@@ -313,6 +313,10 @@ export interface SemesterSurveyDashboard {
   faculties: DashboardFacultyScore[];
   courseIssueCount: number;
   lecturerVarianceCount: number;
+  /** Tổng sĩ số của mọi lớp trong đợt — mẫu số của tỷ lệ phản hồi. */
+  totalClassSize: number;
+  /** Số phiếu ĐÃ THU trên tổng sĩ số; `averageCompletionRate` chỉ đếm phiếu hợp lệ. */
+  responseRate: number;
 }
 
 export interface RecalculateScoresResult {
@@ -667,6 +671,37 @@ export interface SubmitSurveyResponsePayload {
    * nhưng coi như làm bài 0 giây.
    */
   startTicket: string | null;
+}
+
+/**
+ * Tải tệp Excel danh sách lớp kèm ảnh mã QR của một đợt.
+ *
+ * Server dựng tệp và trả về nguyên khối, trình duyệt chỉ nhận rồi lưu — trước đây
+ * chỗ này sinh QR và nén workbook ngay trên luồng chính nên đợt vài nghìn lớp là
+ * treo tab.
+ *
+ * Không dùng `apiRequest` vì phần thân là nhị phân chứ không phải JSON.
+ */
+export async function downloadCourseSurveyQrExcel(semesterSurveyId: number): Promise<{
+  blob: Blob;
+  fileName: string;
+}> {
+  const response = await fetch(
+    `/api/surveys/semester-surveys/${semesterSurveyId}/qr-export`,
+    { credentials: 'include' },
+  );
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { errorCode?: string };
+    throw new ApiError(response.status, body.errorCode ?? 'API_REQUEST_FAILED');
+  }
+
+  // Tên tệp do server đặt, đọc từ Content-Disposition; hụt thì dùng tên dự phòng.
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+  const fileName = match ? decodeURIComponent(match[1]) : 'ma-qr-dot-khao-sat.xlsx';
+
+  return { blob: await response.blob(), fileName };
 }
 
 /** Link sinh viên dùng để vào làm bài của một lớp học phần. */

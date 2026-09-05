@@ -16,6 +16,7 @@ import {
   YAxis,
 } from 'recharts';
 import type { QuestionRating } from '../types';
+import '../styles/catalogs.css';
 
 export interface QuestionAnalysisChartProps {
   questions: QuestionRating[];
@@ -182,7 +183,6 @@ export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
       {/* Header phần phân tích */}
       <header className="section-analysis-header">
         <div className="section-analysis-heading">
-          <BarChart3 className="operation-icon" aria-hidden="true" />
           <h3>{title}</h3>
         </div>
 
@@ -359,7 +359,9 @@ export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
                 </span>
               </div>
 
-              <table className="campaign-table analysis-detail-table">
+              {/* Dùng đúng bảng của các trang danh mục để cả hệ thống một kiểu bảng. */}
+              <div className="catalog-table-scroll" tabIndex={0} aria-label={`Phân bố ${scaleName}`}>
+              <table className="catalog-table analysis-detail-table">
                 <thead>
                   <tr>
                     <th className="analysis-table-code-col">Mã</th>
@@ -442,6 +444,7 @@ export const QuestionAnalysisChart: React.FC<QuestionAnalysisChartProps> = ({
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           );
         })}

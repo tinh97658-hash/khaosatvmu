@@ -559,6 +559,11 @@ export interface LecturerPerformanceReport {
   facultyAverageScore: number;
   sections: LecturerSectionSummary[];
   questionRatings: QuestionRating[];
+  /**
+   * Phần phiếu hợp lệ thực sự dựng nên `averageScore`: chỉ của lớp đã chốt điểm.
+   * `totalResponses` đếm cả lớp chưa đủ điều kiện vì đó là tiến độ.
+   */
+  scoredValidResponseCount: number;
 }
 
 export interface DepartmentSummary {
@@ -602,6 +607,11 @@ export interface SectionSurveyAnalysis {
   averageScore: number;
   templateName: string;
   questions: QuestionRating[];
+  /**
+   * Lớp đã được chốt điểm ở lần bấm "Tính lại điểm" gần nhất chưa. Chưa chốt thì
+   * mọi số liệu phân tích đều rỗng, đúng như ô điểm bỏ trống ở Bảng dữ liệu khảo sát.
+   */
+  isScored: boolean;
 }
 
 /** Một dòng kết quả chi tiết của một bài khảo sát lớp học phần. */
@@ -718,6 +728,10 @@ export interface SchoolSurveyOverview {
   departments: DepartmentOverview[];
   weakestQuestions: QuestionRating[];
   semesterComparison: SemesterComparison | null;
+  /** Mọi lượt nộp, kể cả phiếu bị lọc nhiễu; `totalResponses` chỉ đếm phiếu hợp lệ. */
+  totalSubmittedResponses: number;
+  /** Số phiếu đã thu trên chỉ tiêu — vế thứ nhất của ngưỡng tính điểm. */
+  responseRate: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -230,6 +230,8 @@
   border-radius: 4px;
 }
 
+/* Nhãn và con số cùng một màu đậm, chỉ phân cấp bằng cỡ chữ — giống dải số liệu
+   ở tab Tổng quan, để hai nơi không chỗ mờ chỗ rõ. */
 .reports-kpi-item {
   display: inline-flex;
   align-items: center;
@@ -237,7 +239,7 @@
   min-width: 0;
   font-size: 12px;
   font-weight: 600;
-  color: var(--reports-text-muted);
+  color: var(--reports-text);
   white-space: nowrap;
 }
 
@@ -260,11 +262,35 @@
 }
 
 /* ---------- Bảng Khoa / Bộ môn ---------- */
+/*
+  Không đặt padding lên thẻ. Padding ở đây đẩy cả bảng vào trong, để lại hai dải
+  trắng hai bên. Thanh công cụ và phân trang của DataTable đã tự giữ lề 10px của
+  chúng, riêng bảng thì chạy thẳng ra tới viền thẻ.
+*/
 .reports-table-section {
   background: #ffffff;
   border: 1px solid var(--reports-border);
   border-radius: 4px;
-  padding: 16px;
+  padding: 0;
+  overflow: hidden;
+}
+
+/*
+  Bảng tra cứu chi tiết có 13 cột và khai báo bề rộng theo phần trăm, nên phải khoá
+  bố cục lại. Để `auto` thì tên học phần và tên giảng viên tự kéo cột rộng ra, phần
+  trăm không còn nghĩa gì và mấy cột số bị bóp lại.
+*/
+.reports-table-section .catalog-table {
+  min-width: 1360px;
+  table-layout: fixed;
+}
+
+/* Bố cục khoá rồi thì nội dung dài phải tự xuống dòng chứ không tràn ra ngoài ô. */
+.reports-table-section .catalog-table td .report-lecturer-link,
+.reports-table-section .catalog-table td .catalog-cell-primary {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .reports-toolbar {
@@ -380,14 +406,22 @@
 }
 
 /* ---------- Phân tích câu hỏi (giảng viên & bài khảo sát) ---------- */
+/*
+  Không đặt padding lên thẻ: padding ở đây đẩy cả bảng vào trong, để lại hai dải
+  trắng hai bên. Tiêu đề, chú thích và biểu đồ tự giữ lề 14px của mình, riêng bảng
+  phân bố chạy thẳng ra tới viền thẻ — cùng cách bày với các thẻ bảng còn lại.
+*/
 .section-analysis {
   background: #ffffff;
   border: 1px solid var(--reports-border);
-  border-radius: 6px;
-  padding: 12px 14px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  border-radius: 4px;
+  padding: 0;
+  overflow: hidden;
   min-width: 0;
   max-width: 100%;
+  /* Thẻ này hay nằm trong một cột flex có cuộn. Không khoá lại thì nó co xuống dưới
+     chiều cao nội dung, mà `overflow: hidden` sẽ cắt luôn phần thân bảng phân bố. */
+  flex: 0 0 auto;
 }
 
 .section-analysis-header {
@@ -396,9 +430,8 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px 14px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #f1f5f9;
-  margin-bottom: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--reports-border);
 }
 
 .section-analysis-heading {
@@ -532,10 +565,8 @@
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  margin-bottom: 10px;
   background: #ffffff;
-  border-radius: 6px;
-  padding: 4px 0;
+  padding: 8px 14px 4px;
 }
 
 .section-analysis-chart-scroll {
@@ -716,20 +747,19 @@
 
 /* Distribution Table */
 .section-analysis-distribution {
-  overflow-x: auto;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  border-top: 1px solid #f1f5f9;
-  padding-top: 10px;
+  border-top: 1px solid var(--reports-border);
 }
 
 .distribution-table-header {
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 4px 10px;
-  margin-bottom: 6px;
+  padding: 10px 14px;
 }
 
 /* Câu hỏi tự nhập: liệt kê nội dung thay cho bảng phân bố mức. */
@@ -788,15 +818,38 @@
   color: #64748b;
 }
 
+/*
+  Bảng dài bằng số câu của bộ đề (có bộ tới 30 câu) nên bóp sát chiều cao dòng,
+  còn lại thừa hưởng nguyên quy chuẩn tiêu đề của .catalog-table: chữ căn giữa cả
+  hai chiều và được xuống dòng.
+*/
 .analysis-detail-table {
   width: 100%;
+  min-width: 0;
 }
 
-/* Bảng này dài bằng số câu hỏi của bộ đề nên bóp sát chiều cao dòng. */
-.analysis-detail-table td,
+/* Thẻ không cuộn dọc nên tiêu đề không ghim; để sticky ở đây chỉ khiến hàng tiêu
+   đề trôi đè lên khối bên dưới khi cuộn cả màn. */
 .analysis-detail-table th {
+  position: static;
+  height: 42px;
+  padding: 4px 6px;
+}
+
+.analysis-detail-table td {
   height: 30px;
   padding: 3px 8px;
+}
+
+/* Nằm trong thẻ có viền nên giữ nét phải cột cuối và nét dưới hàng cuối, không thì
+   góc bảng hở ra như bị cắt dở. */
+.analysis-detail-table th:last-child,
+.analysis-detail-table td:last-child {
+  border-right: 0;
+}
+
+.analysis-detail-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .analysis-question-cell {
@@ -1437,6 +1490,11 @@
   border-radius: 4px;
 }
 
+/*
+  Cả ba mảnh chữ trong một ô số liệu (nhãn, con số, chú thích) đều để đọc được,
+  nên dùng chung một màu đậm và chỉ phân cấp bằng cỡ chữ với độ đậm. Trước đây
+  nhãn và chú thích để màu xám nhạt, đứng cạnh con số đen thành ra chỗ mờ chỗ rõ.
+*/
 .reports-exec-stat {
   display: inline-flex;
   align-items: center;
@@ -1444,7 +1502,7 @@
   min-width: 0;
   font-size: 12px;
   font-weight: 600;
-  color: var(--reports-text-muted);
+  color: var(--reports-text);
   white-space: nowrap;
 }
 
@@ -1468,8 +1526,22 @@
 
 .reports-exec-stat small {
   font-size: 11px;
-  font-weight: 500;
-  color: var(--reports-text-muted);
+  font-weight: 600;
+  color: #46515a;
+}
+
+/* Giải nghĩa hai thuật ngữ dùng xuyên suốt trang, đặt ngay dưới dải số liệu. */
+.reports-exec-band-note {
+  margin: 6px 0 0;
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: #46515a;
+}
+
+.reports-exec-band-note strong {
+  font-weight: 700;
+  color: var(--reports-text);
 }
 
 /* Một nhóm phân tích tại một thời điểm, tránh bốn biểu đồ và một bảng nối dài trang. */
@@ -1924,121 +1996,79 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Tiêu chí cần cải tiến ---------- */
-.reports-weakest-hint {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 12px;
-  font-size: 11px;
-  color: var(--reports-text-muted);
-  background: #fdf6ec;
-  border: 1px solid #f3e2c3;
-  border-radius: 4px;
-  padding: 8px 10px;
-}
+/* ---------- Xếp hạng tiêu chí (tab Chất lượng phản hồi) ---------- */
 
-.reports-weakest-hint .operation-icon {
-  color: #b86216;
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
-}
-
-.reports-weakest-list {
-  list-style: none;
-  margin: 0;
+/*
+  Bày y như thẻ "Kết quả theo Khoa/Viện": thẻ bỏ padding, tiêu đề và dòng dẫn nhập
+  tự giữ lề của mình, riêng bảng chạy thẳng ra tới hai viền thẻ. Để padding trên thẻ
+  thì bảng bị đẩy vào trong, hở hai dải trắng hai bên và nhìn không cùng một hệ với
+  các bảng còn lại của trang.
+*/
+.reports-quality-card {
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.reports-weakest-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.reports-weakest-rank {
-  flex: 0 0 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  background: #eef1f4;
-  color: var(--reports-text-muted);
-  font-size: 12px;
-  font-weight: 700;
-  border-radius: 4px;
-}
-
-.reports-weakest-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.reports-weakest-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.reports-weakest-text {
-  font-size: 13px;
-  color: var(--reports-text);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.reports-weakest-score {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  font-weight: 800;
-  white-space: nowrap;
+.reports-quality-card > .reports-exec-card-head {
+  margin: 0;
+  padding: 12px 16px;
+}
+
+.reports-weakest-hint {
+  margin: 0;
+  padding: 0 16px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #46515a;
+}
+
+.reports-weakest-hint strong {
+  color: var(--reports-text);
   font-variant-numeric: tabular-nums;
 }
 
-.reports-weakest-score small {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--reports-text-muted);
+/*
+  Bỏ trần rộng 920px của bảng danh mục: bảng nằm gọn trong thẻ nên không cần cuộn
+  ngang, và để nguyên thì bề rộng phần trăm của từng cột quy về 920px chứ không về
+  bề ngang thật của thẻ.
+*/
+.reports-weakest .catalog-table {
+  min-width: 0;
+  table-layout: fixed;
 }
 
-.reports-weakest-dist {
-  display: flex;
-  height: 7px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: #eef1f4;
-  margin-top: 6px;
+.reports-weakest .catalog-table td {
+  font-variant-numeric: tabular-nums;
 }
 
-.reports-weakest-dist-seg {
-  height: 100%;
+/* Câu hỏi thường dài, cho xuống dòng thay vì cắt cụt như các bảng danh mục. */
+.reports-weakest .catalog-cell-primary {
   display: block;
+  white-space: normal;
+  line-height: 1.4;
 }
 
-.reports-weakest-answers {
-  display: block;
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--reports-text-muted);
+/*
+  Lưới kẻ chạy sát mép thẻ và hàng cuối cũng có nét dưới. Bảng danh mục mặc định bỏ
+  nét phải của cột cuối và nét dưới của hàng cuối — hợp lý khi bảng chiếm trọn chiều
+  ngang trang, nhưng đặt trong thẻ có viền thì ô cuối hở, nhìn như bảng bị cắt dở.
+*/
+.reports-weakest .catalog-table-scroll {
+  border-top: 1px solid var(--reports-border);
 }
 
-/* Tên thang trả lời của câu, cần thiết khi một bộ trộn nhiều thang. */
-.reports-weakest-scale {
-  display: inline-block;
-  margin: 4px 0 2px;
-  padding: 1px 6px;
-  border-radius: 10px;
-  background: rgba(2, 132, 199, 0.1);
-  color: #0369a1;
-  font-size: 10px;
-  font-weight: 600;
+.reports-weakest .catalog-table th:last-child,
+.reports-weakest .catalog-table td:last-child {
+  border-right: 0;
+}
+
+.reports-weakest .catalog-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Thẻ đã bỏ padding nên trạng thái rỗng phải tự giữ lề. */
+.reports-quality-card .reports-chart-empty {
+  padding: 0 16px 16px;
 }
 
 /* ---------- Bảng bộ môn chậm tiến độ ---------- */

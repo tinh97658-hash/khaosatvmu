@@ -1956,6 +1956,29 @@ public sealed class EfSurveyService(
         string DepartmentName);
 
     /// <summary>
+    /// Điểm trung bình của một nhóm lớp: cộng dồn tử số và mẫu số rồi mới chia, không
+    /// lấy trung bình của các trung bình — lớp 50 phiếu phải nặng hơn lớp 5 phiếu.
+    /// Đúng công thức của điểm toàn trường ở trang Tổng quan và của bảng xếp hạng
+    /// Khoa / Bộ môn.
+    ///
+    /// Cột Z-Score thì KHÔNG dùng hàm này: ở đó mỗi LỚP là một quan sát chứ không
+    /// phải mỗi phiếu, nên mặt bằng phải là trung bình không trọng số.
+    /// </summary>
+    private static decimal? WeightedAverageScore(IEnumerable<AnalysedSection> sections)
+    {
+        decimal scoreSum = 0;
+        int responseSum = 0;
+
+        foreach (var section in sections)
+        {
+            scoreSum += section.AverageScore * section.ValidResponseCount;
+            responseSum += section.ValidResponseCount;
+        }
+
+        return responseSum > 0 ? Math.Round(scoreSum / responseSum, 2) : null;
+    }
+
+    /// <summary>
     /// Lọc danh sách lớp xuống phạm vi người xem.
     /// <para>
     /// Chỉ được gọi ở BƯỚC CUỐI, khi dựng danh sách trả về. Mọi con số mặt bằng —
@@ -2339,7 +2362,7 @@ public sealed class EfSurveyService(
                     totalClassSize == 0
                         ? 0m
                         : Math.Round((decimal)validResponses / totalClassSize * 100, 1),
-                    scores.Count == 0 ? null : Math.Round(scores.Average(), 2),
+                    WeightedAverageScore(g),
                     warningCutoff is { } cutoff ? scores.Count(x => x <= cutoff) : 0);
             })
             .OrderBy(x => x.FacultyName)
@@ -2462,7 +2485,9 @@ public sealed class EfSurveyService(
                     first.FacultyName,
                     g.Count(),
                     CountLecturers(g),
-                    Math.Round(scores.Average(), 2),
+                    // Cột điểm của học phần gộp theo phiếu; min/max/spread bên dưới
+                    // mới là thống kê trên từng lớp.
+                    WeightedAverageScore(g) ?? 0m,
                     min,
                     max,
                     spread,
@@ -2621,7 +2646,7 @@ public sealed class EfSurveyService(
                 g.Key.FacultyId,
                 g.Key.FacultyName,
                 g.Count(),
-                Math.Round(g.Average(x => x.AverageScore), 2)))
+                WeightedAverageScore(g) ?? 0m))
             .OrderByDescending(x => x.AverageScore)
             .ToList();
 
@@ -2642,13 +2667,17 @@ public sealed class EfSurveyService(
             totalClassSize == 0
                 ? 0m
                 : Math.Round((decimal)validResponseCount / totalClassSize * 100, 1),
-            sections.Count == 0 ? null : Math.Round(sections.Average(x => x.AverageScore), 2),
+            WeightedAverageScore(sections),
             sections.Count,
             questions,
             questions.OrderBy(x => x.AverageScore).Take(5).ToList(),
             faculties,
             courseRows.Count(x => x.Verdict == CourseDiagnosisVerdicts.CourseIssue),
-            courseRows.Count(x => x.Verdict == CourseDiagnosisVerdicts.LecturerVariance)));
+            courseRows.Count(x => x.Verdict == CourseDiagnosisVerdicts.LecturerVariance),
+            totalClassSize,
+            totalClassSize == 0
+                ? 0m
+                : Math.Round((decimal)totalResponseCount / totalClassSize * 100, 1)));
     }
 
     public async Task<SurveyOperationResult<SurveyScopeAnalysisDto>> GetSurveyScopeAnalysisAsync(
@@ -2719,6 +2748,7 @@ public sealed class EfSurveyService(
                 q.QuestionId,
                 q.QuestionText,
                 q.AttentionCheckValue,
+                q.AnswerScaleId,
                 s.ScaleKind,
                 s.AnswerScaleName
             })
@@ -2729,6 +2759,10 @@ public sealed class EfSurveyService(
             .Select(x => x.QuestionId)
             .ToList();
 
+        // Trung bình có TRỌNG SỐ theo số lượt trả lời. Lấy thẳng Average của các
+        // AverageScore là trung bình của trung bình: lớp 5 phiếu nặng ngang lớp 50
+        // phiếu, và con số ra không khớp với chính điểm chung của phạm vi ngay trên
+        // đầu trang.
         var scoresByQuestion = cssIds.Count == 0 || scoredQuestionIds.Count == 0
             ? []
             : await db.CourseSectionSurveyQuestionScores.AsNoTracking()
@@ -2737,23 +2771,82 @@ public sealed class EfSurveyService(
                 .Select(g => new
                 {
                     QuestionId = g.Key,
-                    Average = g.Average(x => x.AverageScore),
+                    WeightedScore = g.Sum(x => x.AverageScore * x.AnswerCount),
                     TotalAnswers = g.Sum(x => x.AnswerCount)
                 })
                 .ToDictionaryAsync(x => x.QuestionId, x => x, cancellationToken);
 
+        // Phân bố lựa chọn không có bảng chốt nào lưu, nên vẫn gộp từ phiếu gốc —
+        // nhưng chỉ trên đúng các lớp đã chốt điểm ở trên, để hai cột của cùng một
+        // dòng không nói về hai tập lớp khác nhau. Trước đây phần này bỏ trống hẳn
+        // nên bảng "tỷ lệ phân bố" không có cột mức nào.
+        var optionCounts = cssIds.Count == 0 || scoredQuestionIds.Count == 0
+            ? []
+            : await (from r in db.SurveyResponses.AsNoTracking()
+                     join a in db.SurveyResponseAnswers.AsNoTracking()
+                         on r.ResponseId equals a.ResponseId
+                     where cssIds.Contains(r.CourseSectionSurveyId)
+                           && r.IsValid
+                           && scoredQuestionIds.Contains(a.QuestionId)
+                     group a by new { a.QuestionId, a.AnswerValue } into g
+                     select new { g.Key.QuestionId, g.Key.AnswerValue, Count = g.Count() })
+                .ToListAsync(cancellationToken);
+
+        var countsByQuestion = optionCounts
+            .GroupBy(x => x.QuestionId)
+            .ToDictionary(
+                g => g.Key,
+                g => g
+                    .Where(x => int.TryParse(x.AnswerValue, out _))
+                    .ToDictionary(x => int.Parse(x.AnswerValue!), x => x.Count));
+
+        var scaleIds = questions.Select(x => x.AnswerScaleId).Distinct().ToList();
+        var optionsByScaleId = (await db.AnswerScaleOptions.AsNoTracking()
+                .Where(x => scaleIds.Contains(x.AnswerScaleId))
+                .ToListAsync(cancellationToken))
+            .ToLookup(x => x.AnswerScaleId);
+
+        // Số thứ tự phải đánh trên TOÀN BỘ câu của bộ đề rồi mới bỏ câu bẫy, giống
+        // QuestionOrderMapAsync và hai màn chi tiết bên Tra cứu chi tiết. Đánh số sau
+        // khi lọc thì mọi câu sau câu bẫy bị lùi một bậc, C16 ở trang Bảng dữ liệu
+        // khảo sát thành C15 ở đây và không đối chiếu được với nhau.
         var questionRows = questions
-            .Where(x => x.AttentionCheckValue == null)
-            .Select((q, index) =>
+            .Select((q, index) => new { Question = q, Order = index + 1 })
+            .Where(x => x.Question.AttentionCheckValue == null)
+            .Select(x =>
             {
+                var q = x.Question;
+                int index = x.Order - 1;
                 var stat = scoresByQuestion.GetValueOrDefault(q.QuestionId);
+                var counts = countsByQuestion.GetValueOrDefault(q.QuestionId) ?? [];
+                int answeredTotal = counts.Values.Sum();
+
+                IReadOnlyList<ScopeAnalysisOptionDto> distribution = q.ScaleKind != AnswerScaleKinds.Options
+                    ? []
+                    : optionsByScaleId[q.AnswerScaleId]
+                        .OrderBy(option => option.Value)
+                        .Select(option =>
+                        {
+                            int count = counts.GetValueOrDefault(option.Value);
+                            return new ScopeAnalysisOptionDto(
+                                option.Value,
+                                option.DisplayText,
+                                count,
+                                answeredTotal > 0
+                                    ? Math.Round((decimal)count / answeredTotal * 100, 1)
+                                    : 0m);
+                        })
+                        .ToList();
+
                 return new ScopeAnalysisQuestionDto(
                     q.QuestionId,
                     index + 1,
                     q.QuestionText,
-                    stat is not null ? Math.Round(stat.Average, 2) : 0m,
+                    stat is not null && stat.TotalAnswers > 0
+                        ? Math.Round(stat.WeightedScore / stat.TotalAnswers, 2)
+                        : 0m,
                     stat?.TotalAnswers ?? 0,
-                    [],
+                    distribution,
                     q.ScaleKind,
                     q.AnswerScaleName,
                     null);
@@ -2789,7 +2882,7 @@ public sealed class EfSurveyService(
                         totalClassSize == 0
                             ? 0m
                             : Math.Round((decimal)validResponses / totalClassSize * 100, 1),
-                        scores.Count == 0 ? null : Math.Round(scores.Average(), 2),
+                        WeightedAverageScore(g),
                         warningCutoff is { } cutoff ? scores.Count(x => x <= cutoff) : 0);
                 })
                 .OrderBy(x => x.DepartmentName)

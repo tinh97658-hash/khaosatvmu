@@ -27,11 +27,18 @@
   align-items: stretch;
 }
 
+/*
+  Cùng một kiểu thẻ với màn phân tích của Thống kê chi tiết (.section-analysis):
+  viền 1px bo 4px, tiêu đề nằm trong một băng có nét ngăn, thân thẻ tự giữ lề còn
+  bảng thì chạy thẳng ra hai mép. Trước đây thẻ có padding đều nên bảng bị thụt vào,
+  và tiêu đề viết hoa toàn phần trông khác hẳn tiêu đề của các thẻ kia.
+*/
 .dashboard-report-block {
-  padding: 12px 14px;
   border: 1px solid #dfe4e8;
+  border-radius: 4px;
   background: #ffffff;
   margin-bottom: 12px;
+  overflow: hidden;
 }
 
 .dashboard-report-grid .dashboard-report-block {
@@ -41,19 +48,28 @@
 }
 
 .dashboard-report-title {
-  margin: 0 0 10px;
-  color: #40505a;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid #dfe4e8;
+  color: #20262c;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .dashboard-report-note {
-  margin: 10px 0 0;
-  color: #68737d;
+  margin: 0;
+  padding: 10px 14px;
+  color: #46515a;
   font-size: 11px;
   line-height: 1.5;
+}
+
+/* Chú thích trong hộp thoại không nằm trong thẻ nên không cần lề riêng. */
+.note-modal .dashboard-report-note {
+  padding: 0;
+  margin: 8px 0 0;
 }
 
 /* Nhãn bên trái, số bên phải trong ô nền nhạt — giữ đúng bố cục bản mô phỏng. */
@@ -64,6 +80,7 @@
   justify-content: space-evenly;
   gap: 6px;
   margin: 0;
+  padding: 10px 14px;
 }
 
 .dashboard-kpi {
@@ -103,22 +120,47 @@
   border: 1px solid #dfe4e8;
 }
 
-/* Bảng cảnh báo: tiêu đề đỏ như bản mô phỏng, nhưng dịu hơn để không chọi với
-   phần còn lại của giao diện. */
-.statistics-table--alert thead th {
-  background: #fdecea;
-  color: #b42318;
+/* Thẻ đã bỏ padding nên biểu đồ phải tự giữ lề. */
+.dashboard-chart-frame {
+  padding: 10px 14px 12px;
 }
 
-.statistics-table--alert tbody th[scope='row'] {
-  color: #b42318;
+/* Bảng tiêu chí yếu nhất: chạy sát hai mép thẻ, giữ nét phải cột cuối và nét dưới
+   hàng cuối vì thẻ đã có viền của nó. */
+.dashboard-weakest-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.dashboard-weakest-table .catalog-table__index {
+  width: auto;
+  color: #20262c;
   font-weight: 650;
 }
 
-/* Nội dung câu hỏi là câu dài, cho phép xuống dòng thay vì kéo bảng ra vô tận. */
-.statistics-table .dashboard-question-text {
-  min-width: 320px;
+.dashboard-weakest-table .catalog-cell-primary {
+  display: block;
   white-space: normal;
+  line-height: 1.4;
+}
+
+.dashboard-weakest-table td.num {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-weakest-table td.is-flagged {
+  color: #b42318;
+  font-weight: 700;
+}
+
+.dashboard-weakest-table th:last-child,
+.dashboard-weakest-table td:last-child {
+  border-right: 0;
+}
+
+.dashboard-weakest-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .dashboard-notes {

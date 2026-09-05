@@ -347,7 +347,14 @@ public sealed record SemesterSurveyDashboardDto(
     /// <summary>Số học phần mà mọi lớp đều dưới ngưỡng.</summary>
     int CourseIssueCount,
     /// <summary>Số học phần có biên độ điểm giữa các lớp quá rộng.</summary>
-    int LecturerVarianceCount);
+    int LecturerVarianceCount,
+    /// <summary>Tổng sĩ số của mọi lớp trong đợt — mẫu số của tỷ lệ phản hồi.</summary>
+    int TotalClassSize = 0,
+    /// <summary>
+    /// Số phiếu ĐÃ THU trên tổng sĩ số. Khác <paramref name="AverageCompletionRate"/>
+    /// ở tử số: chỗ kia chỉ đếm phiếu hợp lệ. Đây là vế thứ nhất của ngưỡng tính điểm.
+    /// </summary>
+    decimal ResponseRate = 0m);
 
 /// <summary>
 /// Dải chỉ số gọn cho bảng điều khiển riêng của trưởng bộ môn. Mỗi con số của bộ môn
@@ -909,6 +916,9 @@ public static class SurveyErrorCodes
     public const string SemesterHasNoSections = "SURVEY_SEMESTER_HAS_NO_SECTIONS";
     public const string ScheduleInvalid = "SURVEY_SCHEDULE_INVALID";
     public const string SemesterSurveyNotFound = "SURVEY_SEMESTER_SURVEY_NOT_FOUND";
+
+    /// <summary>Đợt không có lớp nào trong phạm vi người dùng, không có gì để xuất.</summary>
+    public const string SemesterSurveyHasNoSections = "SURVEY_SEMESTER_SURVEY_HAS_NO_SECTIONS";
     /// <summary>Tên đợt để trống hoặc chỉ có khoảng trắng.</summary>
     public const string SemesterSurveyNameRequired = "SURVEY_SEMESTER_SURVEY_NAME_REQUIRED";
     /// <summary>Kiểu phạm vi không nằm trong <see cref="SurveyScopeTypes"/>.</summary>

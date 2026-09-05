@@ -1,15 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ArrowLeft,
-  CalendarDays,
+  BarChart3,
   CircleAlert,
   Eraser,
   Eye,
   LoaderCircle,
-  MessageSquare,
-  Star,
   TriangleAlert,
-  Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
@@ -166,14 +163,21 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
   // Các mức của thang trả lời lấy từ chính phiếu đầu tiên, đủ cả mức không ai chọn.
   const scaleValues = responses[0]?.valueCounts ?? [];
 
-  // Điểm trung bình là số liệu chất lượng nên chỉ gộp phiếu qua bộ lọc nhiễu,
-  // khớp với cách backend tính trong báo cáo.
   const validResponses = responses.filter((response) => response.isValid);
-  const averageScore =
+
+  /*
+    Điểm của lớp lấy đúng con số đã chốt ở lần bấm "Tính lại điểm", không tự cộng
+    lại từ danh sách phiếu bên dưới. Lớp chưa đủ điều kiện thì Bảng dữ liệu khảo sát
+    đang để trống ô điểm, ở đây cũng phải để trống theo. Phần phân tích chỉ tải khi
+    bật `showAnalysis`, nên màn quản lý khảo sát vẫn dùng cách cộng tại chỗ.
+  */
+  const snapshotAverageScore = analysis?.isScored ? analysis.averageScore : null;
+  const liveAverageScore =
     validResponses.length === 0
       ? 0
       : validResponses.reduce((total, response) => total + response.score, 0) /
         validResponses.length;
+  const displayAverageScore = showAnalysis ? snapshotAverageScore : liveAverageScore;
 
   const invalidCount = responses.filter((response) => !response.isValid).length;
 
@@ -324,25 +328,22 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
               {sectionSurvey.lecturerName || 'Chưa phân công'} · Sĩ số {sectionSurvey.classSize}
             </p>
           </div>
+          {/* Chỉ giữ icon ở ô cảnh báo, chỗ nó thực sự nói thêm được điều gì. */}
           <div className="section-responses-stats">
+            <span>{responses.length} phiếu đã thu</span>
+            <span>{validResponses.length} phiếu hợp lệ</span>
             <span>
-              <Users className="operation-icon" aria-hidden="true" />
-              {responses.length} phiếu đã thu
+              Điểm trung bình{' '}
+              {displayAverageScore !== null ? displayAverageScore.toFixed(2) : '—'}
             </span>
-            <span>
-              <Star className="operation-icon" aria-hidden="true" />
-              Điểm trung bình {averageScore.toFixed(2)}
-            </span>
-            <span>
-              <MessageSquare className="operation-icon" aria-hidden="true" />
-              {commentedCount} phiếu hợp lệ có ý kiến
-            </span>
+            <span>{commentedCount} phiếu hợp lệ có ý kiến</span>
             <span className={invalidCount > 0 ? 'section-responses-stat--warning' : undefined}>
-              <TriangleAlert className="operation-icon" aria-hidden="true" />
+              {invalidCount > 0 && (
+                <TriangleAlert className="operation-icon" aria-hidden="true" />
+              )}
               {invalidCount} phiếu bị lọc nhiễu
             </span>
             <span>
-              <CalendarDays className="operation-icon" aria-hidden="true" />
               {formatDateTime(sectionSurvey.startTime)} → {formatDateTime(sectionSurvey.endTime)}
             </span>
             {/* Dùng khi số liệu của lớp không tin được — vd cả lớp nộp nhưng bộ lọc
@@ -407,7 +408,24 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
         </div>
       )}
 
-      {showAnalysis && !analysisLoading && analysis && (
+      {/*
+        Lớp chưa qua hai vòng lọc thì không có điểm để phân tích. Nói thẳng lý do,
+        không tự tính lấy một con số riêng — Bảng dữ liệu khảo sát đang để trống ô
+        điểm của chính lớp này thì ở đây cũng không được hiện ra con số nào.
+      */}
+      {showAnalysis && !analysisLoading && analysis && !analysis.isScored && (
+        <div className="operations-empty" role="status">
+          <BarChart3 className="operation-icon" aria-hidden="true" />
+          <strong>Lớp chưa đủ điều kiện tính điểm</strong>
+          <span>
+            Lớp phải qua cả ngưỡng tỷ lệ phản hồi và ngưỡng tỷ lệ phiếu hợp lệ, sau đó
+            được chốt bằng nút "Tính lại điểm" ở trang Bảng dữ liệu khảo sát thì mới có
+            số liệu phân tích.
+          </span>
+        </div>
+      )}
+
+      {showAnalysis && !analysisLoading && analysis && analysis.isScored && (
         <QuestionAnalysisChart
           questions={analysis.questions}
           overallAverageScore={analysis.averageScore}
@@ -435,7 +453,9 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
             'Sĩ số sinh viên': sectionSurvey?.classSize,
             'Tổng số phiếu thu': responses.length,
             'Số phiếu hợp lệ': validResponses.length,
-            'Điểm trung bình': averageScore > 0 ? averageScore.toFixed(2) : '—',
+            'Điểm trung bình': displayAverageScore !== null && displayAverageScore > 0
+              ? displayAverageScore.toFixed(2)
+              : '—',
           },
           summaryNotes: [
             'Điểm trung bình chỉ tính trên các phiếu đánh giá hợp lệ qua bộ lọc.',

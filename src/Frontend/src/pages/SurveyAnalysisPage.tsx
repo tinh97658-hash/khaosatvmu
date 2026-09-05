@@ -4,8 +4,6 @@ import {
   CircleAlert,
   LoaderCircle,
   RefreshCw,
-  Star,
-  Users,
 } from 'lucide-react';
 import { useSemester } from '../context/semesterContext';
 import { QuestionAnalysisChart } from '../components/QuestionAnalysisChart';
@@ -1112,7 +1110,10 @@ const ScopeDepartmentsTable: React.FC<{
         <p className="analysis-subtable-hint">Bấm vào tên bộ môn để xem chi tiết thống kê và các học phần của bộ môn đó.</p>
       </div>
       <div className="statistics-table-scroll" tabIndex={0} aria-label="Danh sách bộ môn">
-        <table className="statistics-table statistics-table--fill">
+        {/* Không dùng `--fill`: nó kéo bảng cao bằng khung cuộn để dòng tổng kết nằm
+            sát đáy, mà bảng này không có dòng tổng kết lẫn ô đệm — nên chỗ thừa bị
+            chia đều cho các dòng và mỗi dòng phình to gấp đôi chuẩn. */}
+        <table className="statistics-table">
           <thead>
             <tr>
               <th scope="col" style={{ textAlign: 'left', minWidth: 200 }}>
@@ -1532,14 +1533,8 @@ const ScopeAnalysisDetail: React.FC<{
           </p>
         </div>
         <div className="section-responses-stats">
-          <span>
-            <Users className="operation-icon" aria-hidden="true" />
-            {data.sectionCount} lớp · tổng sĩ số {data.totalClassSize.toLocaleString('vi-VN')}
-          </span>
-          <span>
-            <Star className="operation-icon" aria-hidden="true" />
-            Điểm trung bình {data.averageScore.toFixed(2)}
-          </span>
+          <span>{data.sectionCount} lớp · tổng sĩ số {data.totalClassSize.toLocaleString('vi-VN')}</span>
+          <span>Điểm trung bình {data.averageScore.toFixed(2)}</span>
           <span>{data.responseCount.toLocaleString('vi-VN')} phiếu hợp lệ</span>
         </div>
       </section>
@@ -2556,14 +2551,8 @@ const LecturerReportView: React.FC<{
           </p>
         </div>
         <div className="section-responses-stats">
-          <span>
-            <Users className="operation-icon" aria-hidden="true" />
-            {report.sectionCount} lớp · tổng sĩ số {totalClassSize.toLocaleString('vi-VN')}
-          </span>
-          <span>
-            <Star className="operation-icon" aria-hidden="true" />
-            Điểm trung bình {report.averageScore.toFixed(2)}
-          </span>
+          <span>{report.sectionCount} lớp · tổng sĩ số {totalClassSize.toLocaleString('vi-VN')}</span>
+          <span>Điểm trung bình {report.averageScore.toFixed(2)}</span>
           <span>
             {report.totalResponseCount.toLocaleString('vi-VN')} phiếu thu ({overallRate.toFixed(1)}%)
           </span>

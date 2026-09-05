@@ -85,7 +85,13 @@ public sealed record LecturerPerformanceReportDto(
     decimal DepartmentAverageScore,
     decimal FacultyAverageScore,
     IReadOnlyList<LecturerSectionSummaryDto> Sections,
-    IReadOnlyList<QuestionRatingDto> QuestionRatings);
+    IReadOnlyList<QuestionRatingDto> QuestionRatings,
+    /// <summary>
+    /// Phần phiếu hợp lệ thực sự dựng nên <paramref name="AverageScore"/>: chỉ của
+    /// những lớp đã chốt điểm. <paramref name="TotalResponses"/> đếm cả lớp chưa đủ
+    /// điều kiện vì đó là tiến độ, không phải mẫu số của điểm.
+    /// </summary>
+    int ScoredValidResponseCount = 0);
 
 /// <summary>Báo cáo thống kê cấp Bộ môn.</summary>
 public sealed record DepartmentSummaryDto(
@@ -127,7 +133,13 @@ public sealed record SectionSurveyAnalysisDto(
     int ResponseCount,
     decimal AverageScore,
     string TemplateName,
-    IReadOnlyList<QuestionRatingDto> Questions);
+    IReadOnlyList<QuestionRatingDto> Questions,
+    /// <summary>
+    /// Lớp đã được chốt điểm ở lần bấm "Tính lại điểm" gần nhất chưa. Chưa chốt thì
+    /// mọi con số phân tích đều rỗng — giống hệt ô điểm bỏ trống ở trang Bảng dữ
+    /// liệu khảo sát, chứ không tự tính lấy một con số riêng.
+    /// </summary>
+    bool IsScored = true);
 
 /// <summary>Một dòng kết quả chi tiết của một bài khảo sát lớp học phần.</summary>
 public sealed record SurveyResultDetailDto(
@@ -245,7 +257,15 @@ public sealed record SchoolSurveyOverviewDto(
     IReadOnlyList<QuestionRatingDto> WeakestQuestions,
 
     // Xu hướng so với học kỳ được chọn (mặc định là kỳ liền trước)
-    SemesterComparisonDto? SemesterComparison);
+    SemesterComparisonDto? SemesterComparison,
+
+    /// <summary>
+    /// Mọi lượt nộp, kể cả phiếu bị bộ lọc nhiễu loại. <paramref name="TotalResponses"/>
+    /// chỉ đếm phiếu hợp lệ, nên hai con số này không thay thế được cho nhau.
+    /// </summary>
+    int TotalSubmittedResponses = 0,
+    /// <summary>Số phiếu ĐÃ THU trên chỉ tiêu — vế thứ nhất của ngưỡng tính điểm.</summary>
+    decimal ResponseRate = 0m);
 
 /// <summary>Dịch vụ truy vấn và tổng hợp các báo cáo thống kê.</summary>
 public interface IReportService

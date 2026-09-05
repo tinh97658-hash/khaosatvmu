@@ -14,6 +14,53 @@
   overflow: hidden;
 }
 
+/*
+  Trang Thống kê chi tiết cuộn cả trang, không ghim bảng vào một khung cố định.
+
+  Cách của trang Bảng dữ liệu khảo sát — khoá trang lại rồi cho riêng khung bảng
+  cuộn — hợp lý ở đó vì trang chỉ có đúng MỘT bảng và một dòng tổng kết cần luôn
+  nhìn thấy. Ở đây mỗi tab còn dải tóm tắt và phần chú thích phía trên, nên khung
+  bảng chỉ còn một ô hẹp: phân trang 20 dòng mà nhìn được vài dòng, tiêu đề thì bị
+  ghim lại một chỗ. Giờ bảng cao bằng nội dung, tiêu đề trôi theo bảng, và cả trang
+  cuộn một mạch cho tới hết trang phân trang.
+*/
+.survey-analysis-page {
+  height: auto;
+  min-height: 100%;
+  /* `.content-area` của khung ứng dụng đã là vùng cuộn rồi, trang chỉ cần cao tự
+     nhiên là cả tiêu đề trang, thanh công cụ và bảng cùng trôi theo một thanh cuộn. */
+  overflow: visible;
+}
+
+.survey-analysis-page .statistics-table-scroll {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+/*
+  Bỏ ghim DỌC của hàng tiêu đề và dòng tổng kết. Dùng `top`/`bottom: auto` chứ không
+  phải `position: static`, vì các ô của cột ghim TRÁI vẫn cần sticky để chạy theo
+  khi cuộn ngang.
+*/
+.survey-analysis-page .statistics-table thead th {
+  top: auto;
+}
+
+.survey-analysis-page .statistics-table tfoot th,
+.survey-analysis-page .statistics-table tfoot td {
+  bottom: auto;
+}
+
+/* `--fill` kéo bảng cao bằng khung để dòng tổng kết nằm sát đáy; khung giờ cao bằng
+   nội dung nên không còn chỗ thừa để nuốt, và ô đệm chỉ tổ thêm một dòng trống. */
+.survey-analysis-page .statistics-table--fill {
+  height: auto;
+}
+
+.survey-analysis-page .statistics-table .table-spacer {
+  display: none;
+}
+
 .statistics-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -494,14 +541,46 @@
   outline-offset: 2px;
 }
 
+/*
+  Màn chi tiết phạm vi (và báo cáo giảng viên) là một CHỒNG khối: dải tóm tắt, thẻ
+  phân tích câu hỏi, rồi bảng con. Khác hẳn trang Bảng dữ liệu khảo sát vốn chỉ có
+  đúng một bảng chiếm trọn trang.
+
+  Nên cả màn cuộn một mạch ở đây, còn từng khối bên trong giữ nguyên chiều cao nội
+  dung của nó. Trước đây mọi khối đều là flex item co được nên thẻ phân tích bị cắt
+  cụt (bảng phân bố mất hẳn phần thân, khối bên dưới đè lên) và bảng con thì nuốt
+  hết chỗ trống rồi tự cuộn bên trong — tiêu đề cột bị ghim lại, chừa một ô nhìn
+  được vài dòng dù phân trang 20 dòng.
+*/
 .analysis-scope-detail {
   display: flex;
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 16px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+}
+
+.analysis-scope-detail > *,
+.analysis-scope-detail .section-analysis,
+/* `--grow` dành cho bảng chiếm trọn trang ở các tab chính; trong màn cuộn một mạch
+   này nó chỉ tạo ra một khoảng trắng thừa dưới bảng. */
+.analysis-scope-detail .analysis-section--grow {
+  flex: 0 0 auto;
+}
+
+/* Bảng con cao bằng nội dung: hết chỗ thì cả màn cuộn, không cuộn riêng trong ô. */
+.analysis-scope-detail .statistics-table-scroll {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+/*
+  Bỏ ghim dọc của hàng tiêu đề — `top: auto` chứ không phải `position: static`, vì
+  các ô tiêu đề của cột ghim trái vẫn cần `position: sticky` để chạy theo khi cuộn
+  ngang. Tiêu đề giờ trôi theo bảng đúng như trang Tiến độ thu phiếu.
+*/
+.analysis-scope-detail .statistics-table thead th {
+  top: auto;
 }
 
 .analysis-scope-subtable {

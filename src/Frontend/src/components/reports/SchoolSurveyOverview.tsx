@@ -1,12 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-  AlertTriangle,
-  BarChart3,
-  CircleAlert,
-  LoaderCircle,
-  Target,
-  Timer,
-} from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AlertTriangle, CircleAlert, LoaderCircle } from 'lucide-react';
 import { reportApi } from '../../services/reportApi';
 import type {
   QuestionRating,
@@ -87,10 +80,30 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
     void load();
   }, [load]);
 
+  // Bộ tham số của danh sách đang hiển thị, để không gọi lại API cho đúng thứ đã có.
+  const rankingKeyRef = useRef<string | null>(null);
+
   // Chỉ tải khi tab chất lượng đang mở, và bỏ luôn lần gọi thừa khi người dùng
   // còn đang gõ dở số lượng.
   useEffect(() => {
     if (analysisView !== 'quality' || !semesterId) return;
+
+    const key = `${semesterId}|${semesterSurveyId ?? ''}|${questionCount}|${questionLowest ? 'low' : 'high'}`;
+
+    // Mở lại tab không phải là lý do để gọi API: danh sách đang hiển thị vẫn đúng
+    // bộ tham số này. Trước đây mỗi lần bấm vào tab là một lần gọi lại, bảng mờ đi
+    // rồi sáng lại đúng bằng dữ liệu cũ.
+    if (rankingKeyRef.current === key) return;
+
+    // Mặc định của tab (5 tiêu chí điểm thấp nhất) trùng đúng phần bảng tổng quan
+    // đã tải sẵn, nên dùng luôn dữ liệu đó thay vì đi một vòng API cho ra cùng kết quả.
+    if (questionCount === defaultQuestionCount && questionLowest) {
+      rankingKeyRef.current = key;
+      setRankedQuestions(null);
+      setQuestionsLoading(false);
+      return;
+    }
+
     let cancelled = false;
     setQuestionsLoading(true);
     reportApi
@@ -101,7 +114,9 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
         lowest: questionLowest,
       })
       .then((questions) => {
-        if (!cancelled) setRankedQuestions(questions);
+        if (cancelled) return;
+        rankingKeyRef.current = key;
+        setRankedQuestions(questions);
       })
       .catch(() => {
         if (!cancelled) setRankedQuestions([]);
@@ -258,7 +273,6 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
     <section className="reports-exec" aria-label="Bảng tổng quan kết quả khảo sát toàn trường">
       <header className="reports-exec-header">
         <div className="reports-exec-heading">
-          <BarChart3 className="operation-icon" aria-hidden="true" />
           <div>
             <h2>Bảng tổng quan kết quả khảo sát toàn trường</h2>
           </div>
@@ -314,7 +328,7 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
             >
               Phiếu dùng để tính điểm
               <strong>{formatNumber(data.scoredValidResponseCount)}</strong>
-              <small>phiếu hợp lệ</small>
+              <small>phiếu hợp lệ của lớp đủ điều kiện</small>
             </span>
 
             <span
@@ -325,9 +339,21 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
               <strong>
                 {formatNumber(Math.max(0, data.totalResponses - data.scoredValidResponseCount))}
               </strong>
-              <small>thuộc lớp chưa đủ điều kiện</small>
+              <small>phiếu hợp lệ của lớp chưa đủ điều kiện</small>
             </span>
           </div>
+
+          {/*
+            Hai chữ "phiếu hợp lệ" và "lớp đủ điều kiện" lặp lại khắp dải số liệu và
+            các bảng bên dưới, nên nói rõ nghĩa đúng một lần ngay dưới dải thay vì để
+            người đọc đoán.
+          */}
+          <p className="reports-exec-band-note">
+            <strong>Phiếu hợp lệ</strong> là phiếu không bị lọc nhiễu (trả lời sai câu kiểm
+            tra chú ý, chọn cùng một mức cho mọi câu, làm nhanh bất thường).{' '}
+            <strong>Lớp đủ điều kiện</strong> là lớp qua cả hai ngưỡng tỷ lệ phản hồi và tỷ
+            lệ phiếu hợp lệ; chỉ những lớp này mới được tính vào điểm trung bình.
+          </p>
 
           <div className="reports-analysis-tabs" role="tablist" aria-label="Chọn nhóm phân tích">
             <button
@@ -364,7 +390,6 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
           <div className="reports-exec-grid reports-analysis-panel" role="tabpanel">
             <div className="reports-exec-card">
               <header className="reports-exec-card-head">
-                <Target className="operation-icon" aria-hidden="true" />
                 <h3>Điểm TB theo Khoa / Viện</h3>
                 <span className="reports-exec-card-note">Đường nét đứt = điểm TB toàn trường</span>
               </header>
@@ -377,7 +402,6 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
 
             <div className="reports-exec-card">
               <header className="reports-exec-card-head">
-                <Timer className="operation-icon" aria-hidden="true" />
                 <h3>Tỷ lệ hoàn thành theo Khoa / Viện</h3>
               </header>
               <FacultyCompletionChart
@@ -390,9 +414,8 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
 
           {/* Hàng thứ 2: xếp hạng tiêu chí, số lượng và đầu bảng do người dùng chọn */}
           {analysisView === 'quality' && (
-          <div className="reports-exec-card reports-analysis-panel" role="tabpanel">
+          <div className="reports-exec-card reports-analysis-panel reports-quality-card" role="tabpanel">
             <header className="reports-exec-card-head">
-              <AlertTriangle className="operation-icon" aria-hidden="true" />
               <h3>{questionLowest ? 'Tiêu chí cần cải tiến' : 'Tiêu chí được đánh giá cao'}</h3>
               <div className="reports-question-controls">
                 <label htmlFor="reports-question-count">Hiển thị</label>
@@ -425,7 +448,7 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
             >
               <WeakestQuestionsPanel
                 questions={rankedQuestions ?? data.weakestQuestions}
-                totalResponses={data.totalResponses}
+                validResponseCount={data.scoredValidResponseCount}
                 lowestFirst={questionLowest}
               />
             </div>

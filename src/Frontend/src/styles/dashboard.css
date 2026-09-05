@@ -897,6 +897,7 @@
 .executive-kpi-box {
   background: #ffffff;
   border: 1px solid #dfe4e8;
+  border-radius: 4px;
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
@@ -1075,6 +1076,8 @@
 .executive-table-card {
   background: #ffffff;
   border: 1px solid #dfe4e8;
+  border-radius: 4px;
+  overflow: hidden;
 }
 
 .executive-table-toolbar {
@@ -1131,32 +1134,55 @@
   font-weight: 600;
 }
 
+/*
+  Bảng giám sát dùng đúng quy chuẩn tiêu đề của cả hệ thống (xem .catalog-table
+  trong catalogs.css): chữ căn giữa cả hai chiều, được xuống dòng, nét ngăn cột đầy
+  đủ. Trước đây bảng này có bộ màu và cỡ chữ riêng nên đứng cạnh các bảng khác là
+  nhận ra ngay hai kiểu.
+*/
 .executive-grid-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  color: #20262c;
+  font-size: 12px;
   text-align: left;
 }
 
 .executive-grid-table th {
-  background: #f1f5f9;
-  color: #475569;
-  font-weight: 700;
-  font-size: 12px;
-  padding: 8px 12px;
-  border-bottom: 1px solid #cbd5e1;
-  letter-spacing: 0;
-  white-space: nowrap;
+  height: 46px;
+  padding: 4px;
+  border-right: 1px solid #e5e9ec;
+  border-bottom: 1px solid #cfd7dc;
+  background: #f7f9fa;
+  color: #404a52;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: normal;
+  vertical-align: middle;
+  text-align: center;
 }
 
 .executive-grid-table td {
-  padding: 6px 12px;
-  border-bottom: 1px solid #e2e8f0;
-  color: #1e293b;
+  height: 32px;
+  padding: 4px 10px;
+  border-right: 1px solid #e8ecef;
+  border-bottom: 1px solid #e3e7ea;
+  vertical-align: middle;
+  line-height: 1.35;
 }
 
-.executive-grid-table tr:hover td {
-  background: #f8fafc;
+.executive-grid-table th:last-child,
+.executive-grid-table td:last-child {
+  border-right: 0;
+}
+
+.executive-grid-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.executive-grid-table tbody tr:hover {
+  background: #f7fafb;
 }
 
 .executive-mini-bar {
