@@ -292,7 +292,10 @@ export interface SurveyResponseDetail {
 /** Phiếu khảo sát sinh viên thấy khi mở link hoặc quét QR. */
 export interface PublicSurvey {
   linkToken: string;
+  /** Tên BỘ CÂU HỎI — chuyện nội bộ, không dùng làm tiêu đề phiếu. */
   templateName: string;
+  /** Tên ĐỢT khảo sát do quản trị đặt; đây mới là tiêu đề sinh viên thấy. */
+  surveyName: string;
   courseCode: string;
   courseName: string;
   sectionName: string;

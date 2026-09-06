@@ -21,10 +21,12 @@ public class ResponseFilterTests
         ResponseFilter.MinimumSeconds(questionCount);
 
     [Fact]
-    public void MinimumSeconds_LaBaGiayMoiCau()
+    public void MinimumSeconds_LaMotRuoiGiayMoiCau()
     {
-        ResponseFilter.SecondsPerQuestion.Should().Be(3);
-        ResponseFilter.MinimumSeconds(30).Should().Be(90);
+        ResponseFilter.SecondsPerQuestion.Should().Be(1.5);
+        ResponseFilter.MinimumSeconds(30).Should().Be(45);
+        // Số câu lẻ thì ngưỡng lẻ nửa giây, không được làm tròn xuống.
+        ResponseFilter.MinimumSeconds(29).Should().Be(43.5);
     }
 
     [Fact]
@@ -55,8 +57,8 @@ public class ResponseFilterTests
             new FilterAnswer(3, "4"),
         };
 
-        // 3 câu, ngưỡng 9 giây.
-        var result = ResponseFilter.Evaluate(questions, answers, 8);
+        // 3 câu, ngưỡng 4.5 giây.
+        var result = ResponseFilter.Evaluate(questions, answers, 4);
 
         result.IsValid.Should().BeFalse();
         result.RejectionReasons.Should().Be(RejectionReasonCodes.TooFast);
@@ -68,8 +70,8 @@ public class ResponseFilterTests
         var questions = new[] { Scored(1), Scored(2) };
         var answers = new[] { new FilterAnswer(1, "5"), new FilterAnswer(2, "2") };
 
-        // 2 câu, ngưỡng đúng 6 giây.
-        var result = ResponseFilter.Evaluate(questions, answers, 6);
+        // 2 câu, ngưỡng đúng 3 giây.
+        var result = ResponseFilter.Evaluate(questions, answers, 3);
 
         result.IsValid.Should().BeTrue();
     }
@@ -77,7 +79,7 @@ public class ResponseFilterTests
     [Fact]
     public void CauTuNhapVaCauBay_VanTinhVaoNguongThoiGian()
     {
-        // 1 câu chấm điểm + 1 câu tự nhập + 1 câu bẫy = 3 câu, ngưỡng 9 giây.
+        // 1 câu chấm điểm + 1 câu tự nhập + 1 câu bẫy = 3 câu, ngưỡng 4.5 giây.
         var questions = new[] { Scored(1), Text(2), Trap(3, 3) };
         var answers = new[]
         {
@@ -86,9 +88,9 @@ public class ResponseFilterTests
             new FilterAnswer(3, "3"),
         };
 
-        ResponseFilter.Evaluate(questions, answers, 8).RejectionReasons
+        ResponseFilter.Evaluate(questions, answers, 4).RejectionReasons
             .Should().Be(RejectionReasonCodes.TooFast);
-        ResponseFilter.Evaluate(questions, answers, 9).IsValid
+        ResponseFilter.Evaluate(questions, answers, 4.5).IsValid
             .Should().BeTrue();
     }
 

@@ -582,6 +582,7 @@ public sealed record PublicSurveyQuestionDto(int QuestionId, string QuestionText
 /// </summary>
 public sealed record PublicSurveyDto(
     string LinkToken,
+    /// <summary>Tên BỘ CÂU HỎI. Không dùng làm tiêu đề phiếu — xem <paramref name="SurveyName"/>.</summary>
     string TemplateName,
     string CourseCode,
     string CourseName,
@@ -593,7 +594,12 @@ public sealed record PublicSurveyDto(
     DateTime EndTime,
     bool IsOpen,
     IReadOnlyList<AnswerScaleDto> AnswerScales,
-    IReadOnlyList<PublicSurveyQuestionDto> Questions);
+    IReadOnlyList<PublicSurveyQuestionDto> Questions,
+    /// <summary>
+    /// Tên ĐỢT khảo sát do quản trị đặt lúc tạo ("SemesterSurveys"."SurveyName").
+    /// Đây mới là tiêu đề sinh viên thấy; tên bộ câu hỏi là chuyện nội bộ.
+    /// </summary>
+    string SurveyName = "");
 
 /// <summary>
 /// <paramref name="AnswerValue"/> là số mức đã chọn ("1".."5") với câu thang

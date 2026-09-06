@@ -902,7 +902,10 @@ public sealed class EfSurveyService(
                     course?.CourseCode ?? string.Empty,
                     course?.CourseName ?? string.Empty,
                     section?.SectionName ?? string.Empty,
-                    lecturer?.FullName ?? string.Empty,
+                    // Lớp chưa gắn được mã giảng viên vẫn có tên đọc từ tệp import ở
+                    // UnidentifiedLecturerName. Bỏ qua nó thì cả bảng lẫn tệp Excel
+                    // xuất ra đều ghi "Chưa phân công" cho một lớp thật ra có người dạy.
+                    lecturer?.FullName ?? section?.UnidentifiedLecturerName ?? string.Empty,
                     departmentId is { } dId2 && departments.TryGetValue(dId2, out var department)
                         ? department.DepartmentName
                         : "Chưa thuộc bộ môn",
@@ -1327,7 +1330,8 @@ public sealed class EfSurveyService(
                 sectionSurvey.EndTime,
                 true,
                 scales,
-                questions);
+                questions,
+                semesterSurvey.SurveyName);
         });
 
         if (cached is null)
@@ -1716,6 +1720,12 @@ public sealed class EfSurveyService(
         {
             await ownTransaction.CommitAsync(cancellationToken);
         }
+
+        // Tổng quan toàn trường có cache 90 giây. Đây là thao tác làm điểm đổi trên
+        // diện rộng nhất của cả hệ thống, không dọn cache thì bấm xong mở Thống kê &
+        // Báo cáo hay Bảng điều khiển vẫn thấy số của lần chốt trước tới một phút
+        // rưỡi — mọi hồ sơ đều dính, không riêng người vừa bấm.
+        schoolOverviewCache.Bump();
 
         return Succeeded(new RecalculateScoresDto(semesterSurveyId, updated, calculatedAt));
     }

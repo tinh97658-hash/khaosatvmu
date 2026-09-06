@@ -789,7 +789,14 @@ export function App() {
     );
   }
 
-  return <DashboardApp />;
+  /*
+    Khoá theo hồ sơ đang dùng. Đổi hồ sơ là đổi luôn phạm vi dữ liệu được thấy,
+    nhưng các trang nạp dữ liệu trong useEffect chỉ phụ thuộc học kỳ / bộ lọc chứ
+    không phụ thuộc hồ sơ, nên chuyển từ quản trị sang trưởng bộ môn xong bảng vẫn
+    giữ nguyên danh sách cũ cho tới khi người dùng tự F5 — đọc ra là sai quyền.
+    Đổi key thì React tháo cả cây và dựng lại, mọi trang tự gọi lại API của mình.
+  */
+  return <DashboardApp key={auth.activeProfile?.id ?? 'none'} />;
 }
 
 export default App;

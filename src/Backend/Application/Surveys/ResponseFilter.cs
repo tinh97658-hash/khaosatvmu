@@ -41,14 +41,17 @@ public static class ResponseFilter
     /// <summary>
     /// Số giây tối thiểu cho mỗi câu hỏi. Viết cứng theo quyết định A-c, không
     /// đọc từ cấu hình và không cho sửa qua giao diện.
+    ///
+    /// Là số thực chứ không phải số nguyên: ngưỡng 1.5 giây/câu cho ra tổng lẻ
+    /// nửa giây với bộ đề có số câu lẻ, làm tròn xuống int sẽ nới ngưỡng ra.
     /// </summary>
-    public const int SecondsPerQuestion = 3;
+    public const double SecondsPerQuestion = 1.5;
 
     /// <summary>
     /// Ngưỡng thời gian tối thiểu của cả bài: tính trên TỔNG số câu, kể cả câu
     /// tự nhập chữ và câu bẫy (quyết định A-d).
     /// </summary>
-    public static int MinimumSeconds(int questionCount) => questionCount * SecondsPerQuestion;
+    public static double MinimumSeconds(int questionCount) => questionCount * SecondsPerQuestion;
 
     /// <summary>
     /// Chấm một phiếu. <paramref name="elapsedSeconds"/> là số giây từ lúc phát vé

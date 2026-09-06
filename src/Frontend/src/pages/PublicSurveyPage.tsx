@@ -1,19 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowRight,
   BookOpen,
   CalendarDays,
-  CheckCircle2,
   CircleAlert,
   ClipboardList,
+  Clock,
+  GraduationCap,
   Info,
-  ListChecks,
+  Lock,
+  MessageSquare,
   LoaderCircle,
-  PlayCircle,
   Send,
-  ShieldCheck,
   UserRound,
 } from 'lucide-react';
-import { ConfirmDialog } from '../components/Modal';
+import { Modal } from '../components/Modal';
 import { ApiError } from '../services/apiClient';
 import { publicSurveyApi, surveyErrorMessage } from '../services/surveyApi';
 import { maximumTextAnswerLength } from '../types';
@@ -64,44 +65,29 @@ function clearDraft(linkToken: string): void {
 
 type PublicSurveyQuestion = PublicSurvey['questions'][number];
 
-/**
- * Các câu liền nhau dùng chung một thang chọn mức được gộp thành một bảng ma
- * trận như trước; câu tự nhập chữ đứng riêng thành một ô nhập.
- */
-type QuestionBlock =
-  | { kind: 'options'; key: string; scale: AnswerScale; items: { question: PublicSurveyQuestion; order: number }[] }
-  | { kind: 'text'; key: string; scale: AnswerScale; question: PublicSurveyQuestion; order: number };
+/** Một câu hỏi kèm thang trả lời của nó và số thứ tự trong bộ đề. */
+interface QuestionRow {
+  question: PublicSurveyQuestion;
+  order: number;
+  scale: AnswerScale;
+}
 
-function buildQuestionBlocks(survey: PublicSurvey): QuestionBlock[] {
+/**
+ * Mỗi câu đứng riêng một thẻ. Trước đây các câu liền nhau dùng chung một thang
+ * được gộp thành bảng ma trận, nhưng bộ đề trộn nhiều loại thang thì bảng vỡ
+ * thành mấy khối rời rạc mỗi khối một bộ cột — nên bỏ hẳn cách gộp.
+ */
+function buildQuestionRows(survey: PublicSurvey): QuestionRow[] {
   const scaleById = new Map(survey.answerScales.map((scale) => [scale.answerScaleId, scale]));
-  const blocks: QuestionBlock[] = [];
+  const rows: QuestionRow[] = [];
 
   survey.questions.forEach((question, index) => {
     const scale = scaleById.get(question.answerScaleId);
     if (!scale) return;
-
-    const order = index + 1;
-
-    if (scale.scaleKind === 'Text') {
-      blocks.push({ kind: 'text', key: `text-${question.questionId}`, scale, question, order });
-      return;
-    }
-
-    const previous = blocks.at(-1);
-    if (previous?.kind === 'options' && previous.scale.answerScaleId === scale.answerScaleId) {
-      previous.items.push({ question, order });
-      return;
-    }
-
-    blocks.push({
-      kind: 'options',
-      key: `options-${scale.answerScaleId}-${question.questionId}`,
-      scale,
-      items: [{ question, order }],
-    });
+    rows.push({ question, order: index + 1, scale });
   });
 
-  return blocks;
+  return rows;
 }
 
 interface PublicSurveyPageProps {
@@ -117,13 +103,7 @@ function formatRange(startTime: string, endTime: string): string {
   return `${formatter.format(new Date(startTime))} → ${formatter.format(new Date(endTime))}`;
 }
 
-/** Dưới ngưỡng này thì đổi bảng ma trận sang từng thẻ câu hỏi cho dễ bấm. */
-const narrowScreenQuery = '(max-width: 760px)';
-
 export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken }) => {
-  const [isNarrow, setIsNarrow] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia(narrowScreenQuery).matches
-  );
   const [survey, setSurvey] = useState<PublicSurvey | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -136,6 +116,9 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  /** Ảnh bìa là tuỳ chọn: chưa đặt tệp vào thì gỡ luôn dải ảnh thay vì để ô vỡ. */
+  const [heroVisible, setHeroVisible] = useState(true);
+
   /**
    * Vé bắt đầu làm bài. Chưa có vé nghĩa là đang ở màn mở đầu; có vé thì vào màn
    * làm bài. Vé chính là mốc tính thời gian nên phải xin từ server, không tự sinh.
@@ -144,13 +127,6 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [confirmingSubmit, setConfirmingSubmit] = useState(false);
-
-  useEffect(() => {
-    const query = window.matchMedia(narrowScreenQuery);
-    const handleChange = (event: MediaQueryListEvent) => setIsNarrow(event.matches);
-    query.addEventListener('change', handleChange);
-    return () => query.removeEventListener('change', handleChange);
-  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -204,7 +180,7 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
     }
   };
 
-  const blocks = useMemo(() => (survey ? buildQuestionBlocks(survey) : []), [survey]);
+  const questionRows = useMemo(() => (survey ? buildQuestionRows(survey) : []), [survey]);
 
   const answeredCount = useMemo(
     () =>
@@ -278,15 +254,54 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
 
   if (submitted) {
     return (
-      <main className="public-survey">
-        <section className="public-survey-card public-survey-success" aria-live="polite">
-          <CheckCircle2 aria-hidden="true" />
-          <h1>Đã ghi nhận phiếu khảo sát</h1>
-          <p>
-            Cảm ơn bạn đã đánh giá lớp <strong>{survey.sectionName}</strong> - {survey.courseName}.
-            Ý kiến của bạn được ghi nhận ẩn danh.
-          </p>
-        </section>
+      <main className="public-survey public-survey--done">
+        <div className="public-quiz">
+          {heroVisible && (
+            <div className="public-intro-hero">
+              <img
+                src="/survey-hero.png"
+                alt=""
+                aria-hidden="true"
+                onError={() => setHeroVisible(false)}
+              />
+            </div>
+          )}
+
+          <section className="public-done" aria-live="polite">
+            {/* Dấu tích kèm mấy tia toả: vẽ luôn bằng SVG cho gọn, không thêm thư viện. */}
+            <svg
+              className="public-done-mark"
+              viewBox="0 0 96 96"
+              role="img"
+              aria-label="Đã gửi thành công"
+            >
+              <g stroke="#1f7a45" strokeWidth="4" strokeLinecap="round" opacity="0.75">
+                <line x1="48" y1="4" x2="48" y2="14" />
+                <line x1="18" y1="14" x2="25" y2="22" />
+                <line x1="78" y1="14" x2="71" y2="22" />
+                <line x1="6" y1="44" x2="16" y2="44" />
+                <line x1="90" y1="44" x2="80" y2="44" />
+              </g>
+              <circle cx="48" cy="52" r="22" fill="#1f7a45" />
+              <path
+                d="M38 52.5 45 59.5 58.5 45.5"
+                fill="none"
+                stroke="#ffffff"
+                strokeWidth="5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+
+            <h1>Đã gửi phiếu khảo sát thành công!</h1>
+            <p>
+              Cảm ơn bạn đã tham gia khảo sát. Ý kiến của bạn sẽ được tổng hợp và sử dụng để
+              cải thiện chất lượng giảng dạy.
+            </p>
+          </section>
+
+          <p className="public-intro-footnote">Phiên bản thử nghiệm</p>
+        </div>
       </main>
     );
   }
@@ -297,58 +312,207 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
   // ghi ra là chỉ luôn cho người làm ẩu biết cần ngồi chờ bao lâu cho đủ.
   if (!startTicket) {
     return (
-      <main className="public-survey">
-        <section className="public-survey-card public-survey-intro">
-          <div className="public-survey-note">
+      <main className="public-survey public-survey--intro">
+        <div className="public-intro">
+          {/*
+            Ảnh bìa tuỳ chọn: đặt tệp tại `src/Frontend/public/survey-hero.png`.
+            Không có tệp thì onError gỡ luôn cả dải, phiếu vẫn hiển thị bình thường
+            chứ không để lại một ô ảnh vỡ.
+          */}
+          {heroVisible && (
+            <div className="public-intro-hero">
+              <img
+                src="/survey-hero.png"
+                alt=""
+                aria-hidden="true"
+                onError={() => setHeroVisible(false)}
+              />
+            </div>
+          )}
+
+          <section className="public-intro-card">
+            <header className="public-intro-head">
+              {/* Tiêu đề là tên ĐỢT khảo sát; tên bộ câu hỏi là chuyện nội bộ. */}
+              <h1>{survey.surveyName || survey.templateName}</h1>
+              <p>
+                {survey.courseCode} – {survey.courseName}
+              </p>
+            </header>
+
+            <dl className="public-intro-meta">
+              <div className="public-intro-meta-item">
+                <ClipboardList aria-hidden="true" />
+                <div>
+                  <dt>Lớp học phần</dt>
+                  <dd>{survey.sectionName}</dd>
+                </div>
+              </div>
+              <div className="public-intro-meta-item">
+                <UserRound aria-hidden="true" />
+                <div>
+                  <dt>Giảng viên</dt>
+                  <dd>{survey.lecturerName || 'Chưa phân công'}</dd>
+                </div>
+              </div>
+              <div className="public-intro-meta-item">
+                <CalendarDays aria-hidden="true" />
+                <div>
+                  <dt>Học kỳ</dt>
+                  <dd>
+                    {survey.semesterName} ({survey.academicYearName})
+                  </dd>
+                </div>
+              </div>
+            </dl>
+
+            {/* Khoảng thời gian dài hơn hẳn bốn ô trên nên tách xuống một hàng riêng. */}
+            <dl className="public-intro-meta public-intro-meta--full">
+              <div className="public-intro-meta-item">
+                <Clock aria-hidden="true" />
+                <div>
+                  <dt>Thời gian làm bài</dt>
+                  <dd>{formatRange(survey.startTime, survey.endTime)}</dd>
+                </div>
+              </div>
+            </dl>
+
+            <div className="public-intro-notice">
+              <Info aria-hidden="true" />
+              <div>
+                <strong>Trước khi bắt đầu</strong>
+                <p>
+                  Vui lòng đọc kỹ từng câu hỏi và trả lời dựa trên trải nghiệm thực tế của bạn.
+                  Ý kiến của bạn sẽ được sử dụng để cải thiện chất lượng giảng dạy.
+                </p>
+              </div>
+            </div>
+
+            <div className="public-intro-notice">
+              <Lock aria-hidden="true" />
+              <div>
+                <strong>Cam kết ẩn danh</strong>
+                <p>
+                  Phiếu này không ghi tên, mã sinh viên hay bất kỳ thông tin nào nhận ra bạn.
+                  Giảng viên chỉ nhận được kết quả tổng hợp của cả lớp, không xem được từng
+                  phiếu riêng lẻ.
+                </p>
+              </div>
+            </div>
+
+            {!survey.isOpen && (
+              <div className="public-survey-alert" role="alert">
+                <CircleAlert aria-hidden="true" />
+                <span>Phiếu khảo sát chưa mở hoặc đã hết hạn nên không thể làm bài.</span>
+              </div>
+            )}
+
+            {startError && (
+              <div className="public-survey-alert" role="alert">
+                <CircleAlert aria-hidden="true" />
+                <span>{startError}</span>
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="public-intro-start"
+              disabled={!survey.isOpen || starting}
+              onClick={() => void handleStart()}
+            >
+              {starting ? (
+                <>
+                  <LoaderCircle className="auth-spin" aria-hidden="true" />
+                  Đang mở phiếu...
+                </>
+              ) : (
+                <>
+                  Bắt đầu làm bài
+                  <ArrowRight aria-hidden="true" />
+                </>
+              )}
+            </button>
+          </section>
+
+          <p className="public-intro-footnote">Phiên bản thử nghiệm</p>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="public-survey public-survey--quiz">
+      <div className="public-quiz">
+        {heroVisible && (
+          <div className="public-intro-hero">
+            <img
+              src="/survey-hero.png"
+              alt=""
+              aria-hidden="true"
+              onError={() => setHeroVisible(false)}
+            />
+          </div>
+        )}
+
+        <section className="public-quiz-card">
+          <span className="public-quiz-badge">
+            <GraduationCap aria-hidden="true" />
+            {survey.templateName}
+          </span>
+          <h1>{survey.surveyName || survey.templateName}</h1>
+
+          <dl className="public-quiz-meta">
+            <div className="public-quiz-meta-item">
+              <BookOpen aria-hidden="true" />
+              <div>
+                <dt>
+                  {survey.courseCode} – {survey.courseName}
+                </dt>
+                <dd>Lớp học phần: {survey.sectionName}</dd>
+              </div>
+            </div>
+            <div className="public-quiz-meta-item">
+              <UserRound aria-hidden="true" />
+              <div>
+                <dt>Giảng viên</dt>
+                <dd>{survey.lecturerName || 'Chưa phân công'}</dd>
+              </div>
+            </div>
+            <div className="public-quiz-meta-item">
+              <CalendarDays aria-hidden="true" />
+              <div>
+                <dt>
+                  {survey.semesterName} ({survey.academicYearName})
+                </dt>
+                <dd>Số câu hỏi: {totalQuestions}</dd>
+              </div>
+            </div>
+            <div className="public-quiz-meta-item">
+              <Clock aria-hidden="true" />
+              <div>
+                <dt>Phiếu mở</dt>
+                <dd>{formatRange(survey.startTime, survey.endTime)}</dd>
+              </div>
+            </div>
+          </dl>
+
+          {/* Không có phân trang câu hỏi nên thanh này chỉ báo đã trả lời tới đâu. */}
+          <div className="public-quiz-progress">
+            <span className="public-quiz-progress-label">
+              Câu hỏi {answeredCount} / {totalQuestions}
+            </span>
+            <div className="public-quiz-progress-bar" aria-hidden="true">
+              <span style={{ width: `${progress}%` }} />
+            </div>
+            <span className="public-quiz-progress-percent">{progress}%</span>
+          </div>
+
+          <div className="public-intro-notice">
             <Info aria-hidden="true" />
             <div>
-              <strong>Trước khi bắt đầu</strong>
+              <strong>Lưu ý trước khi làm bài</strong>
               <p>
-                Hãy đọc kỹ từng câu hỏi trước khi trả lời. Ý kiến của bạn được dùng để cải thiện
-                chất lượng giảng dạy nên rất cần sự nghiêm túc.
-              </p>
-            </div>
-          </div>
-
-          <header className="public-survey-header">
-            <h1>{survey.templateName}</h1>
-          </header>
-
-          <div className="public-survey-context">
-            <span>
-              <BookOpen aria-hidden="true" />
-              {survey.courseCode} - {survey.courseName}
-            </span>
-            <span>
-              <ClipboardList aria-hidden="true" />
-              Lớp học phần: <strong>{survey.sectionName}</strong>
-            </span>
-            <span>
-              <UserRound aria-hidden="true" />
-              Giảng viên: <strong>{survey.lecturerName || 'Chưa phân công'}</strong>
-            </span>
-            <span>
-              <CalendarDays aria-hidden="true" />
-              {survey.semesterName} ({survey.academicYearName})
-            </span>
-            <span>
-              <ListChecks aria-hidden="true" />
-              Số câu hỏi: <strong>{totalQuestions}</strong>
-            </span>
-            <span>
-              <CalendarDays aria-hidden="true" />
-              Phiếu mở: {formatRange(survey.startTime, survey.endTime)}
-            </span>
-          </div>
-
-          <div className="public-survey-pledge">
-            <ShieldCheck aria-hidden="true" />
-            <div>
-              <strong>Cam kết ẩn danh</strong>
-              <p>
-                Phiếu này không ghi tên, mã sinh viên hay bất kỳ thông tin nào nhận ra bạn.
-                Giảng viên chỉ nhận được kết quả tổng hợp của cả lớp, không xem được từng phiếu
-                riêng lẻ.
+                Vui lòng đọc kỹ từng câu hỏi và trả lời dựa trên trải nghiệm thực tế của bạn.
+                Ý kiến của bạn sẽ được sử dụng để cải thiện chất lượng giảng dạy.
               </p>
             </div>
           </div>
@@ -356,150 +520,71 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
           {!survey.isOpen && (
             <div className="public-survey-alert" role="alert">
               <CircleAlert aria-hidden="true" />
-              <span>Phiếu khảo sát chưa mở hoặc đã hết hạn nên không thể làm bài.</span>
+              <span>Phiếu khảo sát chưa mở hoặc đã hết hạn nên không thể nộp bài.</span>
             </div>
           )}
-
-          {startError && (
-            <div className="public-survey-alert" role="alert">
-              <CircleAlert aria-hidden="true" />
-              <span>{startError}</span>
-            </div>
-          )}
-
-          <div className="public-survey-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={!survey.isOpen || starting}
-              onClick={() => void handleStart()}
-            >
-              {starting ? (
-                <LoaderCircle className="auth-spin" aria-hidden="true" />
-              ) : (
-                <PlayCircle aria-hidden="true" />
-              )}
-              {starting ? 'Đang mở phiếu...' : 'Bắt đầu làm bài'}
-            </button>
-          </div>
         </section>
-      </main>
-    );
-  }
-
-  return (
-    <main className="public-survey">
-      <section className="public-survey-card">
-        <header className="public-survey-header">
-          <h1>{survey.templateName}</h1>
-          <p>Ý kiến của bạn rất quan trọng đối với chúng tôi.</p>
-
-          <div className="public-survey-context">
-            <span>
-              <BookOpen aria-hidden="true" />
-              {survey.courseCode} - {survey.courseName}
-            </span>
-            <span>
-              <ClipboardList aria-hidden="true" />
-              Lớp học phần: <strong>{survey.sectionName}</strong>
-            </span>
-            <span>
-              <UserRound aria-hidden="true" />
-              Giảng viên: <strong>{survey.lecturerName || 'Chưa phân công'}</strong>
-            </span>
-            <span>
-              <CalendarDays aria-hidden="true" />
-              {survey.semesterName} ({survey.academicYearName})
-            </span>
-          </div>
-        </header>
-
-        <div className="public-survey-note">
-          <Info aria-hidden="true" />
-          <div>
-            <strong>Hướng dẫn</strong>
-            <p>
-              Phiếu có nhiều dạng câu hỏi: câu chọn mức, câu Có/Không và câu tự nhập. Vui lòng
-              trả lời đủ tất cả câu hỏi. Phiếu mở trong khoảng{' '}
-              {formatRange(survey.startTime, survey.endTime)}.
-            </p>
-          </div>
-        </div>
-
-        {!survey.isOpen && (
-          <div className="public-survey-alert" role="alert">
-            <CircleAlert aria-hidden="true" />
-            <span>Phiếu khảo sát chưa mở hoặc đã hết hạn nên không thể nộp bài.</span>
-          </div>
-        )}
-
-        <div className="public-survey-progress">
-          <span>
-            {answeredCount}/{totalQuestions} câu hỏi
-          </span>
-          <div className="public-survey-progress-bar">
-            <span style={{ width: `${progress}%` }} />
-          </div>
-          <span>{progress}% hoàn thành</span>
-        </div>
 
         <form onSubmit={handleSubmitRequest}>
-          {blocks.map((block) => {
-            if (block.kind === 'text') {
-              const { question, order, scale } = block;
+          {/*
+            Mỗi câu một thẻ, kể cả khi nhiều câu liền nhau dùng chung một thang.
+            Bảng ma trận cũ chỉ gọn khi cả bộ đề dùng đúng một thang; bộ trộn thang
+            chọn mức với Có/Không và câu tự nhập thì nó vỡ thành mấy bảng rời rạc,
+            mỗi bảng một bộ cột khác nhau.
+          */}
+          <ol className="public-quiz-list">
+            {questionRows.map(({ question, order, scale }) => {
               const value = answers[question.questionId] ?? '';
 
               return (
-                <div className="public-survey-text-question" key={block.key}>
-                  <label htmlFor={`question-${question.questionId}`}>
-                    {order}. {question.questionText}
-                  </label>
-                  <textarea
-                    id={`question-${question.questionId}`}
-                    rows={3}
-                    maxLength={maximumTextAnswerLength}
-                    placeholder={`Nhập câu trả lời (${scale.answerScaleName})`}
-                    value={value}
-                    disabled={!survey.isOpen || submitting}
-                    onChange={(event) => {
-                      setAnswers((prev) => ({
-                        ...prev,
-                        [question.questionId]: event.target.value,
-                      }));
-                      setSubmitError(null);
-                    }}
-                  />
-                  <span className="public-survey-counter">
-                    {value.length}/{maximumTextAnswerLength}
-                  </span>
-                </div>
-              );
-            }
+                <li className="public-quiz-question" key={question.questionId}>
+                  <div className="public-quiz-question-head">
+                    <span className="public-quiz-number" aria-hidden="true">
+                      {order}
+                    </span>
+                    <p>{question.questionText}</p>
+                  </div>
 
-            const { scale, items } = block;
-
-            // Màn hẹp bấm ô radio trong bảng rất khó nên đổi sang từng thẻ.
-            if (isNarrow) {
-              return (
-                <ol className="public-survey-cards" key={block.key}>
-                  {items.map(({ question, order }) => (
-                    <li className="public-survey-question-card" key={question.questionId}>
-                      <p className="public-survey-question-text">
-                        {order}. {question.questionText}
-                      </p>
-                      <div
-                        className="public-survey-option-row"
-                        role="radiogroup"
+                  {scale.scaleKind === 'Text' ? (
+                    <div className="public-quiz-text">
+                      <textarea
+                        id={`question-${question.questionId}`}
+                        rows={3}
+                        maxLength={maximumTextAnswerLength}
+                        placeholder="Nhập câu trả lời của bạn..."
                         aria-label={question.questionText}
-                      >
-                        {scale.options.map((option) => (
-                          <label className="public-survey-option" key={option.answerScaleOptionId}>
-                            <span className="public-survey-option-value">{option.value}</span>
+                        value={value}
+                        disabled={!survey.isOpen || submitting}
+                        onChange={(event) => {
+                          setAnswers((prev) => ({
+                            ...prev,
+                            [question.questionId]: event.target.value,
+                          }));
+                          setSubmitError(null);
+                        }}
+                      />
+                      <span className="public-survey-counter">
+                        {value.length}/{maximumTextAnswerLength}
+                      </span>
+                    </div>
+                  ) : (
+                    <div
+                      className="public-quiz-options"
+                      role="radiogroup"
+                      aria-label={question.questionText}
+                    >
+                      {scale.options.map((option) => {
+                        const selected = value === String(option.value);
+                        return (
+                          <label
+                            className={selected ? 'public-quiz-option is-selected' : 'public-quiz-option'}
+                            key={option.answerScaleOptionId}
+                          >
                             <input
                               type="radio"
                               name={`question-${question.questionId}`}
                               value={option.value}
-                              checked={answers[question.questionId] === String(option.value)}
+                              checked={selected}
                               disabled={!survey.isOpen || submitting}
                               onChange={() => {
                                 setAnswers((prev) => ({
@@ -509,78 +594,34 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
                                 setSubmitError(null);
                               }}
                             />
-                            <span className="public-survey-sr-only">{option.displayText}</span>
+                            <span className="public-quiz-option-value">{option.value}</span>
+                            <span className="public-quiz-option-label">{option.displayText}</span>
                           </label>
-                        ))}
-                      </div>
-                      <div className="public-survey-option-legend">
-                        <span>{scale.options[0]?.displayText}</span>
-                        <span>{scale.options[scale.options.length - 1]?.displayText}</span>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
+                        );
+                      })}
+                    </div>
+                  )}
+                </li>
               );
-            }
+            })}
+          </ol>
 
-            return (
-              <div className="public-survey-table-scroll" key={block.key}>
-                <table className="public-survey-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">{scale.answerScaleName}</th>
-                      {scale.options.map((option) => (
-                        <th key={option.answerScaleOptionId} scope="col">
-                          {option.displayText}
-                          <small>({option.value})</small>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map(({ question, order }) => (
-                      <tr key={question.questionId}>
-                        <th scope="row">
-                          {order}. {question.questionText}
-                        </th>
-                        {scale.options.map((option) => (
-                          <td key={option.answerScaleOptionId}>
-                            <label className="public-survey-radio">
-                              <input
-                                type="radio"
-                                name={`question-${question.questionId}`}
-                                value={option.value}
-                                checked={answers[question.questionId] === String(option.value)}
-                                disabled={!survey.isOpen || submitting}
-                                onChange={() => {
-                                  setAnswers((prev) => ({
-                                    ...prev,
-                                    [question.questionId]: String(option.value),
-                                  }));
-                                  setSubmitError(null);
-                                }}
-                              />
-                              <span className="public-survey-sr-only">
-                                {question.questionText}: {option.displayText}
-                              </span>
-                            </label>
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })}
-
-          <div className="public-survey-comments">
-            <label htmlFor="public-survey-comments">Ý kiến khác của bạn (nếu có)</label>
+          <section className="public-quiz-card public-quiz-comments">
+            <span className="public-quiz-badge">
+              <MessageSquare aria-hidden="true" />
+              Ý kiến khác
+            </span>
+            <h2>Ý kiến khác của bạn (nếu có)</h2>
+            <p className="public-quiz-comments-hint">
+              Bạn có thể chia sẻ thêm ý kiến, đề xuất hoặc góp ý khác về giảng dạy, học phần
+              hoặc nhà trường (không bắt buộc).
+            </p>
             <textarea
               id="public-survey-comments"
-              rows={4}
+              rows={5}
               maxLength={maximumCommentLength}
               placeholder="Nhập ý kiến của bạn tại đây..."
+              aria-label="Ý kiến khác của bạn"
               value={comments}
               disabled={!survey.isOpen || submitting}
               onChange={(event) => setComments(event.target.value)}
@@ -588,7 +629,7 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
             <span className="public-survey-counter">
               {comments.length}/{maximumCommentLength}
             </span>
-          </div>
+          </section>
 
           {submitError && (
             <div className="public-survey-alert" role="alert">
@@ -597,45 +638,97 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
             </div>
           )}
 
-          <div className="public-survey-actions">
-            <button type="submit" className="btn btn-primary" disabled={!survey.isOpen || submitting}>
-              {submitting ? (
+          {/*
+            Chỉ còn đúng một nút. Cả phiếu nằm trên một trang cuộn dọc nên "Quay lại"
+            và "Tiếp theo" không dẫn đi đâu cả.
+          */}
+          <button
+            type="submit"
+            className="public-intro-start public-quiz-submit"
+            disabled={!survey.isOpen || submitting}
+          >
+            {submitting ? (
+              <>
                 <LoaderCircle className="auth-spin" aria-hidden="true" />
-              ) : (
+                Đang gửi...
+              </>
+            ) : (
+              <>
                 <Send aria-hidden="true" />
-              )}
-              {submitting ? 'Đang gửi...' : 'Nộp bài khảo sát'}
-            </button>
-          </div>
+                Nộp bài khảo sát
+              </>
+            )}
+          </button>
         </form>
 
-        <footer className="public-survey-footer">
-          Thông tin của bạn được ghi nhận ẩn danh và chỉ dùng cho mục đích khảo sát.
-        </footer>
-      </section>
+        <p className="public-intro-footnote">Phiên bản thử nghiệm</p>
+      </div>
 
       {/* Server tính thời gian từ lúc phát vé tới lúc nhận request nên hộp thoại
           này nằm trong khoảng đó, ngồi phân vân lâu cũng không sao vì chỉ chặn
           ngưỡng dưới. */}
-      <ConfirmDialog
+      <Modal
         isOpen={confirmingSubmit}
         onClose={() => setConfirmingSubmit(false)}
-        onConfirm={() => void handleSubmitConfirmed()}
-        title="Nộp phiếu khảo sát?"
-        recordName={`${survey.sectionName} - ${survey.courseName}`}
-        confirmText="Nộp bài"
-        confirmVariant="primary"
-        message={
-          <>
-            Bạn sắp nộp phiếu đánh giá lớp{' '}
-            <strong>
-              {survey.sectionName} - {survey.courseName}
-            </strong>
-            .
-          </>
-        }
-        warning="Sau khi nộp bạn không sửa lại được câu trả lời."
-      />
+        title="Xác nhận nộp bài"
+        size="compact"
+      >
+        {/*
+          Dùng lại vỏ Modal để giữ nguyên phím Esc, bấm ra ngoài và trả tiêu điểm
+          về chỗ cũ; phần tiêu đề của vỏ được CSS ẩn đi vì bản thiết kế đặt tiêu
+          đề vào giữa thân hộp.
+        */}
+        <div className="public-submit-confirm">
+          <span className="public-submit-icon" aria-hidden="true">
+            !
+          </span>
+          <h2>Xác nhận nộp bài</h2>
+          <p>
+            Bạn đã hoàn thành tất cả các câu hỏi.
+            <br />
+            Bạn có chắc chắn <strong>muốn nộp bài khảo sát</strong> không?
+          </p>
+
+          <dl className="public-submit-facts">
+            <div>
+              <dt>Môn học:</dt>
+              <dd>
+                {survey.courseCode} - {survey.courseName}
+              </dd>
+            </div>
+            <div>
+              <dt>Lớp học phần:</dt>
+              <dd>{survey.sectionName}</dd>
+            </div>
+            <div>
+              <dt>Giảng viên:</dt>
+              <dd>{survey.lecturerName || 'Chưa phân công'}</dd>
+            </div>
+            <div>
+              <dt>Số câu hỏi:</dt>
+              <dd>{totalQuestions}</dd>
+            </div>
+          </dl>
+
+          <div className="public-submit-actions">
+            <button
+              type="button"
+              className="public-submit-cancel"
+              onClick={() => setConfirmingSubmit(false)}
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              className="public-submit-ok"
+              onClick={() => void handleSubmitConfirmed()}
+            >
+              <Send aria-hidden="true" />
+              Nộp bài
+            </button>
+          </div>
+        </div>
+      </Modal>
     </main>
   );
 };

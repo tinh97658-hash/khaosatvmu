@@ -7,7 +7,6 @@ import {
   LoaderCircle,
   Target,
   TriangleAlert,
-  UserRound,
 } from 'lucide-react';
 import { useSemester } from '../context/semesterContext';
 import { DataTable } from '../components/DataTable';
@@ -49,7 +48,7 @@ interface ProgressItem {
 const progressColumns = [
   { key: 'code', header: 'Mã lớp HP', width: 14, align: 'center' as const },
   { key: 'name', header: 'Tên lớp học phần', width: 28 },
-  { key: 'lecturerName', header: 'Giảng viên phụ trách', width: 24 },
+  { key: 'lecturerName', header: 'Giảng viên', width: 24 },
   { key: 'departmentName', header: 'Bộ môn', width: 20 },
   { key: 'facultyName', header: 'Khoa / Viện', width: 22 },
   { key: 'targetCount', header: 'Sĩ số', width: 10, type: 'number' as const, align: 'right' as const },
@@ -203,14 +202,11 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
     },
     {
       key: 'lecturerName',
-      header: 'Giảng viên phụ trách',
+      header: 'Giảng viên',
       width: '14%',
       filterValue: (item) => item.lecturerName,
       render: (item) => (
-        <span className="operations-primary-text">
-          <UserRound className="operation-icon" aria-hidden="true" />
-          {item.lecturerName}
-        </span>
+        <span className="operations-primary-text">{item.lecturerName}</span>
       ),
     },
     {
