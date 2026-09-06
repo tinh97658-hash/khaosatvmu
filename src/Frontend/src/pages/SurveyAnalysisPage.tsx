@@ -5,6 +5,8 @@ import {
   LoaderCircle,
   RefreshCw,
 } from 'lucide-react';
+import { useAuth } from '../auth/authContext';
+import { isReadOnlyRole, isUnrestrictedRole } from '../auth/roles';
 import { useSemester } from '../context/semesterContext';
 import { QuestionAnalysisChart } from '../components/QuestionAnalysisChart';
 import { TablePagination } from '../components/TablePagination';
@@ -119,31 +121,46 @@ function buildAnalysisHash(route: AnalysisRouteState): string {
   return `#${path}${queryString ? `?${queryString}` : ''}`;
 }
 
-const tabs: { id: TabId; label: string; hint: string }[] = [
+/**
+ * `minimumRole` cho biết tab mở tới đâu:
+ * - `unrestricted`: chỉ ADMIN / SURVEY_ADMIN. Mặt bằng toàn trường là bức tranh cả
+ *   trường, không phải việc của trưởng bộ môn hay giảng viên.
+ * - `manager`: từ trưởng bộ môn trở lên.
+ * - `all`: mọi vai trò mở được trang này.
+ *
+ * Ẩn nút không phải là khoá — backend từ chối hai endpoint của tab `manager` khi
+ * người gọi là giảng viên.
+ */
+const tabs: { id: TabId; label: string; hint: string; minimumRole: 'unrestricted' | 'manager' | 'all' }[] = [
   {
     id: 'normalization',
     label: 'Mặt bằng toàn trường',
     hint: 'Điểm trung bình từng khoa/viện. Cột Z-Score so điểm TB khoa với trung bình toàn trường theo sai số chuẩn σ/√n, chia bậc 1σ · 2σ · 3σ.',
+    minimumRole: 'unrestricted',
   },
   {
     id: 'departments',
     label: 'Tổng hợp theo khoa/viện',
     hint: 'Phục vụ trưởng khoa: mỗi dòng là một bộ môn trong đợt khảo sát.',
+    minimumRole: 'manager',
   },
   {
     id: 'courses',
     label: 'Tổng hợp theo bộ môn',
     hint: 'So các lớp trong cùng một học phần để biết vấn đề nằm ở học phần hay ở giảng viên.',
+    minimumRole: 'manager',
   },
   {
     id: 'normalizationSections',
     label: 'Phân tích theo lớp học phần',
     hint: 'So điểm thô giữa các lớp khác khoa là so sai. Z-score đưa mọi lớp về cùng một thước.',
+    minimumRole: 'all',
   },
   {
     id: 'lecturer',
     label: 'Báo cáo giảng viên',
     hint: 'Tổng hợp kết quả đánh giá theo từng giảng viên trong đợt khảo sát. Bấm vào giảng viên để xem chi tiết các lớp giảng dạy.',
+    minimumRole: 'all',
   },
 ];
 
@@ -264,6 +281,7 @@ const tabNotes: Partial<Record<TabId, React.ReactNode>> = {
 };
 
 export const SurveyAnalysisPage: React.FC = () => {
+  const { activeProfile } = useAuth();
   const { academicYears, activeSemesterId } = useSemester();
   const [initialRoute] = useState(parseAnalysisRoute);
 
@@ -464,10 +482,33 @@ export const SurveyAnalysisPage: React.FC = () => {
     [academicYears]
   );
 
+  // Danh sách tab của riêng vai trò đang dùng. Đổi hồ sơ là App dựng lại cả cây
+  // nên chỗ này tự tính lại, không cần theo dõi gì thêm.
+  const visibleTabs = useMemo(() => {
+    const roleCode = activeProfile?.roleCode;
+    if (isUnrestrictedRole(roleCode)) return tabs;
+    if (isReadOnlyRole(roleCode)) return tabs.filter((item) => item.minimumRole === 'all');
+    return tabs.filter((item) => item.minimumRole !== 'unrestricted');
+  }, [activeProfile?.roleCode]);
+
   const activeTab = useMemo(
-    () => tabs.find((item) => item.id === tab) ?? tabs[0],
-    [tab]
+    () => visibleTabs.find((item) => item.id === tab) ?? visibleTabs[0],
+    [tab, visibleTabs]
   );
+
+  // Đường dẫn có thể trỏ thẳng vào một tab mà vai trò này không mở được — người
+  // dùng lưu dấu trang từ hồ sơ khác chẳng hạn. Đưa về tab đầu tiên hợp lệ.
+  useEffect(() => {
+    if (visibleTabs.some((item) => item.id === tab)) return;
+    const fallback = visibleTabs[0];
+    if (!fallback) return;
+    navigateAnalysis({
+      tab: fallback.id,
+      semesterId: Number(semesterId) || undefined,
+      semesterSurveyId: Number(semesterSurveyId) || undefined,
+      selection: null,
+    }, true);
+  }, [navigateAnalysis, semesterId, semesterSurveyId, tab, visibleTabs]);
   const thresholds = useScoringThresholds();
 
   // Nút chú thích của tab được truyền xuống để mỗi tab đặt nó vào cuối dòng tóm
@@ -968,7 +1009,7 @@ export const SurveyAnalysisPage: React.FC = () => {
       </div>
 
       <nav className="analysis-tabs" aria-label="Các góc nhìn phân tích">
-        {tabs.map((item) => (
+        {visibleTabs.map((item) => (
           <button
             key={item.id}
             type="button"
@@ -2523,7 +2564,6 @@ const LecturerReportView: React.FC<{
       value: (row) => (row.zDepartment === null ? '—' : row.zDepartment.toFixed(2)),
       sortValue: (row) => row.zDepartment,
     },
-    { key: 'verdict', value: (row) => zVerdict(row.zDepartment).label },
   ], []);
   const filters = useColumnFilters(report.sections, columns);
   const totalClassSize = report.sections.reduce((sum, row) => sum + row.classSize, 0);
@@ -2586,12 +2626,10 @@ const LecturerReportView: React.FC<{
                 <th scope="col">{filters.filterHeader('zSchool', 'Z-Score toàn trường')}</th>
                 <th scope="col">{filters.filterHeader('zFaculty', 'Z-Score trong khoa')}</th>
                 <th scope="col">{filters.filterHeader('zDepartment', 'Z-Score trong bộ môn')}</th>
-                <th scope="col">{filters.filterHeader('verdict', 'Nhận xét')}</th>
               </tr>
             </thead>
             <tbody>
               {filters.visibleRows.map((section) => {
-                const verdict = zVerdict(section.zDepartment);
                 return (
                   <tr
                     key={section.courseSectionSurveyId}
@@ -2661,9 +2699,6 @@ const LecturerReportView: React.FC<{
                       {section.zDepartment === null
                         ? '—'
                         : `${section.zDepartment > 0 ? '+' : ''}${section.zDepartment.toFixed(2)}`}
-                    </td>
-                    <td>
-                      <span className={verdict.className}>{verdict.label}</span>
                     </td>
                   </tr>
                 );

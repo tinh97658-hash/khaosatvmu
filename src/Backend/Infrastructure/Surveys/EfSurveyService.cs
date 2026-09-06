@@ -2336,6 +2336,14 @@ public sealed class EfSurveyService(
         int semesterSurveyId,
         CancellationToken cancellationToken = default)
     {
+        // Bảng tổng hợp theo khoa/viện là công cụ của cấp quản lý bộ môn trở lên;
+        // giảng viên không có tab này nên chặn luôn ở đây, ẩn nút không phải là khoá.
+        var summaryScope = await userScope.ResolveAsync(cancellationToken);
+        if (summaryScope.SeesOnlyOwn)
+        {
+            return Failed<SemesterSurveyDepartmentSummaryDto>(SurveyErrorCodes.OutOfScope);
+        }
+
         var header = await LoadSurveyHeaderAsync(semesterSurveyId, cancellationToken);
         if (header is null)
         {
@@ -2388,10 +2396,19 @@ public sealed class EfSurveyService(
         var schoolAverageScore = schoolScores.Count == 0 ? (decimal?)null : Math.Round(schoolScores.Average(), 2);
         var schoolWarningCount = rows.Sum(x => x.WarningSectionCount);
 
-        var scope = await userScope.ResolveAsync(cancellationToken);
+        // Trưởng bộ môn xem được mọi bộ môn TRONG KHOA của mình: bảng này sinh ra để
+        // so bộ môn với bộ môn, chỉ còn đúng một dòng của chính mình thì không so được
+        // với ai. Mặt bằng ở chân bảng vẫn là toàn trường nên vẫn có mốc lớn mà đối chiếu.
+        //
+        // Giảng viên không mở được tab này; nếu gọi thẳng API thì vẫn giữ mức hẹp nhất.
+        var scope = summaryScope;
         var visibleRows = scope.SeesEverything
             ? rows
-            : rows.Where(x => x.DepartmentId == scope.DepartmentId).ToList();
+            : scope.SeesOnlyOwn
+                ? rows.Where(x => x.DepartmentId == scope.DepartmentId).ToList()
+                : scope.FacultyId is { } scopeFacultyId
+                    ? rows.Where(x => x.FacultyId == scopeFacultyId).ToList()
+                    : [];
 
         return Succeeded(new SemesterSurveyDepartmentSummaryDto(
             semesterSurveyId,
@@ -2410,6 +2427,13 @@ public sealed class EfSurveyService(
         int semesterSurveyId,
         CancellationToken cancellationToken = default)
     {
+        // Cùng lý do với bảng tổng hợp theo khoa/viện: giảng viên không mở tab này.
+        var diagnosisScope = await userScope.ResolveAsync(cancellationToken);
+        if (diagnosisScope.SeesOnlyOwn)
+        {
+            return Failed<SemesterSurveyCourseDiagnosisDto>(SurveyErrorCodes.OutOfScope);
+        }
+
         var header = await LoadSurveyHeaderAsync(semesterSurveyId, cancellationToken);
         if (header is null)
         {
