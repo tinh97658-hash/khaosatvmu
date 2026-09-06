@@ -3,11 +3,14 @@ import { FileSpreadsheet, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
+import { useAuth } from '../auth/authContext';
+import { canCreateOrDeleteCatalog } from '../auth/roles';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { FacultyImportDialog } from '../components/FacultyImportDialog';
 import { catalogErrorMessage, type CatalogImportResponse } from '../services/catalogApi';
 import type { ImportFacultyRow } from '../utils/facultyImportExcel';
 import type { Department, Faculty, Major } from '../types';
+import { foldVietnamese } from '../utils/vietnamese';
 
 interface FacultiesPageProps {
   faculties: Faculty[];
@@ -27,6 +30,9 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
   onDeleteFaculty,
   onImportFaculties,
 }) => {
+  // Thêm và xoá là việc của quản trị; trưởng bộ môn và giảng viên chỉ xem và sửa.
+  const { activeProfile } = useAuth();
+  const canManageCatalog = canCreateOrDeleteCatalog(activeProfile?.roleCode);
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -104,9 +110,9 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
     return result;
   };
 
-  const normalized = search.trim().toLowerCase();
+  const normalized = foldVietnamese(search);
   const filtered = faculties.filter(
-    (faculty) => !normalized || faculty.facultyName.toLowerCase().includes(normalized)
+    (faculty) => !normalized || foldVietnamese(faculty.facultyName).includes(normalized)
   );
 
   // Bề rộng để theo phần trăm, không để pixel: bảng chỉ có bốn cột nên với màn
@@ -153,15 +159,17 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
           >
             <Pencil aria-hidden="true" size={15} />
           </button>
-          <button
-            type="button"
-            className="catalog-icon-button catalog-icon-button--danger"
-            onClick={() => setToDelete(item)}
-            aria-label={`Xóa ${item.facultyName}`}
-            title="Xóa"
-          >
-            <Trash2 aria-hidden="true" size={15} />
-          </button>
+          {canManageCatalog && (
+            <button
+              type="button"
+              className="catalog-icon-button catalog-icon-button--danger"
+              onClick={() => setToDelete(item)}
+              aria-label={`Xóa ${item.facultyName}`}
+              title="Xóa"
+            >
+              <Trash2 aria-hidden="true" size={15} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -182,7 +190,7 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm nhanh theo tên khoa viện..."
-        onAddNew={openCreate}
+        onAddNew={canManageCatalog ? openCreate : undefined}
         addNewLabel="Thêm khoa viện"
         toolbarActions={(
           <button

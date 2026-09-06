@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.UserAdministration;
 
-public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdministrationService
+public sealed partial class EfUserAdministrationService(AppDbContext db) : IUserAdministrationService
 {
     private const int MaximumPageSize = 100;
 
@@ -733,7 +733,8 @@ public sealed class EfUserAdministrationService(AppDbContext db) : IUserAdminist
                 x.IsDefault,
                 x.LastSelectedAt,
                 x.CreatedAt,
-                x.UpdatedAt)).ToList());
+                x.UpdatedAt)).ToList(),
+            user.LecturerId);
 
     private async Task ClearDefaultProfileAsync(
         Guid userId,

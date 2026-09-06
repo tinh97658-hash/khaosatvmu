@@ -16,7 +16,8 @@ import {
 import type { ImportLecturerRow } from '../utils/lecturerImportExcel';
 import type { Department, Faculty, Lecturer, Position } from '../types';
 import { useAuth } from '../auth/authContext';
-import { isUnrestrictedRole } from '../auth/roles';
+import { canCreateOrDeleteCatalog, isUnrestrictedRole } from '../auth/roles';
+import { foldVietnamese } from '../utils/vietnamese';
 
 interface LecturersPageProps {
   lecturers: Lecturer[];
@@ -71,6 +72,8 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
   // chỉ dành cho quản trị thì ẩn nút đi cho gọn. Chặn thật nằm ở backend.
   const { activeProfile } = useAuth();
   const canManageAll = isUnrestrictedRole(activeProfile?.roleCode);
+  // Thêm và xoá là việc của quản trị; trưởng bộ môn chỉ xem và sửa.
+  const canManageCatalog = canCreateOrDeleteCatalog(activeProfile?.roleCode);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -257,11 +260,11 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
     ? departments.filter((department) => String(department.facultyId) === form.facultyId)
     : departments;
 
-  const normalized = search.trim().toLowerCase();
+  const normalized = foldVietnamese(search);
   const filtered = lecturers.filter((lecturer) => {
     const matchesSearch =
       !normalized ||
-      lecturer.fullName.toLowerCase().includes(normalized) ||
+      foldVietnamese(lecturer.fullName).includes(normalized) ||
       (lecturer.email ?? '').toLowerCase().includes(normalized);
     const matchesFaculty = !facultyFilter || String(lecturer.facultyId) === facultyFilter;
     return matchesSearch && matchesFaculty;
@@ -363,7 +366,7 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
         ] : undefined}
         currentFilter={facultyFilter}
         onFilterChange={setFacultyFilter}
-        onAddNew={openCreate}
+        onAddNew={canManageCatalog ? openCreate : undefined}
         addNewLabel="Thêm giảng viên"
         toolbarActions={(
           <>
@@ -371,7 +374,7 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
               type="button"
               className="btn btn-secondary btn-sm catalog-add-button"
               onClick={() => {
-                openPositionCreate();
+                if (canManageCatalog) openPositionCreate();
                 setIsPositionsOpen(true);
               }}
             >
@@ -542,15 +545,17 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
                     >
                       <Pencil aria-hidden="true" size={15} />
                     </button>
-                    <button
-                      type="button"
-                      className="catalog-icon-button catalog-icon-button--danger"
-                      onClick={() => setDeletingPositionId(position.positionId)}
-                      aria-label={`Xóa chức vụ ${position.positionName}`}
-                      title="Xóa"
-                    >
-                      <Trash2 aria-hidden="true" size={15} />
-                    </button>
+                    {canManageCatalog && (
+                      <button
+                        type="button"
+                        className="catalog-icon-button catalog-icon-button--danger"
+                        onClick={() => setDeletingPositionId(position.positionId)}
+                        aria-label={`Xóa chức vụ ${position.positionName}`}
+                        title="Xóa"
+                      >
+                        <Trash2 aria-hidden="true" size={15} />
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

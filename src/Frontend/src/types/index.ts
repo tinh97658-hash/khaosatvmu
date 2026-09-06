@@ -104,6 +104,13 @@ export interface CourseSection {
   classSize: number;
   /** Tên giảng viên chưa gắn được vào bảng "Lecturers" vì thiếu email. */
   unidentifiedLecturerName: string | null;
+  /**
+   * Tên người dạy do API gửi kèm. Đừng tra lại từ danh sách giảng viên: danh sách đó
+   * đã bị lọc theo phạm vi người xem nên lớp do giảng viên bộ môn khác dạy hộ sẽ
+   * không tra ra tên.
+   */
+  lecturerName: string | null;
+  lecturerEmail: string | null;
 }
 
 export interface Criterion {
@@ -422,6 +429,11 @@ export interface AdminUser {
   createdAt: string;
   updatedAt: string;
   profiles: AdminProfile[];
+  /**
+   * Hồ sơ giảng viên gắn với tài khoản; null với tài khoản quản trị thuần.
+   * Màn cấp hồ sơ dùng nó để sinh 6 chữ số đầu của mã hồ sơ.
+   */
+  lecturerId: number | null;
 }
 
 export interface ImportAdminUserRow {
@@ -442,6 +454,21 @@ export interface AdminUserImportResult {
   createdCount: number;
   skippedCount: number;
   items: AdminUserImportItem[];
+}
+
+/** Một dòng của kết quả cấp hồ sơ hàng loạt. */
+export interface AdminProfileImportItem {
+  rowNumber: number;
+  email: string;
+  succeeded: boolean;
+  errorCode: string | null;
+}
+
+export interface AdminProfileImportResult {
+  totalCount: number;
+  createdCount: number;
+  skippedCount: number;
+  items: AdminProfileImportItem[];
 }
 
 export interface AdminRole {

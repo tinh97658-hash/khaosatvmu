@@ -35,6 +35,7 @@ import type {
   Criterion,
 } from '../types';
 import '../styles/survey-operations.css';
+import { foldVietnamese } from '../utils/vietnamese';
 
 interface CampaignsPageProps {
   campaigns: SurveyCampaign[];
@@ -179,10 +180,10 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   const filteredCampaigns = React.useMemo(() => campaigns.filter((cmp) => {
       const matchesTab = cmp.type === activeTab;
       const matchesSearch =
-        cmp.title.toLowerCase().includes(search.toLowerCase()) ||
-        (cmp.classCode && cmp.classCode.toLowerCase().includes(search.toLowerCase())) ||
-        (cmp.courseName && cmp.courseName.toLowerCase().includes(search.toLowerCase())) ||
-        (cmp.majorName && cmp.majorName.toLowerCase().includes(search.toLowerCase()));
+        foldVietnamese(cmp.title).includes(search.toLowerCase()) ||
+        (cmp.classCode && foldVietnamese(cmp.classCode).includes(search.toLowerCase())) ||
+        (cmp.courseName && foldVietnamese(cmp.courseName).includes(search.toLowerCase())) ||
+        (cmp.majorName && foldVietnamese(cmp.majorName).includes(search.toLowerCase()));
 
       const matchesSemester = semesterFilter ? cmp.semester === semesterFilter : true;
       const matchesAcademicYear = academicYearFilter ? cmp.academicYear === academicYearFilter : true;

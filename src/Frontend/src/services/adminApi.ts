@@ -10,6 +10,7 @@ import type {
   RolePermissionGrantDto,
   RolePermissionMatrix,
   SaveAdminProfile,
+  AdminProfileImportResult,
 } from '../types';
 import { apiRequest, csrfRequest } from './apiClient';
 
@@ -32,6 +33,11 @@ export const adminApi = {
     csrfRequest<AdminUser>('/api/admin/users', 'POST', { email, displayName }),
   importUsers: (users: ImportAdminUserRow[]) =>
     csrfRequest<AdminUserImportResult>('/api/admin/users/import', 'POST', { users }),
+  /** Cấp hồ sơ Giảng viên cho mọi tài khoản chưa có hồ sơ nào. */
+  bulkCreateLecturerProfiles: () =>
+    csrfRequest<AdminProfileImportResult>('/api/admin/users/profiles/bulk-lecturer', 'POST'),
+  importProfiles: (profiles: { rowNumber: number; email: string; roleLabel: string }[]) =>
+    csrfRequest<AdminProfileImportResult>('/api/admin/users/profiles/import', 'POST', { profiles }),
   setUserStatus: (userId: string, isActive: boolean) =>
     csrfRequest<AdminUser>(`/api/admin/users/${userId}/status`, 'PATCH', { isActive }),
   roles: () => apiRequest<AdminRole[]>('/api/admin/roles'),

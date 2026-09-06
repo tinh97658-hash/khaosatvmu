@@ -46,6 +46,7 @@ import {
 } from '../utils/reportThresholds';
 import '../styles/survey-operations.css';
 import '../styles/reports.css';
+import { foldVietnamese } from '../utils/vietnamese';
 
 /** Một đơn vị (Khoa hoặc Bộ môn) gộp từ kết quả để xếp hạng. */
 interface RankedUnit {
@@ -186,7 +187,7 @@ const RankedUnitTable: React.FC<RankedUnitTableProps> = ({
 
   const exportConfig = useMemo(() => ({
     title: `BÁO CÁO XẾP HẠNG ${title.toUpperCase()}`,
-    fileName: `xep-hang-${title.toLowerCase().includes('khoa') ? 'khoa-vien' : 'bo-mon'}`,
+    fileName: `xep-hang-${foldVietnamese(title).includes('khoa') ? 'khoa-vien' : 'bo-mon'}`,
     subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
     columns: [
       { key: 'name', header: unitHeader, width: 28 },

@@ -51,6 +51,35 @@ public static class UserAdministrationEndpoints
             return ToResult(result);
         }).AddEndpointFilter<RequireAntiforgeryFilter>();
 
+        // Cấp hồ sơ Giảng viên cho mọi tài khoản chưa có hồ sơ nào, một cú bấm.
+        group.MapPost("/users/profiles/bulk-lecturer", async (
+            ClaimsPrincipal principal,
+            IUserAdministrationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await service.BulkCreateLecturerProfilesAsync(
+                GetRequiredGuidClaim(principal, ClaimTypes.NameIdentifier),
+                cancellationToken);
+            return ToResult(result);
+        }).AddEndpointFilter<RequireAntiforgeryFilter>();
+
+        // Cấp hồ sơ theo tệp Excel: mỗi dòng một email kèm tên vai trò.
+        group.MapPost("/users/profiles/import", async (
+            ImportProfilesRequest request,
+            ClaimsPrincipal principal,
+            IUserAdministrationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var commands = request.Profiles?
+                .Select(x => new ImportAdminProfileRowCommand(x.RowNumber, x.Email ?? string.Empty, x.RoleLabel))
+                .ToList() ?? [];
+            var result = await service.ImportProfilesAsync(
+                commands,
+                GetRequiredGuidClaim(principal, ClaimTypes.NameIdentifier),
+                cancellationToken);
+            return ToResult(result);
+        }).AddEndpointFilter<RequireAntiforgeryFilter>();
+
         group.MapPatch("/users/{userId:guid}/status", async (
             Guid userId,
             SetStatusRequest request,
@@ -206,6 +235,10 @@ public static class UserAdministrationEndpoints
     public sealed record ImportUsersRequest(IReadOnlyList<ImportUserRowRequest>? Users);
 
     public sealed record ImportUserRowRequest(int RowNumber, string Email, string? DisplayName);
+
+    public sealed record ImportProfilesRequest(IReadOnlyList<ImportProfileRowRequest>? Profiles);
+
+    public sealed record ImportProfileRowRequest(int RowNumber, string Email, string? RoleLabel);
 
     public sealed record SetStatusRequest(bool IsActive);
 

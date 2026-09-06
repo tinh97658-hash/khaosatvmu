@@ -27,6 +27,7 @@ import type {
 } from '../types';
 import '../styles/survey-operations.css';
 import '../styles/reports.css';
+import { foldVietnamese } from '../utils/vietnamese';
 
 interface SectionSurveyResponsesPageProps {
   courseSectionSurveyId: number;
@@ -184,7 +185,7 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
   // Ý kiến của phiếu bị lọc không dùng được vào kết quả nào nên không đếm.
   const commentedCount = validResponses.filter((response) => response.additionalComments).length;
 
-  const normalized = search.trim().toLowerCase();
+  const normalized = foldVietnamese(search);
   const filtered = responses.filter(
     (response) =>
       !normalized ||

@@ -36,7 +36,8 @@ import type {
 } from '../types';
 import { useSemester } from '../context/semesterContext';
 import { useAuth } from '../auth/authContext';
-import { isReadOnlyRole, isUnrestrictedRole } from '../auth/roles';
+import { canCreateOrDeleteCatalog, isReadOnlyRole, isUnrestrictedRole } from '../auth/roles';
+import { foldVietnamese } from '../utils/vietnamese';
 
 interface ClassesPageProps {
   courses: Course[];
@@ -232,6 +233,8 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
   // Import lấy bộ môn từ tệp nên chỉ quản trị mới được dùng; ẩn nút cho gọn.
   const { activeProfile } = useAuth();
   const canManageAll = isUnrestrictedRole(activeProfile?.roleCode);
+  // Thêm và xoá là việc của quản trị; trưởng bộ môn chỉ xem và sửa.
+  const canManageCatalog = canCreateOrDeleteCatalog(activeProfile?.roleCode);
   // Giảng viên chỉ theo dõi lớp mình dạy, không sửa gì trên trang này.
   const readOnly = isReadOnlyRole(activeProfile?.roleCode);
 
@@ -616,14 +619,14 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
 
   // ----- Bảng lớp học phần --------------------------------------------------
 
-  const normalized = search.trim().toLowerCase();
+  const normalized = foldVietnamese(search);
   const filteredSections = sections
     .filter((section) => !showOnlyUnidentified || section.lecturerId === null)
     .filter((section) => {
       if (!normalized) return true;
       const course = courseOf(section.courseId);
       return (
-        section.sectionName.toLowerCase().includes(normalized) ||
+        foldVietnamese(section.sectionName).includes(normalized) ||
         (course?.courseName ?? '').toLowerCase().includes(normalized) ||
         (course?.courseCode ?? '').toLowerCase().includes(normalized)
       );
@@ -701,7 +704,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
       filterValue: (item) =>
         item.lecturerId === null
           ? `⚠ ${item.unidentifiedLecturerName || 'Chưa có giảng viên'}`
-          : (lecturerOf(item.lecturerId)?.fullName ?? '—'),
+          : (item.lecturerName ?? lecturerOf(item.lecturerId)?.fullName ?? '—'),
       render: (item) => {
         // Lớp chưa xác định được giảng viên: hiện tên đọc từ tệp import kèm
         // cảnh báo để quản trị hoặc trưởng bộ môn biết cần bổ sung email.
@@ -717,11 +720,17 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
           );
         }
 
+        // Tên lấy thẳng từ API. Danh sách giảng viên tải về đã bị lọc theo phạm vi
+        // nên không tra ra người của bộ môn khác dạy hộ; chỉ dùng nó làm dự phòng.
         const lecturer = lecturerOf(item.lecturerId);
         return (
           <div>
-            <div className="catalog-cell-primary">{lecturer?.fullName ?? '—'}</div>
-            <div className="catalog-cell-meta">{lecturer?.email ?? '—'}</div>
+            <div className="catalog-cell-primary">
+              {item.lecturerName ?? lecturer?.fullName ?? '—'}
+            </div>
+            <div className="catalog-cell-meta">
+              {item.lecturerEmail ?? lecturer?.email ?? '—'}
+            </div>
           </div>
         );
       },
@@ -758,15 +767,17 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
           >
             <Pencil aria-hidden="true" size={15} />
           </button>
-          <button
-            type="button"
-            className="catalog-icon-button catalog-icon-button--danger"
-            onClick={() => setSectionToDelete(item)}
-            aria-label={`Xóa lớp ${item.sectionName}`}
-            title="Xóa"
-          >
-            <Trash2 aria-hidden="true" size={15} />
-          </button>
+          {canManageCatalog && (
+            <button
+              type="button"
+              className="catalog-icon-button catalog-icon-button--danger"
+              onClick={() => setSectionToDelete(item)}
+              aria-label={`Xóa lớp ${item.sectionName}`}
+              title="Xóa"
+            >
+              <Trash2 aria-hidden="true" size={15} />
+            </button>
+          )}
         </div>
       ),
     });
@@ -981,7 +992,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
                 subtitle: `${selectedYear?.academicYearName || ''}`,
                 subInstitution: 'PHÒNG ĐÀO TẠO',
               }}
-              onAddNew={readOnly ? undefined : openCreateSection}
+              onAddNew={canManageCatalog ? openCreateSection : undefined}
               addNewLabel="Thêm lớp học phần"
               toolbarActions={canManageAll ? (
                 <button

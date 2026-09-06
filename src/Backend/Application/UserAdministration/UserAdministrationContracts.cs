@@ -24,7 +24,12 @@ public sealed record AdminUserDto(
     DateTime? LastLoginAt,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    IReadOnlyList<AdminProfileDto> Profiles);
+    IReadOnlyList<AdminProfileDto> Profiles,
+    /// <summary>
+    /// Hồ sơ giảng viên gắn với tài khoản ("Users"."LecturerId"); null với tài khoản
+    /// quản trị thuần. Màn cấp hồ sơ dùng nó để sinh mã hồ sơ 6 chữ số.
+    /// </summary>
+    int? LecturerId = null);
 
 public sealed record AdminRoleDto(Guid Id, string Code, string Name, string? Description);
 
@@ -78,6 +83,65 @@ public sealed record AdminPage<T>(IReadOnlyList<T> Items, int Page, int PageSize
 public sealed record CreateAdminUserCommand(string Email, string? DisplayName);
 
 public sealed record ImportAdminUserRowCommand(int RowNumber, string Email, string? DisplayName);
+
+/// <summary>
+/// Quy ước đặt tên và mã hồ sơ. Nằm ở backend vì cả ba đường tạo hồ sơ — thủ công,
+/// tạo hàng loạt và import Excel — đều phải cho ra cùng một kết quả.
+/// <para>
+/// Mã hồ sơ = 6 chữ số mã giảng viên + 2 ký tự vai trò. Giảng viên 36 làm trưởng bộ
+/// môn thì mã là <c>000036BM</c>. Tài khoản chưa gắn hồ sơ giảng viên dùng 000000.
+/// </para>
+/// </summary>
+public static class ProfileNaming
+{
+    public static readonly IReadOnlyDictionary<string, (string Name, string Suffix)> ByRoleCode =
+        new Dictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ADMIN"] = ("Admin hệ thống", "AD"),
+            ["DEPARTMENT_MANAGER"] = ("Trưởng bộ môn", "BM"),
+            ["LECTURER"] = ("Giảng viên", "GV"),
+            ["SURVEY_ADMIN"] = ("Quản trị khảo sát", "QT"),
+        };
+
+    public static string CodeFor(int? lecturerId, string suffix) =>
+        $"{(lecturerId ?? 0):D6}{suffix}";
+
+    /// <summary>
+    /// Tra vai trò từ tên tiếng Việt trong tệp Excel, hoặc từ chính mã vai trò. Nhận
+    /// cả hai để người điền tệp không phải nhớ mã hệ thống.
+    /// </summary>
+    public static string? RoleCodeFromLabel(string? value)
+    {
+        var text = (value ?? string.Empty).Trim();
+        if (text.Length == 0) return null;
+
+        foreach (var (roleCode, naming) in ByRoleCode)
+        {
+            if (string.Equals(text, roleCode, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(text, naming.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                return roleCode;
+            }
+        }
+
+        return null;
+    }
+}
+
+/// <summary>Một dòng của tệp Excel cấp hồ sơ hàng loạt.</summary>
+public sealed record ImportAdminProfileRowCommand(int RowNumber, string Email, string? RoleLabel);
+
+public sealed record AdminProfileImportItemDto(
+    int RowNumber,
+    string Email,
+    bool Succeeded,
+    string? ErrorCode);
+
+public sealed record AdminProfileImportDto(
+    int TotalCount,
+    int CreatedCount,
+    int SkippedCount,
+    IReadOnlyList<AdminProfileImportItemDto> Items);
 
 public sealed record AdminUserImportItemDto(
     int RowNumber,
@@ -134,6 +198,21 @@ public interface IUserAdministrationService
     Task<AdminOperationResult<AdminUserDto>> SetUserStatusAsync(
         Guid userId,
         bool isActive,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cấp hồ sơ Giảng viên cho MỌI tài khoản đã gắn hồ sơ giảng viên mà chưa có hồ sơ
+    /// nào. Chỉ làm đúng mức giảng viên; trưởng bộ môn và quản trị phải cấp bằng tệp
+    /// Excel hoặc thủ công vì còn phải chọn đúng người.
+    /// </summary>
+    Task<AdminOperationResult<AdminProfileImportDto>> BulkCreateLecturerProfilesAsync(
+        Guid actorUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Cấp hồ sơ theo tệp Excel: mỗi dòng một email kèm tên vai trò.</summary>
+    Task<AdminOperationResult<AdminProfileImportDto>> ImportProfilesAsync(
+        IReadOnlyList<ImportAdminProfileRowCommand> commands,
         Guid actorUserId,
         CancellationToken cancellationToken = default);
 
@@ -207,5 +286,14 @@ public static class UserAdministrationErrorCodes
     public const string ProfileCodeExists = "ADMIN_PROFILE_CODE_EXISTS";
     public const string ProfileAssignmentExists = "ADMIN_PROFILE_ASSIGNMENT_EXISTS";
     public const string RoleNotFound = "ADMIN_ROLE_NOT_FOUND";
+
+    /// <summary>Vai trò trong tệp Excel không khớp tên nào của hệ thống.</summary>
+    public const string ImportRoleInvalid = "ADMIN_IMPORT_ROLE_INVALID";
+
+    /// <summary>Tài khoản đã có sẵn hồ sơ với đúng vai trò này.</summary>
+    public const string ImportProfileExists = "ADMIN_IMPORT_PROFILE_EXISTS";
+
+    /// <summary>Không có tài khoản nào cần cấp hồ sơ.</summary>
+    public const string NoProfilesToCreate = "ADMIN_NO_PROFILES_TO_CREATE";
     public const string CannotModifyActiveProfile = "ADMIN_CANNOT_MODIFY_ACTIVE_PROFILE";
 }

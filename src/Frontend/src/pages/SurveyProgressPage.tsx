@@ -17,6 +17,7 @@ import {
   LAGGING_COMPLETION_RATE,
 } from '../utils/reportThresholds';
 import '../styles/survey-operations.css';
+import { foldVietnamese } from '../utils/vietnamese';
 
 interface SurveyProgressPageProps {
   semesterSurveys: SemesterSurvey[];
@@ -133,9 +134,9 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
 
   const filtered = progressItems.filter(
     (item) =>
-      item.code.toLowerCase().includes(search.toLowerCase()) ||
-      item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.lecturerName.toLowerCase().includes(search.toLowerCase())
+      foldVietnamese(item.code).includes(search.toLowerCase()) ||
+      foldVietnamese(item.name).includes(search.toLowerCase()) ||
+      foldVietnamese(item.lecturerName).includes(search.toLowerCase())
   );
 
   const exportConfig = useMemo(() => {

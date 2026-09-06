@@ -35,14 +35,14 @@ const quickActions: QuickAction[] = [
   {
     tab: 'classes',
     title: 'Lớp học phần',
-    description: 'Lớp tôi dạy',
+    description: 'Các lớp đang phụ trách',
     icon: BookOpen,
     tone: 'blue',
   },
   {
     tab: 'course-campaigns',
-    title: 'Khảo sát học phần',
-    description: 'Phiếu của lớp tôi',
+    title: 'Danh sách đợt khảo sát',
+    description: 'Phiếu khảo sát của các lớp',
     icon: ClipboardCheck,
     tone: 'teal',
   },
@@ -90,6 +90,9 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
           surveyApi.semesterSurveys(activeSemesterId),
         ]);
         if (cancelled) return;
+        // Thiếu dòng này thì danh sách đợt luôn rỗng: ô chọn đợt không bao giờ hiện
+        // ra và dòng mô tả báo "chưa có đợt nào" ngay cả khi số liệu bên dưới đã có.
+        setSemesterSurveys(surveys);
         let chosenSurveyId: number | null = null;
         setSelectedSurveyId((current) => {
           chosenSurveyId = current && surveys.some((s) => s.semesterSurveyId === current)
@@ -191,22 +194,22 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
       <section className="dashboard-block">
         <div className="dashboard-block-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <h2>Lớp của tôi</h2>
+            <h2>Lớp học phần phụ trách</h2>
             <p>
               {selectedSurvey
                 ? `Đợt khảo sát: ${selectedSurvey.surveyName}`
-                : 'Học kỳ này chưa có đợt khảo sát nào cho lớp của bạn'}
+                : 'Học kỳ này chưa có đợt khảo sát nào'}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             {semesterSurveys.length > 0 && (
               <div className="executive-compare-select" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <label htmlFor="lec-dashboard-survey-select" style={{ fontSize: '12px', color: '#475569', fontWeight: 600 }}>Đợt khảo sát:</label>
+                <label htmlFor="lec-dashboard-survey-select" style={{ fontSize: '13px', color: '#20262c', fontWeight: 600 }}>Đợt khảo sát:</label>
                 <select
                   id="lec-dashboard-survey-select"
                   value={selectedSurveyId ?? ''}
                   onChange={(e) => void handleSelectSurvey(e.target.value ? Number(e.target.value) : null)}
-                  style={{ height: '32px', padding: '0 8px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '3px' }}
+                  style={{ height: '34px', padding: '0 8px', fontSize: '13px', color: '#20262c', border: '1px solid #cbd5e1', borderRadius: '3px' }}
                 >
                   {semesterSurveys.map((survey) => (
                     <option key={survey.semesterSurveyId} value={survey.semesterSurveyId}>
@@ -270,7 +273,7 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
         ) : (
           <div className="department-metric-grid">
             <div className="department-metric">
-              <span className="department-metric__label">Lớp tôi dạy</span>
+              <span className="department-metric__label">Lớp học phần phụ trách</span>
               <strong className="department-metric__value">
                 {metrics ? metrics.sectionCount : '—'}
               </strong>

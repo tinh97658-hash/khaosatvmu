@@ -25,16 +25,18 @@
 
 .dashboard-block-heading h2 {
   color: #20262c;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.35;
 }
 
+/* Dòng mô tả dưới tiêu đề: cùng tông với nhãn của các thẻ số, không để mỗi khối
+   một mức xám riêng. */
 .dashboard-block-heading p {
-  margin-top: 2px;
-  color: #68737d;
-  font-size: 11px;
-  line-height: 1.35;
+  margin-top: 3px;
+  color: #46515a;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .dashboard-heading-actions,
@@ -305,9 +307,15 @@
   font-size: 11px;
 }
 
+/*
+  Chia đều theo SỐ THẺ THẬT chứ không chốt cứng 4 cột: trang giảng viên có 3 thẻ,
+  trang trưởng bộ môn có 4. Chốt 4 thì trang 3 thẻ chừa lại một cột trống, thẻ cuối
+  mất nét ngăn phải nên trông rộng hơn hẳn hai thẻ kia.
+*/
 .dashboard-quick-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
 }
 
 .dashboard-quick-action {
@@ -373,15 +381,15 @@
 }
 
 .dashboard-quick-copy strong {
-  color: #283138;
-  font-size: 12px;
+  color: #20262c;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .dashboard-quick-copy small {
-  margin-top: 2px;
-  color: #758089;
-  font-size: 10px;
+  margin-top: 3px;
+  color: #46515a;
+  font-size: 12px;
 }
 
 .dashboard-quick-arrow {
@@ -396,6 +404,7 @@
 
 @media (max-width: 1180px) {
   .dashboard-quick-grid {
+    grid-auto-flow: row;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -429,6 +438,7 @@
   }
 
   .dashboard-quick-grid {
+    grid-auto-flow: row;
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -1308,8 +1318,8 @@
 }
 
 .department-metric__label {
-  color: #40505a;
-  font-size: 11px;
+  color: #20262c;
+  font-size: 13px;
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -1324,8 +1334,8 @@
 
 /* Con số toàn trường để so. Nhạt hơn hẳn số chính để không ai đọc nhầm hai cái. */
 .department-metric__compare {
-  color: #6b7a85;
-  font-size: 11px;
+  color: #46515a;
+  font-size: 13px;
 }
 
 .department-feed {

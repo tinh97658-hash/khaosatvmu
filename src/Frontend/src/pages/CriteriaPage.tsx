@@ -6,6 +6,7 @@ import type { Column } from '../components/DataTable';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import type { Criterion } from '../types';
 import '../styles/survey-operations.css';
+import { foldVietnamese } from '../utils/vietnamese';
 
 interface CriteriaPageProps {
   criteria: Criterion[];
@@ -50,9 +51,9 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
   const filtered = criteria.filter((c) => {
     const matchesTab = c.category === activeTab;
     const matchesSearch =
-      c.question.toLowerCase().includes(search.toLowerCase()) ||
-      c.groupName.toLowerCase().includes(search.toLowerCase()) ||
-      c.code.toLowerCase().includes(search.toLowerCase());
+      foldVietnamese(c.question).includes(search.toLowerCase()) ||
+      foldVietnamese(c.groupName).includes(search.toLowerCase()) ||
+      foldVietnamese(c.code).includes(search.toLowerCase());
     return matchesTab && matchesSearch;
   });
 

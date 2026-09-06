@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using Application.Auth;
 using Application.Catalog;
@@ -96,8 +98,11 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
         IReadOnlyList<ImportFacultyRowCommand> rows,
         CancellationToken cancellationToken = default)
     {
+        // Kiểm trùng bằng khoá BỎ DẤU: "Công trình thuỷ" và "Công trình thủy" là cùng
+        // một khoa gõ theo hai kiểu đặt dấu. Cho tạo cả hai thì mọi tệp import sau đó
+        // tra tên khoa sẽ trúng nhầm cái này hoặc cái kia.
         var existingNames = (await db.Faculties.Select(x => x.FacultyName).ToListAsync(cancellationToken))
-            .Select(NormalizeKey)
+            .Select(NormalizeLooseKey)
             .ToHashSet();
         var seenInFile = new HashSet<string>();
         var items = new List<CatalogImportItemDto>(rows.Count);
@@ -112,7 +117,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
                 continue;
             }
 
-            var key = NormalizeKey(name);
+            var key = NormalizeLooseKey(name);
             if (existingNames.Contains(key))
             {
                 items.Add(new CatalogImportItemDto(row.RowNumber, name, null, false, CatalogErrorCodes.FacultyNameExists));
@@ -276,7 +281,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
             int? facultyId = null;
             if (facultyName.Length > 0)
             {
-                if (!facultyIdByName.TryGetValue(NormalizeKey(facultyName), out var found))
+                if (!facultyIdByName.TryGet(facultyName, out var found))
                 {
                     items.Add(new CatalogImportItemDto(row.RowNumber, name, facultyName, false, CatalogErrorCodes.FacultyNotFound));
                     continue;
@@ -371,10 +376,15 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
 
     private async Task<bool> PositionNameTakenAsync(string name, int? exceptPositionId, CancellationToken cancellationToken)
     {
-        var normalized = NormalizeKey(name);
-        return await db.Positions
+        // So bằng khoá BỎ DẤU nên phải tra trong bộ nhớ: "Thuỷ lực" và "Thủy lực" là
+        // cùng một tên gõ theo hai kiểu đặt dấu, cho tạo cả hai là hỏng mọi phép tra
+        // theo tên về sau. Danh mục chỉ vài trăm dòng nên tải hết về không tốn gì.
+        var normalized = NormalizeLooseKey(name);
+        var existing = await db.Positions
             .Where(x => exceptPositionId == null || x.PositionId != exceptPositionId)
-            .AnyAsync(x => x.PositionName.Trim().ToLower() == normalized, cancellationToken);
+            .Select(x => x.PositionName)
+            .ToListAsync(cancellationToken);
+        return existing.Any(x => NormalizeLooseKey(x) == normalized);
     }
 
     // ------------------------------------------------------------------ Majors
@@ -474,7 +484,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
                 items.Add(new CatalogImportItemDto(row.RowNumber, name, facultyName, false, CatalogErrorCodes.MajorFacultyRequired));
                 continue;
             }
-            if (!facultyIdByName.TryGetValue(NormalizeKey(facultyName), out var facultyId))
+            if (!facultyIdByName.TryGet(facultyName, out var facultyId))
             {
                 items.Add(new CatalogImportItemDto(row.RowNumber, name, facultyName, false, CatalogErrorCodes.FacultyNotFound));
                 continue;
@@ -744,7 +754,28 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
         }
 
         var sections = await query.OrderBy(x => x.SectionName).ToListAsync(cancellationToken);
-        return sections.Select(ToDto).ToList();
+
+        // Tra tên người dạy ngay tại đây, KHÔNG lọc theo bộ môn của người xem: đây là
+        // giảng viên của chính những lớp mà họ đã được phép thấy, giấu tên đi thì cột
+        // Giảng viên trống trơn mà lớp vẫn hiện.
+        var lecturerIds = sections
+            .Where(x => x.LecturerId.HasValue)
+            .Select(x => x.LecturerId!.Value)
+            .Distinct()
+            .ToList();
+        var lecturerById = lecturerIds.Count == 0
+            ? []
+            : await db.Lecturers.AsNoTracking()
+                .Where(x => lecturerIds.Contains(x.LecturerId))
+                .ToDictionaryAsync(x => x.LecturerId, x => x, cancellationToken);
+
+        return sections
+            .Select(section => ToDto(
+                section,
+                section.LecturerId is { } lecturerId
+                    ? lecturerById.GetValueOrDefault(lecturerId)
+                    : null))
+            .ToList();
     }
 
     public async Task<CatalogOperationResult<CourseSectionDto>> CreateCourseSectionAsync(
@@ -982,7 +1013,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
             }
             else if (departmentName.Length > 0)
             {
-                if (!departmentIdByName.TryGetValue(NormalizeKey(departmentName), out var foundDepartment))
+                if (!departmentIdByName.TryGet(departmentName, out var foundDepartment))
                 {
                     itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.DepartmentNotFound);
                     continue;
@@ -994,7 +1025,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
             var facultyName = row.FacultyName?.Trim() ?? string.Empty;
             if (facultyName.Length > 0)
             {
-                if (!facultyIdByName.TryGetValue(NormalizeKey(facultyName), out var foundFaculty))
+                if (!facultyIdByName.TryGet(facultyName, out var foundFaculty))
                 {
                     itemsByRow[row.RowNumber] = new CatalogImportItemDto(row.RowNumber, sectionName, courseCode, false, CatalogErrorCodes.FacultyNotFound);
                     continue;
@@ -1103,7 +1134,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
             {
                 departmentId = parsedDepartmentId;
             }
-            else if (departmentName.Length > 0 && departmentIdByName.TryGetValue(NormalizeKey(departmentName), out var foundDept))
+            else if (departmentName.Length > 0 && departmentIdByName.TryGet(departmentName, out var foundDept))
             {
                 departmentId = foundDept;
             }
@@ -1655,7 +1686,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
             int? facultyId = null;
             if (facultyName.Length > 0)
             {
-                if (!facultyIdByName.TryGetValue(NormalizeKey(facultyName), out var foundFaculty))
+                if (!facultyIdByName.TryGet(facultyName, out var foundFaculty))
                 {
                     items.Add(new CatalogImportItemDto(row.RowNumber, fullName, facultyName, false, CatalogErrorCodes.FacultyNotFound));
                     continue;
@@ -1667,7 +1698,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
             var departmentName = row.DepartmentName?.Trim() ?? string.Empty;
             if (departmentName.Length > 0)
             {
-                if (!departmentIdByName.TryGetValue(NormalizeKey(departmentName), out var foundDepartment))
+                if (!departmentIdByName.TryGet(departmentName, out var foundDepartment))
                 {
                     items.Add(new CatalogImportItemDto(row.RowNumber, fullName, facultyName, false, CatalogErrorCodes.DepartmentNotFound));
                     continue;
@@ -1681,7 +1712,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
             {
                 positionName = CatalogDefaults.PositionName;
             }
-            if (!positionIdByName.TryGetValue(NormalizeKey(positionName), out var positionId))
+            if (!positionIdByName.TryGet(positionName, out var positionId))
             {
                 items.Add(new CatalogImportItemDto(row.RowNumber, fullName, facultyName, false, CatalogErrorCodes.PositionNotFound));
                 continue;
@@ -1929,7 +1960,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
             int? facultyId = null;
             if (facultyName.Length > 0)
             {
-                if (!facultyIdByName.TryGetValue(NormalizeKey(facultyName), out var foundFaculty))
+                if (!facultyIdByName.TryGet(facultyName, out var foundFaculty))
                 {
                     items.Add(new CatalogImportItemDto(row.RowNumber, name, facultyName, false, CatalogErrorCodes.FacultyNotFound));
                     continue;
@@ -1941,7 +1972,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
             var departmentName = row.DepartmentName?.Trim() ?? string.Empty;
             if (departmentName.Length > 0)
             {
-                if (!departmentIdByName.TryGetValue(NormalizeKey(departmentName), out var foundDepartment))
+                if (!departmentIdByName.TryGet(departmentName, out var foundDepartment))
                 {
                     items.Add(new CatalogImportItemDto(row.RowNumber, name, facultyName, false, CatalogErrorCodes.DepartmentNotFound));
                     continue;
@@ -1992,6 +2023,85 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
     // ------------------------------------------------------------------ Helpers
 
     private static string NormalizeKey(string value) => value.Trim().ToLowerInvariant();
+
+    /// <summary>
+    /// Khoá tra cứu NỚI cho tên tiếng Việt: bỏ hết dấu thanh và đổi đ thành d.
+    ///
+    /// <para>
+    /// Cùng một tên có thể được gõ ra hai chuỗi ký tự khác hẳn nhau:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>Đặt dấu theo kiểu cũ hay kiểu mới — "thuỷ" và "thủy", "hoà" và "hòa".</item>
+    /// <item>Ký tự dựng sẵn hay ký tự ghép — "ủ" là một mã, hoặc "u" cộng dấu hỏi rời.</item>
+    /// </list>
+    /// <para>
+    /// Người soạn tệp Excel dùng bộ gõ nào thì ra kiểu ấy, nên so chuỗi thẳng là trượt.
+    /// Bỏ dấu đi thì cả hai kiểu về chung một khoá.
+    /// </para>
+    /// </summary>
+    private static string NormalizeLooseKey(string value)
+    {
+        var decomposed = value.Trim().Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposed.Length);
+
+        foreach (var character in decomposed)
+        {
+            // Dấu thanh sau khi tách ra nằm ở nhóm NonSpacingMark.
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            // đ/Đ là chữ cái riêng, không tách ra dấu nên phải đổi tay.
+            builder.Append(character switch
+            {
+                'đ' or 'Đ' => 'd',
+                _ => character,
+            });
+        }
+
+        return builder.ToString().Normalize(NormalizationForm.FormC).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Bảng tra tên → mã của danh mục, chịu được khác biệt về dấu.
+    ///
+    /// <para>
+    /// Tra đúng chuỗi trước; trượt thì mới tra theo khoá bỏ dấu. Chỉ nhận kết quả bỏ
+    /// dấu khi nó trỏ tới DUY NHẤT một bản ghi — hai bộ môn khác nhau mà bỏ dấu ra
+    /// giống nhau thì thà báo không tìm thấy còn hơn gán bừa vào một trong hai.
+    /// </para>
+    /// </summary>
+    private sealed class NameLookup
+    {
+        private readonly Dictionary<string, int> exact = [];
+        private readonly Dictionary<string, int> loose = [];
+        private readonly HashSet<string> ambiguous = [];
+
+        public void Add(string name, int id)
+        {
+            exact[NormalizeKey(name)] = id;
+
+            var looseKey = NormalizeLooseKey(name);
+            if (loose.TryGetValue(looseKey, out var existing) && existing != id)
+            {
+                ambiguous.Add(looseKey);
+                return;
+            }
+            loose[looseKey] = id;
+        }
+
+        public bool TryGet(string name, out int id)
+        {
+            if (exact.TryGetValue(NormalizeKey(name), out id)) return true;
+
+            var looseKey = NormalizeLooseKey(name);
+            if (!ambiguous.Contains(looseKey) && loose.TryGetValue(looseKey, out id)) return true;
+
+            id = 0;
+            return false;
+        }
+    }
 
     // ------------------------------------------------------- Gác phạm vi khi ghi
     //
@@ -2156,7 +2266,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
     private static SemesterDto ToDto(Semester semester) =>
         new(semester.SemesterId, semester.SemesterName, semester.AcademicYearId);
 
-    private static CourseSectionDto ToDto(CourseSection section) =>
+    private static CourseSectionDto ToDto(CourseSection section, Lecturer? lecturer = null) =>
         new(
             section.CourseSectionId,
             section.CourseId,
@@ -2164,7 +2274,9 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
             section.LecturerId,
             section.SectionName,
             section.ClassSize,
-            section.UnidentifiedLecturerName);
+            section.UnidentifiedLecturerName,
+            lecturer?.FullName,
+            lecturer?.Email);
 
     private async Task<string?> ValidateAcademicYearAsync(
         int? academicYearId,
@@ -2308,30 +2420,30 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
         return null;
     }
 
-    private async Task<Dictionary<string, int>> LoadPositionIdByNameAsync(CancellationToken cancellationToken)
+    private async Task<NameLookup> LoadPositionIdByNameAsync(CancellationToken cancellationToken)
     {
         var positions = await db.Positions
             .Select(x => new { x.PositionId, x.PositionName })
             .ToListAsync(cancellationToken);
 
-        var map = new Dictionary<string, int>();
+        var map = new NameLookup();
         foreach (var position in positions)
         {
-            map[NormalizeKey(position.PositionName)] = position.PositionId;
+            map.Add(position.PositionName, position.PositionId);
         }
         return map;
     }
 
-    private async Task<Dictionary<string, int>> LoadDepartmentIdByNameAsync(CancellationToken cancellationToken)
+    private async Task<NameLookup> LoadDepartmentIdByNameAsync(CancellationToken cancellationToken)
     {
         var departments = await db.Departments
             .Select(x => new { x.DepartmentId, x.DepartmentName })
             .ToListAsync(cancellationToken);
 
-        var map = new Dictionary<string, int>();
+        var map = new NameLookup();
         foreach (var department in departments)
         {
-            map[NormalizeKey(department.DepartmentName)] = department.DepartmentId;
+            map.Add(department.DepartmentName, department.DepartmentId);
         }
         return map;
     }
@@ -2563,22 +2675,25 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
 
     private async Task<bool> FacultyNameTakenAsync(string name, int? exceptFacultyId, CancellationToken cancellationToken)
     {
-        var normalized = NormalizeKey(name);
-        return await db.Faculties
+        // Xem ghi chú ở PositionNameTakenAsync: so bằng khoá bỏ dấu.
+        var normalized = NormalizeLooseKey(name);
+        var existing = await db.Faculties
             .Where(x => exceptFacultyId == null || x.FacultyId != exceptFacultyId)
-            .AnyAsync(x => x.FacultyName.Trim().ToLower() == normalized, cancellationToken);
+            .Select(x => x.FacultyName)
+            .ToListAsync(cancellationToken);
+        return existing.Any(x => NormalizeLooseKey(x) == normalized);
     }
 
-    private async Task<Dictionary<string, int>> LoadFacultyIdByNameAsync(CancellationToken cancellationToken)
+    private async Task<NameLookup> LoadFacultyIdByNameAsync(CancellationToken cancellationToken)
     {
         var faculties = await db.Faculties
             .Select(x => new { x.FacultyId, x.FacultyName })
             .ToListAsync(cancellationToken);
 
-        var map = new Dictionary<string, int>();
+        var map = new NameLookup();
         foreach (var faculty in faculties)
         {
-            map[NormalizeKey(faculty.FacultyName)] = faculty.FacultyId;
+            map.Add(faculty.FacultyName, faculty.FacultyId);
         }
         return map;
     }

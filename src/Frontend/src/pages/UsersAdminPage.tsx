@@ -22,6 +22,9 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Modal } from '../components/Modal';
+import { ProfileImportDialog } from '../components/ProfileImportDialog';
+import { useColumnFilters, type FilterableColumn } from '../hooks/useColumnFilters';
+import type { ImportProfileRow } from '../utils/profileImportExcel';
 import { RolePermissionEditor } from '../components/RolePermissionEditor';
 import { UserImportDialog } from '../components/UserImportDialog';
 import { adminApi } from '../services/adminApi';
@@ -34,6 +37,7 @@ import type {
   AdminUser,
   SaveAdminProfile,
 } from '../types';
+import '../styles/catalogs.css';
 import '../styles/auth-admin.css';
 
 type AdminView = 'users' | 'audit' | 'permissions';
@@ -41,6 +45,20 @@ type StatusConfirmation =
   | { type: 'user'; item: AdminUser }
   | { type: 'profile'; item: AdminProfile }
   | null;
+
+/**
+ * Tên hồ sơ và hai ký tự cuối của mã hồ sơ suy thẳng từ vai trò được cấp, không để
+ * quản trị tự gõ: gõ tay thì mỗi người một kiểu và mã hồ sơ mất luôn tính tra cứu.
+ *
+ * Mã hồ sơ = 6 chữ số mã giảng viên + 2 ký tự vai trò, ví dụ giảng viên 36 làm
+ * trưởng bộ môn thì mã là 000036BM.
+ */
+const profileNamingByRole: Record<string, { name: string; suffix: string }> = {
+  ADMIN: { name: 'Admin hệ thống', suffix: 'AD' },
+  DEPARTMENT_MANAGER: { name: 'Trưởng bộ môn', suffix: 'BM' },
+  LECTURER: { name: 'Giảng viên', suffix: 'GV' },
+  SURVEY_ADMIN: { name: 'Quản trị khảo sát', suffix: 'QT' },
+};
 
 const emptyProfile: SaveAdminProfile = {
   name: '',
@@ -196,6 +214,8 @@ export function UsersAdminPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled'>('all');
   const [page, setPage] = useState(1);
+  /** Số dòng mỗi trang, phân trang chạy ở phía giao diện. */
+  const usersPageSize = 20;
   const [auditPageNumber, setAuditPageNumber] = useState(1);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -215,14 +235,27 @@ export function UsersAdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await adminApi.users(search, activeFilter, page);
-      setUsersPage(result);
+      // Nạp TRỌN danh sách rồi mới lọc: bộ lọc theo cột chạy ở phía giao diện nên
+      // thiếu dòng nào là lọc sót dòng đó. Máy chủ kẹp mỗi lần gọi ở 100 dòng
+      // (MaximumPageSize) nên phải xin tiếp cho tới khi đủ, thay vì xin một lần thật
+      // lớn rồi tưởng là đã có hết.
+      const serverPageSize = 100;
+      const first = await adminApi.users(search, activeFilter, 1, serverPageSize);
+      const items = [...first.items];
+
+      const pageCount = Math.ceil(first.totalCount / serverPageSize);
+      for (let next = 2; next <= pageCount; next += 1) {
+        const chunk = await adminApi.users(search, activeFilter, next, serverPageSize);
+        items.push(...chunk.items);
+      }
+
+      setUsersPage({ ...first, items });
     } catch (requestError) {
       setError(messageFrom(requestError));
     } finally {
       setLoading(false);
     }
-  }, [activeFilter, page, search]);
+  }, [activeFilter, search]);
 
   const loadAudit = useCallback(async () => {
     setLoading(true);
@@ -258,10 +291,6 @@ export function UsersAdminPage() {
     if (view === 'audit') void loadAudit();
   }, [loadAudit, view]);
 
-  const totalPages = useMemo(
-    () => Math.max(1, Math.ceil((usersPage?.totalCount ?? 0) / (usersPage?.pageSize ?? 20))),
-    [usersPage],
-  );
   const auditTotalPages = useMemo(
     () => Math.max(1, Math.ceil((auditPage?.totalCount ?? 0) / (auditPage?.pageSize ?? 30))),
     [auditPage],
@@ -321,6 +350,92 @@ export function UsersAdminPage() {
     }
   };
 
+  // Hai đường cấp hồ sơ hàng loạt: một cú bấm cho mức Giảng viên, tệp Excel cho
+  // các vai trò còn lại.
+  const [isImportProfilesOpen, setIsImportProfilesOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const handleBulkLecturerProfiles = async () => {
+    if (bulkBusy) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      const result = await adminApi.bulkCreateLecturerProfiles();
+      await loadUsers();
+      toast.success(`Đã cấp ${result.createdCount} hồ sơ Giảng viên`, {
+        description: result.skippedCount > 0
+          ? `${result.skippedCount} tài khoản bị bỏ qua`
+          : undefined,
+      });
+    } catch (requestError) {
+      const message = messageFrom(requestError);
+      setError(message);
+      toast.error('Không cấp được hồ sơ', { description: message });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleImportProfiles = async (rows: ImportProfileRow[]): Promise<string | null> => {
+    try {
+      const result = await adminApi.importProfiles(rows.map((row) => ({
+        rowNumber: row.rowNumber,
+        email: row.email,
+        roleLabel: row.roleLabel,
+      })));
+      await loadUsers();
+      toast.success(`Đã cấp ${result.createdCount} hồ sơ`, {
+        description: result.skippedCount > 0
+          ? `${result.skippedCount} dòng bị bỏ qua`
+          : undefined,
+      });
+      return null;
+    } catch (requestError) {
+      return messageFrom(requestError);
+    }
+  };
+
+  const userRows = useMemo(() => usersPage?.items ?? [], [usersPage]);
+
+  /**
+   * Vai trò của một tài khoản. Trả về DANH SÁCH chứ không phải một chuỗi ghép: gộp
+   * lại thì menu lọc liệt kê từng tổ hợp một ("ADMIN, LECTURER", "ADMIN,
+   * DEPARTMENT_MANAGER, LECTURER"...) thay vì bốn vai trò, và lọc theo trưởng bộ môn
+   * sẽ bỏ sót mọi tài khoản kiêm thêm vai trò khác.
+   */
+  const rolesOf = (user: AdminUser) =>
+    [...new Set(user.profiles.map((profile) => profile.roleCode))].sort();
+
+  const roleLabelOf = (user: AdminUser) =>
+    user.profiles.length === 0 ? 'Chưa có hồ sơ' : rolesOf(user).join(', ');
+
+  const userColumns = useMemo<FilterableColumn<AdminUser>[]>(() => [
+    { key: 'displayName', value: (user) => user.displayName || 'Chưa cập nhật họ tên' },
+    { key: 'email', value: (user) => user.email },
+    { key: 'status', value: (user) => (user.isActive ? 'Hoạt động' : 'Vô hiệu') },
+    {
+      key: 'roles',
+      value: roleLabelOf,
+      values: rolesOf,
+      // Bốn vai trò cố định của hệ thống, cộng mục cho tài khoản chưa được cấp hồ sơ.
+      options: ['ADMIN', 'SURVEY_ADMIN', 'DEPARTMENT_MANAGER', 'LECTURER', 'Chưa có hồ sơ'],
+    },
+    { key: 'lastLogin', value: (user) => formatDate(user.lastLoginAt) },
+  ], []);
+
+  const userFilters = useColumnFilters(userRows, userColumns);
+
+  // Phân trang chạy trên kết quả ĐÃ lọc, nếu không thì lọc xong vẫn kẹt ở trang cũ.
+  const userTotalPages = Math.max(1, Math.ceil(userFilters.visibleRows.length / usersPageSize));
+  const visibleUsers = userFilters.visibleRows.slice(
+    (page - 1) * usersPageSize,
+    page * usersPageSize,
+  );
+
+  useEffect(() => {
+    if (page > userTotalPages) setPage(1);
+  }, [page, userTotalPages]);
+
   const openProfileForm = (profile?: AdminProfile) => {
     setEditingProfile(profile ?? null);
     setProfileForm(profile ? {
@@ -335,6 +450,16 @@ export function UsersAdminPage() {
     setError(null);
   };
 
+  // Vai trò đang chọn quyết định cả tên lẫn hậu tố mã, nên tính tại chỗ thay vì
+  // giữ thêm state — state riêng thì đổi vai trò xong hai ô kia còn giá trị cũ.
+  const selectedRoleCode = roles.find((role) => role.id === profileForm.roleId)?.code ?? '';
+  const naming = profileNamingByRole[selectedRoleCode];
+  const derivedProfileName = naming?.name ?? '';
+  // Tài khoản chưa gắn hồ sơ giảng viên thì 6 chữ số là 000000.
+  const derivedProfileCode = naming
+    ? `${String(selectedUser?.lecturerId ?? 0).padStart(6, '0')}${naming.suffix}`
+    : '';
+
   const handleSaveProfile = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedUser) return;
@@ -342,9 +467,16 @@ export function UsersAdminPage() {
     setError(null);
     try {
       const wasEditing = editingProfile !== null;
+      // Mã đơn vị / phạm vi không còn ô nhập nào: giữ nguyên giá trị cũ khi sửa để
+      // không xoá mất dữ liệu đã có trong cơ sở dữ liệu.
+      const payload: SaveAdminProfile = {
+        ...profileForm,
+        name: derivedProfileName || profileForm.name,
+        code: derivedProfileCode || profileForm.code.trim(),
+      };
       const saved = editingProfile
-        ? await adminApi.updateProfile(selectedUser.id, editingProfile.id, profileForm)
-        : await adminApi.createProfile(selectedUser.id, profileForm);
+        ? await adminApi.updateProfile(selectedUser.id, editingProfile.id, payload)
+        : await adminApi.createProfile(selectedUser.id, payload);
       replaceProfile(saved);
       setShowProfileForm(false);
       setEditingProfile(null);
@@ -435,6 +567,24 @@ export function UsersAdminPage() {
             <button
               type="button"
               className="btn btn-secondary"
+              onClick={() => void handleBulkLecturerProfiles()}
+              disabled={bulkBusy}
+              title="Cấp hồ sơ Giảng viên cho mọi tài khoản chưa có hồ sơ nào"
+            >
+              {bulkBusy ? <LoaderCircle className="auth-spin" aria-hidden="true" /> : <UsersRound aria-hidden="true" />}
+              {bulkBusy ? 'Đang cấp...' : 'Cấp hồ sơ giảng viên hàng loạt'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => { setError(null); setIsImportProfilesOpen(true); }}
+            >
+              <ShieldPlus aria-hidden="true" />
+              Cấp hồ sơ từ Excel
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
               onClick={() => { setError(null); setIsImportUsersOpen(true); }}
             >
               <FileUp aria-hidden="true" />
@@ -504,30 +654,33 @@ export function UsersAdminPage() {
             </div>
           </div>
 
-          <div className="table-container admin-table-container" aria-busy={loading}>
-            <table className="vmu-table admin-users-table">
+          <div className="catalog-table-scroll admin-table-container" tabIndex={0} aria-busy={loading}>
+            <table className="catalog-table admin-users-table">
               <caption className="admin-visually-hidden">Danh sách tài khoản được phép truy cập hệ thống</caption>
               <thead>
                 <tr>
-                  <th scope="col">Người dùng</th>
-                  <th scope="col">Trạng thái</th>
-                  <th scope="col">Hồ sơ và vai trò</th>
-                  <th scope="col">Đăng nhập gần nhất</th>
+                  <th scope="col">{userFilters.filterHeader('displayName', 'Người dùng')}</th>
+                  <th scope="col">{userFilters.filterHeader('email', 'Email')}</th>
+                  <th scope="col">{userFilters.filterHeader('status', 'Trạng thái')}</th>
+                  <th scope="col">{userFilters.filterHeader('roles', 'Hồ sơ và vai trò')}</th>
+                  <th scope="col">{userFilters.filterHeader('lastLogin', 'Đăng nhập gần nhất')}</th>
                   <th scope="col"><span className="admin-visually-hidden">Thao tác</span></th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="admin-state-row">
+                    <td colSpan={6} className="admin-state-row">
                       <LoaderCircle className="auth-spin" aria-hidden="true" />
                       <strong>Đang tải danh sách người dùng</strong>
                     </td>
                   </tr>
-                ) : usersPage?.items.length ? usersPage.items.map((user) => (
+                ) : visibleUsers.length ? visibleUsers.map((user) => (
                   <tr key={user.id}>
                     <td>
                       <strong>{user.displayName || 'Chưa cập nhật họ tên'}</strong>
+                    </td>
+                    <td>
                       <span className="admin-cell-subtitle">{user.email}</span>
                     </td>
                     <td>
@@ -570,7 +723,7 @@ export function UsersAdminPage() {
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={5} className="admin-state-row admin-empty-row">
+                    <td colSpan={6} className="admin-state-row admin-empty-row">
                       <UsersRound aria-hidden="true" />
                       <strong>{hasUserFilters ? 'Không có kết quả phù hợp' : 'Chưa có người dùng'}</strong>
                       <span>
@@ -586,7 +739,7 @@ export function UsersAdminPage() {
           </div>
 
           <div className="pagination admin-pagination">
-            <div>Trang <strong>{page}</strong> / {totalPages}</div>
+            <div>Trang <strong>{page}</strong> / {userTotalPages}</div>
             <div className="admin-pagination-actions">
               <button
                 type="button"
@@ -601,7 +754,7 @@ export function UsersAdminPage() {
               <button
                 type="button"
                 className="admin-icon-button"
-                disabled={page >= totalPages || loading}
+                disabled={page >= userTotalPages || loading}
                 onClick={() => setPage(page + 1)}
                 aria-label="Trang sau"
                 title="Trang sau"
@@ -795,6 +948,12 @@ export function UsersAdminPage() {
         }}
       />
 
+      <ProfileImportDialog
+        isOpen={isImportProfilesOpen}
+        onClose={() => setIsImportProfilesOpen(false)}
+        onImport={handleImportProfiles}
+      />
+
       <Modal
         isOpen={selectedUser !== null}
         onClose={() => { setSelectedUser(null); setShowProfileForm(false); setError(null); }}
@@ -806,16 +965,6 @@ export function UsersAdminPage() {
               <ArrowLeft aria-hidden="true" />
               Quay lại tài khoản
             </button>
-            <div className="admin-form-grid">
-              <div className="form-group">
-                <label htmlFor="profile-name">Tên hồ sơ</label>
-                <input id="profile-name" value={profileForm.name} onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })} required maxLength={200} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="profile-code">Mã hồ sơ</label>
-                <input id="profile-code" value={profileForm.code} onChange={(event) => setProfileForm({ ...profileForm, code: event.target.value })} required maxLength={100} />
-              </div>
-            </div>
             <div className="form-group">
               <label htmlFor="profile-role">Vai trò được cấp</label>
               <select id="profile-role" value={profileForm.roleId} onChange={(event) => setProfileForm({ ...profileForm, roleId: event.target.value })} required>
@@ -823,14 +972,26 @@ export function UsersAdminPage() {
                 {roles.map((role) => <option key={role.id} value={role.id}>{role.name} ({role.code})</option>)}
               </select>
             </div>
+
+            {/* Hai ô dưới đây do vai trò quyết định nên chỉ để xem, không gõ được. */}
             <div className="admin-form-grid">
               <div className="form-group">
-                <label htmlFor="organization-code">Mã đơn vị / phạm vi</label>
-                <input id="organization-code" value={profileForm.organizationUnitCode ?? ''} onChange={(event) => setProfileForm({ ...profileForm, organizationUnitCode: event.target.value || null })} maxLength={100} />
+                <label htmlFor="profile-name">Tên hồ sơ</label>
+                <input
+                  id="profile-name"
+                  value={derivedProfileName}
+                  readOnly
+                  placeholder="Chọn vai trò để có tên hồ sơ"
+                />
               </div>
               <div className="form-group">
-                <label htmlFor="organization-name">Tên đơn vị / phạm vi</label>
-                <input id="organization-name" value={profileForm.organizationUnitName ?? ''} onChange={(event) => setProfileForm({ ...profileForm, organizationUnitName: event.target.value || null })} maxLength={200} />
+                <label htmlFor="profile-code">Mã hồ sơ</label>
+                <input
+                  id="profile-code"
+                  value={derivedProfileCode}
+                  readOnly
+                  placeholder="Chọn vai trò để có mã hồ sơ"
+                />
               </div>
             </div>
             <label className="admin-checkbox-row">

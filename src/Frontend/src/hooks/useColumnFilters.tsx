@@ -14,6 +14,19 @@ export interface FilterableColumn<T> {
    * cột Z-Score có dấu cộng ở đầu và "—" khi thiếu dữ liệu.
    */
   sortValue?: (row: T) => number | string | null;
+  /**
+   * Cột mà MỘT DÒNG mang nhiều giá trị cùng lúc — ví dụ một tài khoản có cả vai
+   * trò trưởng bộ môn lẫn giảng viên. Chọn "Trưởng bộ môn" thì mọi tài khoản có
+   * vai trò đó đều hiện, không cần trùng khít cả bộ.
+   *
+   * Có trường này thì `value` chỉ còn dùng để hiển thị và sắp xếp.
+   */
+  values?: (row: T) => string[];
+  /**
+   * Danh sách giá trị CỐ ĐỊNH của menu lọc, giữ nguyên thứ tự khai báo. Bỏ trống
+   * thì menu tự dựng từ dữ liệu đang có.
+   */
+  options?: string[];
 }
 
 /**
@@ -35,7 +48,15 @@ export function useColumnFilters<T>(rows: readonly T[], columns: FilterableColum
     columns.every((column) => {
       if (column.key === except) return true;
       const allowed = filters[column.key];
-      return !allowed || allowed.includes(column.value(row));
+      if (!allowed) return true;
+      if (!column.values) return allowed.includes(column.value(row));
+
+      const owned = column.values(row);
+      // Dòng không mang giá trị nào thì lọc theo nhãn hiển thị của chính nó, ví dụ
+      // tài khoản chưa được cấp hồ sơ nào.
+      return owned.length === 0
+        ? allowed.includes(column.value(row))
+        : owned.some((item) => allowed.includes(item));
     });
 
   const filtered = useMemo(
@@ -83,7 +104,11 @@ export function useColumnFilters<T>(rows: readonly T[], columns: FilterableColum
     const column = columnByKey.get(key);
     if (!column) return label;
 
-    const values = [...new Set(rows.filter((row) => passes(row, key)).map(column.value))].sort(
+    const values = column.options ?? [...new Set(
+      rows
+        .filter((row) => passes(row, key))
+        .flatMap((row) => (column.values ? column.values(row) : [column.value(row)]))
+    )].sort(
       (left, right) =>
         column.numeric ? Number(left) - Number(right) : left.localeCompare(right, 'vi')
     );

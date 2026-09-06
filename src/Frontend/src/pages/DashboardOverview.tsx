@@ -38,6 +38,7 @@ import {
 } from '../utils/reportThresholds';
 import '../styles/reports.css';
 import '../styles/dashboard.css';
+import { foldVietnamese } from '../utils/vietnamese';
 
 interface DashboardOverviewProps {
   semesterSurveys: SemesterSurvey[];
@@ -275,7 +276,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const filteredFaculties = useMemo(() => {
     if (!overviewData?.faculties) return [];
     return overviewData.faculties.filter((f) => {
-      const matchesSearch = f.facultyName.toLowerCase().includes(searchTerm.toLowerCase().trim());
+      const matchesSearch = foldVietnamese(f.facultyName).includes(foldVietnamese(searchTerm));
       if (!matchesSearch) return false;
 
       if (filterStatus === 'good') return f.completionRate >= COMPLETED_COMPLETION_RATE;

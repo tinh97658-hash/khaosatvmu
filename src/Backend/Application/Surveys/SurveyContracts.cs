@@ -948,7 +948,21 @@ public static class SurveyErrorCodes
     public const string ResponseNotFound = "SURVEY_RESPONSE_NOT_FOUND";
 
     public const string LinkNotFound = "SURVEY_LINK_NOT_FOUND";
+
+    /// <summary>Ngoài khung giờ, không rõ trước hay sau. Giữ cho các chỗ gọi cũ.</summary>
     public const string LinkNotOpen = "SURVEY_LINK_NOT_OPEN";
+
+    /// <summary>Chưa tới giờ mở phiếu.</summary>
+    public const string LinkNotStarted = "SURVEY_LINK_NOT_STARTED";
+
+    /// <summary>Đã quá hạn nộp phiếu.</summary>
+    public const string LinkExpired = "SURVEY_LINK_EXPIRED";
+
+    /// <summary>
+    /// Số phiếu đã nộp đạt sĩ số của lớp. Đếm mọi lượt nộp chưa bị huỷ, kể cả phiếu
+    /// bị bộ lọc nhiễu loại — một người đã nộp là đã dùng một suất.
+    /// </summary>
+    public const string ClassFull = "SURVEY_CLASS_FULL";
     public const string AnswersIncomplete = "SURVEY_ANSWERS_INCOMPLETE";
     public const string AnswerValueInvalid = "SURVEY_ANSWER_VALUE_INVALID";
 

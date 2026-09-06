@@ -14,7 +14,8 @@ import {
 import type { ImportCourseRow } from '../utils/courseImportExcel';
 import type { Course, CourseType, Department, Faculty } from '../types';
 import { useAuth } from '../auth/authContext';
-import { isReadOnlyRole, isUnrestrictedRole } from '../auth/roles';
+import { canCreateOrDeleteCatalog, isReadOnlyRole, isUnrestrictedRole } from '../auth/roles';
+import { foldVietnamese } from '../utils/vietnamese';
 
 interface CoursesPageProps {
   courses: Course[];
@@ -64,10 +65,11 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
   onImportCourses,
 }) => {
   const [search, setSearch] = useState('');
-  const [facultyFilter, setFacultyFilter] = useState('');
   // Xoá học phần và import chỉ dành cho quản trị; ẩn nút cho gọn, chặn thật ở backend.
   const { activeProfile } = useAuth();
   const canManageAll = isUnrestrictedRole(activeProfile?.roleCode);
+  // Thêm và xoá là việc của quản trị; trưởng bộ môn chỉ xem và sửa.
+  const canManageCatalog = canCreateOrDeleteCatalog(activeProfile?.roleCode);
   // Giảng viên chỉ xem các học phần mình có lớp dạy, không sửa gì.
   const readOnly = isReadOnlyRole(activeProfile?.roleCode);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -176,14 +178,15 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     ? departments.filter((department) => String(department.facultyId) === form.facultyId)
     : departments;
 
-  const normalized = search.trim().toLowerCase();
+  const normalized = foldVietnamese(search);
   const filtered = courses.filter((course) => {
     const matchesSearch =
       !normalized ||
-      course.courseName.toLowerCase().includes(normalized) ||
-      course.courseCode.toLowerCase().includes(normalized);
-    const matchesFaculty = !facultyFilter || String(course.facultyId) === facultyFilter;
-    return matchesSearch && matchesFaculty;
+      foldVietnamese(course.courseName).includes(normalized) ||
+      foldVietnamese(course.courseCode).includes(normalized);
+    // Lọc theo khoa/viện đã có ngay trên tiêu đề cột, không cần thêm một ô chọn
+    // riêng cạnh nút xuất dữ liệu.
+    return matchesSearch;
   });
 
   const columns: Column<Course>[] = [
@@ -287,16 +290,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm mã hoặc tên học phần..."
-        filterOptions={[
-          { label: 'Tất cả khoa / viện', value: '' },
-          ...faculties.map((faculty) => ({
-            label: faculty.facultyName,
-            value: String(faculty.facultyId),
-          })),
-        ]}
-        currentFilter={facultyFilter}
-        onFilterChange={setFacultyFilter}
-        onAddNew={readOnly ? undefined : openCreate}
+        onAddNew={canManageCatalog ? openCreate : undefined}
         addNewLabel="Thêm học phần"
         toolbarActions={canManageAll ? (
           <button

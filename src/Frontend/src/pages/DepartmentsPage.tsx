@@ -3,12 +3,15 @@ import { FileSpreadsheet, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
+import { useAuth } from '../auth/authContext';
+import { canCreateOrDeleteCatalog } from '../auth/roles';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { DepartmentImportDialog } from '../components/DepartmentImportDialog';
 import { catalogErrorMessage, type CatalogImportResponse } from '../services/catalogApi';
 import type { ImportDepartmentRow } from '../utils/departmentImportExcel';
 import type { Course, Department, Faculty, Lecturer } from '../types';
+import { foldVietnamese } from '../utils/vietnamese';
 
 interface DepartmentsPageProps {
   departments: Department[];
@@ -47,6 +50,9 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
   onDeleteDepartment,
   onImportDepartments,
 }) => {
+  // Thêm và xoá là việc của quản trị; trưởng bộ môn và giảng viên chỉ xem và sửa.
+  const { activeProfile } = useAuth();
+  const canManageCatalog = canCreateOrDeleteCatalog(activeProfile?.roleCode);
   const [search, setSearch] = useState('');
   const [facultyFilter, setFacultyFilter] = useState('');
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -143,9 +149,9 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
     return result;
   };
 
-  const normalized = search.trim().toLowerCase();
+  const normalized = foldVietnamese(search);
   const filtered = departments.filter((department) => {
-    const matchesSearch = !normalized || department.departmentName.toLowerCase().includes(normalized);
+    const matchesSearch = !normalized || foldVietnamese(department.departmentName).includes(normalized);
     const matchesFaculty = !facultyFilter || String(department.facultyId) === facultyFilter;
     return matchesSearch && matchesFaculty;
   });
@@ -210,15 +216,17 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
           >
             <Pencil aria-hidden="true" size={15} />
           </button>
-          <button
-            type="button"
-            className="catalog-icon-button catalog-icon-button--danger"
-            onClick={() => setToDelete(row)}
-            aria-label={`Xóa ${row.departmentName}`}
-            title="Xóa"
-          >
-            <Trash2 aria-hidden="true" size={15} />
-          </button>
+          {canManageCatalog && (
+            <button
+              type="button"
+              className="catalog-icon-button catalog-icon-button--danger"
+              onClick={() => setToDelete(row)}
+              aria-label={`Xóa ${row.departmentName}`}
+              title="Xóa"
+            >
+              <Trash2 aria-hidden="true" size={15} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -248,7 +256,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
         ]}
         currentFilter={facultyFilter}
         onFilterChange={setFacultyFilter}
-        onAddNew={openCreate}
+        onAddNew={canManageCatalog ? openCreate : undefined}
         addNewLabel="Thêm bộ môn"
         toolbarActions={(
           <button

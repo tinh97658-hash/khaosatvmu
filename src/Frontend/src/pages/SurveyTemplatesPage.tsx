@@ -24,6 +24,7 @@ import {
 import { maximumAnswerScaleOptions, maximumQuestionsPerTemplate } from '../types';
 import type { AnswerScale, AnswerScaleKind, SurveyTemplate } from '../types';
 import '../styles/survey-operations.css';
+import { foldVietnamese } from '../utils/vietnamese';
 
 /** Một dòng câu hỏi trong trình soạn: nội dung kèm thang trả lời của riêng nó. */
 interface QuestionForm {
@@ -129,9 +130,9 @@ export const SurveyTemplatesPage: React.FC = () => {
       .map(scaleNameOf)
       .join(' · ');
 
-  const normalized = search.trim().toLowerCase();
+  const normalized = foldVietnamese(search);
   const filtered = templates.filter(
-    (item) => !normalized || item.templateName.toLowerCase().includes(normalized)
+    (item) => !normalized || foldVietnamese(item.templateName).includes(normalized)
   );
 
   // ------------------------------------------------------------- Bộ câu hỏi

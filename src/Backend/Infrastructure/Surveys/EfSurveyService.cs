@@ -1342,9 +1342,40 @@ public sealed class EfSurveyService(
         // Ngoài khung giờ thì coi như không có link: chặn ngay ở đây nên phiếu
         // không mở ra được nữa, và bộ câu hỏi cũng không lọt ra ngoài.
         var now = DateTime.UtcNow;
-        if (now < cached.StartTime || now > cached.EndTime)
+        // Tách hai đầu của khung giờ: "chưa mở" và "đã hết hạn" là hai chuyện khác
+        // nhau với người vào link, gộp chung một mã thì thông báo phải nói nước đôi.
+        if (now < cached.StartTime)
         {
-            return Failed<PublicSurveyDto>(SurveyErrorCodes.LinkNotOpen);
+            return Failed<PublicSurveyDto>(SurveyErrorCodes.LinkNotStarted);
+        }
+
+        if (now > cached.EndTime)
+        {
+            return Failed<PublicSurveyDto>(SurveyErrorCodes.LinkExpired);
+        }
+
+        // Chặn theo sĩ số. KHÔNG đưa vào DTO đang cache 15 phút: số phiếu đổi liên
+        // tục, cache lại thì lớp đã đủ vẫn mở thêm được cả một khắc đồng hồ.
+        //
+        // Đếm mọi lượt nộp chưa bị huỷ, kể cả phiếu bị bộ lọc nhiễu loại — một người
+        // đã nộp là đã dùng một suất, không cho làm lại. Huỷ phiếu của lớp thì suất
+        // được trả lại vì bộ lọc IsDeleted của EF loại chúng khỏi phép đếm.
+        var capacity = await db.CourseSectionSurveys.AsNoTracking()
+            .Where(x => x.LinkToken == token)
+            .Select(x => new
+            {
+                ClassSize = db.CourseSections
+                    .Where(section => section.CourseSectionId == x.CourseSectionId)
+                    .Select(section => section.ClassSize)
+                    .FirstOrDefault(),
+                Submitted = db.SurveyResponses
+                    .Count(response => response.CourseSectionSurveyId == x.CourseSectionSurveyId),
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (capacity is not null && capacity.ClassSize > 0 && capacity.Submitted >= capacity.ClassSize)
+        {
+            return Failed<PublicSurveyDto>(SurveyErrorCodes.ClassFull);
         }
 
         return Succeeded(cached with { IsOpen = true });

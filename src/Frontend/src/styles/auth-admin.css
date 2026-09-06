@@ -1430,6 +1430,15 @@
   overflow: auto;
 }
 
+/*
+  Bảng tài khoản dùng nguyên bộ .catalog-table như mọi bảng khác của hệ thống: tiêu
+  đề căn giữa cả hai chiều, chữ được xuống dòng, nút lọc nhấc lên góc trên phải.
+  Trước đây trang tự dựng lại tiêu đề (cao 38px, căn trái, không xuống dòng) nên nút
+  lọc không có chỗ neo và bảng đứng cạnh các bảng khác là nhận ra ngay hai kiểu.
+
+  Chỉ còn giữ riêng bề rộng từng cột và chiều cao dòng — dòng ở đây có hai tầng chữ
+  nên cao hơn bảng danh mục.
+*/
 .admin-users-page .vmu-table {
   min-width: 820px;
   table-layout: fixed;
@@ -1474,11 +1483,22 @@
   background: #f5fafc;
 }
 
-.admin-users-table th:nth-child(1) { width: 28%; }
-.admin-users-table th:nth-child(2) { width: 14%; }
-.admin-users-table th:nth-child(3) { width: 30%; }
-.admin-users-table th:nth-child(4) { width: 20%; }
-.admin-users-table th:nth-child(5) { width: 54px; }
+.admin-users-page .admin-users-table {
+  min-width: 940px;
+  table-layout: fixed;
+}
+
+.admin-users-page .admin-users-table td {
+  height: 48px;
+  padding: 6px 10px;
+}
+
+.admin-users-table th:nth-child(1) { width: 20%; }
+.admin-users-table th:nth-child(2) { width: 24%; }
+.admin-users-table th:nth-child(3) { width: 12%; }
+.admin-users-table th:nth-child(4) { width: 21%; }
+.admin-users-table th:nth-child(5) { width: 16%; }
+.admin-users-table th:nth-child(6) { width: 7%; }
 
 .admin-users-table strong,
 .admin-account-summary strong {
@@ -1490,6 +1510,80 @@
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/*
+  Cỡ chữ trong hộp thoại Chi tiết tài khoản. Bảng ở ngoài phải nhồi nhiều cột nên
+  để 11-12px là hợp lý, nhưng hộp thoại rộng 1180px mà vẫn giữ nguyên cỡ đó thì
+  chữ nhỏ tin hin giữa một khoảng trắng mênh mông. Đưa về đúng hai tông của các
+  trang khác: nội dung #20262c, dòng phụ #46515a.
+*/
+.admin-account-detail .admin-account-summary strong {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.admin-account-detail .admin-account-summary span,
+.admin-account-detail .admin-account-summary small {
+  margin-top: 3px;
+  color: #46515a;
+  font-size: 14px;
+}
+
+.admin-account-detail .admin-account-avatar {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+}
+
+.admin-account-detail .admin-account-avatar svg {
+  width: 23px;
+  height: 23px;
+}
+
+.admin-account-detail .admin-profile-heading h4 {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.admin-account-detail .admin-profile-heading p {
+  margin-top: 4px;
+  color: #46515a;
+  font-size: 14px;
+}
+
+.admin-account-detail .admin-profile-row {
+  padding: 14px 16px;
+}
+
+.admin-account-detail .admin-profile-title strong {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.admin-account-detail .admin-profile-row > div > span,
+.admin-account-detail .admin-profile-row > div > small {
+  margin-top: 4px;
+  color: #46515a;
+  font-size: 14px;
+}
+
+.admin-account-detail .admin-status {
+  font-size: 13px;
+}
+
+.admin-account-detail .admin-role-label {
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.admin-account-detail .admin-empty-state strong {
+  font-size: 16px;
+}
+
+.admin-account-detail .admin-empty-state span {
+  font-size: 14px;
 }
 
 .admin-cell-subtitle,
@@ -1754,39 +1848,21 @@
   background: rgba(28, 38, 45, 0.52);
 }
 
-.admin-users-page .modal-card {
-  max-width: 1280px;
-  border: 1px solid #bfc9cf;
-  border-radius: 3px !important;
-  box-shadow: 0 12px 32px rgba(28, 38, 45, 0.18);
-}
+/*
+  Hộp thoại của trang này dùng NGUYÊN bộ khung .catalog-modal-* như mọi hộp thoại
+  khác: viền, bo góc, chiều cao dòng tiêu đề, lề thân hộp. Trước đây trang tự đặt
+  lại từng thứ (tiêu đề 48px thay vì 62px, thân 18px thay vì 20px) nên đứng cạnh
+  các hộp thoại còn lại là nhận ra ngay hai kiểu.
 
-.admin-users-page .modal-header {
-  min-height: 48px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--ops-border);
-  background: var(--ops-surface);
-  color: var(--ops-text);
-}
-
-.admin-users-page .modal-header h3 {
-  font-size: 14px;
-  letter-spacing: 0;
-}
-
-.admin-users-page .modal-close-btn {
-  width: 32px;
-  height: 32px;
-  color: #53616a;
-  line-height: 1;
-}
-
-.admin-users-page .modal-close-btn:hover {
-  background: var(--ops-muted-surface);
+  Chỉ giữ lại một thứ riêng: nới bề ngang. Chi tiết tài khoản có danh sách hồ sơ
+  làm việc nằm ngang nên chật hơn hẳn các hộp thoại một cột.
+*/
+.admin-users-page .catalog-modal-card.modal-card {
+  width: min(1180px, 100%);
+  max-width: 1180px;
 }
 
 .admin-users-page .modal-body {
-  padding: 18px;
   overflow-x: hidden;
 }
 
@@ -1818,19 +1894,28 @@
 }
 
 .admin-users-page .form-group label {
-  margin-bottom: 5px;
-  color: #3d4951;
-  font-size: 12px;
+  margin-bottom: 6px;
+  color: #20262c;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .admin-users-page .form-group input,
 .admin-users-page .form-group select {
-  min-height: 36px;
-  padding: 7px 9px;
+  min-height: 42px;
+  padding: 8px 11px;
   border-color: var(--ops-border-strong);
   border-radius: 3px !important;
   color: var(--ops-text);
-  font-size: 12px;
+  font-size: 14px;
+}
+
+/* Ô chỉ đọc: nền xám để thấy ngay là giá trị hệ thống tự điền, không phải ô bỏ trống. */
+.admin-users-page .form-group input[readonly] {
+  background: #f4f6f7;
+  color: #20262c;
+  font-weight: 600;
+  cursor: default;
 }
 
 .admin-users-page .form-group input:focus,
@@ -1850,7 +1935,7 @@
   align-items: center;
   gap: 8px;
   color: var(--ops-text);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
 }

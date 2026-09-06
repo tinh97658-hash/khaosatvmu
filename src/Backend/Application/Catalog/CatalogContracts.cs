@@ -27,7 +27,14 @@ public sealed record CourseSectionDto(
     int? LecturerId,
     string SectionName,
     int ClassSize,
-    string? UnidentifiedLecturerName);
+    string? UnidentifiedLecturerName,
+    /// <summary>
+    /// Tên người dạy, gửi kèm ngay trên dòng lớp. Trước đây giao diện tự tra tên từ
+    /// danh sách giảng viên đã bị lọc theo phạm vi, nên lớp do giảng viên bộ môn khác
+    /// dạy hộ hiện ra dấu gạch — dù chính lớp đó vẫn nằm trong phạm vi người xem.
+    /// </summary>
+    string? LecturerName = null,
+    string? LecturerEmail = null);
 
 public sealed record SaveAcademicYearCommand(string AcademicYearName);
 

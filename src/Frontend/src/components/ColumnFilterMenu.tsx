@@ -251,7 +251,8 @@ export const ColumnFilterMenu: React.FC<ColumnFilterMenuProps> = ({
                       checked={draft.includes(value)}
                       onChange={() => toggleValue(value)}
                     />
-                    <span>{value}</span>
+                    {/* Giá trị rỗng vẫn phải bấm được, nếu không thì ô trống trơn. */}
+                    <span>{value === '' ? '(trống)' : value}</span>
                   </label>
                 ))}
               </>

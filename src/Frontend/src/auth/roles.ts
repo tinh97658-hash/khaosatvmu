@@ -27,3 +27,14 @@ export function isUnrestrictedRole(roleCode: string | null | undefined): boolean
 export function isReadOnlyRole(roleCode: string | null | undefined): boolean {
   return roleCode === ROLE_CODES.lecturer;
 }
+
+/**
+ * Chỉ quản trị mới được THÊM hoặc XOÁ bản ghi trong Danh mục đào tạo. Trưởng bộ môn
+ * và giảng viên chỉ xem, và sửa những gì thuộc phạm vi của mình — danh mục là dữ
+ * liệu nền của cả trường, thêm bớt phải đi qua một đầu mối.
+ *
+ * Cũng chỉ để ẩn nút. Backend tự từ chối mọi thao tác ghi ngoài phạm vi.
+ */
+export function canCreateOrDeleteCatalog(roleCode: string | null | undefined): boolean {
+  return isUnrestrictedRole(roleCode);
+}
