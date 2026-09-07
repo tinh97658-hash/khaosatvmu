@@ -20,3 +20,14 @@ export function foldVietnamese(value: string): string {
     .trim()
     .toLowerCase();
 }
+
+/**
+ * Chuẩn hóa phần tên của tệp tải xuống: tiếng Việt không dấu, chữ thường và chỉ
+ * dùng dấu gạch ngang để ngăn cách từ.
+ */
+export function toVietnameseFileSlug(value: string, fallback = 'tep-du-lieu'): string {
+  const slug = foldVietnamese(value)
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || fallback;
+}

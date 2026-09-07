@@ -519,6 +519,12 @@ public sealed record CreateSemesterSurveyCommand(
     /// <summary>Mã khoa / bộ môn / lớp học phần tuỳ theo <paramref name="ScopeType"/>.</summary>
     int? ScopeId = null);
 
+/// <summary>Chỉnh sửa thông tin chung của đợt; không thay đổi học kỳ hoặc bộ câu hỏi.</summary>
+public sealed record UpdateSemesterSurveyCommand(
+    string SurveyName,
+    DateTime StartTime,
+    DateTime EndTime);
+
 /// <summary>
 /// Bổ sung lớp vào một đợt đã có, theo cùng bộ phạm vi lúc tạo. Lớp đã có bài
 /// trong đợt thì bỏ qua chứ không báo lỗi, nên chồng phạm vi lên nhau vẫn an toàn.
@@ -723,6 +729,11 @@ public interface ISurveyService
     /// </summary>
     Task<SurveyOperationResult<SemesterSurveyDto>> CreateSemesterSurveyAsync(
         CreateSemesterSurveyCommand command,
+        CancellationToken cancellationToken = default);
+
+    Task<SurveyOperationResult<SemesterSurveyDto>> UpdateSemesterSurveyAsync(
+        int semesterSurveyId,
+        UpdateSemesterSurveyCommand command,
         CancellationToken cancellationToken = default);
 
     Task<SurveyOperationResult<bool>> DeleteSemesterSurveyAsync(
@@ -936,6 +947,12 @@ public static class SurveyErrorCodes
     /// <summary>Mọi lớp của phạm vi đều đã có bài khảo sát trong đợt.</summary>
     public const string ScopeSectionsAlreadyAdded = "SURVEY_SCOPE_SECTIONS_ALREADY_ADDED";
     public const string SemesterSurveyHasResponses = "SURVEY_SEMESTER_SURVEY_HAS_RESPONSES";
+    /// <summary>Lịch tổng mới không bao trọn lịch của tất cả lớp đã có trong đợt.</summary>
+    public const string SemesterSurveyScheduleExcludesSections =
+        "SURVEY_SEMESTER_SURVEY_SCHEDULE_EXCLUDES_SECTIONS";
+    /// <summary>Lịch lớp phải nằm trọn trong lịch tổng của đợt khảo sát.</summary>
+    public const string SectionScheduleOutsideSemesterSurvey =
+        "SURVEY_SECTION_SCHEDULE_OUTSIDE_SEMESTER_SURVEY";
 
     public const string SectionSurveyNotFound = "SURVEY_SECTION_SURVEY_NOT_FOUND";
 

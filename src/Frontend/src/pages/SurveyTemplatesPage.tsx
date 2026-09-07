@@ -516,6 +516,11 @@ export const SurveyTemplatesPage: React.FC = () => {
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm tên bộ câu hỏi..."
+        exportConfig={{
+          title: 'DANH SÁCH BỘ CÂU HỎI KHẢO SÁT',
+          fileName: 'danh-sach-bo-cau-hoi-khao-sat',
+          subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+        }}
         onAddNew={openCreate}
         addNewLabel="Tạo bộ câu hỏi"
         toolbarActions={(

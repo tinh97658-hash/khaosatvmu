@@ -204,6 +204,13 @@ public sealed partial class EfUserAdministrationService(AppDbContext db) : IUser
             x => x.UserId == userId && x.IsActive,
             cancellationToken);
         var isDefault = command.IsDefault || !hasActiveProfile;
+        var role = await db.Roles.SingleAsync(x => x.Id == command.RoleId, cancellationToken);
+        var naming = ProfileNaming.ByRoleCode[role.Code];
+        var profileCode = await GenerateNextProfileCodeAsync(naming.Suffix, cancellationToken);
+
+        await using var transaction = isDefault
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
         if (isDefault)
         {
             await ClearDefaultProfileAsync(userId, null, cancellationToken);
@@ -214,8 +221,8 @@ public sealed partial class EfUserAdministrationService(AppDbContext db) : IUser
             Id = Guid.NewGuid(),
             UserId = userId,
             RoleId = command.RoleId,
-            ProfileName = command.Name.Trim(),
-            ProfileCode = NormalizeCode(command.Code),
+            ProfileName = naming.Name,
+            ProfileCode = profileCode,
             OrganizationUnitCode = NormalizeCodeOptional(command.OrganizationUnitCode),
             OrganizationUnitName = NormalizeOptional(command.OrganizationUnitName),
             IsActive = true,
@@ -227,6 +234,10 @@ public sealed partial class EfUserAdministrationService(AppDbContext db) : IUser
         user.UpdatedAt = now;
         AddAudit(user, profile, "ADMIN_PROFILE_CREATED", actorUserId, ProfileMetadata(profile));
         await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
         return Success(await BuildProfileAsync(profile, cancellationToken));
     }
 
@@ -257,14 +268,18 @@ public sealed partial class EfUserAdministrationService(AppDbContext db) : IUser
             return Failure<AdminProfileDto>(validationError);
         }
 
-        if (command.IsDefault && profile.IsActive)
+        var switchesDefault = command.IsDefault && profile.IsActive && !profile.IsDefault;
+        await using var transaction = switchesDefault
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        if (switchesDefault)
         {
             await ClearDefaultProfileAsync(userId, profileId, cancellationToken);
         }
 
         var roleChanged = profile.RoleId != command.RoleId;
-        profile.ProfileName = command.Name.Trim();
-        profile.ProfileCode = NormalizeCode(command.Code);
+        var role = await db.Roles.SingleAsync(x => x.Id == command.RoleId, cancellationToken);
+        profile.ProfileName = ProfileNaming.ByRoleCode[role.Code].Name;
         profile.RoleId = command.RoleId;
         profile.OrganizationUnitCode = NormalizeCodeOptional(command.OrganizationUnitCode);
         profile.OrganizationUnitName = NormalizeOptional(command.OrganizationUnitName);
@@ -279,6 +294,10 @@ public sealed partial class EfUserAdministrationService(AppDbContext db) : IUser
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
         return Success(await BuildProfileAsync(profile, cancellationToken));
     }
 
@@ -597,8 +616,6 @@ public sealed partial class EfUserAdministrationService(AppDbContext db) : IUser
     {
         if (string.IsNullOrWhiteSpace(command.Name)
             || command.Name.Trim().Length > 200
-            || string.IsNullOrWhiteSpace(command.Code)
-            || command.Code.Trim().Length > 100
             || command.OrganizationUnitCode?.Trim().Length > 100
             || command.OrganizationUnitName?.Trim().Length > 200)
         {
@@ -613,14 +630,6 @@ public sealed partial class EfUserAdministrationService(AppDbContext db) : IUser
         if (!await db.Roles.AnyAsync(x => x.Id == command.RoleId, cancellationToken))
         {
             return UserAdministrationErrorCodes.RoleNotFound;
-        }
-
-        var code = NormalizeCode(command.Code);
-        if (await db.UserProfiles.AnyAsync(
-                x => x.ProfileCode == code && x.Id != profileId,
-                cancellationToken))
-        {
-            return UserAdministrationErrorCodes.ProfileCodeExists;
         }
 
         var organizationCode = NormalizeCodeOptional(command.OrganizationUnitCode);
@@ -741,14 +750,21 @@ public sealed partial class EfUserAdministrationService(AppDbContext db) : IUser
         Guid? excludedProfileId,
         CancellationToken cancellationToken)
     {
-        var profiles = await db.UserProfiles
+        await db.UserProfiles
             .Where(x => x.UserId == userId && x.IsDefault && x.Id != excludedProfileId)
-            .ToListAsync(cancellationToken);
-        foreach (var profile in profiles)
-        {
-            profile.IsDefault = false;
-            profile.UpdatedAt = DateTime.UtcNow;
-        }
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.IsDefault, false)
+                .SetProperty(x => x.UpdatedAt, DateTime.UtcNow), cancellationToken);
+    }
+
+    private async Task<string> GenerateNextProfileCodeAsync(
+        string suffix,
+        CancellationToken cancellationToken)
+    {
+        var nextNumber = await db.Database
+            .SqlQueryRaw<long>("SELECT nextval('\"UserProfileCodeSequence\"') AS \"Value\"")
+            .SingleAsync(cancellationToken);
+        return ProfileNaming.CodeFor(nextNumber, suffix);
     }
 
     private async Task EnsureDefaultProfileAsync(

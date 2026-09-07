@@ -175,7 +175,7 @@ public sealed class ClosedXmlCourseSurveyQrExporter(
             true,
             null,
             new CourseSurveyQrExportDto(
-                $"ma-qr-{Slugify(survey.SurveyName)}.xlsx",
+                $"danh-sach-ma-qr-lop-hoc-phan-{Slugify(survey.SurveyName)}.xlsx",
                 output.ToArray(),
                 sections.Count));
     }

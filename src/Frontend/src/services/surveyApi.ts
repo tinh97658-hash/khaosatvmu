@@ -534,6 +534,15 @@ export const surveyApi = {
     ),
   createSemesterSurvey: (survey: CreateSemesterSurveyPayload) =>
     csrfRequest<SemesterSurvey>('/api/surveys/semester-surveys', 'POST', survey),
+  updateSemesterSurvey: (
+    semesterSurveyId: number,
+    survey: UpdateSemesterSurveyPayload,
+  ) =>
+    csrfRequest<SemesterSurvey>(
+      `/api/surveys/semester-surveys/${semesterSurveyId}`,
+      'PUT',
+      survey,
+    ),
   deleteSemesterSurvey: (semesterSurveyId: number) =>
     csrfRequest<boolean>(`/api/surveys/semester-surveys/${semesterSurveyId}`, 'DELETE'),
   /** Hai vòng lọc lớp được tính điểm, dùng chung cho mọi trang báo cáo. */
@@ -662,6 +671,13 @@ export interface CreateSemesterSurveyPayload {
   endTime: string;
 }
 
+export interface UpdateSemesterSurveyPayload {
+  surveyName: string;
+  /** ISO 8601 (UTC). Mọi lịch lớp phải nằm trọn trong khoảng này. */
+  startTime: string;
+  endTime: string;
+}
+
 export interface SubmitSurveyResponsePayload {
   /** `answerValue`: số mức đã chọn dạng chuỗi, hoặc nội dung tự nhập. */
   answers: { questionId: number; answerValue: string }[];
@@ -734,6 +750,10 @@ export const surveyErrorMessages: Record<string, string> = {
   SURVEY_SEMESTER_NOT_FOUND: 'Không tìm thấy học kỳ.',
   SURVEY_SEMESTER_HAS_NO_SECTIONS: 'Học kỳ này chưa có lớp học phần nào để tạo bài khảo sát.',
   SURVEY_SCHEDULE_INVALID: 'Thời gian đóng phải sau thời gian mở.',
+  SURVEY_SEMESTER_SURVEY_SCHEDULE_EXCLUDES_SECTIONS:
+    'Không thể lưu vì lịch tổng mới không bao trọn thời gian của một hoặc nhiều lớp học phần trong đợt.',
+  SURVEY_SECTION_SCHEDULE_OUTSIDE_SEMESTER_SURVEY:
+    'Thời gian của lớp học phần phải nằm trọn trong thời gian mở và đóng của đợt khảo sát.',
   SURVEY_SEMESTER_SURVEY_NOT_FOUND: 'Không tìm thấy đợt khảo sát.',
   SURVEY_SEMESTER_SURVEY_NAME_REQUIRED: 'Vui lòng đặt tên cho bài khảo sát.',
   SURVEY_SEMESTER_SURVEY_HAS_RESPONSES: 'Đợt khảo sát đã có phiếu trả lời nên không xóa được.',

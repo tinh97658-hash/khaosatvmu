@@ -135,9 +135,6 @@ export const catalogApi = {
     csrfRequest<AcademicYear>('/api/catalog/academic-years', 'POST', year),
   updateAcademicYear: (academicYearId: number, year: SaveAcademicYearPayload) =>
     csrfRequest<AcademicYear>(`/api/catalog/academic-years/${academicYearId}`, 'PUT', year),
-  deleteAcademicYear: (academicYearId: number) =>
-    csrfRequest<boolean>(`/api/catalog/academic-years/${academicYearId}`, 'DELETE'),
-
   createSemester: (semesterName: string, academicYearId: number) =>
     csrfRequest<Semester>('/api/catalog/semesters', 'POST', { semesterName, academicYearId }),
   updateSemester: (semesterId: number, semesterName: string, academicYearId: number) =>

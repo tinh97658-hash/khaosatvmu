@@ -1777,6 +1777,14 @@
   box-shadow: 0 6px 18px rgba(15, 30, 45, 0.18);
 }
 
+.searchable-select__list--portal {
+  position: fixed;
+  z-index: 1200;
+  right: auto;
+  bottom: auto;
+  margin: 0;
+}
+
 .searchable-select__option {
   display: flex;
   align-items: center;

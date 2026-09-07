@@ -1328,7 +1328,7 @@ export const ReportsOverviewPage: React.FC = () => {
                 data={lecturerDetail.sections ?? []}
                 exportConfig={{
                   title: `BÁO CÁO KẾT QUẢ ĐÁNH GIÁ GIẢNG VIÊN ${lecturerDetail.fullName.toUpperCase()}`,
-                  fileName: `danh-gia-giang-vien-${lecturerDetail.fullName.toLowerCase().replace(/\s+/g, '-')}`,
+                  fileName: `bao-cao-danh-gia-giang-vien-${lecturerDetail.fullName}-${semesterLabel}`,
                   subtitle: `${lecturerDetail.departmentName} · ${lecturerDetail.facultyName}`,
                   subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
                   info: {
@@ -1465,7 +1465,7 @@ export const ReportsOverviewPage: React.FC = () => {
               searchPlaceholder="Mã HP, tên HP, nhóm lớp, giảng viên..."
               exportConfig={{
                 title: 'BÁO CÁO KẾT QUẢ KHẢO SÁT HỌC PHẦN CHI TIẾT',
-                fileName: 'ket-qua-khao-sat-chi-tiet',
+                fileName: `bao-cao-ket-qua-khao-sat-hoc-phan-chi-tiet-${semesterLabel}`,
                 subtitle: semesterLabel,
                 subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
                 info: {

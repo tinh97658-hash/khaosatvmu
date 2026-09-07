@@ -165,7 +165,10 @@ export const SurveyDashboardPage: React.FC = () => {
               buttonLabel="Xuất báo cáo"
               size="sm"
               options={{
-                fileName: 'tong-quan-dot-khao-sat',
+                fileName: `bao-cao-tong-quan-dot-khao-sat-${
+                  semesterSurveys.find((item) => String(item.semesterSurveyId) === semesterSurveyId)
+                    ?.surveyName || 'hoc-phan'
+                }-${data.semesterName}-${data.academicYearName}`,
                 metadata: {
                   title: 'BÁO CÁO TỔNG QUAN ĐỢT KHẢO SÁT HỌC PHẦN',
                   subtitle: `${data.templateName} — ${data.semesterName} năm học ${data.academicYearName}`,

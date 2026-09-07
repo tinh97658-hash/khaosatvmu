@@ -114,6 +114,17 @@ public static class SurveyEndpoints
             ToResult(await service.CreateSemesterSurveyAsync(request.ToCommand(), cancellationToken)))
             .AddEndpointFilter<RequireAntiforgeryFilter>();
 
+        campaignGroup.MapPut("/semester-surveys/{semesterSurveyId:int}", async (
+            int semesterSurveyId,
+            UpdateSemesterSurveyRequest request,
+            ISurveyService service,
+            CancellationToken cancellationToken) =>
+            ToResult(await service.UpdateSemesterSurveyAsync(
+                semesterSurveyId,
+                request.ToCommand(),
+                cancellationToken)))
+            .AddEndpointFilter<RequireAntiforgeryFilter>();
+
         campaignGroup.MapDelete("/semester-surveys/{semesterSurveyId:int}", async (
             int semesterSurveyId,
             ISurveyService service,
@@ -479,6 +490,15 @@ public static class SurveyEndpoints
                 // Client cũ không gửi phạm vi thì giữ nguyên hành vi cũ: phát cả kỳ.
                 ScopeType ?? SurveyScopeTypes.All,
                 ScopeId);
+    }
+
+    public sealed record UpdateSemesterSurveyRequest(
+        string SurveyName,
+        DateTime StartTime,
+        DateTime EndTime)
+    {
+        public UpdateSemesterSurveyCommand ToCommand() =>
+            new(SurveyName, StartTime, EndTime);
     }
 
     public sealed record AddSectionsToSemesterSurveyRequest(

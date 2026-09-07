@@ -444,7 +444,9 @@ export const SectionSurveyResponsesPage: React.FC<SectionSurveyResponsesPageProp
         searchPlaceholder="Tìm theo mã phiếu hoặc ý kiến..."
         exportConfig={{
           title: `BÁO CÁO KẾT QUẢ KHẢO SÁT LỚP ${sectionSurvey?.sectionName || ''}`.trim(),
-          fileName: `khao-sat-lop-${sectionSurvey?.sectionName || 'hoc-phan'}`,
+          fileName: `ket-qua-khao-sat-lop-${sectionSurvey?.sectionName || 'hoc-phan'}-${
+            sectionSurvey?.courseCode || ''
+          }`,
           subtitle: `${sectionSurvey?.courseCode || ''} - ${sectionSurvey?.courseName || ''}`,
           subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
           info: {

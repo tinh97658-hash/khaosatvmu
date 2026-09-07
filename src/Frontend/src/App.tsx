@@ -626,7 +626,6 @@ function DashboardApp() {
             {currentTab === 'faculties' && (
               <FacultiesPage
                 faculties={faculties}
-                majors={majors}
                 departments={departments}
                 onSaveFaculty={handleSaveFaculty}
                 onDeleteFaculty={handleDeleteFaculty}

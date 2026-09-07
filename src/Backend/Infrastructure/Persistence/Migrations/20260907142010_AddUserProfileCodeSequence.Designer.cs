@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260907142010_AddUserProfileCodeSequence")]
+    partial class AddUserProfileCodeSequence
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -905,17 +908,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime>("EndTime")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
                     b.Property<int>("SemesterId")
                         .HasColumnType("integer");
-
-                    b.Property<DateTime>("StartTime")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("SurveyName")
                         .IsRequired()
@@ -930,10 +927,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SurveyTemplateId");
 
-                    b.ToTable("SemesterSurveys", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_SemesterSurveys_TimeRange", "\"EndTime\" > \"StartTime\"");
-                        });
+                    b.ToTable("SemesterSurveys", (string)null);
                 });
 
             modelBuilder.Entity("Domain.SurveyQuestion", b =>

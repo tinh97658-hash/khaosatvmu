@@ -40,6 +40,7 @@ import type {
   SemesterSurvey,
   SurveyTemplate,
 } from '../types';
+import { toVietnameseFileSlug } from '../utils/vietnamese';
 import '../styles/catalogs.css';
 import '../styles/survey-operations.css';
 
@@ -144,6 +145,12 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  const [editingSurvey, setEditingSurvey] = useState<SemesterSurvey | null>(null);
+  const [editSurveyName, setEditSurveyName] = useState('');
+  const [editSurveySchedule, setEditSurveySchedule] = useState<ScheduleForm>(defaultSchedule);
+  const [editSurveyError, setEditSurveyError] = useState<string | null>(null);
+  const [savingSurvey, setSavingSurvey] = useState(false);
+
   const [editingSection, setEditingSection] = useState<CourseSectionSurvey | null>(null);
   const [editSchedule, setEditSchedule] = useState<ScheduleForm>(defaultSchedule);
   const [editError, setEditError] = useState<string | null>(null);
@@ -159,11 +166,13 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
   const handleExportQr = async (survey: SemesterSurvey) => {
     setExportingId(survey.semesterSurveyId);
     try {
-      const { blob, fileName } = await downloadCourseSurveyQrExcel(survey.semesterSurveyId);
+      const { blob } = await downloadCourseSurveyQrExcel(survey.semesterSurveyId);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = fileName;
+      anchor.download = `${toVietnameseFileSlug(
+        `danh sach ma qr lop hoc phan ${survey.surveyName}`
+      )}.xlsx`;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
@@ -183,6 +192,11 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
   const [addSchedule, setAddSchedule] = useState<ScheduleForm>(defaultSchedule);
   const [addError, setAddError] = useState<string | null>(null);
   const [addingId, setAddingId] = useState<number | null>(null);
+  const editingSectionParent = editingSection
+    ? semesterSurveys.find(
+        (survey) => survey.semesterSurveyId === editingSection.semesterSurveyId
+      ) ?? null
+    : null;
 
   // Nạp danh sách template khảo sát. Bộ câu hỏi thuộc quyền
   // COURSE_QUESTION_SETS_ACCESS mà vai trò chỉ đọc không có, nên gọi vào là 403 và
@@ -343,6 +357,16 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
       setEditError('Thời gian đóng phải sau thời gian mở.');
       return;
     }
+    const parent = semesterSurveys.find(
+      (survey) => survey.semesterSurveyId === editingSection.semesterSurveyId
+    );
+    if (parent && (
+      new Date(editSchedule.startTime) < new Date(parent.startTime)
+      || new Date(editSchedule.endTime) > new Date(parent.endTime)
+    )) {
+      setEditError('Thời gian của lớp phải nằm trọn trong thời gian mở và đóng của đợt khảo sát.');
+      return;
+    }
 
     setSavingSchedule(true);
     try {
@@ -360,6 +384,66 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
       setEditError(messageFrom(error));
     } finally {
       setSavingSchedule(false);
+    }
+  };
+
+  const openEditSurvey = (survey: SemesterSurvey) => {
+    setEditingSurvey(survey);
+    setEditSurveyName(survey.surveyName);
+    setEditSurveySchedule({
+      startTime: toLocalInput(survey.startTime),
+      endTime: toLocalInput(survey.endTime),
+    });
+    setEditSurveyError(null);
+  };
+
+  const handleSaveSurvey = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingSurvey) return;
+    if (!editSurveyName.trim()) {
+      setEditSurveyError('Vui lòng nhập tên đợt khảo sát.');
+      return;
+    }
+
+    const proposedStart = new Date(editSurveySchedule.startTime);
+    const proposedEnd = new Date(editSurveySchedule.endTime);
+    if (proposedEnd <= proposedStart) {
+      setEditSurveyError('Thời gian đóng phải sau thời gian mở.');
+      return;
+    }
+
+    setSavingSurvey(true);
+    try {
+      // Kiểm tra trước để chỉ rõ lớp vi phạm; backend vẫn kiểm tra lại để không thể lách qua API.
+      const sections = await surveyApi.courseSectionSurveys(editingSurvey.semesterSurveyId);
+      const outside = sections.find(
+        (section) => new Date(section.startTime) < proposedStart
+          || new Date(section.endTime) > proposedEnd
+      );
+      if (outside) {
+        setEditSurveyError(
+          `Không thể lưu: lịch của lớp ${outside.sectionName} (${formatRange(
+            outside.startTime,
+            outside.endTime
+          )}) nằm ngoài lịch tổng mới.`
+        );
+        return;
+      }
+
+      const updated = await surveyApi.updateSemesterSurvey(editingSurvey.semesterSurveyId, {
+        surveyName: editSurveyName.trim(),
+        startTime: toIso(editSurveySchedule.startTime),
+        endTime: toIso(editSurveySchedule.endTime),
+      });
+      await loadSemesterSurveys(semesterId);
+      onSurveysChanged?.();
+      toast.success('Đã cập nhật đợt khảo sát', { description: updated.surveyName });
+      setEditingSurvey(null);
+      setEditSurveyError(null);
+    } catch (error) {
+      setEditSurveyError(messageFrom(error));
+    } finally {
+      setSavingSurvey(false);
     }
   };
 
@@ -398,6 +482,13 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
     }
     if (new Date(addSchedule.endTime) <= new Date(addSchedule.startTime)) {
       setAddError('Thời gian đóng phải sau thời gian mở.');
+      return;
+    }
+    if (
+      new Date(addSchedule.startTime) < new Date(addTarget.startTime)
+      || new Date(addSchedule.endTime) > new Date(addTarget.endTime)
+    ) {
+      setAddError('Thời gian của lớp phải nằm trọn trong thời gian mở và đóng của đợt khảo sát.');
       return;
     }
 
@@ -649,6 +740,16 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                     </>
                   )}
                 </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => openEditSurvey(survey)}
+                  >
+                    <Pencil className="operation-icon" aria-hidden="true" />
+                    Chỉnh sửa
+                  </button>
+                )}
                 {!readOnly && (
                   <button
                     type="button"
@@ -920,6 +1021,86 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
       </Modal>
 
       <Modal
+        isOpen={editingSurvey !== null}
+        onClose={() => {
+          if (savingSurvey) return;
+          setEditingSurvey(null);
+          setEditSurveyError(null);
+        }}
+        title="Chỉnh sửa đợt khảo sát"
+      >
+        <form className="catalog-form" onSubmit={(event) => void handleSaveSurvey(event)}>
+          {editSurveyError && (
+            <div className="catalog-validation-error" role="alert">{editSurveyError}</div>
+          )}
+
+          <div className="form-group">
+            <label htmlFor="edit-semester-survey-name">Tên đợt khảo sát</label>
+            <input
+              id="edit-semester-survey-name"
+              type="text"
+              value={editSurveyName}
+              onChange={(event) => setEditSurveyName(event.target.value)}
+              required
+            />
+          </div>
+
+          <div className="catalog-context-band">
+            Lịch của mọi lớp học phần phải nằm trọn trong lịch tổng. Nếu lịch mới loại ra
+            bất kỳ lớp nào, hệ thống sẽ không lưu.
+          </div>
+
+          <div className="catalog-form-grid catalog-form-grid--2">
+            <div className="form-group">
+              <label htmlFor="edit-semester-survey-start">Thời gian mở</label>
+              <input
+                id="edit-semester-survey-start"
+                type="datetime-local"
+                value={editSurveySchedule.startTime}
+                onChange={(event) => setEditSurveySchedule((prev) => ({
+                  ...prev,
+                  startTime: event.target.value,
+                }))}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="edit-semester-survey-end">Thời gian đóng</label>
+              <input
+                id="edit-semester-survey-end"
+                type="datetime-local"
+                value={editSurveySchedule.endTime}
+                onChange={(event) => setEditSurveySchedule((prev) => ({
+                  ...prev,
+                  endTime: event.target.value,
+                }))}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="modal-footer catalog-form-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setEditingSurvey(null)}
+              disabled={savingSurvey}
+            >
+              Hủy
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={savingSurvey}>
+              {savingSurvey ? (
+                <LoaderCircle className="auth-spin" aria-hidden="true" size={16} />
+              ) : (
+                <Save aria-hidden="true" size={16} />
+              )}
+              Lưu thay đổi
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
         isOpen={editingSection !== null}
         onClose={() => {
           if (savingSchedule) return;
@@ -935,6 +1116,15 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
         <form className="catalog-form" onSubmit={(event) => void handleSaveSchedule(event)}>
           {editError && <div className="catalog-validation-error" role="alert">{editError}</div>}
 
+          {editingSectionParent && (
+            <div className="catalog-context-band">
+              Lịch tổng của đợt: <strong>{formatRange(
+                editingSectionParent.startTime,
+                editingSectionParent.endTime
+              )}</strong>. Lịch lớp phải nằm trọn trong khoảng này.
+            </div>
+          )}
+
           <div className="catalog-form-grid catalog-form-grid--2">
             <div className="form-group">
               <label htmlFor="edit-survey-start">Thời gian mở</label>
@@ -942,6 +1132,8 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                 id="edit-survey-start"
                 type="datetime-local"
                 value={editSchedule.startTime}
+                min={editingSectionParent ? toLocalInput(editingSectionParent.startTime) : undefined}
+                max={editingSectionParent ? toLocalInput(editingSectionParent.endTime) : undefined}
                 onChange={(event) =>
                   setEditSchedule((prev) => ({ ...prev, startTime: event.target.value }))
                 }
@@ -954,6 +1146,8 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                 id="edit-survey-end"
                 type="datetime-local"
                 value={editSchedule.endTime}
+                min={editingSectionParent ? toLocalInput(editingSectionParent.startTime) : undefined}
+                max={editingSectionParent ? toLocalInput(editingSectionParent.endTime) : undefined}
                 onChange={(event) =>
                   setEditSchedule((prev) => ({ ...prev, endTime: event.target.value }))
                 }
@@ -996,6 +1190,9 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
             : ''
         }
         surveyLink={qrTarget ? surveyLinkOf(qrTarget.linkToken) : ''}
+        downloadFileName={
+          qrTarget ? `ma qr khao sat lop ${qrTarget.sectionName}` : undefined
+        }
         onOpenSurveySimulator={() => {
           if (qrTarget) window.open(surveyLinkOf(qrTarget.linkToken), '_blank', 'noreferrer');
         }}
@@ -1025,6 +1222,13 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
             <br />
             Lớp đã có bài trong đợt sẽ được bỏ qua, nên chọn chồng phạm vi lên nhau vẫn an toàn.
             Các bài khảo sát đã có không bị đụng tới.
+            {addTarget && (
+              <>
+                <br />
+                Lịch tổng: <strong>{formatRange(addTarget.startTime, addTarget.endTime)}</strong>.
+                Lịch lớp mới phải nằm trọn trong khoảng này.
+              </>
+            )}
           </div>
 
           <SurveyScopePicker
@@ -1045,6 +1249,8 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                 id="add-sections-start"
                 type="datetime-local"
                 value={addSchedule.startTime}
+                min={addTarget ? toLocalInput(addTarget.startTime) : undefined}
+                max={addTarget ? toLocalInput(addTarget.endTime) : undefined}
                 onChange={(event) =>
                   setAddSchedule((prev) => ({ ...prev, startTime: event.target.value }))
                 }
@@ -1057,6 +1263,8 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                 id="add-sections-end"
                 type="datetime-local"
                 value={addSchedule.endTime}
+                min={addTarget ? toLocalInput(addTarget.startTime) : undefined}
+                max={addTarget ? toLocalInput(addTarget.endTime) : undefined}
                 onChange={(event) =>
                   setAddSchedule((prev) => ({ ...prev, endTime: event.target.value }))
                 }

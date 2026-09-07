@@ -88,8 +88,8 @@ public sealed record ImportAdminUserRowCommand(int RowNumber, string Email, stri
 /// Quy ước đặt tên và mã hồ sơ. Nằm ở backend vì cả ba đường tạo hồ sơ — thủ công,
 /// tạo hàng loạt và import Excel — đều phải cho ra cùng một kết quả.
 /// <para>
-/// Mã hồ sơ = 6 chữ số mã giảng viên + 2 ký tự vai trò. Giảng viên 36 làm trưởng bộ
-/// môn thì mã là <c>000036BM</c>. Tài khoản chưa gắn hồ sơ giảng viên dùng 000000.
+/// Sáu chữ số đầu là số thứ tự tự tăng trên toàn hệ thống, hai ký tự cuối biểu thị
+/// vai trò. Ví dụ hồ sơ thứ 36 của trưởng bộ môn có mã <c>000036BM</c>.
 /// </para>
 /// </summary>
 public static class ProfileNaming
@@ -103,8 +103,8 @@ public static class ProfileNaming
             ["SURVEY_ADMIN"] = ("Quản trị khảo sát", "QT"),
         };
 
-    public static string CodeFor(int? lecturerId, string suffix) =>
-        $"{(lecturerId ?? 0):D6}{suffix}";
+    public static string CodeFor(long sequenceNumber, string suffix) =>
+        $"{sequenceNumber:D6}{suffix}";
 
     /// <summary>
     /// Tra vai trò từ tên tiếng Việt trong tệp Excel, hoặc từ chính mã vai trò. Nhận
@@ -157,7 +157,6 @@ public sealed record AdminUserImportDto(
 
 public sealed record SaveAdminProfileCommand(
     string Name,
-    string Code,
     Guid RoleId,
     string? OrganizationUnitCode,
     string? OrganizationUnitName,

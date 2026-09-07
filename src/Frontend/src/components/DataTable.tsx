@@ -226,20 +226,11 @@ export function DataTable<T>({
 
   const exportDataPayload = useMemo<AnyExportOptions<T>>(() => {
     const exportDataset = exportConfig?.scope === 'all' ? data : sortedData;
-    const resolvedTitle =
-      exportConfig?.title ||
-      (searchPlaceholder && searchPlaceholder !== 'Tìm kiếm danh mục...'
-        ? searchPlaceholder.replace(/^Tìm kiếm\s*/i, 'DANH SÁCH ').toUpperCase()
-        : 'DANH SÁCH DỮ LIỆU');
+    // Placeholder chỉ hướng dẫn tìm kiếm, không mô tả nội dung báo cáo. Dùng nó làm
+    // tên tệp từng tạo ra các tên sai như "tim-nhanh-theo-ten-bo-mon.xlsx".
+    const resolvedTitle = exportConfig?.title || 'DANH SÁCH DỮ LIỆU';
     const resolvedFileName =
       exportConfig?.fileName ||
-      resolvedTitle
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/đ/g, 'd')
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '') ||
       'danh-sach-du-lieu';
 
     if (exportConfig?.sheets && exportConfig.sheets.length > 0) {
@@ -268,7 +259,7 @@ export function DataTable<T>({
       columns: exportColumns,
       data: exportDataset,
     };
-  }, [data, exportColumns, exportConfig, searchPlaceholder, sortedData]);
+  }, [data, exportColumns, exportConfig, sortedData]);
 
   const changeSort = (column: Column<T>) => {
     if (!column.sortValue) return;

@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ArrowDownAZ, ArrowDownZA, ListFilter, Search } from 'lucide-react';
 import '../styles/column-filter.css';
 
@@ -158,7 +159,7 @@ export const ColumnFilterMenu: React.FC<ColumnFilterMenuProps> = ({
         <span className="column-filter-caret" aria-hidden="true" />
       </button>
 
-      {isOpen && (
+      {isOpen && createPortal(
         <div
           ref={panelRef}
           className="column-filter-panel"
@@ -273,7 +274,8 @@ export const ColumnFilterMenu: React.FC<ColumnFilterMenuProps> = ({
               Cancel
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

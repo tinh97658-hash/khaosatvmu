@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BriefcaseBusiness, FileSpreadsheet, LoaderCircle, Pencil, Save, Trash2 } from 'lucide-react';
+import { FileSpreadsheet, LoaderCircle, Pencil, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable } from '../components/DataTable';
 import type { Column } from '../components/DataTable';
@@ -357,6 +357,11 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm họ tên hoặc email..."
+        exportConfig={{
+          title: 'DANH SÁCH GIẢNG VIÊN',
+          fileName: 'danh-sach-giang-vien',
+          subInstitution: 'PHÒNG ĐÀO TẠO',
+        }}
         filterOptions={canManageAll ? [
           { label: 'Tất cả khoa / viện', value: '' },
           ...faculties.map((faculty) => ({
@@ -370,17 +375,6 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
         addNewLabel="Thêm giảng viên"
         toolbarActions={(
           <>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm catalog-add-button"
-              onClick={() => {
-                if (canManageCatalog) openPositionCreate();
-                setIsPositionsOpen(true);
-              }}
-            >
-              <BriefcaseBusiness aria-hidden="true" size={16} />
-              <span>Chức vụ</span>
-            </button>
             {canManageAll && (
               <button
                 type="button"

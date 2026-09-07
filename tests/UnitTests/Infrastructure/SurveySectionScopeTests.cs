@@ -151,6 +151,8 @@ public class SurveySectionScopeTests
             SurveyName = SeededSurveyName,
             SemesterId = slice.SemesterId,
             SurveyTemplateId = templateId,
+            StartTime = now.AddDays(-1),
+            EndTime = now.AddDays(30),
             CreatedAt = now,
         };
         db.SemesterSurveys.Add(survey);
@@ -233,7 +235,7 @@ public class SurveySectionScopeTests
             after.Should().HaveCount(before.Count + 3);
             after.Select(x => x.LinkToken).Should().OnlyHaveUniqueItems("mỗi lớp một đường dẫn riêng");
 
-            // Khung giờ do người gọi đặt, không lấy lại của các bài đã có.
+            // Khung giờ do người gọi đặt, nhưng vẫn phải nằm trong lịch tổng của đợt.
             var created = after.Where(x => !before.Contains(x.CourseSectionSurveyId)).ToList();
             created.Should().OnlyContain(
                 x => x.StartTime == startTime && x.EndTime == endTime,
@@ -386,6 +388,102 @@ public class SurveySectionScopeTests
             var after = await db.CourseSectionSurveys
                 .CountAsync(x => x.SemesterSurveyId == semesterSurveyId);
             after.Should().Be(before, "không được tạo thêm bài nào");
+        });
+    }
+
+    [Fact]
+    public async Task UpdateSemesterSurvey_WhenNewRangeExcludesASection_ShouldBeRejected()
+    {
+        await RunInRollbackAsync(async (db, serviceFor) =>
+        {
+            var seeded = await SeedDepartmentScopedSurveyAsync(db, 1);
+            if (seeded is null) return;
+
+            var survey = await db.SemesterSurveys.SingleAsync(
+                x => x.SemesterSurveyId == seeded.Value.SemesterSurveyId);
+            var result = await serviceFor(Admin).UpdateSemesterSurveyAsync(
+                survey.SemesterSurveyId,
+                new UpdateSemesterSurveyCommand(
+                    "Tên không được lưu",
+                    survey.StartTime.AddMinutes(1),
+                    survey.EndTime));
+
+            result.Succeeded.Should().BeFalse();
+            result.ErrorCode.Should().Be(
+                SurveyErrorCodes.SemesterSurveyScheduleExcludesSections);
+            survey.SurveyName.Should().Be(SeededSurveyName);
+        });
+    }
+
+    [Fact]
+    public async Task UpdateSemesterSurvey_WhenRangeContainsEverySection_ShouldUpdateNameAndSchedule()
+    {
+        await RunInRollbackAsync(async (db, serviceFor) =>
+        {
+            var seeded = await SeedDepartmentScopedSurveyAsync(db, 1);
+            if (seeded is null) return;
+
+            var survey = await db.SemesterSurveys.SingleAsync(
+                x => x.SemesterSurveyId == seeded.Value.SemesterSurveyId);
+            var newStart = survey.StartTime.AddHours(-1);
+            var newEnd = survey.EndTime.AddHours(1);
+            var result = await serviceFor(Admin).UpdateSemesterSurveyAsync(
+                survey.SemesterSurveyId,
+                new UpdateSemesterSurveyCommand("Đợt đã chỉnh sửa", newStart, newEnd));
+
+            result.Succeeded.Should().BeTrue();
+            result.Value!.SurveyName.Should().Be("Đợt đã chỉnh sửa");
+            result.Value.StartTime.Should().Be(newStart);
+            result.Value.EndTime.Should().Be(newEnd);
+        });
+    }
+
+    [Fact]
+    public async Task UpdateSectionSchedule_WhenOutsideSemesterSurvey_ShouldBeRejected()
+    {
+        await RunInRollbackAsync(async (db, serviceFor) =>
+        {
+            var seeded = await SeedDepartmentScopedSurveyAsync(db, 1);
+            if (seeded is null) return;
+
+            var survey = await db.SemesterSurveys.SingleAsync(
+                x => x.SemesterSurveyId == seeded.Value.SemesterSurveyId);
+            var section = await db.CourseSectionSurveys.FirstAsync(
+                x => x.SemesterSurveyId == survey.SemesterSurveyId);
+            var result = await serviceFor(Admin).UpdateCourseSectionSurveyScheduleAsync(
+                section.CourseSectionSurveyId,
+                new SaveSurveyScheduleCommand(
+                    survey.StartTime.AddMinutes(-1),
+                    survey.EndTime));
+
+            result.Succeeded.Should().BeFalse();
+            result.ErrorCode.Should().Be(
+                SurveyErrorCodes.SectionScheduleOutsideSemesterSurvey);
+        });
+    }
+
+    [Fact]
+    public async Task AddSections_WhenScheduleIsOutsideSemesterSurvey_ShouldBeRejected()
+    {
+        await RunInRollbackAsync(async (db, serviceFor) =>
+        {
+            var seeded = await SeedDepartmentScopedSurveyAsync(db, 1);
+            if (seeded is null) return;
+            var (semesterSurveyId, slice, _) = seeded.Value;
+            var survey = await db.SemesterSurveys.SingleAsync(
+                x => x.SemesterSurveyId == semesterSurveyId);
+
+            var result = await serviceFor(Admin).AddSectionsToSemesterSurveyAsync(
+                semesterSurveyId,
+                new AddSectionsToSemesterSurveyCommand(
+                    SurveyScopeTypes.Department,
+                    slice.DepartmentId,
+                    survey.StartTime,
+                    survey.EndTime.AddMinutes(1)));
+
+            result.Succeeded.Should().BeFalse();
+            result.ErrorCode.Should().Be(
+                SurveyErrorCodes.SectionScheduleOutsideSemesterSurvey);
         });
     }
 }

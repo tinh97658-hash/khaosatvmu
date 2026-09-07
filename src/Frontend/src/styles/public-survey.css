@@ -831,6 +831,12 @@
   margin: 0 auto;
 }
 
+.public-quiz > form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .public-quiz-card {
   padding: 22px 26px 24px;
   border: 1px solid #dfe4e8;
@@ -987,6 +993,12 @@
   border: 1px solid #dfe4e8;
   border-radius: 8px;
   background: #ffffff;
+  scroll-margin-top: 24px;
+}
+
+.public-quiz-question.is-invalid {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
 }
 
 .public-quiz-question-head {
@@ -1114,6 +1126,7 @@
 
 .public-quiz-text .public-survey-counter,
 .public-quiz-comments .public-survey-counter {
+  position: static;
   display: block;
   margin-top: 6px;
   color: #6b757e;
@@ -1136,6 +1149,103 @@
   color: #46515a;
   font-size: 15px;
   line-height: 1.6;
+}
+
+/* --------------------------------------------- Tiến độ và danh sách câu hỏi */
+
+.public-quiz-review .public-quiz-progress {
+  margin: 0;
+  padding: 0;
+  border-top: 0;
+}
+
+.public-question-review-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #eceff1;
+}
+
+.public-question-review-heading > svg {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  color: #1f7a45;
+}
+
+.public-question-review-heading h2 {
+  margin: 0;
+  color: #20262c;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.public-question-review-heading p {
+  margin: 3px 0 0;
+  color: #6b757e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.public-question-review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 44px);
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.public-question-review-item {
+  display: grid;
+  grid-template-rows: 30px 20px;
+  width: 44px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #b8c2c9;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #334155;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.public-question-review-item > span {
+  display: grid;
+  place-items: center;
+}
+
+.public-question-review-item > span:last-child {
+  background: #e5e9ec;
+  color: #64727d;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.public-question-review-item.is-answered {
+  border-color: #1f7a45;
+  color: #176236;
+}
+
+.public-question-review-item.is-answered > span:last-child {
+  background: #1f7a45;
+  color: #ffffff;
+}
+
+.public-question-review-item:hover {
+  border-color: #1f7a45;
+  transform: translateY(-1px);
+}
+
+.public-question-review-item:focus-visible {
+  outline: 0;
+  border-color: #176236;
+  box-shadow: 0 0 0 3px rgba(31, 122, 69, 0.18);
 }
 
 .public-quiz-submit {
@@ -1240,6 +1350,15 @@
 
   .public-quiz-comments-hint {
     font-size: 14px;
+  }
+
+  .public-question-review-grid {
+    grid-template-columns: repeat(auto-fill, 42px);
+    gap: 7px;
+  }
+
+  .public-question-review-item {
+    width: 42px;
   }
 
   .public-quiz-submit {

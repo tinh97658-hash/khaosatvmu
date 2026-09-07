@@ -39,6 +39,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasSequence<long>("UserProfileCodeSequence");
+
         // Global soft-delete filters — excluded from queries unless .IgnoreQueryFilters() is used
         modelBuilder.Entity<Role>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Faculty>().HasQueryFilter(e => !e.IsDeleted);
@@ -364,7 +366,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         // Đợt khảo sát theo học kỳ và bài khảo sát riêng của từng lớp học phần.
         modelBuilder.Entity<SemesterSurvey>(entity =>
         {
-            entity.ToTable("SemesterSurveys");
+            entity.ToTable("SemesterSurveys", table =>
+                table.HasCheckConstraint(
+                    "CK_SemesterSurveys_TimeRange",
+                    "\"EndTime\" > \"StartTime\""));
             entity.HasKey(x => x.SemesterSurveyId);
             entity.Property(x => x.SurveyName).IsRequired();
             entity.HasIndex(x => x.SemesterId);

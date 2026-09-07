@@ -224,7 +224,9 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
               buttonLabel="Xuất số liệu"
               size="sm"
               options={{
-                fileName: 'tien-do-khao-sat-giang-vien',
+                fileName: `bao-cao-tien-do-khao-sat-giang-vien-${
+                  selectedSurvey?.surveyName || 'hoc-phan'
+                }-${activeSemesterLabel}`,
                 metadata: {
                   title: 'BÁO CÁO TIẾN ĐỘ THU PHIẾU KHẢO SÁT CÁ NHÂN GIẢNG VIÊN',
                   subtitle: `Học kỳ: ${activeSemesterLabel}${selectedSurvey ? ` — Đợt: ${selectedSurvey.surveyName}` : ''}`,

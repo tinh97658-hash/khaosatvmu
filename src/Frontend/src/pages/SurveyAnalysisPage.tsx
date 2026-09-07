@@ -551,7 +551,7 @@ export const SurveyAnalysisPage: React.FC = () => {
       );
 
       return {
-        fileName: 'chuan-hoa-diem-khoa-vien',
+        fileName: 'thong-ke-chi-tiet-mat-bang-toan-truong',
         metadata: {
           title: 'BÁO CÁO CHUẨN HÓA Z-SCORE THEO KHOA / VIỆN',
           subtitle: `Bộ câu hỏi: ${surveyTitle}`,
@@ -634,7 +634,7 @@ export const SurveyAnalysisPage: React.FC = () => {
       );
 
       return {
-        fileName: 'chuan-hoa-lop-hoc-phan',
+        fileName: 'thong-ke-chi-tiet-phan-tich-theo-lop-hoc-phan',
         metadata: {
           title: 'BÁO CÁO PHÂN LOẠI & CHUẨN HÓA Z-SCORE LỚP HỌC PHẦN',
           subtitle: `Bộ câu hỏi: ${surveyTitle}`,
@@ -697,7 +697,7 @@ export const SurveyAnalysisPage: React.FC = () => {
       );
 
       return {
-        fileName: 'tong-hop-khao-sat-bo-mon',
+        fileName: 'thong-ke-chi-tiet-tong-hop-theo-bo-mon',
         metadata: {
           title: 'BÁO CÁO TỔNG HỢP KẾT QUẢ KHẢO SÁT THEO BỘ MÔN',
           subtitle: `Bộ câu hỏi: ${surveyTitle}`,
@@ -781,7 +781,7 @@ export const SurveyAnalysisPage: React.FC = () => {
       );
 
       return {
-        fileName: 'chan-doan-hoc-phan',
+        fileName: 'thong-ke-chi-tiet-chan-doan-hoc-phan',
         metadata: {
           title: 'BÁO CÁO CHẨN ĐOÁN CHẤT LƯỢNG HỌC PHẦN',
           subtitle: `Bộ câu hỏi: ${surveyTitle}`,
@@ -848,7 +848,7 @@ export const SurveyAnalysisPage: React.FC = () => {
 
     if (tab === 'lecturer' && lecturers.length > 0) {
       return {
-        fileName: 'danh-sach-giang-vien-khao-sat',
+        fileName: 'thong-ke-chi-tiet-danh-sach-giang-vien-khao-sat',
         metadata: {
           title: 'BÁO CÁO DANH SÁCH GIẢNG VIÊN ĐƯỢC KHẢO SÁT',
           subtitle: `Bộ câu hỏi: ${surveyTitle}`,

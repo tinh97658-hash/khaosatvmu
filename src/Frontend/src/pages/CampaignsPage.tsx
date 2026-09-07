@@ -35,7 +35,7 @@ import type {
   Criterion,
 } from '../types';
 import '../styles/survey-operations.css';
-import { foldVietnamese } from '../utils/vietnamese';
+import { foldVietnamese, toVietnameseFileSlug } from '../utils/vietnamese';
 
 interface CampaignsPageProps {
   campaigns: SurveyCampaign[];
@@ -168,7 +168,9 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = 'danh-sach-duong-dan-khao-sat.csv';
+    anchor.download = `${toVietnameseFileSlug(
+      `danh sach duong dan khao sat ${activeTab} ${semesterFilter || activeSemester?.semesterName || ''} ${academicYearFilter || activeYear?.academicYearName || ''}`
+    )}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
     toast.success('Đã xuất danh sách khảo sát', {

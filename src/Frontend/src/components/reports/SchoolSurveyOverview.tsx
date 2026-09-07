@@ -169,7 +169,7 @@ export const SchoolSurveyOverview: React.FC<SchoolSurveyOverviewProps> = ({
   );
 
   const exportOverviewPayload = {
-    fileName: 'tong-quan-khao-sat-toan-truong',
+    fileName: `bao-cao-tong-quan-khao-sat-toan-truong-${data.semesterName}-${data.academicYearName}`,
     metadata: {
       title: 'BÁO CÁO TỔNG QUAN KẾT QUẢ KHẢO SÁT TOÀN TRƯỜNG',
       subtitle: `${data.academicYearName} · ${data.semesterName}`,

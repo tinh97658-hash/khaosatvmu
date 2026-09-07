@@ -9,12 +9,11 @@ import { ConfirmDialog, Modal } from '../components/Modal';
 import { FacultyImportDialog } from '../components/FacultyImportDialog';
 import { catalogErrorMessage, type CatalogImportResponse } from '../services/catalogApi';
 import type { ImportFacultyRow } from '../utils/facultyImportExcel';
-import type { Department, Faculty, Major } from '../types';
+import type { Department, Faculty } from '../types';
 import { foldVietnamese } from '../utils/vietnamese';
 
 interface FacultiesPageProps {
   faculties: Faculty[];
-  majors: Major[];
   departments: Department[];
   /** Trả về mã lỗi của API, null nếu lưu thành công. */
   onSaveFaculty: (facultyId: number | null, facultyName: string) => Promise<string | null>;
@@ -24,7 +23,6 @@ interface FacultiesPageProps {
 
 export const FacultiesPage: React.FC<FacultiesPageProps> = ({
   faculties,
-  majors,
   departments,
   onSaveFaculty,
   onDeleteFaculty,
@@ -42,8 +40,6 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
   const [saving, setSaving] = useState(false);
   const [facultyName, setFacultyName] = useState('');
 
-  const majorCountOf = (facultyId: number) =>
-    majors.filter((major) => major.facultyId === facultyId).length;
   const departmentCountOf = (facultyId: number) =>
     departments.filter((department) => department.facultyId === facultyId).length;
 
@@ -115,29 +111,19 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
     (faculty) => !normalized || foldVietnamese(faculty.facultyName).includes(normalized)
   );
 
-  // Bề rộng để theo phần trăm, không để pixel: bảng chỉ có bốn cột nên với màn
-  // hình rộng, cột tên khoa viện nhận hết phần dư và trông lệch hẳn so với ba cột
-  // còn lại. Theo phần trăm thì tỷ lệ giữ nguyên ở mọi cỡ màn hình.
+  // Bề rộng theo phần trăm để ba cột còn lại lấp đầy bảng sau khi ẩn số ngành học.
   const columns: Column<Faculty>[] = [
     {
       key: 'facultyName',
       header: 'Tên khoa viện',
-      width: '40%',
+      width: '55%',
       filterValue: (item) => item.facultyName,
       render: (item) => <span className="catalog-cell-primary">{item.facultyName}</span>,
     },
     {
-      key: 'majorCount',
-      header: 'Số ngành học',
-      width: '22%',
-      filterValue: (item) => String(majorCountOf(item.facultyId)),
-      numeric: true,
-      render: (item) => <span className="catalog-cell-primary">{majorCountOf(item.facultyId)}</span>,
-    },
-    {
       key: 'departmentCount',
       header: 'Số bộ môn',
-      width: '22%',
+      width: '25%',
       filterValue: (item) => String(departmentCountOf(item.facultyId)),
       numeric: true,
       render: (item) => (
@@ -147,7 +133,7 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
     {
       key: 'actions',
       header: 'Hành động',
-      width: '16%',
+      width: '20%',
       render: (item) => (
         <div className="catalog-actions">
           <button
@@ -190,6 +176,11 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm nhanh theo tên khoa viện..."
+        exportConfig={{
+          title: 'DANH SÁCH KHOA / VIỆN',
+          fileName: 'danh-sach-khoa-vien',
+          subInstitution: 'PHÒNG ĐÀO TẠO',
+        }}
         onAddNew={canManageCatalog ? openCreate : undefined}
         addNewLabel="Thêm khoa viện"
         toolbarActions={(

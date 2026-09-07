@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 
 export interface SearchableSelectOption {
@@ -40,6 +41,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [highlighted, setHighlighted] = useState(0);
+  const [listStyle, setListStyle] = useState<React.CSSProperties>({});
 
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -78,11 +80,52 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
     if (!isOpen) return;
 
     const handlePointerDown = (event: MouseEvent) => {
-      if (rootRef.current?.contains(event.target as Node)) return;
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || listRef.current?.contains(target)) return;
       close();
     };
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isOpen]);
+
+  // Danh sách được đưa ra document.body để không bị vùng cuộn của modal/bảng cắt mất.
+  // Tọa độ vẫn bám theo ô nhập và tự mở lên trên nếu phía dưới không đủ chỗ.
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+
+    const updatePosition = () => {
+      const rect = rootRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const viewportPadding = 8;
+      const gap = 3;
+      const preferredHeight = 264;
+      const spaceBelow = window.innerHeight - rect.bottom - gap - viewportPadding;
+      const spaceAbove = rect.top - gap - viewportPadding;
+      const openAbove = spaceBelow < Math.min(160, preferredHeight) && spaceAbove > spaceBelow;
+      const availableHeight = openAbove ? spaceAbove : spaceBelow;
+      const width = Math.min(rect.width, window.innerWidth - viewportPadding * 2);
+      const left = Math.max(
+        viewportPadding,
+        Math.min(rect.left, window.innerWidth - width - viewportPadding)
+      );
+
+      setListStyle({
+        top: openAbove ? rect.top - gap : rect.bottom + gap,
+        left,
+        width,
+        maxHeight: Math.max(72, Math.min(preferredHeight, availableHeight)),
+        transform: openAbove ? 'translateY(-100%)' : undefined,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
   }, [isOpen]);
 
   // Giữ mục đang trỏ luôn nằm trong tầm nhìn khi đi bằng phím mũi tên.
@@ -150,12 +193,13 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       />
       <ChevronDown className="searchable-select__caret" aria-hidden="true" />
 
-      {isOpen && (
+      {isOpen && createPortal(
         <ul
           ref={listRef}
           id={id ? `${id}-listbox` : undefined}
-          className="searchable-select__list"
+          className="searchable-select__list searchable-select__list--portal"
           role="listbox"
+          style={listStyle}
         >
           {visibleOptions.length === 0 ? (
             <li className="searchable-select__empty">Không có lựa chọn nào khớp</li>
@@ -183,7 +227,8 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
               </li>
             ))
           )}
-        </ul>
+        </ul>,
+        document.body
       )}
     </div>
   );

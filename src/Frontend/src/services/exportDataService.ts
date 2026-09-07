@@ -1,5 +1,6 @@
 import { toast } from 'sonner';
 import { applyVmuFontsToPdf } from '../utils/vmuFontHelper';
+import { toVietnameseFileSlug } from '../utils/vietnamese';
 
 export type ExportFormat = 'xlsx' | 'docx' | 'pdf';
 
@@ -112,12 +113,11 @@ function downloadBlob(blob: Blob, fileName: string) {
 }
 
 function sanitizeFileName(name: string, ext: string): string {
-  const clean = name
-    .trim()
-    .replace(/[\\/:*?"<>|]+/g, '_')
-    .replace(/\s+/g, '_');
   const targetExt = ext.startsWith('.') ? ext : `.${ext}`;
-  return clean.toLowerCase().endsWith(targetExt.toLowerCase()) ? clean : `${clean}${targetExt}`;
+  const baseName = name.toLowerCase().endsWith(targetExt.toLowerCase())
+    ? name.slice(0, -targetExt.length)
+    : name;
+  return `${toVietnameseFileSlug(baseName)}${targetExt.toLowerCase()}`;
 }
 
 function sanitizeSheetName(name: string): string {

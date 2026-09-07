@@ -231,6 +231,11 @@ export const MajorsPage: React.FC<MajorsPageProps> = ({
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm nhanh theo tên ngành học..."
+        exportConfig={{
+          title: 'DANH SÁCH NGÀNH ĐÀO TẠO',
+          fileName: 'danh-sach-nganh-dao-tao',
+          subInstitution: 'PHÒNG ĐÀO TẠO',
+        }}
         filterOptions={[
           { label: 'Tất cả khoa / viện', value: '' },
           ...faculties.map((faculty) => ({

@@ -223,7 +223,9 @@ export const DepartmentDashboardPage: React.FC<DepartmentDashboardPageProps> = (
               buttonLabel="Xuất báo cáo bộ môn"
               size="sm"
               options={{
-                fileName: `tong-quan-bo-mon-${(metrics.departmentName || 'bo-mon').toLowerCase().replace(/\s+/g, '-')}`,
+                fileName: `bao-cao-tong-quan-bo-mon-${metrics.departmentName || 'bo-mon'}-${
+                  selectedSurvey?.surveyName || 'dot-khao-sat'
+                }-${activeSemesterLabel}`,
                 metadata: {
                   title: `BÁO CÁO TỔNG QUAN BỘ MÔN ${(metrics.departmentName || '').toUpperCase()}`,
                   subtitle: `Học kỳ: ${activeSemesterLabel} — Đợt: ${selectedSurvey?.surveyName ?? '—'}`,

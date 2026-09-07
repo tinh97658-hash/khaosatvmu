@@ -138,13 +138,18 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
       foldVietnamese(item.name).includes(search.toLowerCase()) ||
       foldVietnamese(item.lecturerName).includes(search.toLowerCase())
   );
+  const selectedSurvey = semesterSurveys.find(
+    (survey) => String(survey.semesterSurveyId) === selectedSurveyId
+  );
 
   const exportConfig = useMemo(() => {
     const laggingItems = progressItems.filter((i) => i.status === 'Chậm tiến độ');
     const completedItems = progressItems.filter((i) => i.status === 'Đạt chỉ tiêu');
 
     return {
-      fileName: 'bao-cao-tien-do-thu-phieu-khao-sat',
+      fileName: `bao-cao-tien-do-thu-phieu-dot-khao-sat-${
+        selectedSurvey?.surveyName || 'hoc-phan'
+      }-${activeSemesterLabel}`,
       title: 'BÁO CÁO TIẾN ĐỘ THU PHIẾU KHẢO SÁT Ý KIẾN SINH VIÊN',
       subtitle: 'Hệ thống Khảo sát & Đảm bảo Chất lượng Đào tạo VMU',
       subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
@@ -183,7 +188,16 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
         },
       ],
     };
-  }, [progressItems, totalTarget, totalActual, overallRate, completedCount, laggingCount]);
+  }, [
+    progressItems,
+    totalTarget,
+    totalActual,
+    overallRate,
+    completedCount,
+    laggingCount,
+    selectedSurvey?.surveyName,
+    activeSemesterLabel,
+  ]);
 
   // Bề rộng theo phần trăm để tỷ lệ cột giữ nguyên trên mọi cỡ màn hình.
   const columns: Column<ProgressItem>[] = [

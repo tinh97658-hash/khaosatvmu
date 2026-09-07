@@ -417,8 +417,8 @@ public sealed class EfSurveyService(
                     questionCounts
                         .FirstOrDefault(x => x.SurveyTemplateId == survey.SurveyTemplateId)?.Count ?? 0,
                     survey.CreatedAt,
-                    sections.Count == 0 ? survey.CreatedAt : sections.Min(x => x.StartTime),
-                    sections.Count == 0 ? survey.CreatedAt : sections.Max(x => x.EndTime),
+                    survey.StartTime,
+                    survey.EndTime,
                     sections.Count,
                     sections.Sum(section =>
                         responseCounts.TryGetValue(section.CourseSectionSurveyId, out var count) ? count : 0),
@@ -490,6 +490,8 @@ public sealed class EfSurveyService(
             SurveyName = surveyName,
             SemesterId = command.SemesterId,
             SurveyTemplateId = command.SurveyTemplateId,
+            StartTime = startTime,
+            EndTime = endTime,
             CreatedAt = now,
         };
         db.SemesterSurveys.Add(survey);
@@ -512,6 +514,80 @@ public sealed class EfSurveyService(
         return created is null
             ? Failed<SemesterSurveyDto>(SurveyErrorCodes.SemesterSurveyNotFound)
             : Succeeded(created);
+    }
+
+    public async Task<SurveyOperationResult<SemesterSurveyDto>> UpdateSemesterSurveyAsync(
+        int semesterSurveyId,
+        UpdateSemesterSurveyCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.SeesEverything)
+        {
+            return Failed<SemesterSurveyDto>(SurveyErrorCodes.OutOfScope);
+        }
+
+        var surveyName = command.SurveyName?.Trim() ?? string.Empty;
+        if (surveyName.Length == 0)
+        {
+            return Failed<SemesterSurveyDto>(SurveyErrorCodes.SemesterSurveyNameRequired);
+        }
+
+        var startTime = ToUtc(command.StartTime);
+        var endTime = ToUtc(command.EndTime);
+        if (endTime <= startTime)
+        {
+            return Failed<SemesterSurveyDto>(SurveyErrorCodes.ScheduleInvalid);
+        }
+
+        await using var transaction = db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(
+                System.Data.IsolationLevel.Serializable,
+                cancellationToken)
+            : null;
+
+        var survey = await FindSemesterSurveyForUpdateAsync(semesterSurveyId, cancellationToken);
+        if (survey is null)
+        {
+            return Failed<SemesterSurveyDto>(SurveyErrorCodes.SemesterSurveyNotFound);
+        }
+
+        // Không tự ép lịch lớp theo lịch tổng mới: người quản trị phải nhìn thấy và sửa rõ từng
+        // lịch đang vượt biên, tránh vô tình đóng sớm hàng loạt lớp đã công bố thời gian.
+        var excludesExistingSection = await db.CourseSectionSurveys.AnyAsync(
+            x => x.SemesterSurveyId == semesterSurveyId
+                 && (x.StartTime < startTime || x.EndTime > endTime),
+            cancellationToken);
+        if (excludesExistingSection)
+        {
+            return Failed<SemesterSurveyDto>(
+                SurveyErrorCodes.SemesterSurveyScheduleExcludesSections);
+        }
+
+        survey.SurveyName = surveyName;
+        survey.StartTime = startTime;
+        survey.EndTime = endTime;
+        await db.SaveChangesAsync(cancellationToken);
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        var links = await db.CourseSectionSurveys.AsNoTracking()
+            .Where(x => x.SemesterSurveyId == semesterSurveyId)
+            .Select(x => x.LinkToken)
+            .ToListAsync(cancellationToken);
+        foreach (var link in links)
+        {
+            cache.Remove($"survey:public:{link}");
+        }
+
+        var updated = (await GetSemesterSurveysAsync(survey.SemesterId, cancellationToken))
+            .FirstOrDefault(x => x.SemesterSurveyId == semesterSurveyId);
+        return updated is null
+            ? Failed<SemesterSurveyDto>(SurveyErrorCodes.SemesterSurveyNotFound)
+            : Succeeded(updated);
     }
 
     public async Task<SurveyOperationResult<bool>> DeleteSemesterSurveyAsync(
@@ -706,9 +782,8 @@ public sealed class EfSurveyService(
             newSectionCount));
     }
 
-    // Bổ sung lớp vào đợt đã có theo phạm vi tự chọn. Khung giờ do người gọi quyết
-    // định chứ không ép theo đợt: thêm một khoa vào đợt đã chạy quá nửa mà dùng lại
-    // khung giờ cũ thì lớp mới mở ra đã hết hạn.
+    // Bổ sung lớp vào đợt đã có theo phạm vi tự chọn. Người gọi được chọn khung giờ riêng
+    // cho lớp mới, nhưng khoảng đó bắt buộc nằm trọn trong lịch tổng của đợt.
     public async Task<SurveyOperationResult<AddSectionsToSemesterSurveyDto>> AddSectionsToSemesterSurveyAsync(
         int semesterSurveyId,
         AddSectionsToSemesterSurveyCommand command,
@@ -733,11 +808,21 @@ public sealed class EfSurveyService(
             return Failed<AddSectionsToSemesterSurveyDto>(SurveyErrorCodes.ScheduleInvalid);
         }
 
-        var survey = await db.SemesterSurveys
-            .FirstOrDefaultAsync(x => x.SemesterSurveyId == semesterSurveyId, cancellationToken);
+        await using var transaction = db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(
+                System.Data.IsolationLevel.Serializable,
+                cancellationToken)
+            : null;
+
+        var survey = await FindSemesterSurveyForUpdateAsync(semesterSurveyId, cancellationToken);
         if (survey is null)
         {
             return Failed<AddSectionsToSemesterSurveyDto>(SurveyErrorCodes.SemesterSurveyNotFound);
+        }
+        if (startTime < survey.StartTime || endTime > survey.EndTime)
+        {
+            return Failed<AddSectionsToSemesterSurveyDto>(
+                SurveyErrorCodes.SectionScheduleOutsideSemesterSurvey);
         }
 
         var units = await ResolveSectionUnitsAsync([survey.SemesterId], cancellationToken);
@@ -771,6 +856,11 @@ public sealed class EfSurveyService(
             CreatedAt = now,
         }));
         await db.SaveChangesAsync(cancellationToken);
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return Succeeded(new AddSectionsToSemesterSurveyDto(
             semesterSurveyId,
@@ -1243,9 +1333,32 @@ public sealed class EfSurveyService(
             return Failed<CourseSectionSurveyDto>(SurveyErrorCodes.ScheduleInvalid);
         }
 
+        await using var transaction = db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(
+                System.Data.IsolationLevel.Serializable,
+                cancellationToken)
+            : null;
+
+        var semesterSurvey = await FindSemesterSurveyForUpdateAsync(
+            sectionSurvey.SemesterSurveyId,
+            cancellationToken);
+        if (semesterSurvey is null)
+        {
+            return Failed<CourseSectionSurveyDto>(SurveyErrorCodes.SemesterSurveyNotFound);
+        }
+        if (startTime < semesterSurvey.StartTime || endTime > semesterSurvey.EndTime)
+        {
+            return Failed<CourseSectionSurveyDto>(
+                SurveyErrorCodes.SectionScheduleOutsideSemesterSurvey);
+        }
+
         sectionSurvey.StartTime = startTime;
         sectionSurvey.EndTime = endTime;
         await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
         cache.Remove($"survey:public:{sectionSurvey.LinkToken}");
 
         var updated = (await GetCourseSectionSurveysAsync(sectionSurvey.SemesterSurveyId, cancellationToken))
@@ -1254,6 +1367,23 @@ public sealed class EfSurveyService(
             ? Failed<CourseSectionSurveyDto>(SurveyErrorCodes.SectionSurveyNotFound)
             : Succeeded(updated);
     }
+
+    /// <summary>
+    /// Khóa dòng đợt trong transaction để thao tác sửa lịch tổng, sửa lịch lớp và thêm lớp không
+    /// thể chạy xuyên qua nhau rồi cùng vượt qua bước kiểm tra bằng dữ liệu cũ.
+    /// </summary>
+    private Task<SemesterSurvey?> FindSemesterSurveyForUpdateAsync(
+        int semesterSurveyId,
+        CancellationToken cancellationToken) =>
+        db.SemesterSurveys
+            .FromSqlInterpolated(
+                $"""
+                SELECT *
+                FROM "SemesterSurveys"
+                WHERE "SemesterSurveyId" = {semesterSurveyId}
+                FOR UPDATE
+                """)
+            .FirstOrDefaultAsync(cancellationToken);
 
     // -------------------------------------------------- Phiếu khảo sát công khai
 

@@ -247,6 +247,11 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm nhanh theo tên bộ môn..."
+        exportConfig={{
+          title: 'DANH SÁCH BỘ MÔN',
+          fileName: 'danh-sach-bo-mon',
+          subInstitution: 'PHÒNG ĐÀO TẠO',
+        }}
         filterOptions={[
           { label: 'Tất cả khoa / viện', value: '' },
           ...faculties.map((faculty) => ({

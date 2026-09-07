@@ -113,6 +113,7 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [comments, setComments] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [invalidQuestionId, setInvalidQuestionId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -192,6 +193,16 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
   const totalQuestions = survey?.questions.length ?? 0;
   const progress = totalQuestions === 0 ? 0 : Math.round((answeredCount / totalQuestions) * 100);
 
+  const focusQuestion = (questionId: number) => {
+    requestAnimationFrame(() => {
+      const questionElement = document.querySelector<HTMLElement>(
+        `[data-question-id="${questionId}"]`
+      );
+      questionElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      questionElement?.querySelector<HTMLElement>('input, textarea')?.focus({ preventScroll: true });
+    });
+  };
+
   /** Bấm nút Nộp: kiểm đủ câu rồi mới mở hộp thoại xác nhận. */
   const handleSubmitRequest = (event: React.FormEvent) => {
     event.preventDefault();
@@ -199,6 +210,14 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
 
     if (answeredCount < totalQuestions) {
       setSubmitError('Vui lòng trả lời đầy đủ tất cả câu hỏi trước khi nộp.');
+      const firstUnanswered = questionRows.find(
+        ({ question }) => !(answers[question.questionId] ?? '').trim()
+      );
+      if (firstUnanswered) {
+        const questionId = firstUnanswered.question.questionId;
+        setInvalidQuestionId(questionId);
+        focusQuestion(questionId);
+      }
       return;
     }
 
@@ -495,17 +514,6 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
             </div>
           </dl>
 
-          {/* Không có phân trang câu hỏi nên thanh này chỉ báo đã trả lời tới đâu. */}
-          <div className="public-quiz-progress">
-            <span className="public-quiz-progress-label">
-              Câu hỏi {answeredCount} / {totalQuestions}
-            </span>
-            <div className="public-quiz-progress-bar" aria-hidden="true">
-              <span style={{ width: `${progress}%` }} />
-            </div>
-            <span className="public-quiz-progress-percent">{progress}%</span>
-          </div>
-
           <div className="public-intro-notice">
             <Info aria-hidden="true" />
             <div>
@@ -537,7 +545,11 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
               const value = answers[question.questionId] ?? '';
 
               return (
-                <li className="public-quiz-question" key={question.questionId}>
+                <li
+                  className={`public-quiz-question${invalidQuestionId === question.questionId ? ' is-invalid' : ''}`}
+                  key={question.questionId}
+                  data-question-id={question.questionId}
+                >
                   <div className="public-quiz-question-head">
                     <span className="public-quiz-number" aria-hidden="true">
                       {order}
@@ -553,6 +565,7 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
                         maxLength={maximumTextAnswerLength}
                         placeholder="Nhập câu trả lời của bạn..."
                         aria-label={question.questionText}
+                        aria-invalid={invalidQuestionId === question.questionId}
                         value={value}
                         disabled={!survey.isOpen || submitting}
                         onChange={(event) => {
@@ -561,6 +574,7 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
                             [question.questionId]: event.target.value,
                           }));
                           setSubmitError(null);
+                          setInvalidQuestionId(null);
                         }}
                       />
                       <span className="public-survey-counter">
@@ -572,6 +586,7 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
                       className="public-quiz-options"
                       role="radiogroup"
                       aria-label={question.questionText}
+                      aria-invalid={invalidQuestionId === question.questionId}
                     >
                       {scale.options.map((option) => {
                         const selected = value === String(option.value);
@@ -592,6 +607,7 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
                                   [question.questionId]: String(option.value),
                                 }));
                                 setSubmitError(null);
+                                setInvalidQuestionId(null);
                               }}
                             />
                             <span className="public-quiz-option-value">{option.value}</span>
@@ -629,6 +645,51 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
             <span className="public-survey-counter">
               {comments.length}/{maximumCommentLength}
             </span>
+          </section>
+
+          <section className="public-quiz-card public-quiz-review" aria-labelledby="question-review-title">
+            <div className="public-quiz-progress">
+              <span className="public-quiz-progress-label">
+                Câu hỏi {answeredCount} / {totalQuestions}
+              </span>
+              <div
+                className="public-quiz-progress-bar"
+                role="progressbar"
+                aria-label="Tiến độ trả lời"
+                aria-valuemin={0}
+                aria-valuemax={totalQuestions}
+                aria-valuenow={answeredCount}
+              >
+                <span style={{ width: `${progress}%` }} />
+              </div>
+              <span className="public-quiz-progress-percent">{progress}%</span>
+            </div>
+
+            <div className="public-question-review-heading">
+              <ClipboardList aria-hidden="true" />
+              <div>
+                <h2 id="question-review-title">Danh sách câu hỏi</h2>
+                <p>Bấm vào số câu để xem lại hoặc hoàn thành câu còn thiếu.</p>
+              </div>
+            </div>
+
+            <div className="public-question-review-grid">
+              {questionRows.map(({ question, order }) => {
+                const isAnswered = (answers[question.questionId] ?? '').trim().length > 0;
+                return (
+                  <button
+                    type="button"
+                    className={`public-question-review-item${isAnswered ? ' is-answered' : ''}`}
+                    key={question.questionId}
+                    aria-label={`Câu ${order}, ${isAnswered ? 'đã trả lời' : 'chưa trả lời'}`}
+                    onClick={() => focusQuestion(question.questionId)}
+                  >
+                    <span>{order}</span>
+                    <span aria-hidden="true">{isAnswered ? '✓' : '–'}</span>
+                  </button>
+                );
+              })}
+            </div>
           </section>
 
           {submitError && (

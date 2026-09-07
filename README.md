@@ -171,6 +171,7 @@ cd src/Backend/API
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=khaosatvmu;Username=postgres;Password=<local-password>"
 dotnet user-secrets set "Authentication:Google:ClientId" "<client-id>"
 dotnet user-secrets set "Authentication:Google:ClientSecret" "<client-secret>"
+dotnet user-secrets set "SurveyTicket:SigningKey" "<long-random-signing-key>"
 
 # Chạy ứng dụng
 dotnet run

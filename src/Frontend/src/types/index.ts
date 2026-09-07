@@ -192,7 +192,7 @@ export interface SemesterSurvey {
   questionCount: number;
   /** ISO 8601 */
   createdAt: string;
-  /** Sớm nhất / muộn nhất trong các lớp của đợt. */
+  /** Lịch tổng của đợt; mọi lịch lớp phải nằm trọn trong khoảng này. */
   startTime: string;
   endTime: string;
   sectionSurveyCount: number;
@@ -429,10 +429,7 @@ export interface AdminUser {
   createdAt: string;
   updatedAt: string;
   profiles: AdminProfile[];
-  /**
-   * Hồ sơ giảng viên gắn với tài khoản; null với tài khoản quản trị thuần.
-   * Màn cấp hồ sơ dùng nó để sinh 6 chữ số đầu của mã hồ sơ.
-   */
+  /** Hồ sơ giảng viên gắn với tài khoản; null với tài khoản quản trị thuần. */
   lecturerId: number | null;
 }
 
@@ -502,7 +499,6 @@ export interface AdminPage<T> {
 
 export interface SaveAdminProfile {
   name: string;
-  code: string;
   roleId: string;
   organizationUnitCode: string | null;
   organizationUnitName: string | null;

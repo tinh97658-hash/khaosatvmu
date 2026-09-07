@@ -50,8 +50,7 @@ type StatusConfirmation =
  * Tên hồ sơ và hai ký tự cuối của mã hồ sơ suy thẳng từ vai trò được cấp, không để
  * quản trị tự gõ: gõ tay thì mỗi người một kiểu và mã hồ sơ mất luôn tính tra cứu.
  *
- * Mã hồ sơ = 6 chữ số mã giảng viên + 2 ký tự vai trò, ví dụ giảng viên 36 làm
- * trưởng bộ môn thì mã là 000036BM.
+ * Mã hồ sơ do backend cấp số tự tăng khi tạo và không xuất hiện trong biểu mẫu.
  */
 const profileNamingByRole: Record<string, { name: string; suffix: string }> = {
   ADMIN: { name: 'Admin hệ thống', suffix: 'AD' },
@@ -62,7 +61,6 @@ const profileNamingByRole: Record<string, { name: string; suffix: string }> = {
 
 const emptyProfile: SaveAdminProfile = {
   name: '',
-  code: '',
   roleId: '',
   organizationUnitCode: null,
   organizationUnitName: null,
@@ -187,6 +185,7 @@ const errorMessages: Record<string, string> = {
   ADMIN_CANNOT_DISABLE_SELF: 'Bạn không thể vô hiệu chính tài khoản đang sử dụng.',
   ADMIN_PROFILE_CODE_EXISTS: 'Mã profile đã tồn tại.',
   ADMIN_PROFILE_ASSIGNMENT_EXISTS: 'Người dùng đã có role trong cùng phạm vi đơn vị.',
+  ADMIN_NO_PROFILES_TO_CREATE: 'Tất cả tài khoản giảng viên phù hợp đã có hồ sơ.',
   ADMIN_CANNOT_MODIFY_ACTIVE_PROFILE: 'Không thể đổi role hoặc vô hiệu profile đang sử dụng.',
   AUTH_CSRF_INVALID: 'Phiên bảo mật đã thay đổi. Vui lòng thử lại.',
 };
@@ -362,12 +361,29 @@ export function UsersAdminPage() {
     try {
       const result = await adminApi.bulkCreateLecturerProfiles();
       await loadUsers();
+      if (result.createdCount === 0) {
+        toast.info('Không có hồ sơ Giảng viên mới cần cấp', {
+          description: 'Tất cả tài khoản giảng viên phù hợp đã có hồ sơ.',
+        });
+        return;
+      }
       toast.success(`Đã cấp ${result.createdCount} hồ sơ Giảng viên`, {
         description: result.skippedCount > 0
           ? `${result.skippedCount} tài khoản bị bỏ qua`
           : undefined,
       });
     } catch (requestError) {
+      // Tương thích với backend phiên bản cũ vẫn trả 400 khi thao tác đã hoàn tất từ trước.
+      if (
+        requestError instanceof ApiError
+        && requestError.errorCode === 'ADMIN_NO_PROFILES_TO_CREATE'
+      ) {
+        setError(null);
+        toast.info('Không có hồ sơ Giảng viên mới cần cấp', {
+          description: errorMessages.ADMIN_NO_PROFILES_TO_CREATE,
+        });
+        return;
+      }
       const message = messageFrom(requestError);
       setError(message);
       toast.error('Không cấp được hồ sơ', { description: message });
@@ -440,7 +456,6 @@ export function UsersAdminPage() {
     setEditingProfile(profile ?? null);
     setProfileForm(profile ? {
       name: profile.name,
-      code: profile.code,
       roleId: profile.roleId,
       organizationUnitCode: profile.organizationUnitCode,
       organizationUnitName: profile.organizationUnitName,
@@ -455,10 +470,6 @@ export function UsersAdminPage() {
   const selectedRoleCode = roles.find((role) => role.id === profileForm.roleId)?.code ?? '';
   const naming = profileNamingByRole[selectedRoleCode];
   const derivedProfileName = naming?.name ?? '';
-  // Tài khoản chưa gắn hồ sơ giảng viên thì 6 chữ số là 000000.
-  const derivedProfileCode = naming
-    ? `${String(selectedUser?.lecturerId ?? 0).padStart(6, '0')}${naming.suffix}`
-    : '';
 
   const handleSaveProfile = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -472,7 +483,6 @@ export function UsersAdminPage() {
       const payload: SaveAdminProfile = {
         ...profileForm,
         name: derivedProfileName || profileForm.name,
-        code: derivedProfileCode || profileForm.code.trim(),
       };
       const saved = editingProfile
         ? await adminApi.updateProfile(selectedUser.id, editingProfile.id, payload)
@@ -973,26 +983,15 @@ export function UsersAdminPage() {
               </select>
             </div>
 
-            {/* Hai ô dưới đây do vai trò quyết định nên chỉ để xem, không gõ được. */}
-            <div className="admin-form-grid">
-              <div className="form-group">
-                <label htmlFor="profile-name">Tên hồ sơ</label>
-                <input
-                  id="profile-name"
-                  value={derivedProfileName}
-                  readOnly
-                  placeholder="Chọn vai trò để có tên hồ sơ"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="profile-code">Mã hồ sơ</label>
-                <input
-                  id="profile-code"
-                  value={derivedProfileCode}
-                  readOnly
-                  placeholder="Chọn vai trò để có mã hồ sơ"
-                />
-              </div>
+            {/* Tên do vai trò quyết định; mã do backend tự cấp và không xuất hiện trong biểu mẫu. */}
+            <div className="form-group">
+              <label htmlFor="profile-name">Tên hồ sơ</label>
+              <input
+                id="profile-name"
+                value={derivedProfileName}
+                readOnly
+                placeholder="Chọn vai trò để có tên hồ sơ"
+              />
             </div>
             <label className="admin-checkbox-row">
               <input type="checkbox" checked={profileForm.isDefault} onChange={(event) => setProfileForm({ ...profileForm, isDefault: event.target.checked })} />

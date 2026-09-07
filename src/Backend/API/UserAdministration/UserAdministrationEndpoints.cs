@@ -244,7 +244,6 @@ public static class UserAdministrationEndpoints
 
     public sealed record SaveProfileRequest(
         string Name,
-        string Code,
         Guid RoleId,
         string? OrganizationUnitCode,
         string? OrganizationUnitName,
@@ -252,7 +251,6 @@ public static class UserAdministrationEndpoints
     {
         public SaveAdminProfileCommand ToCommand() => new(
             Name,
-            Code,
             RoleId,
             OrganizationUnitCode,
             OrganizationUnitName,

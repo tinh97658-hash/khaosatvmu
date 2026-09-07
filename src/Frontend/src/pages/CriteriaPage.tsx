@@ -179,6 +179,13 @@ export const CriteriaPage: React.FC<CriteriaPageProps> = ({
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder={`Tìm tiêu chí ${activeTab}...`}
+        exportConfig={{
+          title: `DANH SÁCH TIÊU CHÍ ĐÁNH GIÁ ${activeTab.toUpperCase()}`,
+          fileName: activeTab === 'Học phần'
+            ? 'danh-sach-tieu-chi-danh-gia-hoc-phan'
+            : 'danh-sach-tieu-chi-danh-gia-chuong-trinh-dao-tao',
+          subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
+        }}
         emptyMessage="Không tìm thấy tiêu chí phù hợp."
         keyExtractor={(item) => item.id}
       />

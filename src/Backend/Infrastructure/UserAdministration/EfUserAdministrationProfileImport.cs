@@ -34,11 +34,12 @@ public sealed partial class EfUserAdministrationService
 
         if (candidates.Count == 0)
         {
-            return Failure<AdminProfileImportDto>(UserAdministrationErrorCodes.NoProfilesToCreate);
+            // Nút hàng loạt phải gọi lặp an toàn. Sau lần cấp đầu tiên, không còn ứng viên
+            // là trạng thái bình thường chứ không phải lỗi nghiệp vụ.
+            return Success(new AdminProfileImportDto(0, 0, 0, []));
         }
 
         var naming = ProfileNaming.ByRoleCode["LECTURER"];
-        var usedCodes = await ExistingProfileCodesAsync(cancellationToken);
 
         var items = new List<AdminProfileImportItemDto>(candidates.Count);
         var created = 0;
@@ -46,13 +47,7 @@ public sealed partial class EfUserAdministrationService
 
         foreach (var user in candidates)
         {
-            var code = ProfileNaming.CodeFor(user.LecturerId, naming.Suffix);
-            if (!usedCodes.Add(code))
-            {
-                items.Add(new AdminProfileImportItemDto(
-                    0, user.Email, false, UserAdministrationErrorCodes.ProfileCodeExists));
-                continue;
-            }
+            var code = await GenerateNextProfileCodeAsync(naming.Suffix, cancellationToken);
 
             AddProfile(user, role.Id, naming.Name, code, isDefault: true, now, actorUserId);
             items.Add(new AdminProfileImportItemDto(0, user.Email, true, null));
@@ -106,7 +101,6 @@ public sealed partial class EfUserAdministrationService
             .Select(x => (x.UserId, x.RoleId))
             .ToHashSet();
 
-        var usedCodes = await ExistingProfileCodesAsync(cancellationToken);
         var items = new List<AdminProfileImportItemDto>(commands.Count);
         var created = 0;
         var now = DateTime.UtcNow;
@@ -141,12 +135,7 @@ public sealed partial class EfUserAdministrationService
             }
 
             var naming = ProfileNaming.ByRoleCode[roleCode];
-            var code = ProfileNaming.CodeFor(user.LecturerId, naming.Suffix);
-            if (!usedCodes.Add(code))
-            {
-                items.Add(Reject(command, email, UserAdministrationErrorCodes.ProfileCodeExists));
-                continue;
-            }
+            var code = await GenerateNextProfileCodeAsync(naming.Suffix, cancellationToken);
 
             // Hồ sơ đầu tiên của tài khoản mặc nhiên là hồ sơ mặc định, giống hệt
             // đường tạo thủ công — không có hồ sơ mặc định thì không đăng nhập được.
@@ -175,12 +164,6 @@ public sealed partial class EfUserAdministrationService
         string email,
         string errorCode) =>
         new(command.RowNumber, email, false, errorCode);
-
-    private async Task<HashSet<string>> ExistingProfileCodesAsync(CancellationToken cancellationToken) =>
-        (await db.UserProfiles
-            .Select(x => x.ProfileCode)
-            .ToListAsync(cancellationToken))
-        .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private void AddProfile(
         User user,

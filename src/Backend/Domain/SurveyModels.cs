@@ -109,6 +109,10 @@ public sealed class SemesterSurvey : ISoftDeletable
     /// <summary>NOT NULL, ON DELETE RESTRICT.</summary>
     public int SurveyTemplateId { get; set; }
 
+    /// <summary>Khung thời gian tổng; mọi lịch của lớp trong đợt phải nằm trọn bên trong.</summary>
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAt { get; set; }

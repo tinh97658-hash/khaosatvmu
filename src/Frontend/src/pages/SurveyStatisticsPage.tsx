@@ -349,7 +349,10 @@ export const SurveyStatisticsPage: React.FC = () => {
               buttonLabel="Xuất bảng điểm"
               size="sm"
               options={{
-                fileName: 'thong-ke-diem-khao-sat-dot',
+                fileName: `bao-cao-thong-ke-diem-dot-khao-sat-${
+                  semesterSurveys.find((item) => String(item.semesterSurveyId) === semesterSurveyId)
+                    ?.surveyName || 'hoc-phan'
+                }`,
                 metadata: {
                   title: 'BÁO CÁO THỐNG KÊ ĐIỂM SỐ ĐỢT KHẢO SÁT',
                   subtitle: `Bộ câu hỏi: ${statistics.templateName}`,

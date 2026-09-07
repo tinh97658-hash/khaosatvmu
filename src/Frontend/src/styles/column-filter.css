@@ -43,6 +43,7 @@
 
 .column-filter-panel {
   position: fixed;
+  /* Panel được portal ra body để luôn nằm trên các cột sticky và vùng cuộn của bảng. */
   z-index: 1200;
   display: flex;
   flex-direction: column;

@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Chỉ cho phép hostname của Microsoft Dev Tunnels khi chia sẻ bản demo từ Ports view.
+    allowedHosts: ['.devtunnels.ms'],
     proxy: {
       '/api': {
         target: 'http://localhost:5115',

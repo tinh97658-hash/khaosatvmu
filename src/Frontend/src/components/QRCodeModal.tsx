@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Copy, Download, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { Modal } from './Modal';
+import { toVietnameseFileSlug } from '../utils/vietnamese';
 
 interface QRCodeModalProps {
   isOpen: boolean;
@@ -11,6 +12,8 @@ interface QRCodeModalProps {
   /** Ảnh QR dựng sẵn. Bỏ trống thì mã QR được sinh ngay trong trình duyệt. */
   qrUrl?: string;
   surveyLink: string;
+  /** Phần tên tệp trước đuôi .png; component sẽ tự bỏ dấu và nối bằng dấu gạch ngang. */
+  downloadFileName?: string;
   onOpenSurveySimulator: () => void;
 }
 
@@ -21,6 +24,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   subtitle,
   qrUrl,
   surveyLink,
+  downloadFileName,
   onOpenSurveySimulator,
 }) => {
   // Sinh mã QR tại chỗ để không phụ thuộc dịch vụ ảnh bên ngoài.
@@ -47,6 +51,10 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   }, [isOpen, surveyLink]);
 
   const qrImage = generatedQr || qrUrl || '';
+  const qrDownloadFileName = `${toVietnameseFileSlug(
+    downloadFileName || 'ma qr khao sat',
+    'ma-qr-khao-sat'
+  )}.png`;
 
   const handleCopy = async () => {
     try {
@@ -106,7 +114,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
           </button>
           <a
             href={qrImage}
-            download="VMU_QR_Survey.png"
+            download={qrDownloadFileName}
             target="_blank"
             rel="noreferrer"
             className="btn btn-primary qr-download-link"

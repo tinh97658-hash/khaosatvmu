@@ -48,14 +48,6 @@ const emptyForm: CourseForm = {
   prerequisiteCourseId: '',
 };
 
-const courseTypeLabels: Record<CourseType, string> = {
-  Required: 'Bắt buộc',
-  Elective: 'Tự chọn',
-};
-
-const courseTypeLabelOf = (value: CourseType | null) =>
-  value === null ? '—' : courseTypeLabels[value];
-
 export const CoursesPage: React.FC<CoursesPageProps> = ({
   courses,
   faculties,
@@ -85,9 +77,6 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     faculties.find((faculty) => faculty.facultyId === facultyId)?.facultyName ?? '—';
   const departmentNameOf = (departmentId: number | null) =>
     departments.find((department) => department.departmentId === departmentId)?.departmentName ?? '—';
-  const courseCodeOf = (courseId: number | null) =>
-    courses.find((course) => course.courseId === courseId)?.courseCode ?? '—';
-
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm);
@@ -193,52 +182,38 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     {
       key: 'courseCode',
       header: 'Mã học phần',
-      width: '10%',
+      width: '12%',
       filterValue: (item) => item.courseCode,
       render: (item) => <span className="catalog-code">{item.courseCode}</span>,
     },
     {
       key: 'courseName',
       header: 'Tên học phần',
-      width: '21%',
+      width: '30%',
       filterValue: (item) => item.courseName,
       render: (item) => <span className="catalog-cell-primary">{item.courseName}</span>,
     },
     {
       key: 'credits',
       header: 'Số tín chỉ',
-      width: '8%',
+      width: '10%',
       filterValue: (item) => String(item.credits),
       numeric: true,
       render: (item) => <span className="catalog-cell-primary">{item.credits}</span>,
     },
     {
-      key: 'courseType',
-      header: 'Loại học phần',
-      width: '12%',
-      filterValue: (item) => courseTypeLabelOf(item.courseType),
-      render: (item) => courseTypeLabelOf(item.courseType),
-    },
-    {
       key: 'departmentId',
       header: 'Bộ môn',
-      width: '15%',
+      width: '18%',
       filterValue: (item) => (item.departmentId === null ? '—' : departmentNameOf(item.departmentId)),
       render: (item) => (item.departmentId === null ? '—' : departmentNameOf(item.departmentId)),
     },
     {
       key: 'facultyId',
       header: 'Khoa viện',
-      width: '15%',
+      width: '20%',
       filterValue: (item) => (item.facultyId === null ? '—' : facultyNameOf(item.facultyId)),
       render: (item) => (item.facultyId === null ? '—' : facultyNameOf(item.facultyId)),
-    },
-    {
-      key: 'prerequisiteCourseId',
-      header: 'Học phần tiên quyết',
-      width: '12%',
-      render: (item) =>
-        item.prerequisiteCourseId === null ? '—' : courseCodeOf(item.prerequisiteCourseId),
     },
   ];
 
@@ -247,7 +222,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     columns.push({
       key: 'actions',
       header: 'Thao tác',
-      width: '7%',
+      width: '10%',
       render: (item) => (
         <div className="catalog-actions">
           <button
@@ -290,6 +265,11 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm mã hoặc tên học phần..."
+        exportConfig={{
+          title: 'DANH SÁCH HỌC PHẦN',
+          fileName: 'danh-sach-hoc-phan',
+          subInstitution: 'PHÒNG ĐÀO TẠO',
+        }}
         onAddNew={canManageCatalog ? openCreate : undefined}
         addNewLabel="Thêm học phần"
         toolbarActions={canManageAll ? (

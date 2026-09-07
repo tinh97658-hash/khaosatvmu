@@ -135,7 +135,6 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
 
   const [isYearModalOpen, setIsYearModalOpen] = useState(false);
   const [editingYear, setEditingYear] = useState<AcademicYear | null>(null);
-  const [yearToDelete, setYearToDelete] = useState<AcademicYear | null>(null);
   const [yearForm, setYearForm] = useState<YearForm>(emptyYearForm);
   const [yearError, setYearError] = useState('');
   const [savingYear, setSavingYear] = useState(false);
@@ -388,25 +387,6 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
     } finally {
       setSavingYear(false);
     }
-  };
-
-  const handleYearDelete = async () => {
-    if (!yearToDelete) return;
-    try {
-      await catalogApi.deleteAcademicYear(yearToDelete.academicYearId);
-      const next = await reloadYears();
-      if (selectedYearId === yearToDelete.academicYearId) {
-        setSelectedYearId(null);
-        setSelectedSemesterId(null);
-      }
-      if (next.length === 0) setSelectedSemesterId(null);
-      toast.success('Đã xóa năm học', { description: yearToDelete.academicYearName });
-    } catch (error) {
-      toast.error('Không thể xóa năm học', {
-        description: catalogErrorMessage(errorCodeOf(error)),
-      });
-    }
-    setYearToDelete(null);
   };
 
   // ----- Học kỳ -------------------------------------------------------------
@@ -850,15 +830,6 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
                           >
                             <Pencil aria-hidden="true" size={13} />
                           </button>
-                          <button
-                            type="button"
-                            className="catalog-icon-button catalog-icon-button--sm catalog-icon-button--danger"
-                            onClick={() => setYearToDelete(year)}
-                            aria-label={`Xóa ${year.academicYearName}`}
-                            title="Xóa năm học"
-                          >
-                            <Trash2 aria-hidden="true" size={13} />
-                          </button>
                         </span>
                       )}
                     </div>
@@ -988,7 +959,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
               searchPlaceholder="Tìm tên lớp hoặc học phần..."
               exportConfig={{
                 title: `DANH SÁCH LỚP HỌC PHẦN - ${selectedSemester.semesterName} (${selectedYear?.academicYearName || ''})`,
-                fileName: `danh-sach-lop-hoc-phan-${selectedSemester.semesterName.toLowerCase().replace(/\s+/g, '-')}`,
+                fileName: `danh-sach-lop-hoc-phan-${selectedSemester.semesterName}-${selectedYear?.academicYearName || ''}`,
                 subtitle: `${selectedYear?.academicYearName || ''}`,
                 subInstitution: 'PHÒNG ĐÀO TẠO',
               }}
@@ -1398,20 +1369,6 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
           selectedYear?.academicYearName ?? ''
         }`}
         onImport={handleImportSections}
-      />
-
-      <ConfirmDialog
-        isOpen={yearToDelete !== null}
-        onClose={() => setYearToDelete(null)}
-        onConfirm={() => void handleYearDelete()}
-        title="Xóa năm học?"
-        recordName={yearToDelete?.academicYearName ?? ''}
-        confirmText="Xóa"
-        warning={
-          yearToDelete && yearToDelete.semesters.length > 0
-            ? `Xóa cùng: ${yearToDelete.semesters.length} học kỳ và toàn bộ lớp học phần thuộc các học kỳ đó.`
-            : undefined
-        }
       />
 
       <ConfirmDialog
