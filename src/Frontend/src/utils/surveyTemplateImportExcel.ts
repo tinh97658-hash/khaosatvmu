@@ -148,7 +148,7 @@ export async function downloadSurveyTemplateImportTemplate(
   const header: SheetData[number] = [
     { value: 'Nội dung câu hỏi', type: String, ...bold },
     { value: 'Mã thang trả lời', type: String, ...bold },
-    { value: 'Mức bắt buộc', type: String, ...bold },
+    { value: 'Đáp án bắt buộc phải chọn(dành cho câu hỏi bẫy)', type: String, ...bold },
     null,
     null,
     { value: 'Thang trả lời của hệ thống', type: String, ...bold },

@@ -1112,8 +1112,14 @@
   box-shadow: 0 0 0 3px rgba(31, 122, 69, 0.14);
 }
 
+/*
+  Quy tắc gốc của .public-survey-counter đặt position: absolute, dựng cho bố cục cũ
+  nơi nó nằm trong một khung textarea có position: relative. Ở màn làm bài mới không
+  có khung nào neo, nên nó rơi ra tận mép phải trang. Trả về static.
+*/
 .public-quiz-text .public-survey-counter,
 .public-quiz-comments .public-survey-counter {
+  position: static;
   display: block;
   margin-top: 6px;
   color: #6b757e;
