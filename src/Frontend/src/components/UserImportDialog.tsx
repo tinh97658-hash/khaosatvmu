@@ -155,7 +155,7 @@ export function UserImportDialog({ isOpen, onClose, onImported }: UserImportDial
               <section className="admin-import-preview" aria-label="Xem trước dữ liệu import">
                 <header>
                   <strong>{rows.length} người dùng sẵn sàng import</strong>
-                  <span>Hiển thị {Math.min(rows.length, 8)} dòng đầu</span>
+                  <span>Hiển thị toàn bộ danh sách</span>
                 </header>
                 <div className="admin-import-table-scroll">
                   <table>
@@ -167,7 +167,7 @@ export function UserImportDialog({ isOpen, onClose, onImported }: UserImportDial
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.slice(0, 8).map((row) => (
+                      {rows.map((row) => (
                         <tr key={row.rowNumber}>
                           <td>{row.rowNumber}</td>
                           <td>{row.email || <span className="admin-import-invalid">Thiếu email</span>}</td>

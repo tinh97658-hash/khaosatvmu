@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { CircleAlert, Download, FileSpreadsheet, LoaderCircle, Upload } from 'lucide-react';
 import {
+  downloadProfileFailedRows,
   downloadProfileImportTemplate,
   parseProfileImportFile,
   ProfileImportFileError,
@@ -8,6 +9,7 @@ import {
   type InvalidRoleRow,
   type ProfileImportFileErrorCode,
 } from '../utils/profileImportExcel';
+import { ExportFailedRowsButton } from './ExportFailedRowsButton';
 import { Modal } from './Modal';
 import '../styles/auth-admin.css';
 
@@ -47,6 +49,18 @@ export function ProfileImportDialog({ isOpen, onClose, onImport }: ProfileImport
     setParseError(null);
     setFormError(null);
   };
+
+  const exportInvalidRoleRows = () =>
+    downloadProfileFailedRows(
+      invalidRoleRows.map((row) => ({
+        rowNumber: row.rowNumber,
+        // Tệp đọc lên không giữ họ tên của dòng sai vai trò, nên để trống cột đó.
+        values: ['', row.email, row.rawRole],
+        reason: row.rawRole
+          ? 'Vai trò không nằm trong danh sách vai trò điền được'
+          : 'Chưa điền vai trò',
+      }))
+    );
 
   const handleClose = () => {
     if (parsing || saving) return;
@@ -163,6 +177,7 @@ export function ProfileImportDialog({ isOpen, onClose, onImport }: ProfileImport
               <strong>{invalidRoleRows.length} dòng có vai trò không hợp lệ</strong>
               <span>Sửa lại tệp rồi chọn lại</span>
             </header>
+            <ExportFailedRowsButton count={invalidRoleRows.length} onExport={exportInvalidRoleRows} />
             <div className="admin-import-table-scroll">
               <table>
                 <thead>
@@ -173,7 +188,7 @@ export function ProfileImportDialog({ isOpen, onClose, onImport }: ProfileImport
                   </tr>
                 </thead>
                 <tbody>
-                  {invalidRoleRows.slice(0, 8).map((row) => (
+                  {invalidRoleRows.map((row) => (
                     <tr key={row.rowNumber}>
                       <td>{row.rowNumber}</td>
                       <td>{row.email}</td>
@@ -190,7 +205,7 @@ export function ProfileImportDialog({ isOpen, onClose, onImport }: ProfileImport
           <section className="admin-import-preview" aria-label="Xem trước hồ sơ">
             <header>
               <strong>{rows.length} hồ sơ sẵn sàng</strong>
-              <span>Hiển thị {Math.min(rows.length, 8)} dòng đầu</span>
+              <span>Hiển thị toàn bộ danh sách</span>
             </header>
             <div className="admin-import-table-scroll">
               <table>
@@ -203,7 +218,7 @@ export function ProfileImportDialog({ isOpen, onClose, onImport }: ProfileImport
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.slice(0, 8).map((row) => (
+                  {rows.map((row) => (
                     <tr key={row.rowNumber}>
                       <td>{row.rowNumber}</td>
                       <td>{row.fullName || '—'}</td>

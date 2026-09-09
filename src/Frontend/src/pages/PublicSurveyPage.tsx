@@ -72,22 +72,75 @@ interface QuestionRow {
   scale: AnswerScale;
 }
 
+/** Một mục kèm toàn bộ câu hỏi của nó; cả mục nằm chung một thẻ trên phiếu. */
+interface SectionGroup {
+  sectionId: number;
+  sectionName: string;
+  /** Số La Mã của mục: I, II, III… giống mẫu phiếu giấy của trường. */
+  numeral: string;
+  rows: QuestionRow[];
+}
+
+const romanNumerals: [number, string][] = [
+  [10, 'X'],
+  [9, 'IX'],
+  [5, 'V'],
+  [4, 'IV'],
+  [1, 'I'],
+];
+
+/** Đủ dùng cho số mục tối đa của một bộ; không cần công thức tổng quát. */
+function toRoman(value: number): string {
+  let remaining = value;
+  let result = '';
+
+  for (const [amount, symbol] of romanNumerals) {
+    while (remaining >= amount) {
+      result += symbol;
+      remaining -= amount;
+    }
+  }
+
+  return result;
+}
+
 /**
- * Mỗi câu đứng riêng một thẻ. Trước đây các câu liền nhau dùng chung một thang
- * được gộp thành bảng ma trận, nhưng bộ đề trộn nhiều loại thang thì bảng vỡ
- * thành mấy khối rời rạc mỗi khối một bộ cột — nên bỏ hẳn cách gộp.
+ * Gom câu theo mục: mỗi mục là một thẻ, bên trong là các câu của mục.
+ *
+ * Mỗi câu vẫn đứng riêng một dòng chứ không gộp thành bảng ma trận — bộ đề trộn
+ * nhiều loại thang thì bảng vỡ thành mấy khối rời rạc mỗi khối một bộ cột.
+ *
+ * Số thứ tự chạy suốt cả phiếu và đánh trên MỌI câu, kể cả câu bẫy: số ở đây phải
+ * khớp thanh tiến độ và lưới điều hướng cuối phiếu. Bỏ số của câu bẫy là chỉ thẳng
+ * vào nó cho sinh viên thấy. Các màn quản trị thì ngược lại — bên đó bẫy không số.
  */
-function buildQuestionRows(survey: PublicSurvey): QuestionRow[] {
+function buildSectionGroups(survey: PublicSurvey): SectionGroup[] {
   const scaleById = new Map(survey.answerScales.map((scale) => [scale.answerScaleId, scale]));
-  const rows: QuestionRow[] = [];
+  const groups: SectionGroup[] = [];
+  const groupBySectionId = new Map<number, SectionGroup>();
+
+  survey.sections.forEach((section, index) => {
+    const group: SectionGroup = {
+      sectionId: section.sectionId,
+      sectionName: section.sectionName,
+      numeral: toRoman(index + 1),
+      rows: [],
+    };
+    groups.push(group);
+    groupBySectionId.set(section.sectionId, group);
+  });
 
   survey.questions.forEach((question, index) => {
     const scale = scaleById.get(question.answerScaleId);
-    if (!scale) return;
-    rows.push({ question, order: index + 1, scale });
+    const group = groupBySectionId.get(question.sectionId);
+    if (!scale || !group) return;
+
+    group.rows.push({ question, order: index + 1, scale });
   });
 
-  return rows;
+  // Mục rỗng không hiện: backend không cho lưu mục không có câu nào, nhưng dữ
+  // liệu cũ hoặc câu bị bỏ thang có thể để lại mục trống.
+  return groups.filter((group) => group.rows.length > 0);
 }
 
 interface PublicSurveyPageProps {
@@ -181,7 +234,13 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
     }
   };
 
-  const questionRows = useMemo(() => (survey ? buildQuestionRows(survey) : []), [survey]);
+  const sectionGroups = useMemo(() => (survey ? buildSectionGroups(survey) : []), [survey]);
+
+  // Danh sách phẳng cho thanh tiến độ, lưới điều hướng và việc tìm câu chưa trả lời.
+  const questionRows = useMemo(
+    () => sectionGroups.flatMap((group) => group.rows),
+    [sectionGroups]
+  );
 
   const answeredCount = useMemo(
     () =>
@@ -535,21 +594,28 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
 
         <form onSubmit={handleSubmitRequest}>
           {/*
-            Mỗi câu một thẻ, kể cả khi nhiều câu liền nhau dùng chung một thang.
-            Bảng ma trận cũ chỉ gọn khi cả bộ đề dùng đúng một thang; bộ trộn thang
-            chọn mức với Có/Không và câu tự nhập thì nó vỡ thành mấy bảng rời rạc,
-            mỗi bảng một bộ cột khác nhau.
+            Cả một mục nằm chung một thẻ, tiêu đề mục là dải trên cùng của thẻ đó.
+            Bên trong, mỗi câu vẫn là một dòng riêng chứ không gộp thành bảng ma
+            trận: bảng ma trận chỉ gọn khi cả bộ đề dùng đúng một thang, bộ trộn
+            thang chọn mức với Có/Không và câu tự nhập thì nó vỡ thành mấy bảng rời
+            rạc, mỗi bảng một bộ cột khác nhau.
           */}
-          <ol className="public-quiz-list">
-            {questionRows.map(({ question, order, scale }) => {
-              const value = answers[question.questionId] ?? '';
+          {sectionGroups.map((group) => (
+            <section className="public-quiz-section" key={group.sectionId}>
+              <h2 className="public-quiz-section-title">
+                {group.numeral}. {group.sectionName}
+              </h2>
 
-              return (
-                <li
-                  className={`public-quiz-question${invalidQuestionId === question.questionId ? ' is-invalid' : ''}`}
-                  key={question.questionId}
-                  data-question-id={question.questionId}
-                >
+              <ol className="public-quiz-list">
+                {group.rows.map(({ question, order, scale }) => {
+                  const value = answers[question.questionId] ?? '';
+
+                  return (
+                    <li
+                      className={`public-quiz-question${invalidQuestionId === question.questionId ? ' is-invalid' : ''}`}
+                      key={question.questionId}
+                      data-question-id={question.questionId}
+                    >
                   <div className="public-quiz-question-head">
                     <span className="public-quiz-number" aria-hidden="true">
                       {order}
@@ -610,17 +676,21 @@ export const PublicSurveyPage: React.FC<PublicSurveyPageProps> = ({ linkToken })
                                 setInvalidQuestionId(null);
                               }}
                             />
-                            <span className="public-quiz-option-value">{option.value}</span>
-                            <span className="public-quiz-option-label">{option.displayText}</span>
+                            <span className="public-quiz-option-text">
+                              <span className="public-quiz-option-value">{option.value}.</span>
+                              <span className="public-quiz-option-label">{option.displayText}</span>
+                            </span>
                           </label>
                         );
                       })}
                     </div>
                   )}
-                </li>
-              );
-            })}
-          </ol>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          ))}
 
           <section className="public-quiz-card public-quiz-comments">
             <span className="public-quiz-badge">

@@ -1,5 +1,12 @@
 import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
+import {
+  buildLookupSheet,
+  downloadFailedRows,
+  templateHeaderRow,
+  writeWorkbook,
+  type FailedRowExport,
+} from './importExcelShared';
 
 const maximumFileSize = 5 * 1024 * 1024;
 const majorNameHeaders = new Set([
@@ -69,14 +76,14 @@ export const majorTemplateFileName = 'mau-import-nganh-hoc.xlsx';
  * Tạo và tải tệp Excel mẫu: cột "Tên ngành học" và cột "Tên khoa viện".
  * Khi import, tên khoa viện được tra ngược ra FacultyId.
  */
-export async function downloadMajorImportTemplate(): Promise<void> {
-  const { default: writeXlsxFile } = await import('write-excel-file/browser');
+export const majorImportColumns = ['Tên ngành học', 'Tên khoa viện'];
+const majorColumnWidths = [38, 38];
 
+export async function downloadMajorImportTemplate(
+  faculties: { facultyName: string }[] = []
+): Promise<void> {
   const data: SheetData = [
-    [
-      { value: 'Tên ngành học', type: String, fontWeight: 'bold' },
-      { value: 'Tên khoa viện', type: String, fontWeight: 'bold' },
-    ],
+    templateHeaderRow(majorImportColumns),
     [
       { value: 'Công nghệ Thông tin', type: String },
       { value: 'Khoa Công nghệ Thông tin', type: String },
@@ -91,10 +98,33 @@ export async function downloadMajorImportTemplate(): Promise<void> {
     ],
   ];
 
-  await writeXlsxFile(data, {
-    sheet: 'Nganh hoc',
-    columns: [{ width: 38 }, { width: 38 }],
-  }).toFile(majorTemplateFileName);
+  await writeWorkbook(
+    [
+      {
+        data,
+        sheet: 'Nganh hoc',
+        columns: majorColumnWidths.map((width) => ({ width })),
+      } as never,
+      buildLookupSheet(
+        'Danh sach khoa vien',
+        ['Khoa / Viện'],
+        faculties.map((faculty) => [faculty.facultyName]),
+        [50]
+      ),
+    ],
+    majorTemplateFileName
+  );
+}
+
+/** Xuất các dòng import hỏng ra tệp để sửa rồi nạp lại. */
+export async function downloadMajorFailedRows(rows: FailedRowExport[]): Promise<void> {
+  await downloadFailedRows({
+    fileName: 'dong-loi-nganh-hoc.xlsx',
+    sheetName: 'Dong loi',
+    headers: majorImportColumns,
+    columnWidths: majorColumnWidths,
+    rows,
+  });
 }
 
 /** Đọc tệp .xlsx và lấy cột tên ngành học kèm tên khoa viện. */

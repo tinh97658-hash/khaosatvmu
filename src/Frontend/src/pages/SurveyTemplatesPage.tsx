@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ChevronDown,
+  ChevronRight,
   CircleAlert,
   Eye,
   FileSpreadsheet,
@@ -21,7 +23,7 @@ import {
   surveyErrorMessage,
   type SaveSurveyTemplatePayload,
 } from '../services/surveyApi';
-import { maximumAnswerScaleOptions, maximumQuestionsPerTemplate } from '../types';
+import { maximumAnswerScaleOptions, maximumSectionsPerTemplate } from '../types';
 import type { AnswerScale, AnswerScaleKind, SurveyTemplate } from '../types';
 import '../styles/survey-operations.css';
 import { foldVietnamese } from '../utils/vietnamese';
@@ -34,10 +36,26 @@ interface QuestionForm {
   attentionCheckValue: string;
 }
 
+/**
+ * Một mục trong trình soạn. Câu hỏi nằm LỒNG trong mục chứ không phải danh sách
+ * phẳng kèm ô chọn mục: mục nào cũng có nút "Thêm câu hỏi" của riêng nó nên câu
+ * mới luôn thuộc một mục, và các câu cùng mục tự khắc nằm liền nhau — đúng hai
+ * ràng buộc backend kiểm khi lưu.
+ */
+interface SectionForm {
+  /** Mã mục đã có trong CSDL; null là mục mới chưa lưu lần nào. */
+  sectionId: number | null;
+  sectionName: string;
+  questions: QuestionForm[];
+  collapsed: boolean;
+}
+
 interface TemplateForm {
   surveyTemplateId: number | null;
   templateName: string;
-  questions: QuestionForm[];
+  sections: SectionForm[];
+  /** Bộ đã thu phiếu: chỉ cho sửa chữ, ẩn mọi nút làm dịch chỗ câu hỏi. */
+  locked: boolean;
 }
 
 /** Một mức của thang; `value` cho nhập tay vì thang Có/Không dùng 1 và 5. */
@@ -53,16 +71,11 @@ interface ScaleForm {
   options: ScaleOptionForm[];
 }
 
-const emptyQuestion: QuestionForm = {
-  questionText: '',
-  answerScaleId: '',
-  attentionCheckValue: '',
-};
-
 const emptyTemplateForm: TemplateForm = {
   surveyTemplateId: null,
   templateName: '',
-  questions: [emptyQuestion],
+  sections: [],
+  locked: false,
 };
 
 const emptyScaleForm: ScaleForm = {
@@ -135,67 +148,169 @@ export const SurveyTemplatesPage: React.FC = () => {
     (item) => !normalized || foldVietnamese(item.templateName).includes(normalized)
   );
 
+  /**
+   * Số thứ tự của từng câu trong hộp xem trước. Cùng cách đánh với trình soạn và
+   * với các cột C1, C2… của báo cáo: bỏ câu bẫy ra rồi mới đánh số.
+   */
+  const previewOrders = useMemo(() => {
+    const orders = new Map<number, number>();
+    let order = 0;
+
+    viewing?.questions.forEach((question) => {
+      if (question.attentionCheckValue !== null) return;
+      orders.set(question.questionId, (order += 1));
+    });
+
+    return orders;
+  }, [viewing]);
+
   // ------------------------------------------------------------- Bộ câu hỏi
 
   // Chỉ có đúng một thang thì chọn sẵn cho đỡ phải bấm.
   const defaultScaleId = answerScales.length === 1 ? String(answerScales[0].answerScaleId) : '';
 
-  const openCreate = () => {
-    setValidationError(null);
-    setForm({
-      ...emptyTemplateForm,
-      questions: [{ questionText: '', answerScaleId: defaultScaleId, attentionCheckValue: '' }],
+  const questionCount = form.sections.reduce(
+    (total, section) => total + section.questions.length,
+    0
+  );
+
+  /**
+   * Số thứ tự hiện cạnh mỗi câu trong trình soạn, khoá là "mục:câu".
+   *
+   * Câu bẫy nhận null và hiện chữ "Bẫy" thay cho số: số chạy liền mạch trên các
+   * câu còn lại, khớp với các cột C1, C2… của bảng dữ liệu và báo cáo. Phiếu của
+   * sinh viên thì ngược lại — ở đó mọi câu đều có số, kể cả câu bẫy, để khớp thanh
+   * tiến độ và lưới điều hướng.
+   */
+  const displayOrders = useMemo(() => {
+    const orders = new Map<string, number | null>();
+    let order = 0;
+
+    form.sections.forEach((section, sectionIndex) => {
+      section.questions.forEach((question, questionIndex) => {
+        const isTrap = question.attentionCheckValue !== '';
+        orders.set(`${sectionIndex}:${questionIndex}`, isTrap ? null : (order += 1));
+      });
     });
-    setIsEditorOpen(true);
-  };
+
+    return orders;
+  }, [form.sections]);
 
   const openEdit = (template: SurveyTemplate) => {
     setValidationError(null);
     setForm({
       surveyTemplateId: template.surveyTemplateId,
       templateName: template.templateName,
-      questions: template.questions.map((question) => ({
-        questionText: question.questionText,
-        answerScaleId: String(question.answerScaleId),
-        attentionCheckValue:
-          question.attentionCheckValue === null ? '' : String(question.attentionCheckValue),
+      locked: template.hasResponses,
+      // API đã trả mục theo đúng thứ tự hiển thị và câu theo đúng thứ tự trong bộ,
+      // nên chỉ cần gom câu về mục của nó là ra đúng bố cục phiếu.
+      sections: template.sections.map((section) => ({
+        sectionId: section.sectionId,
+        sectionName: section.sectionName,
+        collapsed: false,
+        questions: template.questions
+          .filter((question) => question.sectionId === section.sectionId)
+          .map((question) => ({
+            questionText: question.questionText,
+            answerScaleId: String(question.answerScaleId),
+            attentionCheckValue:
+              question.attentionCheckValue === null ? '' : String(question.attentionCheckValue),
+          })),
       })),
     });
     setIsEditorOpen(true);
   };
 
-  const updateQuestion = (index: number, patch: Partial<QuestionForm>) => {
+  const updateSection = (sectionIndex: number, patch: Partial<SectionForm>) => {
     setForm((prev) => ({
       ...prev,
-      questions: prev.questions.map((question, position) =>
-        position === index ? { ...question, ...patch } : question
+      sections: prev.sections.map((section, position) =>
+        position === sectionIndex ? { ...section, ...patch } : section
       ),
     }));
   };
 
-  const addQuestion = () => {
-    if (form.questions.length >= maximumQuestionsPerTemplate) {
-      setValidationError(`Mỗi bộ câu hỏi chỉ được tối đa ${maximumQuestionsPerTemplate} câu.`);
-      return;
-    }
+  const updateQuestion = (
+    sectionIndex: number,
+    questionIndex: number,
+    patch: Partial<QuestionForm>
+  ) => {
     setForm((prev) => ({
       ...prev,
-      // Câu mới thường cùng thang với câu ngay trên nó.
-      questions: [
-        ...prev.questions,
+      sections: prev.sections.map((section, position) =>
+        position !== sectionIndex
+          ? section
+          : {
+              ...section,
+              questions: section.questions.map((question, index) =>
+                index === questionIndex ? { ...question, ...patch } : question
+              ),
+            }
+      ),
+    }));
+  };
+
+  const addSection = () => {
+    if (form.sections.length >= maximumSectionsPerTemplate) {
+      setValidationError(`Mỗi bộ câu hỏi chỉ được tối đa ${maximumSectionsPerTemplate} mục.`);
+      return;
+    }
+    setValidationError(null);
+    setForm((prev) => ({
+      ...prev,
+      sections: [
+        ...prev.sections,
         {
-          questionText: '',
-          answerScaleId: prev.questions.at(-1)?.answerScaleId ?? defaultScaleId,
-          attentionCheckValue: '',
+          sectionId: null,
+          sectionName: '',
+          collapsed: false,
+          questions: [{ questionText: '', answerScaleId: defaultScaleId, attentionCheckValue: '' }],
         },
       ],
     }));
   };
 
-  const removeQuestion = (index: number) => {
+  const removeSection = (sectionIndex: number) => {
     setForm((prev) => ({
       ...prev,
-      questions: prev.questions.filter((_, position) => position !== index),
+      sections: prev.sections.filter((_, position) => position !== sectionIndex),
+    }));
+  };
+
+  const addQuestion = (sectionIndex: number) => {
+    setValidationError(null);
+    setForm((prev) => ({
+      ...prev,
+      sections: prev.sections.map((section, position) =>
+        position !== sectionIndex
+          ? section
+          : {
+              ...section,
+              // Câu mới thường cùng thang với câu ngay trên nó.
+              questions: [
+                ...section.questions,
+                {
+                  questionText: '',
+                  answerScaleId: section.questions.at(-1)?.answerScaleId ?? defaultScaleId,
+                  attentionCheckValue: '',
+                },
+              ],
+            }
+      ),
+    }));
+  };
+
+  const removeQuestion = (sectionIndex: number, questionIndex: number) => {
+    setForm((prev) => ({
+      ...prev,
+      sections: prev.sections.map((section, position) =>
+        position !== sectionIndex
+          ? section
+          : {
+              ...section,
+              questions: section.questions.filter((_, index) => index !== questionIndex),
+            }
+      ),
     }));
   };
 
@@ -208,37 +323,64 @@ export const SurveyTemplatesPage: React.FC = () => {
       return;
     }
 
-    const filled = form.questions
-      .map((question) => ({ ...question, questionText: question.questionText.trim() }))
-      .filter((question) => question.questionText.length > 0);
+    // Bỏ câu để trống nội dung, rồi bỏ luôn mục không còn câu nào — backend từ
+    // chối mục rỗng, mà mục rỗng ở đây thường chỉ là dòng người dùng thêm hụt.
+    const filledSections = form.sections
+      .map((section) => ({
+        ...section,
+        sectionName: section.sectionName.trim(),
+        questions: section.questions
+          .map((question) => ({ ...question, questionText: question.questionText.trim() }))
+          .filter((question) => question.questionText.length > 0),
+      }))
+      .filter((section) => section.questions.length > 0);
 
-    if (filled.length === 0) {
-      setValidationError('Bộ câu hỏi cần ít nhất một câu hỏi có nội dung.');
+    if (filledSections.length === 0) {
+      setValidationError('Bộ câu hỏi cần ít nhất một mục có câu hỏi.');
       return;
     }
-    if (filled.length > maximumQuestionsPerTemplate) {
-      setValidationError(`Mỗi bộ câu hỏi chỉ được tối đa ${maximumQuestionsPerTemplate} câu.`);
+    if (filledSections.some((section) => section.sectionName.length === 0)) {
+      setValidationError('Vui lòng đặt tên cho từng mục.');
       return;
     }
-    if (filled.some((question) => !question.answerScaleId)) {
+    const sectionKeys = filledSections.map((section) => foldVietnamese(section.sectionName));
+    if (new Set(sectionKeys).size !== sectionKeys.length) {
+      setValidationError('Hai mục trong cùng một bộ không được trùng tên.');
+      return;
+    }
+    if (
+      filledSections.some((section) =>
+        section.questions.some((question) => !question.answerScaleId)
+      )
+    ) {
       setValidationError('Vui lòng chọn thang trả lời cho từng câu hỏi.');
       return;
     }
 
-    const payload = {
+    const payload: SaveSurveyTemplatePayload = {
       templateName,
-      questions: filled.map((question) => ({
-        questionText: question.questionText,
-        answerScaleId: Number(question.answerScaleId),
-        // Để trống là câu bình thường; backend còn kiểm mức có thật của thang.
-        attentionCheckValue: question.attentionCheckValue
-          ? Number(question.attentionCheckValue)
-          : null,
+      sections: filledSections.map((section) => ({
+        sectionId: section.sectionId,
+        sectionName: section.sectionName,
       })),
+      // Duỗi phẳng theo đúng thứ tự mục, nên các câu cùng mục tự khắc liền nhau.
+      questions: filledSections.flatMap((section, sectionIndex) =>
+        section.questions.map((question) => ({
+          questionText: question.questionText,
+          answerScaleId: Number(question.answerScaleId),
+          // Để trống là câu bình thường; backend còn kiểm mức có thật của thang.
+          attentionCheckValue: question.attentionCheckValue
+            ? Number(question.attentionCheckValue)
+            : null,
+          sectionIndex,
+        }))
+      ),
     };
 
     setSaving(true);
     try {
+      // Trang này không tạo bộ mới nữa — bộ mới chỉ vào qua import Excel — nhưng
+      // vẫn giữ nhánh tạo để hộp thoại import dùng chung đường lưu.
       if (form.surveyTemplateId === null) {
         await surveyApi.createTemplate(payload);
       } else {
@@ -246,7 +388,7 @@ export const SurveyTemplatesPage: React.FC = () => {
       }
       setTemplates(await surveyApi.templates());
       toast.success(form.surveyTemplateId === null ? 'Đã tạo bộ câu hỏi' : 'Đã cập nhật bộ câu hỏi', {
-        description: `${templateName} · ${filled.length} câu hỏi`,
+        description: `${templateName} · ${payload.questions.length} câu hỏi · ${payload.sections.length} mục`,
       });
       setIsEditorOpen(false);
       setForm(emptyTemplateForm);
@@ -427,13 +569,13 @@ export const SurveyTemplatesPage: React.FC = () => {
     },
     {
       key: 'questions',
-      header: 'Số câu hỏi',
+      header: 'Câu hỏi / mục',
       width: '11%',
       filterValue: (item) => String(item.questions.length),
       numeric: true,
       render: (item) => (
         <span className="catalog-cell-primary">
-          {item.questions.length}/{maximumQuestionsPerTemplate}
+          {item.questions.length} câu · {item.sections.length} mục
         </span>
       ),
     },
@@ -488,8 +630,9 @@ export const SurveyTemplatesPage: React.FC = () => {
         <div>
           <h2>Bộ câu hỏi khảo sát</h2>
           <p>
-            Bảng "SurveyTemplates" và "SurveyQuestions". Mỗi câu hỏi có thang trả lời riêng nên
-            một bộ trộn được nhiều loại thang; mỗi bộ tối đa {maximumQuestionsPerTemplate} câu hỏi.
+            Bảng "SurveyTemplates", "SurveyQuestionSections" và "SurveyQuestions". Câu hỏi chia
+            theo mục, mỗi câu có thang trả lời riêng nên một bộ trộn được nhiều loại thang. Bộ
+            mới tạo bằng Import Excel; ở đây chỉ sửa lại bộ đã có.
           </p>
         </div>
       </header>
@@ -521,8 +664,8 @@ export const SurveyTemplatesPage: React.FC = () => {
           fileName: 'danh-sach-bo-cau-hoi-khao-sat',
           subInstitution: 'PHÒNG ĐẢM BẢO CHẤT LƯỢNG',
         }}
-        onAddNew={openCreate}
-        addNewLabel="Tạo bộ câu hỏi"
+        /* Cố ý KHÔNG truyền onAddNew: bộ mới chỉ vào qua Import Excel, để tệp
+           Excel là nguồn duy nhất và người soạn khỏi gõ tay hàng chục câu. */
         toolbarActions={(
           <>
             <button
@@ -582,104 +725,201 @@ export const SurveyTemplatesPage: React.FC = () => {
           <section className="survey-question-editor" aria-label="Danh sách câu hỏi">
             <header className="survey-question-editor-header">
               <strong>Danh sách câu hỏi</strong>
-              <span
-                className={
-                  form.questions.length >= maximumQuestionsPerTemplate
-                    ? 'survey-question-counter is-full'
-                    : 'survey-question-counter'
-                }
-              >
-                {form.questions.length}/{maximumQuestionsPerTemplate} câu
+              <span className="survey-question-counter">
+                {questionCount} câu · {form.sections.length}/{maximumSectionsPerTemplate} mục
               </span>
             </header>
 
-            <div className="survey-question-rows">
-              {form.questions.map((question, index) => (
-                // Danh sách chỉ thêm/bớt ở cuối nên dùng vị trí làm key là đủ.
-                <div className="survey-question-row" key={index}>
-                  <span className="survey-question-row-index">{index + 1}</span>
-                  <div className="survey-question-row-fields">
-                    <textarea
-                      rows={2}
-                      placeholder="Nội dung câu hỏi"
-                      aria-label={`Nội dung câu hỏi ${index + 1}`}
-                      value={question.questionText}
+            {form.locked && (
+              <p className="survey-question-locked-note">
+                Bộ này đã thu phiếu nên chỉ sửa được nội dung chữ. Thêm, bớt hay đổi chỗ câu hỏi
+                sẽ làm nội dung dịch sang câu khác, trong khi các phiếu đã nộp vẫn trỏ câu cũ.
+              </p>
+            )}
+
+            <div className="survey-section-list">
+              {form.sections.map((section, sectionIndex) => (
+                // Mục chỉ thêm/bớt ở cuối nên dùng vị trí làm key là đủ.
+                <fieldset className="survey-section-block" key={sectionIndex}>
+                  <legend className="survey-section-head">
+                    <button
+                      type="button"
+                      className="catalog-icon-button"
+                      onClick={() => updateSection(sectionIndex, { collapsed: !section.collapsed })}
+                      aria-expanded={!section.collapsed}
+                      aria-label={section.collapsed ? 'Mở mục' : 'Thu gọn mục'}
+                      title={section.collapsed ? 'Mở mục' : 'Thu gọn mục'}
+                    >
+                      {section.collapsed ? (
+                        <ChevronRight aria-hidden="true" size={15} />
+                      ) : (
+                        <ChevronDown aria-hidden="true" size={15} />
+                      )}
+                    </button>
+                    <input
+                      type="text"
+                      className="survey-section-name"
+                      placeholder="Tên mục, VD: Nội dung đánh giá học phần"
+                      aria-label={`Tên mục ${sectionIndex + 1}`}
+                      value={section.sectionName}
                       onChange={(event) =>
-                        updateQuestion(index, { questionText: event.target.value })
+                        updateSection(sectionIndex, { sectionName: event.target.value })
                       }
                     />
-                    <select
-                      aria-label={`Thang trả lời của câu hỏi ${index + 1}`}
-                      value={question.answerScaleId}
-                      onChange={(event) =>
-                        updateQuestion(index, { answerScaleId: event.target.value })
-                      }
-                    >
-                      <option value="">Chọn thang trả lời</option>
-                      {answerScales.map((scale) => (
-                        <option key={scale.answerScaleId} value={String(scale.answerScaleId)}>
-                          {scale.answerScaleName}
-                          {scale.scaleKind === 'Text' ? ' (tự nhập)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                    {(() => {
-                      // Câu bẫy chỉ đặt được trên thang có mức chọn sẵn: thang tự
-                      // nhập chữ không có mức nào để bắt người ta chọn.
-                      const scale = answerScales.find(
-                        (item) => String(item.answerScaleId) === question.answerScaleId
-                      );
-                      const canTrap = scale?.scaleKind === 'Options';
+                    <span className="survey-section-count">{section.questions.length} câu</span>
+                    {!form.locked && (
+                      <button
+                        type="button"
+                        className="catalog-icon-button catalog-icon-button--danger"
+                        onClick={() => removeSection(sectionIndex)}
+                        aria-label={`Xóa mục ${section.sectionName || sectionIndex + 1}`}
+                        title="Xóa mục cùng toàn bộ câu hỏi trong mục"
+                      >
+                        <Trash2 aria-hidden="true" size={15} />
+                      </button>
+                    )}
+                  </legend>
 
-                      return (
-                        <label className="survey-question-trap">
-                          <span>Câu bẫy — mức bắt buộc</span>
-                          <select
-                            aria-label={`Mức bắt buộc của câu bẫy cho câu hỏi ${index + 1}`}
-                            value={canTrap ? question.attentionCheckValue : ''}
-                            disabled={!canTrap}
-                            title={
-                              canTrap
-                                ? undefined
-                                : 'Chỉ đặt được câu bẫy trên thang có mức chọn sẵn'
-                            }
-                            onChange={(event) =>
-                              updateQuestion(index, { attentionCheckValue: event.target.value })
-                            }
-                          >
-                            <option value="">Không phải câu bẫy</option>
-                            {(scale?.options ?? []).map((option) => (
-                              <option key={option.answerScaleOptionId} value={String(option.value)}>
-                                Mức {option.value} — {option.displayText}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      );
-                    })()}
-                  </div>
-                  <button
-                    type="button"
-                    className="catalog-icon-button catalog-icon-button--danger"
-                    onClick={() => removeQuestion(index)}
-                    aria-label={`Xóa câu hỏi ${index + 1}`}
-                    title="Xóa câu hỏi"
-                  >
-                    <Trash2 aria-hidden="true" size={15} />
-                  </button>
-                </div>
+                  {!section.collapsed && (
+                    <>
+                      <div className="survey-question-rows">
+                        {section.questions.map((question, questionIndex) => {
+                          // Câu bẫy không được đánh số, đúng như trên bảng dữ liệu và
+                          // báo cáo. Trên phiếu sinh viên thì mọi câu vẫn có số.
+                          const order = displayOrders.get(`${sectionIndex}:${questionIndex}`);
+
+                          return (
+                            <div className="survey-question-row" key={questionIndex}>
+                              <span
+                                className={
+                                  order === null
+                                    ? 'survey-question-row-index survey-question-row-index--trap'
+                                    : 'survey-question-row-index'
+                                }
+                              >
+                                {order === null ? 'Bẫy' : order}
+                              </span>
+                              <div className="survey-question-row-fields">
+                                <textarea
+                                  rows={2}
+                                  placeholder="Nội dung câu hỏi"
+                                  aria-label={`Nội dung câu hỏi ${questionIndex + 1} của mục ${sectionIndex + 1}`}
+                                  value={question.questionText}
+                                  onChange={(event) =>
+                                    updateQuestion(sectionIndex, questionIndex, {
+                                      questionText: event.target.value,
+                                    })
+                                  }
+                                />
+                                <select
+                                  aria-label={`Thang trả lời của câu hỏi ${questionIndex + 1} mục ${sectionIndex + 1}`}
+                                  value={question.answerScaleId}
+                                  disabled={form.locked}
+                                  title={
+                                    form.locked
+                                      ? 'Bộ đã thu phiếu nên không đổi được thang trả lời'
+                                      : undefined
+                                  }
+                                  onChange={(event) =>
+                                    updateQuestion(sectionIndex, questionIndex, {
+                                      answerScaleId: event.target.value,
+                                    })
+                                  }
+                                >
+                                  <option value="">Chọn thang trả lời</option>
+                                  {answerScales.map((scale) => (
+                                    <option
+                                      key={scale.answerScaleId}
+                                      value={String(scale.answerScaleId)}
+                                    >
+                                      {scale.answerScaleName}
+                                      {scale.scaleKind === 'Text' ? ' (tự nhập)' : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                                {(() => {
+                                  // Câu bẫy chỉ đặt được trên thang có mức chọn sẵn:
+                                  // thang tự nhập chữ không có mức nào để bắt chọn.
+                                  const scale = answerScales.find(
+                                    (item) => String(item.answerScaleId) === question.answerScaleId
+                                  );
+                                  const canTrap = scale?.scaleKind === 'Options';
+
+                                  return (
+                                    <label className="survey-question-trap">
+                                      <span>Câu bẫy — mức bắt buộc</span>
+                                      <select
+                                        aria-label={`Mức bắt buộc của câu bẫy cho câu hỏi ${questionIndex + 1} mục ${sectionIndex + 1}`}
+                                        value={canTrap ? question.attentionCheckValue : ''}
+                                        disabled={!canTrap}
+                                        title={
+                                          canTrap
+                                            ? undefined
+                                            : 'Chỉ đặt được câu bẫy trên thang có mức chọn sẵn'
+                                        }
+                                        onChange={(event) =>
+                                          updateQuestion(sectionIndex, questionIndex, {
+                                            attentionCheckValue: event.target.value,
+                                          })
+                                        }
+                                      >
+                                        <option value="">Không phải câu bẫy</option>
+                                        {(scale?.options ?? []).map((option) => (
+                                          <option
+                                            key={option.answerScaleOptionId}
+                                            value={String(option.value)}
+                                          >
+                                            Mức {option.value} — {option.displayText}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  );
+                                })()}
+                              </div>
+                              {!form.locked && (
+                                <button
+                                  type="button"
+                                  className="catalog-icon-button catalog-icon-button--danger"
+                                  onClick={() => removeQuestion(sectionIndex, questionIndex)}
+                                  aria-label={`Xóa câu hỏi ${questionIndex + 1} của mục ${sectionIndex + 1}`}
+                                  title="Xóa câu hỏi"
+                                >
+                                  <Trash2 aria-hidden="true" size={15} />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {!form.locked && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm survey-section-add-question"
+                          onClick={() => addQuestion(sectionIndex)}
+                        >
+                          <Plus aria-hidden="true" size={16} />
+                          Thêm câu hỏi
+                        </button>
+                      )}
+                    </>
+                  )}
+                </fieldset>
               ))}
             </div>
 
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={addQuestion}
-              disabled={form.questions.length >= maximumQuestionsPerTemplate}
-            >
-              <Plus aria-hidden="true" size={16} />
-              Thêm câu hỏi
-            </button>
+            {!form.locked && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={addSection}
+                disabled={form.sections.length >= maximumSectionsPerTemplate}
+              >
+                <Plus aria-hidden="true" size={16} />
+                Thêm mục
+              </button>
+            )}
           </section>
 
           <div className="modal-footer catalog-form-actions">
@@ -980,7 +1220,11 @@ export const SurveyTemplatesPage: React.FC = () => {
       <Modal
         isOpen={viewing !== null}
         onClose={() => setViewing(null)}
-        title={viewing ? `${viewing.templateName} (${viewing.questions.length} câu)` : ''}
+        title={
+          viewing
+            ? `${viewing.templateName} (${viewing.questions.length} câu · ${viewing.sections.length} mục)`
+            : ''
+        }
       >
         <div className="survey-question-preview">
           {viewing && (
@@ -988,16 +1232,29 @@ export const SurveyTemplatesPage: React.FC = () => {
               Thang trả lời đang dùng: <strong>{scaleNamesOf(viewing) || '—'}</strong>
             </p>
           )}
-          <ol>
-            {viewing?.questions.map((question) => (
-              <li key={question.questionId}>
-                {question.questionText}
-                <span className="survey-question-preview-badge">
-                  {scaleNameOf(question.answerScaleId)}
-                </span>
-              </li>
-            ))}
-          </ol>
+          {viewing?.sections.map((section) => (
+            <section className="survey-question-preview-section" key={section.sectionId}>
+              <h4>{section.sectionName}</h4>
+              <ul>
+                {viewing.questions
+                  .filter((question) => question.sectionId === section.sectionId)
+                  .map((question) => (
+                    <li key={question.questionId}>
+                      {/* Câu bẫy không có số ở mọi màn quản trị, chỉ hiện nhãn. */}
+                      <span className="survey-question-preview-order">
+                        {question.attentionCheckValue === null
+                          ? `${previewOrders.get(question.questionId)}.`
+                          : 'Bẫy'}
+                      </span>
+                      {question.questionText}
+                      <span className="survey-question-preview-badge">
+                        {scaleNameOf(question.answerScaleId)}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </section>
+          ))}
         </div>
         <div className="modal-footer catalog-form-actions">
           <button type="button" className="btn btn-secondary" onClick={() => setViewing(null)}>

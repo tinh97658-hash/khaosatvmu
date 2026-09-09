@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import {
   defaultPositionName,
+  downloadLecturerFailedRows,
   downloadLecturerImportTemplate,
   parseLecturerImportFile,
   LecturerImportFileError,
@@ -18,11 +19,17 @@ import {
 } from '../utils/lecturerImportExcel';
 import { ApiError } from '../services/apiClient';
 import { catalogErrorMessage, type CatalogImportResponse } from '../services/catalogApi';
+import { buildDepartmentLookupRows } from '../utils/importLookupRows';
+import type { Department, Faculty } from '../types';
+import { ExportFailedRowsButton } from './ExportFailedRowsButton';
 import { Modal } from './Modal';
 
 interface LecturerImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Dựng sheet tra cứu bộ môn trong tệp mẫu. */
+  departments: Department[];
+  faculties: Faculty[];
   /** Gửi danh sách lên API và trả về kết quả từng dòng. */
   onImport: (rows: ImportLecturerRow[]) => Promise<CatalogImportResponse>;
 }
@@ -37,7 +44,13 @@ const fileErrorMessages: Record<LecturerImportFileErrorCode, string> = {
   READ_FAILED: 'Không thể đọc tệp Excel. Hãy kiểm tra tệp không bị hỏng hoặc đặt mật khẩu.',
 };
 
-export function LecturerImportDialog({ isOpen, onClose, onImport }: LecturerImportDialogProps) {
+export function LecturerImportDialog({
+  isOpen,
+  onClose,
+  departments,
+  faculties,
+  onImport,
+}: LecturerImportDialogProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState('');
@@ -103,7 +116,7 @@ export function LecturerImportDialog({ isOpen, onClose, onImport }: LecturerImpo
     setDownloadingTemplate(true);
     setTemplateError(null);
     try {
-      await downloadLecturerImportTemplate();
+      await downloadLecturerImportTemplate(buildDepartmentLookupRows(departments, faculties));
     } catch {
       setTemplateError('Không thể tạo tệp mẫu. Hãy thử lại.');
     } finally {
@@ -112,6 +125,42 @@ export function LecturerImportDialog({ isOpen, onClose, onImport }: LecturerImpo
   };
 
   const failedItems = result?.items.filter((item) => !item.succeeded) ?? [];
+
+  const rowValues = (row: ImportLecturerRow) => [
+    row.fullName,
+    row.email,
+    row.phoneNumber,
+    row.facultyName,
+    row.departmentName,
+    row.positionName,
+  ];
+
+  // Chỉ họ tên là bắt buộc; các cột còn lại để trống vẫn import được.
+  const invalidRows = rows.filter((row) => row.fullName.length === 0);
+
+  const exportInvalidRows = () =>
+    downloadLecturerFailedRows(
+      invalidRows.map((row) => ({
+        rowNumber: row.rowNumber,
+        values: rowValues(row),
+        reason: 'Thiếu họ và tên',
+      }))
+    );
+
+  const exportFailedItems = () => {
+    const rowByNumber = new Map(rows.map((row) => [row.rowNumber, row]));
+
+    return downloadLecturerFailedRows(
+      failedItems.map((item) => {
+        const row = rowByNumber.get(item.rowNumber);
+        return {
+          rowNumber: item.rowNumber,
+          values: row ? rowValues(row) : [item.name ?? '', '', '', '', '', ''],
+          reason: catalogErrorMessage(item.errorCode),
+        };
+      })
+    );
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Import giảng viên từ Excel">
@@ -129,7 +178,10 @@ export function LecturerImportDialog({ isOpen, onClose, onImport }: LecturerImpo
         {!result && (
           <>
             <div className="import-template-row">
-              <span>Chưa có tệp đúng định dạng? Tải tệp mẫu rồi điền dữ liệu vào.</span>
+              <span>
+                Chưa có tệp đúng định dạng? Tải tệp mẫu rồi điền dữ liệu vào; sheet{' '}
+                <strong>Danh sách bộ môn</strong> có sẵn mã bộ môn, tên bộ môn và khoa/viện.
+              </span>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -194,8 +246,13 @@ export function LecturerImportDialog({ isOpen, onClose, onImport }: LecturerImpo
               <section className="admin-import-preview" aria-label="Xem trước dữ liệu import">
                 <header>
                   <strong>{rows.length} giảng viên sẵn sàng import</strong>
-                  <span>Hiển thị {Math.min(rows.length, 8)} dòng đầu</span>
+                  <span>
+                    {invalidRows.length > 0
+                      ? `${invalidRows.length} dòng thiếu họ và tên`
+                      : 'Hiển thị toàn bộ danh sách'}
+                  </span>
                 </header>
+                <ExportFailedRowsButton count={invalidRows.length} onExport={exportInvalidRows} />
                 <div className="admin-import-table-scroll">
                   <table>
                     <thead>
@@ -209,7 +266,7 @@ export function LecturerImportDialog({ isOpen, onClose, onImport }: LecturerImpo
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.slice(0, 8).map((row) => (
+                      {rows.map((row) => (
                         <tr key={row.rowNumber}>
                           <td>{row.rowNumber}</td>
                           <td>
@@ -250,6 +307,8 @@ export function LecturerImportDialog({ isOpen, onClose, onImport }: LecturerImpo
                 </span>
               </div>
             </div>
+
+            <ExportFailedRowsButton count={failedItems.length} onExport={exportFailedItems} />
 
             {failedItems.length > 0 && (
               <div className="admin-import-table-scroll">

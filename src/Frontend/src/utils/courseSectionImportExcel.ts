@@ -1,5 +1,18 @@
 import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
+import {
+  buildLookupSheet,
+  downloadFailedRows,
+  templateHeaderRow,
+  writeWorkbook,
+  type FailedRowExport,
+} from './importExcelShared';
+import {
+  lecturerLookupHeaders,
+  lecturerLookupValues,
+  lecturerLookupWidths,
+  type LecturerLookupRow,
+} from './importLookupRows';
 
 const maximumFileSize = 5 * 1024 * 1024;
 
@@ -147,7 +160,7 @@ export const courseSectionTemplateFileName = 'mau-import-lop-hoc-phan.xlsx';
 export const unidentifiedLecturerFileName = 'giang-vien-thieu-email.xlsx';
 
 /** Đúng thứ tự cột trong tệp gốc của đơn vị đào tạo. */
-const templateHeader = [
+export const templateHeader = [
   'Mã HP',
   'Học phần',
   'Nhóm',
@@ -179,9 +192,9 @@ const templateColumnWidths = [
  * Học kỳ lấy từ học kỳ đang chọn trên cây bên trái nên tệp không cần cột học kỳ.
  * Dòng cuối cố tình bỏ trống Email để minh hoạ nhánh giảng viên chưa xác định.
  */
-export async function downloadCourseSectionImportTemplate(): Promise<void> {
-  const { default: writeXlsxFile } = await import('write-excel-file/browser');
-
+export async function downloadCourseSectionImportTemplate(
+  lecturerRows: LecturerLookupRow[] = []
+): Promise<void> {
   const rows = [
     [
       '11107E',
@@ -222,14 +235,37 @@ export async function downloadCourseSectionImportTemplate(): Promise<void> {
   ];
 
   const data: SheetData = [
-    templateHeader.map((value) => ({ value, type: String, fontWeight: 'bold' as const })),
+    templateHeaderRow(templateHeader),
     ...rows.map((row) => row.map((value) => ({ value, type: String }))),
   ];
 
-  await writeXlsxFile(data, {
-    sheet: 'Lop hoc phan',
-    columns: templateColumnWidths,
-  }).toFile(courseSectionTemplateFileName);
+  await writeWorkbook(
+    [
+      {
+        data,
+        sheet: 'Lop hoc phan',
+        columns: templateColumnWidths,
+      } as never,
+      buildLookupSheet(
+        'Danh sach giang vien',
+        lecturerLookupHeaders,
+        lecturerRows.map(lecturerLookupValues),
+        lecturerLookupWidths
+      ),
+    ],
+    courseSectionTemplateFileName
+  );
+}
+
+/** Xuất các dòng import hỏng ra tệp để sửa rồi nạp lại. */
+export async function downloadCourseSectionFailedRows(rows: FailedRowExport[]): Promise<void> {
+  await downloadFailedRows({
+    fileName: 'dong-loi-lop-hoc-phan.xlsx',
+    sheetName: 'Dong loi',
+    headers: templateHeader,
+    columnWidths: templateColumnWidths.map((column) => column.width),
+    rows,
+  });
 }
 
 /**

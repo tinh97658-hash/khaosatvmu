@@ -314,6 +314,7 @@ export const MajorsPage: React.FC<MajorsPageProps> = ({
       <MajorImportDialog
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
+        faculties={faculties}
         onImport={handleImport}
       />
 

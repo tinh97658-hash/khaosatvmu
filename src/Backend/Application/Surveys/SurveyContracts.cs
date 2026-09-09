@@ -13,6 +13,9 @@ public sealed record AnswerScaleDto(
     string ScaleKind,
     IReadOnlyList<AnswerScaleOptionDto> Options);
 
+/// <summary>Một mục chia nhóm câu hỏi của bộ, vd "Nội dung đánh giá học phần".</summary>
+public sealed record SurveyQuestionSectionDto(int SectionId, string SectionName);
+
 /// <summary>
 /// Câu hỏi trong trình soạn bộ câu hỏi của quản trị.
 /// <paramref name="AttentionCheckValue"/> khác null nghĩa là câu bẫy độ tập trung.
@@ -21,6 +24,8 @@ public sealed record AnswerScaleDto(
 public sealed record SurveyQuestionDto(
     int QuestionId,
     int SurveyTemplateId,
+    /// <summary>Mục chứa câu này; mọi câu đều thuộc một mục, kể cả câu bẫy.</summary>
+    int SectionId,
     string QuestionText,
     int AnswerScaleId,
     int? AttentionCheckValue);
@@ -29,7 +34,19 @@ public sealed record SurveyTemplateDto(
     int SurveyTemplateId,
     string TemplateName,
     DateTime CreatedAt,
-    IReadOnlyList<SurveyQuestionDto> Questions);
+    /// <summary>
+    /// Xếp theo thứ tự hiển thị, tức theo vị trí câu đầu tiên của từng mục — mục
+    /// không có cột thứ tự riêng.
+    /// </summary>
+    IReadOnlyList<SurveyQuestionSectionDto> Sections,
+    IReadOnlyList<SurveyQuestionDto> Questions,
+    /// <summary>
+    /// Bộ đã có câu nào thu được phiếu trả lời chưa. Đã có thì chỉ sửa được chữ:
+    /// thêm, bớt hay đổi chỗ câu hỏi làm nội dung dịch sang "QuestionId" khác
+    /// trong khi phiếu cũ vẫn trỏ Id cũ. Backend chặn thật, cờ này chỉ để giao
+    /// diện ẩn nút cho người dùng khỏi bấm vào chỗ chắc chắn lỗi.
+    /// </summary>
+    bool HasResponses = false);
 
 public sealed record SaveAnswerScaleOptionCommand(int Value, string DisplayText);
 
@@ -40,23 +57,41 @@ public sealed record SaveAnswerScaleCommand(
     IReadOnlyList<SaveAnswerScaleOptionCommand> Options);
 
 /// <summary>
+/// Một mục gửi lên khi lưu bộ câu hỏi.
+/// <paramref name="SectionId"/> null là mục mới; có giá trị thì phải là một mục
+/// có thật của chính bộ đang lưu, và dòng đó được UPDATE tên tại chỗ. Nhận diện
+/// mục bằng Id chứ không bằng vị trí trong danh sách: đảo thứ tự hai mục mà đoán
+/// theo vị trí thì hai mục đổi danh tính cho nhau, báo cáo cũ đọc ra nhãn sai.
+/// </summary>
+public sealed record SaveSurveyQuestionSectionCommand(int? SectionId, string SectionName);
+
+/// <summary>
 /// Một câu hỏi kèm thang trả lời của riêng nó.
 /// <paramref name="AttentionCheckValue"/> khác null biến câu này thành câu bẫy độ
 /// tập trung: người trả lời phải chọn đúng mức đó thì phiếu mới hợp lệ. Chỉ đặt
 /// được trên câu thuộc thang 'Options' và phải là một mức có thật của thang đó.
+/// <paramref name="SectionIndex"/> là chỉ số mục trong danh sách
+/// <see cref="SaveSurveyTemplateCommand.Sections"/> gửi kèm — dùng chỉ số chứ
+/// không dùng Id vì mục mới chưa có Id lúc gửi lên.
 /// </summary>
 public sealed record SaveSurveyQuestionCommand(
     string QuestionText,
     int AnswerScaleId,
-    int? AttentionCheckValue);
+    int? AttentionCheckValue,
+    int SectionIndex);
 
 /// <summary>
-/// Lưu cả bộ câu hỏi trong một lần: danh sách câu hỏi được ghi đè theo đúng thứ
-/// tự gửi lên, tối đa <see cref="SurveyRules.MaximumQuestionsPerTemplate"/> câu.
-/// Mỗi câu mang thang trả lời riêng nên một bộ trộn được nhiều loại thang.
+/// Lưu cả bộ câu hỏi trong một lần: danh sách mục và danh sách câu hỏi đều được
+/// ghi đè theo đúng thứ tự gửi lên. Mỗi câu mang thang trả lời riêng nên một bộ
+/// trộn được nhiều loại thang.
+///
+/// Các câu cùng một mục phải nằm liền nhau trong <paramref name="Questions"/>:
+/// tiêu đề mục hiện ra ngay trước câu đầu tiên của mục, nên mục bị cắt làm hai
+/// khúc thì không biết đặt tiêu đề ở đâu.
 /// </summary>
 public sealed record SaveSurveyTemplateCommand(
     string TemplateName,
+    IReadOnlyList<SaveSurveyQuestionSectionCommand> Sections,
     IReadOnlyList<SaveSurveyQuestionCommand> Questions);
 
 /// <summary>Một đợt khảo sát của học kỳ, kèm số lớp và số phiếu đã thu.</summary>
@@ -449,10 +484,10 @@ public sealed record SemesterSurveyStatisticsDto(
     int ResponsesSinceLastCalculation,
     IReadOnlyList<StatisticsQuestionColumnDto> QuestionColumns,
     /// <summary>
-    /// Vị trí các câu bẫy trong bộ câu hỏi. Bảng không có cột cho chúng nên phải
-    /// nói ra, nếu không người xem sẽ thắc mắc tại sao nhảy cóc số câu.
+    /// Số câu bẫy của bộ. Câu bẫy không được đánh số nên bảng không nhảy cóc số
+    /// câu nữa, nhưng vẫn phải nói ra để người xem biết bộ dài hơn số cột ở đây.
     /// </summary>
-    IReadOnlyList<int> AttentionCheckOrders,
+    int AttentionCheckCount,
     IReadOnlyList<SectionStatisticsRowDto> Rows);
 
 /// <summary>Bài khảo sát của một lớp học phần: link, mã QR và số lượt trả lời.</summary>
@@ -579,7 +614,19 @@ public sealed record AddSectionsToSemesterSurveyDto(
 
 public sealed record SaveSurveyScheduleCommand(DateTime StartTime, DateTime EndTime);
 
-public sealed record PublicSurveyQuestionDto(int QuestionId, string QuestionText, int AnswerScaleId);
+/// <summary>
+/// Một câu trên phiếu của sinh viên. CỐ Ý không có "AttentionCheckValue": gửi mức
+/// bắt buộc của câu bẫy xuống trình duyệt là đưa luôn đáp án cho người muốn gian.
+/// </summary>
+public sealed record PublicSurveyQuestionDto(
+    int QuestionId,
+    string QuestionText,
+    int AnswerScaleId,
+    /// <summary>Mục chứa câu này, để phiếu hiện tiêu đề mục trước câu đầu tiên của mục.</summary>
+    int SectionId);
+
+/// <summary>Một mục trên phiếu của sinh viên.</summary>
+public sealed record PublicSurveySectionDto(int SectionId, string SectionName);
 
 /// <summary>
 /// Dữ liệu phiếu khảo sát mà sinh viên thấy khi mở link hoặc quét QR.
@@ -600,6 +647,7 @@ public sealed record PublicSurveyDto(
     DateTime EndTime,
     bool IsOpen,
     IReadOnlyList<AnswerScaleDto> AnswerScales,
+    IReadOnlyList<PublicSurveySectionDto> Sections,
     IReadOnlyList<PublicSurveyQuestionDto> Questions,
     /// <summary>
     /// Tên ĐỢT khảo sát do quản trị đặt lúc tạo ("SemesterSurveys"."SurveyName").
@@ -676,8 +724,11 @@ public sealed record SurveyOperationResult<T>(bool Succeeded, string? ErrorCode,
 
 public static class SurveyRules
 {
-    /// <summary>Giới hạn của bảng "SurveyQuestions" theo dtb.md.</summary>
-    public const int MaximumQuestionsPerTemplate = 30;
+    /// <summary>
+    /// Số mục tối đa của một bộ câu hỏi. Số câu thì không giới hạn — bộ dài bao
+    /// nhiêu là việc của người soạn phiếu.
+    /// </summary>
+    public const int MaximumSectionsPerTemplate = 10;
 
     /// <summary>Số mức tối đa của một thang: "AnswerScaleOptions"."Value" CHECK 1..5.</summary>
     public const int MaximumAnswerScaleOptions = 5;
@@ -917,8 +968,31 @@ public static class SurveyErrorCodes
     public const string TemplateNameRequired = "SURVEY_TEMPLATE_NAME_REQUIRED";
     public const string TemplateNameExists = "SURVEY_TEMPLATE_NAME_EXISTS";
     public const string TemplateQuestionsRequired = "SURVEY_TEMPLATE_QUESTIONS_REQUIRED";
-    public const string TemplateTooManyQuestions = "SURVEY_TEMPLATE_TOO_MANY_QUESTIONS";
     public const string TemplateInUse = "SURVEY_TEMPLATE_IN_USE";
+
+    /// <summary>Bộ câu hỏi phải có ít nhất một mục.</summary>
+    public const string TemplateSectionsRequired = "SURVEY_TEMPLATE_SECTIONS_REQUIRED";
+
+    /// <summary>Vượt <see cref="SurveyRules.MaximumSectionsPerTemplate"/>.</summary>
+    public const string TemplateTooManySections = "SURVEY_TEMPLATE_TOO_MANY_SECTIONS";
+
+    /// <summary>Tên mục để trống hoặc chỉ có khoảng trắng.</summary>
+    public const string SectionNameRequired = "SURVEY_SECTION_NAME_REQUIRED";
+
+    /// <summary>Hai mục trong cùng một bộ trùng tên sau khi chuẩn hoá.</summary>
+    public const string SectionNameExists = "SURVEY_SECTION_NAME_EXISTS";
+
+    /// <summary>"SectionId" gửi lên không phải mục của chính bộ đang lưu.</summary>
+    public const string SectionNotFound = "SURVEY_SECTION_NOT_FOUND";
+
+    /// <summary>Mục không có câu hỏi nào; mục rỗng không có vị trí để đứng.</summary>
+    public const string SectionEmpty = "SURVEY_SECTION_EMPTY";
+
+    /// <summary>Câu hỏi trỏ tới một mục không có trong danh sách gửi kèm.</summary>
+    public const string QuestionSectionInvalid = "SURVEY_QUESTION_SECTION_INVALID";
+
+    /// <summary>Các câu cùng một mục không nằm liền nhau nên mục bị cắt làm nhiều khúc.</summary>
+    public const string SectionQuestionsNotContiguous = "SURVEY_SECTION_QUESTIONS_NOT_CONTIGUOUS";
 
     /// <summary>Câu hỏi trỏ tới một "AnswerScaleId" không tồn tại.</summary>
     public const string QuestionScaleNotFound = "SURVEY_QUESTION_SCALE_NOT_FOUND";

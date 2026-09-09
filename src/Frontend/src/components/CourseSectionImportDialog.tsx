@@ -9,6 +9,7 @@ import {
   Upload,
 } from 'lucide-react';
 import {
+  downloadCourseSectionFailedRows,
   downloadCourseSectionImportTemplate,
   downloadUnidentifiedLecturerFile,
   parseCourseSectionImportFile,
@@ -18,6 +19,9 @@ import {
 } from '../utils/courseSectionImportExcel';
 import { ApiError } from '../services/apiClient';
 import { catalogErrorMessage, type CourseSectionImportResponse } from '../services/catalogApi';
+import { buildLecturerLookupRows } from '../utils/importLookupRows';
+import type { Department, Faculty, Lecturer } from '../types';
+import { ExportFailedRowsButton } from './ExportFailedRowsButton';
 import { Modal } from './Modal';
 
 interface CourseSectionImportDialogProps {
@@ -25,6 +29,10 @@ interface CourseSectionImportDialogProps {
   onClose: () => void;
   /** Học kỳ đang chọn, hiển thị để người dùng biết import vào đâu. */
   semesterLabel: string;
+  /** Dựng sheet tra cứu giảng viên trong tệp mẫu. */
+  lecturers: Lecturer[];
+  departments: Department[];
+  faculties: Faculty[];
   onImport: (rows: ImportCourseSectionRow[]) => Promise<CourseSectionImportResponse>;
 }
 
@@ -42,6 +50,9 @@ export function CourseSectionImportDialog({
   isOpen,
   onClose,
   semesterLabel,
+  lecturers,
+  departments,
+  faculties,
   onImport,
 }: CourseSectionImportDialogProps) {
   const inputId = useId();
@@ -112,7 +123,9 @@ export function CourseSectionImportDialog({
     setDownloadingTemplate(true);
     setTemplateError(null);
     try {
-      await downloadCourseSectionImportTemplate();
+      await downloadCourseSectionImportTemplate(
+        buildLecturerLookupRows(lecturers, departments, faculties)
+      );
     } catch {
       setTemplateError('Không thể tạo tệp mẫu. Hãy thử lại.');
     } finally {
@@ -134,6 +147,54 @@ export function CourseSectionImportDialog({
   };
 
   const failedItems = result?.items.filter((item) => !item.succeeded) ?? [];
+
+  // Mười cột đúng thứ tự tệp gốc, để tệp dòng lỗi nạp lại được thẳng vào đây.
+  const rowValues = (row: ImportCourseSectionRow) => [
+    row.courseCode,
+    row.courseName,
+    row.sectionName,
+    row.credits,
+    row.classSize,
+    row.departmentName,
+    row.facultyName,
+    row.lecturerFullName,
+    row.lecturerEmail,
+    row.departmentCode,
+  ];
+
+  const invalidRows = rows.filter(
+    (row) => row.courseCode.length === 0 || row.sectionName.length === 0
+  );
+
+  const exportInvalidRows = () =>
+    downloadCourseSectionFailedRows(
+      invalidRows.map((row) => ({
+        rowNumber: row.rowNumber,
+        values: rowValues(row),
+        reason:
+          row.courseCode.length === 0 && row.sectionName.length === 0
+            ? 'Thiếu Mã HP và Nhóm'
+            : row.courseCode.length === 0
+              ? 'Thiếu Mã HP'
+              : 'Thiếu Nhóm',
+      }))
+    );
+
+  const exportFailedItems = () => {
+    const rowByNumber = new Map(rows.map((row) => [row.rowNumber, row]));
+
+    return downloadCourseSectionFailedRows(
+      failedItems.map((item) => {
+        const row = rowByNumber.get(item.rowNumber);
+        return {
+          rowNumber: item.rowNumber,
+          values: row ? rowValues(row) : ['', '', '', '', '', '', '', '', '', ''],
+          reason: catalogErrorMessage(item.errorCode),
+        };
+      })
+    );
+  };
+
   const unidentifiedLecturers = result?.unidentifiedLecturers ?? [];
   // Các dòng trong tệp xuất ra được xếp liền nhau theo bộ môn.
   const unidentifiedDepartmentCount = new Set(
@@ -161,7 +222,10 @@ export function CourseSectionImportDialog({
         {!result && (
           <>
             <div className="import-template-row">
-              <span>Chưa có tệp đúng định dạng? Tải tệp mẫu rồi điền dữ liệu vào.</span>
+              <span>
+                Chưa có tệp đúng định dạng? Tải tệp mẫu rồi điền dữ liệu vào; sheet{' '}
+                <strong>Danh sách giảng viên</strong> có sẵn họ tên, bộ môn, khoa/viện và email.
+              </span>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -226,8 +290,13 @@ export function CourseSectionImportDialog({
               <section className="admin-import-preview" aria-label="Xem trước dữ liệu import">
                 <header>
                   <strong>{rows.length} lớp học phần sẵn sàng import</strong>
-                  <span>Hiển thị {Math.min(rows.length, 8)} dòng đầu</span>
+                  <span>
+                    {invalidRows.length > 0
+                      ? `${invalidRows.length} dòng thiếu dữ liệu bắt buộc`
+                      : 'Hiển thị toàn bộ danh sách'}
+                  </span>
                 </header>
+                <ExportFailedRowsButton count={invalidRows.length} onExport={exportInvalidRows} />
                 <div className="admin-import-table-scroll">
                   <table>
                     <thead>
@@ -243,7 +312,7 @@ export function CourseSectionImportDialog({
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.slice(0, 8).map((row) => (
+                      {rows.map((row) => (
                         <tr key={row.rowNumber}>
                           <td>{row.rowNumber}</td>
                           <td>
@@ -372,6 +441,8 @@ export function CourseSectionImportDialog({
                 </div>
               </section>
             )}
+
+            <ExportFailedRowsButton count={failedItems.length} onExport={exportFailedItems} />
 
             {failedItems.length > 0 && (
               <div className="admin-import-table-scroll">

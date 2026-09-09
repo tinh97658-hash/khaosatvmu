@@ -49,7 +49,7 @@ public sealed class AnswerScaleOption
     public string DisplayText { get; set; } = string.Empty;
 }
 
-/// <summary>Bảng "SurveyTemplates". Bộ câu hỏi do quản trị soạn, tối đa 30 câu.</summary>
+/// <summary>Bảng "SurveyTemplates". Bộ câu hỏi do quản trị soạn.</summary>
 public sealed class SurveyTemplate : ISoftDeletable
 {
     public int SurveyTemplateId { get; set; }
@@ -61,13 +61,52 @@ public sealed class SurveyTemplate : ISoftDeletable
     public DateTime? DeletedAt { get; set; }
 }
 
-/// <summary>Bảng "SurveyQuestions". Một câu hỏi thuộc đúng một bộ câu hỏi.</summary>
-public sealed class SurveyQuestion
+/// <summary>
+/// Bảng "SurveyQuestionSections". Mục chia nhóm câu hỏi trong một bộ, vd
+/// "Nội dung đánh giá học phần" / "Nội dung đánh giá về giảng viên".
+///
+/// Mục thuộc sở hữu của đúng một bộ câu hỏi chứ không phải danh mục dùng chung:
+/// hai bộ cùng đặt tên mục giống hệt nhau vẫn là hai dòng riêng, sửa tên bên này
+/// không đụng bên kia. Vì vậy UNIQUE chỉ đặt theo (SurveyTemplateId, SectionName)
+/// và chỉ tính các dòng chưa xoá mềm.
+///
+/// KHÔNG có cột thứ tự: thứ tự mục suy ra từ vị trí câu đầu tiên của mục trong
+/// bộ, mà thứ tự câu lại chính là thứ tự "QuestionId" — thêm cột thứ tự nữa là
+/// đẻ ra hai nguồn sự thật có thể lệch nhau.
+/// </summary>
+public sealed class SurveyQuestionSection : ISoftDeletable
 {
-    public int QuestionId { get; set; }
+    public int SectionId { get; set; }
 
     /// <summary>NOT NULL, ON DELETE CASCADE.</summary>
     public int SurveyTemplateId { get; set; }
+
+    public string SectionName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Xoá mục là xoá mềm cả mục lẫn mọi câu thuộc mục. Giữ dòng lại vì báo cáo
+    /// của các đợt đã chốt còn phải đọc ra tên mục để dựng nhãn.
+    /// </summary>
+    public bool IsDeleted { get; set; }
+
+    public DateTime? DeletedAt { get; set; }
+}
+
+/// <summary>
+/// Bảng "SurveyQuestions". Một câu hỏi thuộc đúng một mục, và bộ câu hỏi của câu
+/// suy ra từ mục — câu KHÔNG còn khoá ngoại thẳng vào "SurveyTemplates" nữa. Giữ
+/// cả hai khoá là giữ hai đường dẫn tới cùng một bộ, chỉ chờ ngày chúng lệch nhau.
+/// Đổi lại, mọi truy vấn "các câu của bộ X" phải join qua "SurveyQuestionSections".
+/// </summary>
+public sealed class SurveyQuestion : ISoftDeletable
+{
+    public int QuestionId { get; set; }
+
+    /// <summary>
+    /// NOT NULL, ON DELETE RESTRICT. Mọi câu đều thuộc một mục, kể cả câu bẫy —
+    /// bẫy nằm lọt trong mục thì sinh viên không nhận ra nó khác thường.
+    /// </summary>
+    public int SectionId { get; set; }
 
     public string QuestionText { get; set; } = string.Empty;
 
@@ -85,6 +124,15 @@ public sealed class SurveyQuestion
     /// Câu bẫy không được tính vào <see cref="SurveyResponse.Score"/>.
     /// </summary>
     public int? AttentionCheckValue { get; set; }
+
+    /// <summary>
+    /// Xoá câu là xoá mềm, vì "SurveyResponseAnswers" trỏ vào "QuestionId" bằng
+    /// khoá ngoại RESTRICT — câu đã có phiếu trả lời thì xoá cứng không nổi.
+    /// Xoá mục cũng xoá mềm luôn mọi câu thuộc mục.
+    /// </summary>
+    public bool IsDeleted { get; set; }
+
+    public DateTime? DeletedAt { get; set; }
 }
 
 /// <summary>

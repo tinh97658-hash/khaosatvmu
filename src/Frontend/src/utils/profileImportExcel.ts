@@ -1,5 +1,10 @@
 import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
+import {
+  downloadFailedRows,
+  templateHeaderRow,
+  type FailedRowExport,
+} from './importExcelShared';
 
 const maximumFileSize = 5 * 1024 * 1024;
 
@@ -111,6 +116,20 @@ function roleCodeFromLabel(value: string): string | null {
 
 export const profileTemplateFileName = 'mau-import-ho-so-nguoi-dung.xlsx';
 
+export const profileImportColumns = ['Họ tên', 'Email giảng viên', 'Vai trò'];
+const profileColumnWidths = [28, 38, 22];
+
+/** Xuất các dòng import hỏng ra tệp để sửa rồi nạp lại. */
+export async function downloadProfileFailedRows(rows: FailedRowExport[]): Promise<void> {
+  await downloadFailedRows({
+    fileName: 'dong-loi-ho-so-nguoi-dung.xlsx',
+    sheetName: 'Dong loi',
+    headers: profileImportColumns,
+    columnWidths: profileColumnWidths,
+    rows,
+  });
+}
+
 /**
  * Tạo và tải tệp Excel mẫu để cấp hồ sơ hàng loạt.
  *
@@ -127,14 +146,19 @@ export async function downloadProfileImportTemplate(): Promise<void> {
     { fullName: 'Lê Văn C', email: 'levanc@vimaru.edu.vn', role: 'Quản trị khảo sát' },
   ];
 
-  const bold = { fontWeight: 'bold' as const };
+  const [fullNameCell, emailCell, roleCell, , , roleLookupCell] = templateHeaderRow([
+    ...profileImportColumns,
+    '',
+    '',
+    'Tên vai trò điền được',
+  ]);
   const header: SheetData[number] = [
-    { value: 'Họ tên', type: String, ...bold },
-    { value: 'Email giảng viên', type: String, ...bold },
-    { value: 'Vai trò', type: String, ...bold },
+    fullNameCell,
+    emailCell,
+    roleCell,
     null,
     null,
-    { value: 'Tên vai trò điền được', type: String, ...bold },
+    roleLookupCell,
   ];
 
   // Số dòng mẫu và số vai trò lệch nhau nên bảng bên phải trải dài độc lập.

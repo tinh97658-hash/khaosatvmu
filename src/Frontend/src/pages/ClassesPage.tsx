@@ -1368,6 +1368,9 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
         semesterLabel={`${selectedSemester?.semesterName ?? ''} · ${
           selectedYear?.academicYearName ?? ''
         }`}
+        lecturers={lecturers}
+        departments={departments}
+        faculties={faculties}
         onImport={handleImportSections}
       />
 

@@ -24,6 +24,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AnswerScale> AnswerScales => Set<AnswerScale>();
     public DbSet<AnswerScaleOption> AnswerScaleOptions => Set<AnswerScaleOption>();
     public DbSet<SurveyTemplate> SurveyTemplates => Set<SurveyTemplate>();
+    public DbSet<SurveyQuestionSection> SurveyQuestionSections => Set<SurveyQuestionSection>();
     public DbSet<SurveyQuestion> SurveyQuestions => Set<SurveyQuestion>();
     public DbSet<SemesterSurvey> SemesterSurveys => Set<SemesterSurvey>();
     public DbSet<CourseSectionSurvey> CourseSectionSurveys => Set<CourseSectionSurvey>();
@@ -54,6 +55,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<Course>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<AnswerScale>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<SurveyTemplate>().HasQueryFilter(e => !e.IsDeleted);
+        // Xoá mục thì mọi câu thuộc mục cũng được gán IsDeleted trong cùng lần lưu,
+        // nên hai bộ lọc dưới đây độc lập với nhau là đủ, không phải lọc bắc cầu.
+        modelBuilder.Entity<SurveyQuestionSection>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<SurveyQuestion>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<SemesterSurvey>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<CourseSectionSurvey>().HasQueryFilter(e => !e.IsDeleted);
         // Phiếu bị thanh tra huỷ để lớp làm lại. Lọc ở đây thì mọi phép tính sống
@@ -343,7 +348,25 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.TemplateName).IsRequired();
         });
 
+        // Mục chia nhóm câu hỏi, thuộc sở hữu của đúng một bộ câu hỏi.
+        modelBuilder.Entity<SurveyQuestionSection>(entity =>
+        {
+            entity.ToTable("SurveyQuestionSections");
+            entity.HasKey(x => x.SectionId);
+            entity.Property(x => x.SectionName).IsRequired();
+            // UNIQUE có điều kiện: xoá mục rồi tạo lại đúng tên cũ là thao tác rất
+            // tự nhiên, thiếu mệnh đề WHERE thì lần tạo lại đụng khoá.
+            entity.HasIndex(x => new { x.SurveyTemplateId, x.SectionName })
+                .IsUnique()
+                .HasFilter("NOT \"IsDeleted\"");
+            entity.HasOne<SurveyTemplate>()
+                .WithMany()
+                .HasForeignKey(x => x.SurveyTemplateId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // Thang trả lời gắn ở từng câu hỏi nên một bộ trộn được nhiều loại thang.
+        // Bộ câu hỏi của một câu suy ra từ mục, không có khoá ngoại thẳng tới bộ.
         modelBuilder.Entity<SurveyQuestion>(entity =>
         {
             entity.ToTable("SurveyQuestions");
@@ -351,12 +374,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.QuestionText).IsRequired();
             // Ràng buộc "chỉ đặt bẫy trên thang Options và mức phải có thật" cần
             // tra sang bảng khác nên kiểm ở tầng service, không đặt CHECK ở đây.
-            entity.HasIndex(x => x.SurveyTemplateId);
+            entity.HasIndex(x => x.SectionId);
             entity.HasIndex(x => x.AnswerScaleId);
-            entity.HasOne<SurveyTemplate>()
+            // RESTRICT chứ không CASCADE: mục bị bỏ đi là xoá mềm, câu trong mục
+            // cũng xoá mềm theo, nên không bao giờ có DELETE thật để mà đổ dây.
+            entity.HasOne<SurveyQuestionSection>()
                 .WithMany()
-                .HasForeignKey(x => x.SurveyTemplateId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .HasForeignKey(x => x.SectionId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<AnswerScale>()
                 .WithMany()
                 .HasForeignKey(x => x.AnswerScaleId)

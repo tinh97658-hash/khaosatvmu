@@ -562,14 +562,12 @@ export const SurveyStatisticsPage: React.FC = () => {
                 xem tưởng mất dữ liệu. */}
             {filters.isFiltered && ` · đang lọc còn ${filteredRows.length} lớp`}
           </span>
-          {/* Bảng nhảy cóc số câu vì câu bẫy không có cột; nói rõ để khỏi bị hiểu
-              là thiếu dữ liệu. */}
-          {statistics.attentionCheckOrders.length > 0 && (
+          {/* Câu bẫy không được đánh số nên bảng không nhảy cóc số câu, nhưng bộ
+              vẫn dài hơn số cột ở đây — nói rõ để khỏi bị hiểu là thiếu dữ liệu. */}
+          {statistics.attentionCheckCount > 0 && (
             <span className="statistics-trap-note">
-              Câu bẫy (không lên bảng):{' '}
-              <strong>
-                {statistics.attentionCheckOrders.map((order) => `C${order}`).join(', ')}
-              </strong>
+              Bộ có <strong>{statistics.attentionCheckCount} câu bẫy</strong>, không đánh số và
+              không lên bảng
             </span>
           )}
           <span>

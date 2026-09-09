@@ -1,5 +1,18 @@
 import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
+import {
+  buildLookupSheet,
+  downloadFailedRows,
+  templateHeaderRow,
+  writeWorkbook,
+  type FailedRowExport,
+} from './importExcelShared';
+import {
+  departmentLookupHeaders,
+  departmentLookupValues,
+  departmentLookupWidths,
+  type DepartmentLookupRow,
+} from './importLookupRows';
 
 const maximumFileSize = 5 * 1024 * 1024;
 
@@ -95,11 +108,19 @@ export const lecturerTemplateFileName = 'mau-import-giang-vien.xlsx';
  * khi import được tra ngược ra id. Dòng cuối để trống cột chức vụ để minh họa
  * trường hợp mặc định thành "Giảng viên".
  */
-export async function downloadLecturerImportTemplate(): Promise<void> {
-  const { default: writeXlsxFile } = await import('write-excel-file/browser');
+export const lecturerImportColumns = [
+  'Họ và tên',
+  'Email',
+  'Số điện thoại',
+  'Tên khoa viện',
+  'Tên bộ môn',
+  'Chức vụ',
+];
+const lecturerColumnWidths = [26, 30, 18, 30, 30, 22];
 
-  const header = ['Họ và tên', 'Email', 'Số điện thoại', 'Tên khoa viện', 'Tên bộ môn', 'Chức vụ'];
-
+export async function downloadLecturerImportTemplate(
+  departmentRows: DepartmentLookupRow[] = []
+): Promise<void> {
   const rows = [
     ['Nguyễn Văn Hải', 'hainv@vimaru.edu.vn', '0912345678', 'Khoa Công nghệ Thông tin', 'Bộ môn Công nghệ Phần mềm', 'Trưởng Bộ môn'],
     ['Trần Thị Bình', 'binhtt@vimaru.edu.vn', '0987654321', 'Khoa Công nghệ Thông tin', '', 'Giảng viên chính'],
@@ -107,14 +128,37 @@ export async function downloadLecturerImportTemplate(): Promise<void> {
   ];
 
   const data: SheetData = [
-    header.map((value) => ({ value, type: String, fontWeight: 'bold' as const })),
+    templateHeaderRow(lecturerImportColumns),
     ...rows.map((row) => row.map((value) => ({ value, type: String }))),
   ];
 
-  await writeXlsxFile(data, {
-    sheet: 'Giang vien',
-    columns: [{ width: 26 }, { width: 30 }, { width: 18 }, { width: 30 }, { width: 30 }, { width: 22 }],
-  }).toFile(lecturerTemplateFileName);
+  await writeWorkbook(
+    [
+      {
+        data,
+        sheet: 'Giang vien',
+        columns: lecturerColumnWidths.map((width) => ({ width })),
+      } as never,
+      buildLookupSheet(
+        'Danh sach bo mon',
+        departmentLookupHeaders,
+        departmentRows.map(departmentLookupValues),
+        departmentLookupWidths
+      ),
+    ],
+    lecturerTemplateFileName
+  );
+}
+
+/** Xuất các dòng import hỏng ra tệp để sửa rồi nạp lại. */
+export async function downloadLecturerFailedRows(rows: FailedRowExport[]): Promise<void> {
+  await downloadFailedRows({
+    fileName: 'dong-loi-giang-vien.xlsx',
+    sheetName: 'Dong loi',
+    headers: lecturerImportColumns,
+    columnWidths: lecturerColumnWidths,
+    rows,
+  });
 }
 
 /** Đọc tệp .xlsx của danh mục giảng viên. */

@@ -339,6 +339,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
       <DepartmentImportDialog
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
+        faculties={faculties}
         onImport={handleImport}
       />
 

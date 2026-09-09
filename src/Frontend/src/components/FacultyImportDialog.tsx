@@ -9,6 +9,7 @@ import {
   Upload,
 } from 'lucide-react';
 import {
+  downloadFacultyFailedRows,
   downloadFacultyImportTemplate,
   parseFacultyImportFile,
   FacultyImportFileError,
@@ -17,6 +18,7 @@ import {
 } from '../utils/facultyImportExcel';
 import { ApiError } from '../services/apiClient';
 import { catalogErrorMessage, type CatalogImportResponse } from '../services/catalogApi';
+import { ExportFailedRowsButton } from './ExportFailedRowsButton';
 import { Modal } from './Modal';
 
 interface FacultyImportDialogProps {
@@ -111,6 +113,15 @@ export function FacultyImportDialog({ isOpen, onClose, onImport }: FacultyImport
 
   const failedItems = result?.items.filter((item) => !item.succeeded) ?? [];
 
+  const exportFailedItems = () =>
+    downloadFacultyFailedRows(
+      failedItems.map((item) => ({
+        rowNumber: item.rowNumber,
+        values: [item.name ?? ''],
+        reason: catalogErrorMessage(item.errorCode),
+      }))
+    );
+
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Import khoa / viện từ Excel">
       <div className="admin-import-dialog" aria-busy={parsing}>
@@ -190,7 +201,7 @@ export function FacultyImportDialog({ isOpen, onClose, onImport }: FacultyImport
               <section className="admin-import-preview" aria-label="Xem trước dữ liệu import">
                 <header>
                   <strong>{rows.length} khoa / viện sẵn sàng import</strong>
-                  <span>Hiển thị {Math.min(rows.length, 8)} dòng đầu</span>
+                  <span>Hiển thị toàn bộ danh sách</span>
                 </header>
                 <div className="admin-import-table-scroll">
                   <table>
@@ -201,7 +212,7 @@ export function FacultyImportDialog({ isOpen, onClose, onImport }: FacultyImport
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.slice(0, 8).map((row) => (
+                      {rows.map((row) => (
                         <tr key={row.rowNumber}>
                           <td>{row.rowNumber}</td>
                           <td>{row.facultyName}</td>
@@ -230,6 +241,8 @@ export function FacultyImportDialog({ isOpen, onClose, onImport }: FacultyImport
                 </span>
               </div>
             </div>
+
+            <ExportFailedRowsButton count={failedItems.length} onExport={exportFailedItems} />
 
             {failedItems.length > 0 && (
               <div className="admin-import-table-scroll">

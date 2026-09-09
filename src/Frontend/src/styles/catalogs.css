@@ -1470,11 +1470,101 @@
   color: #8d2525;
 }
 
+/*
+  Bộ đã thu phiếu: nói thẳng vì sao nút thêm/xoá biến mất, thay vì để người dùng
+  đi tìm nút không có.
+*/
+.survey-question-locked-note {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid #c98a1e;
+  background: #fdf6e8;
+  color: #6c4a08;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/*
+  Cuộn đặt ở cả danh sách mục chứ không ở từng mục: bộ không còn giới hạn 30 câu
+  nên một mục cũng có thể dài, mà lồng hai vùng cuộn thì lăn chuột không biết
+  vùng nào ăn.
+*/
+.survey-section-list {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.survey-section-block {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #d7e7ed;
+  border-radius: 6px;
+  background: #f7fafc;
+}
+
+.survey-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0 0 8px;
+}
+
+.survey-section-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 650;
+}
+
+.survey-section-count {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid #d7e7ed;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #40505a;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.survey-section-add-question {
+  margin-top: 8px;
+}
+
 .survey-question-rows {
   display: grid;
   gap: 6px;
-  max-height: 320px;
-  overflow-y: auto;
+}
+
+/* Nhãn "Bẫy" thay cho số: câu bẫy không chiếm số thứ tự ở màn quản trị. */
+.survey-question-row-index--trap {
+  color: #8d2525;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.survey-question-preview-section h4 {
+  margin: 12px 0 6px;
+  color: #0f5a7a;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.survey-question-preview-section ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.survey-question-preview-order {
+  display: inline-block;
+  min-width: 24px;
+  color: #68737d;
+  font-weight: 650;
 }
 
 .survey-question-row {

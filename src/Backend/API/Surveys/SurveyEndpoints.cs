@@ -449,25 +449,42 @@ public static class SurveyEndpoints
     }
 
     /// <summary>
+    /// Một mục của bộ câu hỏi. <paramref name="SectionId"/> để trống là mục mới;
+    /// có giá trị thì phải là mục có thật của chính bộ đang sửa.
+    /// </summary>
+    public sealed record SaveSurveyQuestionSectionRequest(
+        int? SectionId,
+        string? SectionName);
+
+    /// <summary>
     /// <paramref name="AttentionCheckValue"/> để trống là câu hỏi bình thường;
     /// điền một mức thì câu đó thành câu bẫy độ tập trung.
+    /// <paramref name="SectionIndex"/> là vị trí mục trong danh sách gửi kèm.
     /// </summary>
     public sealed record SaveSurveyQuestionRequest(
         string? QuestionText,
         int AnswerScaleId,
-        int? AttentionCheckValue);
+        int? AttentionCheckValue,
+        int SectionIndex);
 
     public sealed record SaveSurveyTemplateRequest(
         string TemplateName,
+        IReadOnlyList<SaveSurveyQuestionSectionRequest>? Sections,
         IReadOnlyList<SaveSurveyQuestionRequest>? Questions)
     {
         public SaveSurveyTemplateCommand ToCommand() => new(
             TemplateName,
+            Sections?
+                .Select(x => new SaveSurveyQuestionSectionCommand(
+                    x.SectionId,
+                    x.SectionName ?? string.Empty))
+                .ToList() ?? [],
             Questions?
                 .Select(x => new SaveSurveyQuestionCommand(
                     x.QuestionText ?? string.Empty,
                     x.AnswerScaleId,
-                    x.AttentionCheckValue))
+                    x.AttentionCheckValue,
+                    x.SectionIndex))
                 .ToList() ?? []);
     }
 

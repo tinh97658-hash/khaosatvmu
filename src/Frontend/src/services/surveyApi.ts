@@ -9,6 +9,7 @@ import type {
   SurveyResponseSummary,
   SurveyTemplate,
 } from '../types';
+import { maximumSectionsPerTemplate } from '../types';
 import type { ScoringThresholds } from '../utils/reportThresholds';
 import { ApiError, apiRequest, csrfRequest } from './apiClient';
 
@@ -25,6 +26,15 @@ export interface SaveAnswerScalePayload {
   options: SaveAnswerScaleOptionPayload[];
 }
 
+export interface SaveSurveyQuestionSectionPayload {
+  /**
+   * Mục đã có thì gửi kèm mã của nó để backend UPDATE tên tại chỗ, giữ nguyên
+   * `sectionId` cho báo cáo cũ. Mục mới thì để null.
+   */
+  sectionId: number | null;
+  sectionName: string;
+}
+
 export interface SaveSurveyQuestionPayload {
   questionText: string;
   /** Thang trả lời của riêng câu này. */
@@ -34,11 +44,18 @@ export interface SaveSurveyQuestionPayload {
    * Chỉ đặt được trên thang có mức chọn sẵn và phải là một mức có thật.
    */
   attentionCheckValue: number | null;
+  /** Vị trí mục trong mảng `sections` gửi kèm — mục mới chưa có mã để trỏ tới. */
+  sectionIndex: number;
 }
 
 export interface SaveSurveyTemplatePayload {
   templateName: string;
-  /** Ghi đè toàn bộ "SurveyQuestions" của bộ theo đúng thứ tự gửi lên. */
+  /** Ghi đè toàn bộ mục của bộ; mục cũ không còn trong danh sách sẽ bị xoá mềm. */
+  sections: SaveSurveyQuestionSectionPayload[];
+  /**
+   * Ghi đè toàn bộ "SurveyQuestions" của bộ theo đúng thứ tự gửi lên. Các câu
+   * cùng một mục phải nằm liền nhau.
+   */
   questions: SaveSurveyQuestionPayload[];
 }
 
@@ -419,8 +436,11 @@ export interface SemesterSurveyStatistics {
   /** Số phiếu về sau lần tính gần nhất. Khác 0 nghĩa là số đang xem đã cũ. */
   responsesSinceLastCalculation: number;
   questionColumns: StatisticsQuestionColumn[];
-  /** Vị trí các câu bẫy trong bộ; bảng không có cột cho chúng nên phải chú thích. */
-  attentionCheckOrders: number[];
+  /**
+   * Số câu bẫy của bộ. Câu bẫy không được đánh số nên bảng không nhảy cóc số câu,
+   * nhưng vẫn phải nói ra để người xem biết bộ dài hơn số cột ở đây.
+   */
+  attentionCheckCount: number;
   rows: SectionStatisticsRow[];
 }
 
@@ -744,9 +764,17 @@ export const surveyErrorMessages: Record<string, string> = {
   SURVEY_TEMPLATE_NAME_REQUIRED: 'Thiếu tên bộ câu hỏi.',
   SURVEY_TEMPLATE_NAME_EXISTS: 'Tên bộ câu hỏi đã tồn tại.',
   SURVEY_TEMPLATE_QUESTIONS_REQUIRED: 'Bộ câu hỏi cần ít nhất một câu hỏi.',
-  SURVEY_TEMPLATE_TOO_MANY_QUESTIONS: 'Mỗi bộ câu hỏi chỉ được tối đa 30 câu.',
   SURVEY_TEMPLATE_IN_USE:
-    'Bộ câu hỏi đang được đợt khảo sát sử dụng, hoặc có câu đã thu phiếu nên không đổi được thang trả lời.',
+    'Bộ câu hỏi đã thu phiếu nên chỉ sửa được nội dung chữ: không thêm, bớt, đổi chỗ câu hỏi hay đổi thang trả lời.',
+  SURVEY_TEMPLATE_SECTIONS_REQUIRED: 'Bộ câu hỏi cần ít nhất một mục.',
+  SURVEY_TEMPLATE_TOO_MANY_SECTIONS: `Mỗi bộ câu hỏi chỉ được tối đa ${maximumSectionsPerTemplate} mục.`,
+  SURVEY_SECTION_NAME_REQUIRED: 'Thiếu tên mục.',
+  SURVEY_SECTION_NAME_EXISTS: 'Hai mục trong cùng một bộ không được trùng tên.',
+  SURVEY_SECTION_NOT_FOUND: 'Một mục gửi lên không thuộc bộ câu hỏi này.',
+  SURVEY_SECTION_EMPTY: 'Mỗi mục phải có ít nhất một câu hỏi.',
+  SURVEY_QUESTION_SECTION_INVALID: 'Một câu hỏi đang trỏ tới mục không tồn tại.',
+  SURVEY_SECTION_QUESTIONS_NOT_CONTIGUOUS:
+    'Các câu hỏi cùng một mục phải nằm liền nhau, không được xen kẽ với mục khác.',
   SURVEY_SEMESTER_NOT_FOUND: 'Không tìm thấy học kỳ.',
   SURVEY_SEMESTER_HAS_NO_SECTIONS: 'Học kỳ này chưa có lớp học phần nào để tạo bài khảo sát.',
   SURVEY_SCHEDULE_INVALID: 'Thời gian đóng phải sau thời gian mở.',

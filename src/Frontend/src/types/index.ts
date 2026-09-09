@@ -123,8 +123,8 @@ export interface Criterion {
   status: 'Kích hoạt' | 'Tạm ẩn';
 }
 
-/** Giới hạn của bảng "SurveyQuestions": mỗi bộ câu hỏi tối đa 30 câu. */
-export const maximumQuestionsPerTemplate = 30;
+/** Số mục tối đa của một bộ câu hỏi. Số câu thì không giới hạn. */
+export const maximumSectionsPerTemplate = 10;
 
 /** Số mức tối đa của một thang trả lời ("AnswerScaleOptions"."Value" CHECK 1..5). */
 export const maximumAnswerScaleOptions = 5;
@@ -158,9 +158,17 @@ export interface AnswerScale {
 }
 
 /** Bảng "SurveyQuestions". Thang trả lời gắn ở từng câu, không gắn cho cả bộ. */
+/** Bảng "SurveyQuestionSections": mục chia nhóm câu hỏi, thuộc riêng một bộ. */
+export interface SurveyQuestionSection {
+  sectionId: number;
+  sectionName: string;
+}
+
 export interface SurveyQuestion {
   questionId: number;
   surveyTemplateId: number;
+  /** Mục chứa câu này; mọi câu đều thuộc một mục, kể cả câu bẫy. */
+  sectionId: number;
   questionText: string;
   answerScaleId: number;
   /**
@@ -170,13 +178,20 @@ export interface SurveyQuestion {
   attentionCheckValue: number | null;
 }
 
-/** Bảng "SurveyTemplates", kèm danh sách câu hỏi của bộ. */
+/** Bảng "SurveyTemplates", kèm mục và câu hỏi của bộ. */
 export interface SurveyTemplate {
   surveyTemplateId: number;
   templateName: string;
   /** ISO 8601 */
   createdAt: string;
+  /** Xếp theo thứ tự hiển thị, tức theo vị trí câu đầu tiên của từng mục. */
+  sections: SurveyQuestionSection[];
   questions: SurveyQuestion[];
+  /**
+   * Bộ đã thu được phiếu chưa. Đã có thì chỉ sửa được chữ: thêm, bớt hay đổi chỗ
+   * câu hỏi làm nội dung dịch sang câu khác trong khi phiếu cũ vẫn trỏ câu cũ.
+   */
+  hasResponses: boolean;
 }
 
 /** Bảng "SemesterSurveys", kèm số lớp và số phiếu đã thu của đợt. */
@@ -314,7 +329,14 @@ export interface PublicSurvey {
   isOpen: boolean;
   /** Các thang mà bộ câu hỏi đang dùng; mỗi câu trỏ tới một thang qua `answerScaleId`. */
   answerScales: AnswerScale[];
-  questions: { questionId: number; questionText: string; answerScaleId: number }[];
+  /** Mục của bộ, đã xếp đúng thứ tự phiếu hiển thị. */
+  sections: SurveyQuestionSection[];
+  questions: {
+    questionId: number;
+    questionText: string;
+    answerScaleId: number;
+    sectionId: number;
+  }[];
 }
 
 export interface SurveyCampaign {

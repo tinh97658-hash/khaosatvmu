@@ -1,17 +1,20 @@
 import { useId, useRef, useState } from 'react';
 import { CircleAlert, Download, FileSpreadsheet, LoaderCircle, Upload } from 'lucide-react';
 import {
+  downloadSurveyTemplateFailedRows,
   downloadSurveyTemplateImportTemplate,
   parseSurveyTemplateImportFile,
   SurveyTemplateImportFileError,
   type ImportSurveyQuestionRow,
   type InvalidAttentionCheckRow,
   type InvalidScaleCodeRow,
+  type InvalidSectionRow,
   type SurveyTemplateImportFileErrorCode,
 } from '../utils/surveyTemplateImportExcel';
 import type { SaveSurveyTemplatePayload } from '../services/surveyApi';
-import { maximumQuestionsPerTemplate } from '../types';
+import { maximumSectionsPerTemplate } from '../types';
 import type { AnswerScale } from '../types';
+import { ExportFailedRowsButton } from './ExportFailedRowsButton';
 import { Modal } from './Modal';
 import '../styles/auth-admin.css';
 
@@ -27,10 +30,11 @@ const fileErrorMessages: Record<SurveyTemplateImportFileErrorCode, string> = {
   FILE_TYPE: 'Chỉ chấp nhận tệp Excel có định dạng .xlsx.',
   FILE_SIZE: 'Tệp Excel không được lớn hơn 5 MB.',
   FILE_EMPTY: 'Tệp Excel không có dữ liệu.',
-  QUESTION_HEADER_MISSING: 'Không tìm thấy cột "Nội dung câu hỏi" trong hàng tiêu đề.',
+  SECTION_HEADER_MISSING: 'Không tìm thấy cột "Mục" trong hàng tiêu đề.',
+  QUESTION_HEADER_MISSING: 'Không tìm thấy cột "Câu hỏi" trong hàng tiêu đề.',
   SCALE_HEADER_MISSING: 'Không tìm thấy cột "Mã thang trả lời" trong hàng tiêu đề.',
   NO_DATA_ROWS: 'Tệp Excel chưa có câu hỏi nào.',
-  TOO_MANY_ROWS: `Mỗi bộ câu hỏi chỉ được tối đa ${maximumQuestionsPerTemplate} câu.`,
+  TOO_MANY_SECTIONS: `Mỗi bộ câu hỏi chỉ được tối đa ${maximumSectionsPerTemplate} mục.`,
   READ_FAILED: 'Không thể đọc tệp Excel. Hãy kiểm tra tệp không bị hỏng hoặc đặt mật khẩu.',
 };
 
@@ -44,7 +48,9 @@ export function SurveyTemplateImportDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const [templateName, setTemplateName] = useState('');
   const [fileName, setFileName] = useState('');
+  const [sections, setSections] = useState<string[]>([]);
   const [rows, setRows] = useState<ImportSurveyQuestionRow[]>([]);
+  const [invalidSectionRows, setInvalidSectionRows] = useState<InvalidSectionRow[]>([]);
   const [invalidScaleRows, setInvalidScaleRows] = useState<InvalidScaleCodeRow[]>([]);
   const [invalidTrapRows, setInvalidTrapRows] = useState<InvalidAttentionCheckRow[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -55,7 +61,9 @@ export function SurveyTemplateImportDialog({
   const resetFile = () => {
     if (inputRef.current) inputRef.current.value = '';
     setFileName('');
+    setSections([]);
     setRows([]);
+    setInvalidSectionRows([]);
     setInvalidScaleRows([]);
     setInvalidTrapRows([]);
     setParseError(null);
@@ -77,7 +85,9 @@ export function SurveyTemplateImportDialog({
     setParsing(true);
     try {
       const result = await parseSurveyTemplateImportFile(file, answerScales);
+      setSections(result.sections);
       setRows(result.rows);
+      setInvalidSectionRows(result.invalidSectionRows);
       setInvalidScaleRows(result.invalidScaleRows);
       setInvalidTrapRows(result.invalidAttentionCheckRows);
       // Chưa đặt tên bộ thì lấy tạm tên tệp cho đỡ phải gõ lại.
@@ -93,6 +103,38 @@ export function SurveyTemplateImportDialog({
     }
   };
 
+  /**
+   * Ba loại lỗi của một tệp bộ câu hỏi gộp chung vào một tệp xuất ra: người sửa
+   * chỉ cần mở đúng một tệp thay vì đối chiếu ba bảng trên màn hình.
+   */
+  const exportFailedRows = () =>
+    downloadSurveyTemplateFailedRows([
+      ...invalidSectionRows.map((row) => ({
+        rowNumber: row.rowNumber,
+        values: [row.sectionName, row.questionText, '', ''],
+        reason:
+          row.reason === 'MISSING'
+            ? 'Chưa điền tên mục (nếu đang gộp ô cột Mục thì bỏ gộp và lặp lại tên mục ở từng dòng)'
+            : 'Mục này đã kết thúc ở phía trên; gom các câu cùng mục lại liền nhau',
+      })),
+      ...invalidScaleRows.map((row) => ({
+        rowNumber: row.rowNumber,
+        values: ['', row.questionText, row.rawCode, ''],
+        reason: 'Mã thang trả lời không có trong hệ thống',
+      })),
+      ...invalidTrapRows.map((row) => ({
+        rowNumber: row.rowNumber,
+        values: ['', row.questionText, '', row.rawValue],
+        reason:
+          row.reason === 'TEXT_SCALE'
+            ? 'Câu này dùng thang tự nhập chữ, không có mức nào để chọn'
+            : 'Mức này không có trong thang trả lời của câu',
+      })),
+    ].sort((left, right) => left.rowNumber - right.rowNumber));
+
+  const failedRowCount =
+    invalidSectionRows.length + invalidScaleRows.length + invalidTrapRows.length;
+
   const handleImport = async () => {
     if (rows.length === 0) return;
     if (!templateName.trim()) {
@@ -100,6 +142,10 @@ export function SurveyTemplateImportDialog({
       return;
     }
     // Bỏ qua một phần câu hỏi thì bộ sẽ thiếu, bắt sửa tệp rồi tải lại.
+    if (invalidSectionRows.length > 0) {
+      setFormError('Vui lòng sửa các dòng có vấn đề ở cột Mục rồi chọn lại tệp.');
+      return;
+    }
     if (invalidScaleRows.length > 0) {
       setFormError('Vui lòng sửa các dòng có mã thang trả lời sai rồi chọn lại tệp.');
       return;
@@ -112,10 +158,13 @@ export function SurveyTemplateImportDialog({
     setSaving(true);
     const message = await onImport({
       templateName: templateName.trim(),
+      // Bộ mới hoàn toàn nên mọi mục đều chưa có mã.
+      sections: sections.map((sectionName) => ({ sectionId: null, sectionName })),
       questions: rows.map((row) => ({
         questionText: row.questionText,
         answerScaleId: row.answerScaleId,
         attentionCheckValue: row.attentionCheckValue,
+        sectionIndex: row.sectionIndex,
       })),
     });
     setSaving(false);
@@ -133,15 +182,20 @@ export function SurveyTemplateImportDialog({
         <div className="admin-form-intro">
           <FileSpreadsheet aria-hidden="true" />
           <p>
-            Hàng đầu tiên cần có cột <strong>Nội dung câu hỏi</strong> và cột{' '}
-            <strong>Mã thang trả lời</strong>. Mỗi dòng tiếp theo là một câu hỏi kèm mã thang
-            trả lời của riêng câu đó. Mỗi bộ tối đa {maximumQuestionsPerTemplate} câu.
+            Hàng đầu tiên cần có cột <strong>Mục</strong>, <strong>Câu hỏi</strong> và{' '}
+            <strong>Mã thang trả lời</strong>; thêm cột{' '}
+            <strong>Đáp án bắt buộc phải chọn</strong> nếu bộ có câu bẫy. Cột Mục phải điền ở{' '}
+            <strong>mọi dòng, kể cả dòng câu bẫy</strong> — lặp lại tên mục chứ{' '}
+            <strong>không gộp ô</strong>, vì ô gộp chỉ đọc ra được dòng trên cùng. Các câu cùng
+            một mục phải nằm liền nhau. Tối đa {maximumSectionsPerTemplate} mục, số câu không
+            giới hạn.
           </p>
         </div>
 
         <div className="import-template-row">
           <span>
-            Tệp mẫu có sẵn bảng tra mã thang trả lời đang dùng của hệ thống.
+            Tệp mẫu có sheet <strong>Danh sách thang trả lời</strong> liệt kê mã và các đáp án của
+            từng thang đang dùng.
           </span>
           <button
             type="button"
@@ -246,6 +300,43 @@ export function SurveyTemplateImportDialog({
           </div>
         )}
 
+        <ExportFailedRowsButton count={failedRowCount} onExport={exportFailedRows} />
+
+        {invalidSectionRows.length > 0 && (
+          <section className="admin-import-preview" aria-label="Dòng có vấn đề ở cột Mục">
+            <header>
+              <strong>{invalidSectionRows.length} dòng có vấn đề ở cột Mục</strong>
+              <span>Sửa lại tệp rồi chọn lại</span>
+            </header>
+            <div className="admin-import-table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Dòng</th>
+                    <th>Nội dung câu hỏi</th>
+                    <th>Mục đã điền</th>
+                    <th>Lý do</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invalidSectionRows.map((row) => (
+                    <tr key={row.rowNumber}>
+                      <td>{row.rowNumber}</td>
+                      <td>{row.questionText}</td>
+                      <td>{row.sectionName || '(trống)'}</td>
+                      <td>
+                        {row.reason === 'MISSING'
+                          ? 'Chưa điền tên mục. Nếu đang gộp ô ở cột Mục thì bỏ gộp và lặp lại tên mục ở từng dòng.'
+                          : 'Mục này đã kết thúc ở phía trên rồi. Gom các câu cùng mục lại liền nhau.'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
         {invalidScaleRows.length > 0 && (
           <section className="admin-import-preview" aria-label="Dòng có mã thang trả lời sai">
             <header>
@@ -262,7 +353,7 @@ export function SurveyTemplateImportDialog({
                   </tr>
                 </thead>
                 <tbody>
-                  {invalidScaleRows.slice(0, 8).map((row) => (
+                  {invalidScaleRows.map((row) => (
                     <tr key={row.rowNumber}>
                       <td>{row.rowNumber}</td>
                       <td>{row.questionText}</td>
@@ -292,7 +383,7 @@ export function SurveyTemplateImportDialog({
                   </tr>
                 </thead>
                 <tbody>
-                  {invalidTrapRows.slice(0, 8).map((row) => (
+                  {invalidTrapRows.map((row) => (
                     <tr key={row.rowNumber}>
                       <td>{row.rowNumber}</td>
                       <td>{row.questionText}</td>
@@ -314,24 +405,26 @@ export function SurveyTemplateImportDialog({
           <section className="admin-import-preview" aria-label="Xem trước câu hỏi">
             <header>
               <strong>
-                {rows.length}/{maximumQuestionsPerTemplate} câu hỏi sẵn sàng
+                {rows.length} câu hỏi trong {sections.length} mục
               </strong>
-              <span>Hiển thị {Math.min(rows.length, 8)} câu đầu</span>
+              <span>Hiển thị toàn bộ danh sách</span>
             </header>
             <div className="admin-import-table-scroll">
               <table>
                 <thead>
                   <tr>
                     <th>Dòng</th>
+                    <th>Mục</th>
                     <th>Nội dung câu hỏi</th>
                     <th>Thang trả lời</th>
                     <th>Câu bẫy</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.slice(0, 8).map((row) => (
+                  {rows.map((row) => (
                     <tr key={row.rowNumber}>
                       <td>{row.rowNumber}</td>
+                      <td>{row.sectionName}</td>
                       <td>{row.questionText}</td>
                       <td>{row.answerScaleName}</td>
                       <td>
@@ -362,6 +455,7 @@ export function SurveyTemplateImportDialog({
             onClick={() => void handleImport()}
             disabled={
               rows.length === 0
+              || invalidSectionRows.length > 0
               || invalidScaleRows.length > 0
               || invalidTrapRows.length > 0
               || parsing

@@ -2083,9 +2083,28 @@
   font-size: 11px;
 }
 
+/*
+  Bảng xem trước giờ hiện ĐỦ mọi dòng chứ không cắt còn 8 dòng đầu, nên khung
+  phải cao hơn và tự cuộn. Tệp lớp học phần thật có 500-2000 dòng: cắt bớt thì
+  người dùng không dò ra dòng hỏng nằm ở đâu.
+*/
 .admin-import-table-scroll {
-  max-height: 260px;
+  max-height: 420px;
   overflow: auto;
+}
+
+/* Nút xuất dòng lỗi, đứng ngay trên bảng mà nó nói về. */
+.admin-import-export-failed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+
+.admin-import-export-failed-error {
+  color: #8d2525;
+  font-size: 12px;
 }
 
 .admin-import-table-scroll table {

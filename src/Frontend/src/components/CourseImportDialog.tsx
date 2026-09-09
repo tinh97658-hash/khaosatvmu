@@ -9,6 +9,7 @@ import {
   Upload,
 } from 'lucide-react';
 import {
+  downloadCourseFailedRows,
   downloadCourseImportTemplate,
   parseCourseImportFile,
   CourseImportFileError,
@@ -17,11 +18,17 @@ import {
 } from '../utils/courseImportExcel';
 import { ApiError } from '../services/apiClient';
 import { catalogErrorMessage, type CatalogImportResponse } from '../services/catalogApi';
+import { buildDepartmentLookupRows } from '../utils/importLookupRows';
+import type { Department, Faculty } from '../types';
+import { ExportFailedRowsButton } from './ExportFailedRowsButton';
 import { Modal } from './Modal';
 
 interface CourseImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Dựng sheet tra cứu bộ môn trong tệp mẫu. */
+  departments: Department[];
+  faculties: Faculty[];
   /** Gửi danh sách lên API và trả về kết quả từng dòng. */
   onImport: (rows: ImportCourseRow[]) => Promise<CatalogImportResponse>;
 }
@@ -36,7 +43,13 @@ const fileErrorMessages: Record<CourseImportFileErrorCode, string> = {
   READ_FAILED: 'Không thể đọc tệp Excel. Hãy kiểm tra tệp không bị hỏng hoặc đặt mật khẩu.',
 };
 
-export function CourseImportDialog({ isOpen, onClose, onImport }: CourseImportDialogProps) {
+export function CourseImportDialog({
+  isOpen,
+  onClose,
+  departments,
+  faculties,
+  onImport,
+}: CourseImportDialogProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState('');
@@ -102,7 +115,7 @@ export function CourseImportDialog({ isOpen, onClose, onImport }: CourseImportDi
     setDownloadingTemplate(true);
     setTemplateError(null);
     try {
-      await downloadCourseImportTemplate();
+      await downloadCourseImportTemplate(buildDepartmentLookupRows(departments, faculties));
     } catch {
       setTemplateError('Không thể tạo tệp mẫu. Hãy thử lại.');
     } finally {
@@ -111,6 +124,51 @@ export function CourseImportDialog({ isOpen, onClose, onImport }: CourseImportDi
   };
 
   const failedItems = result?.items.filter((item) => !item.succeeded) ?? [];
+
+  const rowValues = (row: ImportCourseRow) => [
+    row.courseCode,
+    row.courseName,
+    row.credits,
+    row.courseType,
+    row.facultyName,
+    row.departmentName,
+    row.prerequisiteCourseCode,
+  ];
+
+  // Dòng thiếu dữ liệu bắt buộc, chặn ngay khi đọc tệp.
+  const invalidRows = rows.filter(
+    (row) => row.courseCode.length === 0 || row.courseName.length === 0
+  );
+
+  const exportInvalidRows = () =>
+    downloadCourseFailedRows(
+      invalidRows.map((row) => ({
+        rowNumber: row.rowNumber,
+        values: rowValues(row),
+        reason:
+          row.courseCode.length === 0 && row.courseName.length === 0
+            ? 'Thiếu mã học phần và tên học phần'
+            : row.courseCode.length === 0
+              ? 'Thiếu mã học phần'
+              : 'Thiếu tên học phần',
+      }))
+    );
+
+  // Dòng bị API trả về lỗi; lấy lại đủ cột từ chính tệp vừa đọc theo số dòng.
+  const exportFailedItems = () => {
+    const rowByNumber = new Map(rows.map((row) => [row.rowNumber, row]));
+
+    return downloadCourseFailedRows(
+      failedItems.map((item) => {
+        const row = rowByNumber.get(item.rowNumber);
+        return {
+          rowNumber: item.rowNumber,
+          values: row ? rowValues(row) : ['', item.name ?? '', '', '', '', '', ''],
+          reason: catalogErrorMessage(item.errorCode),
+        };
+      })
+    );
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Import học phần từ Excel">
@@ -127,7 +185,10 @@ export function CourseImportDialog({ isOpen, onClose, onImport }: CourseImportDi
         {!result && (
           <>
             <div className="import-template-row">
-              <span>Chưa có tệp đúng định dạng? Tải tệp mẫu rồi điền dữ liệu vào.</span>
+              <span>
+                Chưa có tệp đúng định dạng? Tải tệp mẫu rồi điền dữ liệu vào; sheet{' '}
+                <strong>Danh sách bộ môn</strong> có sẵn mã bộ môn, tên bộ môn và khoa/viện.
+              </span>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -192,8 +253,13 @@ export function CourseImportDialog({ isOpen, onClose, onImport }: CourseImportDi
               <section className="admin-import-preview" aria-label="Xem trước dữ liệu import">
                 <header>
                   <strong>{rows.length} học phần sẵn sàng import</strong>
-                  <span>Hiển thị {Math.min(rows.length, 8)} dòng đầu</span>
+                  <span>
+                    {invalidRows.length > 0
+                      ? `${invalidRows.length} dòng thiếu dữ liệu bắt buộc`
+                      : 'Hiển thị toàn bộ danh sách'}
+                  </span>
                 </header>
+                <ExportFailedRowsButton count={invalidRows.length} onExport={exportInvalidRows} />
                 <div className="admin-import-table-scroll">
                   <table>
                     <thead>
@@ -207,7 +273,7 @@ export function CourseImportDialog({ isOpen, onClose, onImport }: CourseImportDi
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.slice(0, 8).map((row) => (
+                      {rows.map((row) => (
                         <tr key={row.rowNumber}>
                           <td>{row.rowNumber}</td>
                           <td>
@@ -248,6 +314,8 @@ export function CourseImportDialog({ isOpen, onClose, onImport }: CourseImportDi
                 </span>
               </div>
             </div>
+
+            <ExportFailedRowsButton count={failedItems.length} onExport={exportFailedItems} />
 
             {failedItems.length > 0 && (
               <div className="admin-import-table-scroll">

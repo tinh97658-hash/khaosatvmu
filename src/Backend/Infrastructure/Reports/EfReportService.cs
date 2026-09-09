@@ -675,8 +675,9 @@ public sealed class EfReportService(
         if (template is null) return null;
 
         // Bỏ câu bẫy: điểm của nó vô nghĩa vì mọi người đều bị ép chọn một mức.
-        var questions = await db.SurveyQuestions.AsNoTracking()
-            .Where(x => x.SurveyTemplateId == template.SurveyTemplateId && x.AttentionCheckValue == null)
+        var questions = await QuestionsOfTemplate(template.SurveyTemplateId)
+            .AsNoTracking()
+            .Where(x => x.AttentionCheckValue == null)
             .OrderBy(x => x.QuestionId)
             .ToListAsync(cancellationToken);
         var questionOrders = await TemplateQuestionOrdersAsync(
@@ -803,8 +804,9 @@ public sealed class EfReportService(
         var questions = template is null
             ? []
             // Bỏ câu bẫy khỏi phân tích theo câu hỏi.
-            : await db.SurveyQuestions.AsNoTracking()
-                .Where(x => x.SurveyTemplateId == template.SurveyTemplateId && x.AttentionCheckValue == null)
+            : await QuestionsOfTemplate(template.SurveyTemplateId)
+                .AsNoTracking()
+                .Where(x => x.AttentionCheckValue == null)
                 .OrderBy(x => x.QuestionId)
                 .ToListAsync(cancellationToken);
 
@@ -1820,16 +1822,29 @@ public sealed class EfReportService(
     /// mức của chính thang đó; câu thang 'Text' ra danh sách nội dung người học gõ.
     /// </summary>
     /// <summary>
-    /// Số thứ tự hiển thị (C1, C2...) của mọi câu trong một bộ đề. Đánh trên toàn
-    /// bộ câu kể cả câu bẫy và câu tự nhập, để mã câu khớp với trang bảng dữ liệu
-    /// khảo sát — bỏ câu bẫy ra rồi mới đánh số thì các câu sau bị lùi một bậc.
+    /// Các câu của một bộ đề. "SurveyQuestions" không còn khoá ngoại thẳng tới
+    /// "SurveyTemplates" — bộ của một câu suy ra từ mục chứa nó.
+    /// </summary>
+    private IQueryable<SurveyQuestion> QuestionsOfTemplate(int surveyTemplateId) =>
+        from question in db.SurveyQuestions
+        join section in db.SurveyQuestionSections
+            on question.SectionId equals section.SectionId
+        where section.SurveyTemplateId == surveyTemplateId
+        select question;
+
+    /// <summary>
+    /// Số thứ tự hiển thị (C1, C2...) của các câu trong một bộ đề. Câu bẫy KHÔNG
+    /// được đánh số nên số chạy liền mạch; câu tự nhập vẫn giữ số như câu thường.
+    /// Phải trùng khít cách đánh số của trang bảng dữ liệu khảo sát, lệch nhau thì
+    /// C16 ở màn này là C15 ở màn kia.
     /// </summary>
     private async Task<Dictionary<int, int>> TemplateQuestionOrdersAsync(
         int surveyTemplateId,
         CancellationToken cancellationToken)
     {
-        var questionIds = await db.SurveyQuestions.AsNoTracking()
-            .Where(x => x.SurveyTemplateId == surveyTemplateId)
+        var questionIds = await QuestionsOfTemplate(surveyTemplateId)
+            .AsNoTracking()
+            .Where(x => x.AttentionCheckValue == null)
             .OrderBy(x => x.QuestionId)
             .Select(x => x.QuestionId)
             .ToListAsync(cancellationToken);
@@ -1846,16 +1861,23 @@ public sealed class EfReportService(
     {
         if (questionIds.Count == 0) return [];
 
-        var templateIds = await db.SurveyQuestions.AsNoTracking()
-            .Where(x => questionIds.Contains(x.QuestionId))
-            .Select(x => x.SurveyTemplateId)
+        var templateIds = await (
+            from question in db.SurveyQuestions.AsNoTracking()
+            join section in db.SurveyQuestionSections.AsNoTracking()
+                on question.SectionId equals section.SectionId
+            where questionIds.Contains(question.QuestionId)
+            select section.SurveyTemplateId)
             .Distinct()
             .ToListAsync(cancellationToken);
         if (templateIds.Count == 0) return [];
 
-        var all = await db.SurveyQuestions.AsNoTracking()
-            .Where(x => templateIds.Contains(x.SurveyTemplateId))
-            .Select(x => new { x.QuestionId, x.SurveyTemplateId })
+        var all = await (
+            from question in db.SurveyQuestions.AsNoTracking()
+            join section in db.SurveyQuestionSections.AsNoTracking()
+                on question.SectionId equals section.SectionId
+            where templateIds.Contains(section.SurveyTemplateId)
+                && question.AttentionCheckValue == null
+            select new { question.QuestionId, section.SurveyTemplateId })
             .ToListAsync(cancellationToken);
 
         var orders = new Dictionary<int, int>();

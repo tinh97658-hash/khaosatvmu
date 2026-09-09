@@ -600,6 +600,8 @@ export const LecturersPage: React.FC<LecturersPageProps> = ({
       <LecturerImportDialog
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
+        departments={departments}
+        faculties={faculties}
         onImport={handleImport}
       />
 

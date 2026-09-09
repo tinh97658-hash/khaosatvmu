@@ -979,10 +979,34 @@
 
 /* --------------------------------------------------------- Danh sách câu hỏi */
 
+/*
+  Cả một mục nằm chung một thẻ: dải tiêu đề ở trên, các câu của mục xếp bên dưới
+  và ngăn nhau bằng nét mảnh. Trước đây mỗi câu là một thẻ rời nên nhìn không ra
+  câu nào thuộc mục nào.
+*/
+.public-quiz-section {
+  overflow: hidden;
+  border: 1px solid #dfe4e8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+/* Khoảng cách giữa các mục do `gap` của form lo, đừng cộng thêm margin. */
+.public-quiz-section-title {
+  margin: 0;
+  padding: 14px 26px;
+  border-bottom: 1px solid #dfe4e8;
+  background: #f2f6f3;
+  color: #1f7a45;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
 .public-quiz-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -990,15 +1014,20 @@
 
 .public-quiz-question {
   padding: 20px 26px 22px;
-  border: 1px solid #dfe4e8;
-  border-radius: 8px;
-  background: #ffffff;
   scroll-margin-top: 24px;
 }
 
+.public-quiz-question + .public-quiz-question {
+  border-top: 1px solid #edf1f3;
+}
+
+/*
+  Câu thiếu đáp án nằm trong thẻ chung nên không viền riêng được nữa; đánh dấu
+  bằng nền hồng và một vạch đỏ bên trái.
+*/
 .public-quiz-question.is-invalid {
-  border-color: #dc2626;
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+  box-shadow: inset 3px 0 0 #dc2626;
+  background: #fdf3f3;
 }
 
 .public-quiz-question-head {
@@ -1036,12 +1065,14 @@
 */
 .public-quiz-options {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  /* Rộng hơn 150px cũ vì số và nhãn giờ nằm chung một dòng. */
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
   gap: 10px;
   margin-top: 16px;
   padding-left: 40px;
 }
 
+/* Nút tròn ở trên, "1. Rất không hài lòng" nằm gọn một dòng ở dưới. */
 .public-quiz-option {
   display: flex;
   flex-direction: column;
@@ -1055,6 +1086,14 @@
   cursor: pointer;
   text-align: center;
   transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.public-quiz-option-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0 5px;
 }
 
 .public-quiz-option:hover {
@@ -1273,9 +1312,18 @@
   .public-quiz-card,
   .public-quiz-question {
     padding: 18px 16px 20px;
+  }
+
+  /* Thẻ mục tràn hết bề ngang màn hẹp, bỏ bo góc và viền dọc cho gọn. */
+  .public-quiz-section {
     border-right: 0;
     border-left: 0;
     border-radius: 0;
+  }
+
+  .public-quiz-section-title {
+    padding: 11px 16px;
+    font-size: 14px;
   }
 
   .public-quiz-card h1 {
@@ -1328,12 +1376,11 @@
     text-align: left;
   }
 
-  .public-quiz-option-value::after {
-    content: '.';
-  }
-
-  .public-quiz-option-label {
+  /* Ô rộng cả hàng nên chữ căn trái, không căn giữa như màn rộng. */
+  .public-quiz-option-text {
     flex: 1 1 auto;
+    justify-content: flex-start;
+    text-align: left;
   }
 
   .public-quiz-text {
@@ -1410,6 +1457,7 @@
   color: #20262c;
 }
 
+/* Hộp xác nhận đi theo màu xanh lá của phiếu, không dùng xanh dương của trang quản trị. */
 .public-submit-icon {
   display: grid;
   place-items: center;
@@ -1417,7 +1465,7 @@
   height: 46px;
   margin: 0 auto;
   border-radius: 999px;
-  background: #0788b8;
+  background: #1f7a45;
   color: #ffffff;
   font-size: 26px;
   font-weight: 700;
@@ -1450,9 +1498,9 @@
   gap: 6px;
   margin: 18px 0 0;
   padding: 14px 16px;
-  border: 1px solid #d6e8f1;
+  border: 1px solid #cfe3d6;
   border-radius: 8px;
-  background: #f2f9fc;
+  background: #f2f9f5;
   text-align: left;
 }
 
@@ -1511,17 +1559,17 @@
 
 .public-submit-ok {
   border: 0;
-  background: #0788b8;
+  background: #1f7a45;
   color: #ffffff;
 }
 
 .public-submit-ok:hover {
-  background: #036e99;
+  background: #186237;
 }
 
 .public-submit-cancel:focus-visible,
 .public-submit-ok:focus-visible {
-  outline: 2px solid #036e99;
+  outline: 2px solid #1f7a45;
   outline-offset: 2px;
 }
 

@@ -1,5 +1,12 @@
 import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
+import {
+  buildLookupSheet,
+  downloadFailedRows,
+  templateHeaderRow,
+  writeWorkbook,
+  type FailedRowExport,
+} from './importExcelShared';
 
 const maximumFileSize = 5 * 1024 * 1024;
 const departmentIdHeaders = new Set([
@@ -81,20 +88,23 @@ function cellPositiveInteger(value: CellValue | null | undefined): number {
 
 export const departmentTemplateFileName = 'mau-import-bo-mon.xlsx';
 
+/** Cột của tệp mẫu, cũng là bố cục của tệp xuất dòng lỗi. */
+export const departmentImportColumns = ['Mã bộ môn', 'Tên bộ môn', 'Tên khoa viện'];
+const departmentColumnWidths = [14, 38, 38];
+
 /**
  * Tạo và tải tệp Excel mẫu: cột "Mã bộ môn", "Tên bộ môn" và "Tên khoa viện".
  * Mã bộ môn phải tự điền vì cột khóa chính không tự tăng.
  * Khi import, tên khoa viện được tra ngược ra FacultyId.
+ *
+ * Sheet thứ hai liệt kê khoa/viện đang có để người điền chép đúng tên, khỏi gõ
+ * sai rồi bị bỏ dòng lúc import.
  */
-export async function downloadDepartmentImportTemplate(): Promise<void> {
-  const { default: writeXlsxFile } = await import('write-excel-file/browser');
-
+export async function downloadDepartmentImportTemplate(
+  faculties: { facultyName: string }[] = []
+): Promise<void> {
   const data: SheetData = [
-    [
-      { value: 'Mã bộ môn', type: String, fontWeight: 'bold' },
-      { value: 'Tên bộ môn', type: String, fontWeight: 'bold' },
-      { value: 'Tên khoa viện', type: String, fontWeight: 'bold' },
-    ],
+    templateHeaderRow(departmentImportColumns),
     [
       { value: 101, type: Number },
       { value: 'Bộ môn Công nghệ Phần mềm', type: String },
@@ -112,10 +122,33 @@ export async function downloadDepartmentImportTemplate(): Promise<void> {
     ],
   ];
 
-  await writeXlsxFile(data, {
-    sheet: 'Bo mon',
-    columns: [{ width: 14 }, { width: 38 }, { width: 38 }],
-  }).toFile(departmentTemplateFileName);
+  await writeWorkbook(
+    [
+      {
+        data,
+        sheet: 'Bo mon',
+        columns: departmentColumnWidths.map((width) => ({ width })),
+      } as never,
+      buildLookupSheet(
+        'Danh sach khoa vien',
+        ['Khoa / Viện'],
+        faculties.map((faculty) => [faculty.facultyName]),
+        [50]
+      ),
+    ],
+    departmentTemplateFileName
+  );
+}
+
+/** Xuất các dòng import hỏng ra tệp để sửa rồi nạp lại. */
+export async function downloadDepartmentFailedRows(rows: FailedRowExport[]): Promise<void> {
+  await downloadFailedRows({
+    fileName: 'dong-loi-bo-mon.xlsx',
+    sheetName: 'Dong loi',
+    headers: departmentImportColumns,
+    columnWidths: departmentColumnWidths,
+    rows,
+  });
 }
 
 /** Đọc tệp .xlsx và lấy mã bộ môn, tên bộ môn kèm tên khoa viện. */

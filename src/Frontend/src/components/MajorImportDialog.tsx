@@ -9,6 +9,7 @@ import {
   Upload,
 } from 'lucide-react';
 import {
+  downloadMajorFailedRows,
   downloadMajorImportTemplate,
   parseMajorImportFile,
   MajorImportFileError,
@@ -17,11 +18,15 @@ import {
 } from '../utils/majorImportExcel';
 import { ApiError } from '../services/apiClient';
 import { catalogErrorMessage, type CatalogImportResponse } from '../services/catalogApi';
+import type { Faculty } from '../types';
+import { ExportFailedRowsButton } from './ExportFailedRowsButton';
 import { Modal } from './Modal';
 
 interface MajorImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Đưa vào sheet tra cứu của tệp mẫu để người điền chép đúng tên khoa/viện. */
+  faculties: Faculty[];
   /** Gửi danh sách lên API và trả về kết quả từng dòng. */
   onImport: (rows: ImportMajorRow[]) => Promise<CatalogImportResponse>;
 }
@@ -36,7 +41,12 @@ const fileErrorMessages: Record<MajorImportFileErrorCode, string> = {
   READ_FAILED: 'Không thể đọc tệp Excel. Hãy kiểm tra tệp không bị hỏng hoặc đặt mật khẩu.',
 };
 
-export function MajorImportDialog({ isOpen, onClose, onImport }: MajorImportDialogProps) {
+export function MajorImportDialog({
+  isOpen,
+  onClose,
+  faculties,
+  onImport,
+}: MajorImportDialogProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState('');
@@ -102,7 +112,7 @@ export function MajorImportDialog({ isOpen, onClose, onImport }: MajorImportDial
     setDownloadingTemplate(true);
     setTemplateError(null);
     try {
-      await downloadMajorImportTemplate();
+      await downloadMajorImportTemplate(faculties);
     } catch {
       setTemplateError('Không thể tạo tệp mẫu. Hãy thử lại.');
     } finally {
@@ -111,6 +121,21 @@ export function MajorImportDialog({ isOpen, onClose, onImport }: MajorImportDial
   };
 
   const failedItems = result?.items.filter((item) => !item.succeeded) ?? [];
+
+  const exportFailedItems = () => {
+    const rowByNumber = new Map(rows.map((row) => [row.rowNumber, row]));
+
+    return downloadMajorFailedRows(
+      failedItems.map((item) => {
+        const row = rowByNumber.get(item.rowNumber);
+        return {
+          rowNumber: item.rowNumber,
+          values: [row?.majorName ?? item.name ?? '', row?.facultyName ?? item.facultyName ?? ''],
+          reason: catalogErrorMessage(item.errorCode),
+        };
+      })
+    );
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Import ngành học từ Excel">
@@ -127,7 +152,10 @@ export function MajorImportDialog({ isOpen, onClose, onImport }: MajorImportDial
         {!result && (
           <>
             <div className="import-template-row">
-              <span>Chưa có tệp đúng định dạng? Tải tệp mẫu rồi điền dữ liệu vào.</span>
+              <span>
+                Chưa có tệp đúng định dạng? Tải tệp mẫu rồi điền dữ liệu vào; sheet{' '}
+                <strong>Danh sách khoa/viện</strong> có sẵn tên để chép cho đúng.
+              </span>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -192,7 +220,7 @@ export function MajorImportDialog({ isOpen, onClose, onImport }: MajorImportDial
               <section className="admin-import-preview" aria-label="Xem trước dữ liệu import">
                 <header>
                   <strong>{rows.length} ngành học sẵn sàng import</strong>
-                  <span>Hiển thị {Math.min(rows.length, 8)} dòng đầu</span>
+                  <span>Hiển thị toàn bộ danh sách</span>
                 </header>
                 <div className="admin-import-table-scroll">
                   <table>
@@ -204,7 +232,7 @@ export function MajorImportDialog({ isOpen, onClose, onImport }: MajorImportDial
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.slice(0, 8).map((row) => (
+                      {rows.map((row) => (
                         <tr key={row.rowNumber}>
                           <td>{row.rowNumber}</td>
                           <td>
@@ -242,6 +270,8 @@ export function MajorImportDialog({ isOpen, onClose, onImport }: MajorImportDial
                 </span>
               </div>
             </div>
+
+            <ExportFailedRowsButton count={failedItems.length} onExport={exportFailedItems} />
 
             {failedItems.length > 0 && (
               <div className="admin-import-table-scroll">

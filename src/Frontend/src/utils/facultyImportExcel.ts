@@ -1,5 +1,11 @@
 import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
+import {
+  downloadFailedRows,
+  templateHeaderRow,
+  writeWorkbook,
+  type FailedRowExport,
+} from './importExcelShared';
 
 const maximumFileSize = 5 * 1024 * 1024;
 const facultyNameHeaders = new Set([
@@ -59,20 +65,39 @@ export const facultyTemplateFileName = 'mau-import-khoa-vien.xlsx';
  * Tạo và tải tệp Excel mẫu: một cột "Tên khoa viện" kèm vài dòng ví dụ, đúng
  * định dạng mà parseFacultyImportFile đọc được.
  */
-export async function downloadFacultyImportTemplate(): Promise<void> {
-  const { default: writeXlsxFile } = await import('write-excel-file/browser');
+export const facultyImportColumns = ['Tên khoa viện'];
+const facultyColumnWidths = [42];
 
+export async function downloadFacultyImportTemplate(): Promise<void> {
   const data: SheetData = [
-    [{ value: 'Tên khoa viện', type: String, fontWeight: 'bold' }],
+    templateHeaderRow(facultyImportColumns),
     [{ value: 'Khoa Công nghệ Thông tin', type: String }],
     [{ value: 'Khoa Điện - Điện tử', type: String }],
     [{ value: 'Viện Đào tạo Quốc tế', type: String }],
   ];
 
-  await writeXlsxFile(data, {
-    sheet: 'Khoa vien',
-    columns: [{ width: 42 }],
-  }).toFile(facultyTemplateFileName);
+  // Khoa/viện là gốc của cây danh mục nên không có bảng tra nào để kèm thêm.
+  await writeWorkbook(
+    [
+      {
+        data,
+        sheet: 'Khoa vien',
+        columns: facultyColumnWidths.map((width) => ({ width })),
+      } as never,
+    ],
+    facultyTemplateFileName
+  );
+}
+
+/** Xuất các dòng import hỏng ra tệp để sửa rồi nạp lại. */
+export async function downloadFacultyFailedRows(rows: FailedRowExport[]): Promise<void> {
+  await downloadFailedRows({
+    fileName: 'dong-loi-khoa-vien.xlsx',
+    sheetName: 'Dong loi',
+    headers: facultyImportColumns,
+    columnWidths: facultyColumnWidths,
+    rows,
+  });
 }
 
 /** Đọc tệp .xlsx và lấy cột tên khoa viện. Mỗi dòng dữ liệu là một khoa / viện. */

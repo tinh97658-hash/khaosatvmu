@@ -1,5 +1,18 @@
 import type { CellValue } from 'read-excel-file/browser';
 import type { SheetData } from 'write-excel-file/browser';
+import {
+  buildLookupSheet,
+  downloadFailedRows,
+  templateHeaderRow,
+  writeWorkbook,
+  type FailedRowExport,
+} from './importExcelShared';
+import {
+  departmentLookupHeaders,
+  departmentLookupValues,
+  departmentLookupWidths,
+  type DepartmentLookupRow,
+} from './importLookupRows';
 
 const maximumFileSize = 5 * 1024 * 1024;
 
@@ -87,19 +100,20 @@ export const courseTemplateFileName = 'mau-import-hoc-phan.xlsx';
  * Tạo và tải tệp Excel mẫu cho học phần. Khoa viện, bộ môn và học phần tiên
  * quyết ghi theo tên / mã, khi import được tra ngược ra id.
  */
-export async function downloadCourseImportTemplate(): Promise<void> {
-  const { default: writeXlsxFile } = await import('write-excel-file/browser');
+export const courseImportColumns = [
+  'Mã học phần',
+  'Tên học phần',
+  'Số tín chỉ',
+  'Loại học phần',
+  'Tên khoa viện',
+  'Tên bộ môn',
+  'Mã học phần tiên quyết',
+];
+const courseColumnWidths = [16, 34, 12, 16, 30, 30, 22];
 
-  const header = [
-    'Mã học phần',
-    'Tên học phần',
-    'Số tín chỉ',
-    'Loại học phần',
-    'Tên khoa viện',
-    'Tên bộ môn',
-    'Mã học phần tiên quyết',
-  ];
-
+export async function downloadCourseImportTemplate(
+  departmentRows: DepartmentLookupRow[] = []
+): Promise<void> {
   const rows = [
     ['19783', 'Lập trình Web nâng cao', '3', 'Bắt buộc', 'Khoa Công nghệ Thông tin', 'Bộ môn Công nghệ Phần mềm', ''],
     ['19784', 'Trí tuệ nhân tạo', '3', 'Tự chọn', 'Khoa Công nghệ Thông tin', 'Bộ môn Công nghệ Phần mềm', '19783'],
@@ -107,22 +121,37 @@ export async function downloadCourseImportTemplate(): Promise<void> {
   ];
 
   const data: SheetData = [
-    header.map((value) => ({ value, type: String, fontWeight: 'bold' as const })),
+    templateHeaderRow(courseImportColumns),
     ...rows.map((row) => row.map((value) => ({ value, type: String }))),
   ];
 
-  await writeXlsxFile(data, {
-    sheet: 'Hoc phan',
-    columns: [
-      { width: 16 },
-      { width: 34 },
-      { width: 12 },
-      { width: 16 },
-      { width: 30 },
-      { width: 30 },
-      { width: 22 },
+  await writeWorkbook(
+    [
+      {
+        data,
+        sheet: 'Hoc phan',
+        columns: courseColumnWidths.map((width) => ({ width })),
+      } as never,
+      buildLookupSheet(
+        'Danh sach bo mon',
+        departmentLookupHeaders,
+        departmentRows.map(departmentLookupValues),
+        departmentLookupWidths
+      ),
     ],
-  }).toFile(courseTemplateFileName);
+    courseTemplateFileName
+  );
+}
+
+/** Xuất các dòng import hỏng ra tệp để sửa rồi nạp lại. */
+export async function downloadCourseFailedRows(rows: FailedRowExport[]): Promise<void> {
+  await downloadFailedRows({
+    fileName: 'dong-loi-hoc-phan.xlsx',
+    sheetName: 'Dong loi',
+    headers: courseImportColumns,
+    columnWidths: courseColumnWidths,
+    rows,
+  });
 }
 
 /** Đọc tệp .xlsx của danh mục học phần. */
