@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowRight,
-  BarChart3,
   Building2,
   ChevronRight,
   CircleAlert,
@@ -13,7 +12,6 @@ import {
   RadioTower,
   Search,
   ShieldAlert,
-  Star,
   TrendingDown,
   TrendingUp,
 } from 'lucide-react';
@@ -23,8 +21,6 @@ import { surveyApi } from '../services/surveyApi';
 import { buildReportHash } from './reportRoute';
 import { FacultyScoreChart } from '../components/reports/FacultyScoreChart';
 import { FacultyCompletionChart } from '../components/reports/FacultyCompletionChart';
-import { ScoreDistributionDonut } from '../components/reports/ScoreDistributionDonut';
-import { WeakestQuestionsPanel } from '../components/reports/WeakestQuestionsPanel';
 import { formatNumber, scoreColor, completionColor } from '../components/reports/theme';
 import type {
   SchoolSurveyOverview as SchoolSurveyOverviewData,
@@ -36,6 +32,7 @@ import {
   COMPLETED_COMPLETION_RATE,
   LAGGING_COMPLETION_RATE,
 } from '../utils/reportThresholds';
+import { SearchableSelect } from '../components/SearchableSelect';
 import '../styles/reports.css';
 import '../styles/dashboard.css';
 import { foldVietnamese } from '../utils/vietnamese';
@@ -106,6 +103,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     [activeSemesterId, semesterSurveys],
   );
 
+  const semesterOptions = useMemo(
+    () =>
+      academicYears.flatMap((year) =>
+        year.semesters.map((semester) => ({
+          value: String(semester.semesterId),
+          label: `${semester.semesterName} · ${year.academicYearName}`,
+        }))
+      ),
+    [academicYears],
+  );
+
   // Giữ lựa chọn đồng bộ với danh sách đợt mà App đã nạp gộp cho học kỳ hiện tại.
   useEffect(() => {
     if (!activeSemesterId) {
@@ -162,7 +170,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
   // View state cho biểu đồ
   const [facultyChartView, setFacultyChartView] = useState<'completion' | 'score'>('completion');
-  const [qualityChartView, setQualityChartView] = useState<'distribution' | 'weakest'>('distribution');
 
   // Filter state cho bảng đơn vị
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -337,54 +344,51 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
   return (
     <div className="executive-dashboard">
-      {/* 1. EXECUTIVE HEADER BAR */}
-      <header className="executive-header-bar" aria-label="Bảng điều hành Ban Giám Hiệu">
-        <div className="executive-title-group">
-          <h1>
-            <BarChart3 className="operation-icon text-cyan-600" aria-hidden="true" />
-            Bảng Điều Hành Khảo Sát & Đánh Giá Chất Lượng (BGH)
-          </h1>
-          <p>
-            {overviewData ? (
-              <>
-                <strong>{overviewData.academicYearName} · {overviewData.semesterName}</strong>
-                {selectedSurvey && (
-                  <>
-                    {' '}— Đợt: <strong>{selectedSurvey.surveyName}</strong> ({selectedSurvey.sectionSurveyCount} lớp)
-                  </>
-                )}
-              </>
-            ) : (
-              'Hệ thống Đánh giá & Khảo sát Chất lượng Dạy - Học Đại học Hàng hải Việt Nam'
-            )}
-          </p>
-        </div>
-
-        <div className="executive-header-controls">
-          <div className="executive-compare-select">
-            <label htmlFor="dashboard-survey-campaign">Đợt khảo sát:</label>
+      {/* Bốn phần nằm ngang một hàng ở góc trái trên, giống hệt trang Tổng quan
+          khảo sát. Khối tiêu đề "Bảng Điều Hành..." đã bỏ theo yêu cầu — tên trang
+          đã có sẵn trên thanh trên cùng, và khối đó là một hộp trắng có viền nên
+          để lại thì thanh chọn thành hộp lồng trong hộp. */}
+      <section className="statistics-toolbar" aria-label="Bộ lọc bảng điều khiển">
+          <label className="form-group">
+            <span>Học kỳ</span>
             <select
-              id="dashboard-survey-campaign"
-              value={selectedSemesterSurveyId ?? ''}
-              disabled={currentSemesterSurveys.length === 0}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSelectedSemesterSurveyId(val ? Number(val) : undefined);
-              }}
+              value={activeSemesterId ?? ''}
+              onChange={(event) =>
+                setActiveSemesterId(event.target.value ? Number(event.target.value) : null)
+              }
             >
-              {currentSemesterSurveys.length === 0 ? (
-                <option value="">Chưa có đợt khảo sát nào</option>
-              ) : (
-                <>
-                  {currentSemesterSurveys.map((survey) => (
-                    <option key={survey.semesterSurveyId} value={survey.semesterSurveyId}>
-                      {survey.surveyName} ({survey.sectionSurveyCount} lớp)
-                    </option>
-                  ))}
-                </>
-              )}
+              <option value="">Chọn học kỳ</option>
+              {semesterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
+          </label>
+
+          <div className="form-group statistics-toolbar-field--campaign">
+            <span>Đợt khảo sát</span>
+            <SearchableSelect
+              id="dashboard-survey-campaign"
+              aria-label="Đợt khảo sát"
+              listClassName="statistics-toolbar-field--campaign-list"
+              showHoveredLabel
+              value={selectedSemesterSurveyId ? String(selectedSemesterSurveyId) : ''}
+              disabled={currentSemesterSurveys.length === 0}
+              placeholder={
+                currentSemesterSurveys.length === 0
+                  ? 'Chưa có đợt khảo sát nào'
+                  : 'Chọn đợt khảo sát'
+              }
+              onChange={(next) => setSelectedSemesterSurveyId(next ? Number(next) : undefined)}
+              options={currentSemesterSurveys.map((survey) => ({
+                value: String(survey.semesterSurveyId),
+                label: `${survey.surveyName} · ${survey.sectionSurveyCount} lớp`,
+              }))}
+            />
           </div>
+
+        <div className="statistics-toolbar-actions">
 
           {/* Tạm ẩn theo yêu cầu. Giữ nguyên mã bên trong để bật lại chỉ bằng cách
               đổi cờ này thành true, khỏi phải dựng lại toàn bộ. */}
@@ -439,7 +443,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </button>
           )}
         </div>
-      </header>
+      </section>
 
       {/* LOADING & ERROR STATES */}
       {loading && (
@@ -802,56 +806,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </div>
           </div>
 
-          {/* Right Card: Quality Breakdown & Weakest Questions (40%) */}
-          <div className="executive-card">
-            <div className="executive-card-header">
-              <div className="executive-card-heading">
-                <Star className="operation-icon text-amber-500" aria-hidden="true" />
-                <h3>Cơ Cấu Đánh Giá & Tiêu Chí</h3>
-              </div>
-              <div className="executive-tab-pill-group" role="tablist">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={qualityChartView === 'distribution'}
-                  className={`executive-tab-pill ${qualityChartView === 'distribution' ? 'is-active' : ''}`}
-                  onClick={() => setQualityChartView('distribution')}
-                  disabled={!canPublishScore}
-                >
-                  Phân bố mức độ
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={qualityChartView === 'weakest'}
-                  className={`executive-tab-pill ${qualityChartView === 'weakest' ? 'is-active' : ''}`}
-                  onClick={() => setQualityChartView('weakest')}
-                  disabled={!canPublishScore}
-                >
-                  Top tiêu chí yếu nhất
-                </button>
-              </div>
-            </div>
-            <div className="executive-card-body">
-              {!canPublishScore ? (
-                <div className="executive-quality-withheld">
-                  <ShieldAlert aria-hidden="true" />
-                  <strong>Phân tích chất lượng đang được tạm ẩn</strong>
-                  <span>Cần đủ cỡ mẫu trước khi công bố phân bố điểm và tiêu chí yếu.</span>
-                </div>
-              ) : qualityChartView === 'distribution' ? (
-                <ScoreDistributionDonut
-                  scoreDistribution={overviewData.scoreDistribution}
-                  totalResponses={overviewData.totalResponses}
-                />
-              ) : (
-                <WeakestQuestionsPanel
-                  questions={overviewData.weakestQuestions}
-                  validResponseCount={overviewData.scoredValidResponseCount}
-                />
-              )}
-            </div>
-          </div>
         </section>
       )}
 

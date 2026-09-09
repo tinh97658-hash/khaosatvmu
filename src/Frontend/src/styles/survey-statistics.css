@@ -481,6 +481,59 @@
   min-width: 0;
 }
 
+/*
+  Ô chọn đợt khảo sát tự giãn theo tên đợt dài nhất nên chiếm gần trọn thanh công
+  cụ. Chặn lại còn khoảng một nửa và cắt bằng dấu ba chấm; danh sách xổ xuống vẫn
+  hiện đủ tên.
+*/
+/*
+  Ô tự vẽ không có bề rộng nội tại như <select> nên phải nêu số cụ thể, nếu không
+  nó co về bề rộng tối thiểu của .form-group. Danh sách xổ xuống lấy đúng số này.
+*/
+.statistics-toolbar-field--campaign > .searchable-select {
+  flex: 0 0 460px;
+  min-width: 0;
+}
+
+/* Mỗi đợt một dòng, tên dài thì cắt bằng ba chấm chứ không xuống dòng. */
+.statistics-toolbar-field--campaign-list .searchable-select__option {
+  position: relative;
+  overflow: hidden;
+  /* Mốc để tính quãng chạy bằng 100cqw — chính là bề rộng trong của dòng. */
+  container-type: inline-size;
+}
+
+.statistics-toolbar-field--campaign-list .searchable-select__option > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+  Rê chuột vào dòng: bỏ cắt chữ rồi kéo chữ sang trái đúng phần bị thừa. 100% là
+  bề rộng chữ, 100cqw là bề rộng dòng — chữ ngắn hơn dòng thì hiệu số dương,
+  min() kẹp về 0 nên đứng yên.
+*/
+.statistics-toolbar-field--campaign-list .searchable-select__option:hover > span {
+  /*
+    Bắt buộc: span là con của flex nên bị bóp đúng bằng bề rộng dòng. Không cho nó
+    nở bằng chiều dài thật của chữ thì 100% trong phép tính dưới cũng chính là bề
+    rộng dòng, hiệu số ra 0 và chữ đứng im.
+  */
+  flex: 0 0 max-content;
+  overflow: visible;
+  text-overflow: clip;
+  /* Chạy một chiều phải sang trái; hết chữ thì nhảy thẳng về đầu, không chạy ngược. */
+  animation: campaign-option-scroll 6s linear infinite;
+}
+
+@keyframes campaign-option-scroll {
+  0%, 12% { transform: translateX(0); }
+  88%, 100% { transform: translateX(min(0px, calc(100cqw - 100% - 26px))); }
+}
+
+
 /* Chỉ còn nút chú thích của tab, dồn sang phải. */
 .analysis-hint-row {
   display: flex;

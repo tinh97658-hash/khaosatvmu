@@ -98,19 +98,103 @@ textarea:focus-visible {
 }
 
 /* Sidebar Styles */
+/*
+  Thu gọn thanh điều hướng: chỉ còn dải biểu tượng, nhường chỗ cho nội dung. Bề
+  rộng đổi qua biến nên mọi thứ tính theo --sidebar-width tự co giãn theo.
+*/
+:root.has-collapsed-sidebar {
+  --sidebar-width: 56px;
+}
+
 .sidebar {
   position: sticky;
   top: 0;
   width: var(--sidebar-width);
   height: 100%;
   display: grid;
-  grid-template-rows: 56px auto minmax(0, 1fr);
+  /* Hàng cuối là dải nút thu gọn, luôn dính đáy. */
+  grid-template-rows: 56px auto minmax(0, 1fr) auto;
   flex-shrink: 0;
   overflow: hidden;
   background: #FFFFFF;
   color: var(--text-dark);
   border-right: 1px solid #DFE4E8;
+  transition: width 140ms ease;
   z-index: 30;
+}
+
+.sidebar-collapse-bar {
+  padding: 6px 8px 10px;
+  border-top: 1px solid #DFE4E8;
+}
+
+.sidebar-collapse-button {
+  width: 100%;
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 3px !important;
+  background: transparent;
+  color: #52616B;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-collapse-button:hover {
+  background: #F2F6F8;
+  color: #20262C;
+}
+
+/* ----- Trạng thái thu gọn ----- */
+
+.sidebar.is-collapsed .sidebar-header-text,
+.sidebar.is-collapsed .menu-section-title,
+.sidebar.is-collapsed .menu-label,
+.sidebar.is-collapsed .menu-count,
+.sidebar.is-collapsed .sidebar-semester-bar {
+  display: none;
+}
+
+/*
+  Ẩn ô học kỳ là bỏ luôn một phần tử khỏi lưới, nên lưới bốn hàng còn ba: hàng
+  minmax(0,1fr) rơi vào dải nút thu gọn và đẩy nút lên giữa. Khai lại đúng ba hàng
+  để dải nút vẫn nằm sát đáy.
+*/
+.sidebar.is-collapsed {
+  grid-template-rows: 56px minmax(0, 1fr) auto;
+}
+
+.sidebar.is-collapsed .sidebar-header {
+  justify-content: center;
+  padding: 10px 0;
+}
+
+.sidebar.is-collapsed .sidebar-menu {
+  padding: 10px 6px 16px;
+}
+
+/* Chỉ còn một cột biểu tượng, căn giữa dải. */
+.sidebar.is-collapsed .menu-item,
+.sidebar.is-collapsed .sidebar-collapse-button {
+  grid-template-columns: 22px;
+  justify-content: center;
+  padding: 7px 0;
+}
+
+.sidebar.is-collapsed .menu-section + .menu-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #EDF1F3;
+}
+
+.sidebar.is-collapsed .sidebar-collapse-bar {
+  padding: 6px 6px 10px;
 }
 
 .sidebar-header {

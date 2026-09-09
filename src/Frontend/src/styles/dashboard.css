@@ -470,11 +470,15 @@
    EXECUTIVE DASHBOARD BAN GIÁM HIỆU (MARITIME DATA-DENSE UI)
    ========================================================================== */
 
+/*
+  Không đệm hai bên: mọi khối của trang chạy sát mép trái phải như trang Tổng quan
+  khảo sát. Chỉ chừa lề dưới để khối cuối không dính đáy.
+*/
 .executive-dashboard {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 16px;
+  padding: 0 0 16px;
   background: #f5f7f8;
   color: #20262c;
 }
@@ -669,8 +673,14 @@
   color: #475569;
 }
 
+/*
+  Chặn bề rộng lại: ô chọn của trình duyệt tự giãn theo mục dài nhất, mà tên đợt
+  khảo sát dài cả dòng nên nó đẩy văng cả thanh tiêu đề. Cắt bằng dấu ba chấm,
+  danh sách xổ xuống vẫn hiện đủ tên.
+*/
 .executive-compare-select select {
   height: 32px;
+  max-width: min(320px, 40vw);
   padding: 0 10px;
   border: 1px solid #cbd5e1;
   background: #f8fafc;
@@ -678,6 +688,23 @@
   font-size: 12px;
   font-weight: 500;
   outline: none;
+  text-overflow: ellipsis;
+}
+
+/*
+  Tên đợt ở dòng mô tả dưới tiêu đề: cắt gọn, rê chuột vào thì chạy cho đọc hết.
+
+  Viết kèm .marquee-text để hai lớp cùng chọn một phần tử, đủ hơn một bậc ưu tiên
+  so với quy tắc gốc trong marquee-text.css. Nếu chỉ viết .executive-title-survey
+  thì hai bên ngang điểm và bên nào thắng là do thứ tự gộp CSS — hôm nay đúng,
+  mai thêm một import là thành khối chiếm trọn dòng, hết tràn nên hết chạy.
+*/
+.marquee-text.executive-title-survey,
+.marquee-text.dashboard-heading-survey {
+  display: inline-block;
+  max-width: min(420px, 46vw);
+  font-weight: 700;
+  vertical-align: bottom;
 }
 
 .executive-compare-select select:focus {
@@ -1008,9 +1035,10 @@
 }
 
 /* 2-Column Analytics Grid (60% / 40%) */
+/* Chỉ còn thẻ Đối sánh hiệu suất, cho nó trải hết bề ngang. */
 .executive-charts-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 

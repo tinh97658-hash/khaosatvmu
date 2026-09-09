@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  CalendarDays,
   CheckCircle2,
   CircleAlert,
   ClipboardCheck,
@@ -10,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useSemester } from '../context/semesterContext';
 import { DataTable } from '../components/DataTable';
+import { SearchableSelect } from '../components/SearchableSelect';
 import type { Column } from '../components/DataTable';
 import type { CourseSectionSurvey, SemesterSurvey } from '../types';
 import {
@@ -73,9 +73,25 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
   isLoading,
   loadError,
 }) => {
-  const { activeSemesterLabel } = useSemester();
+  const {
+    academicYears,
+    activeSemesterId,
+    activeSemesterLabel,
+    setActiveSemesterId,
+  } = useSemester();
   const [selectedSurveyId, setSelectedSurveyId] = useState<string>('');
   const [search, setSearch] = useState('');
+
+  const semesterOptions = useMemo(
+    () =>
+      academicYears.flatMap((year) =>
+        year.semesters.map((semester) => ({
+          value: String(semester.semesterId),
+          label: `${semester.semesterName} · ${year.academicYearName}`,
+        }))
+      ),
+    [academicYears]
+  );
 
   // Không còn lựa chọn "tất cả đợt": trang luôn bám đúng một đợt, mặc định là đợt
   // đầu danh sách và tự nhảy sang đợt khác khi danh sách đổi theo học kỳ.
@@ -337,27 +353,43 @@ export const SurveyProgressPage: React.FC<SurveyProgressPageProps> = ({
         </div>
       ) : (
         <>
-          <section className="operations-toolbar" aria-label="Bộ lọc tiến độ" style={{ marginBottom: '14px' }}>
-            <div className="operations-filter-title">
-              <CalendarDays className="operation-icon" aria-hidden="true" />
-              <span>Học kỳ: <strong>{activeSemesterLabel}</strong></span>
+          {/* Cùng bố cục với trang Tổng quan khảo sát: bốn phần nằm ngang một hàng
+              ở góc trái trên — nhãn Học kỳ, ô chọn kỳ, nhãn Đợt khảo sát, ô chọn đợt. */}
+          <section className="statistics-toolbar" aria-label="Bộ lọc tiến độ">
+            <label className="form-group">
+              <span>Học kỳ</span>
+              <select
+                value={activeSemesterId ?? ''}
+                onChange={(event) =>
+                  setActiveSemesterId(event.target.value ? Number(event.target.value) : null)
+                }
+              >
+                <option value="">Chọn học kỳ</option>
+                {semesterOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="form-group statistics-toolbar-field--campaign">
+              <span>Đợt khảo sát</span>
+              <SearchableSelect
+                id="progress-campaign-select"
+                aria-label="Đợt khảo sát"
+                listClassName="statistics-toolbar-field--campaign-list"
+                showHoveredLabel
+                value={selectedSurveyId}
+                onChange={setSelectedSurveyId}
+                disabled={semesterSurveys.length === 0}
+                placeholder={semesterSurveys.length === 0 ? 'Chưa có đợt nào' : 'Chọn đợt khảo sát'}
+                options={semesterSurveys.map((survey) => ({
+                  value: String(survey.semesterSurveyId),
+                  label: `${survey.surveyName} · ${survey.sectionSurveyCount} lớp`,
+                }))}
+              />
             </div>
-            {semesterSurveys.length > 0 && (
-              <div className="operations-field">
-                <label htmlFor="progress-survey-select">Đợt khảo sát</label>
-                <select
-                  id="progress-survey-select"
-                  value={selectedSurveyId}
-                  onChange={(e) => setSelectedSurveyId(e.target.value)}
-                >
-                  {semesterSurveys.map((survey) => (
-                    <option key={survey.semesterSurveyId} value={String(survey.semesterSurveyId)}>
-                      {survey.surveyName} ({survey.sectionSurveyCount} lớp)
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
           </section>
 
           <section className="operations-metrics" aria-label="Tổng quan tiến độ">

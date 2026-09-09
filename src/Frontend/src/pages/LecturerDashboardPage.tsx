@@ -12,6 +12,7 @@ import { catalogApi } from '../services/catalogApi';
 import { surveyApi } from '../services/surveyApi';
 import type { SemesterSurvey } from '../types';
 import { ExportDropdown } from '../components/ExportDropdown';
+import { MarqueeText } from '../components/MarqueeText';
 import '../styles/dashboard.css';
 
 interface LecturerDashboardPageProps {
@@ -196,9 +197,16 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
           <div>
             <h2>Lớp học phần phụ trách</h2>
             <p>
-              {selectedSurvey
-                ? `Đợt khảo sát: ${selectedSurvey.surveyName}`
-                : 'Học kỳ này chưa có đợt khảo sát nào'}
+              {selectedSurvey ? (
+                <>
+                  Đợt khảo sát:{' '}
+                  <MarqueeText className="dashboard-heading-survey">
+                    {selectedSurvey.surveyName}
+                  </MarqueeText>
+                </>
+              ) : (
+                'Học kỳ này chưa có đợt khảo sát nào'
+              )}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -209,7 +217,17 @@ export const LecturerDashboardPage: React.FC<LecturerDashboardPageProps> = ({
                   id="lec-dashboard-survey-select"
                   value={selectedSurveyId ?? ''}
                   onChange={(e) => void handleSelectSurvey(e.target.value ? Number(e.target.value) : null)}
-                  style={{ height: '34px', padding: '0 8px', fontSize: '13px', color: '#20262c', border: '1px solid #cbd5e1', borderRadius: '3px' }}
+                  // Chặn bề rộng vì ô chọn tự giãn theo tên đợt dài nhất.
+                  style={{
+                    height: '34px',
+                    maxWidth: 'min(320px, 40vw)',
+                    padding: '0 8px',
+                    fontSize: '13px',
+                    color: '#20262c',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '3px',
+                    textOverflow: 'ellipsis',
+                  }}
                 >
                   {semesterSurveys.map((survey) => (
                     <option key={survey.semesterSurveyId} value={survey.semesterSurveyId}>

@@ -19,6 +19,20 @@ interface SearchableSelectProps {
   disabled?: boolean;
   required?: boolean;
   'aria-label'?: string;
+  /**
+   * Lớp CSS gắn thêm vào danh sách xổ xuống. Danh sách được đưa ra document.body
+   * nên lớp của ô chọn không với tới nó, muốn sửa riêng cho một chỗ thì phải
+   * truyền vào đây.
+   */
+  listClassName?: string;
+  /**
+   * Hiện một dải nhỏ ở đáy danh sách ghi trọn nhãn của dòng đang rê chuột. Dùng
+   * cho danh sách có nhãn dài bị cắt bằng ba chấm.
+   *
+   * Ô này nổi RIÊNG bên ngoài danh sách chứ không chèn vào trong: chèn vào trong
+   * thì danh sách cao thêm mỗi lần rê chuột, mà kích thước phải giữ nguyên.
+   */
+  showHoveredLabel?: boolean;
 }
 
 /**
@@ -37,11 +51,16 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   disabled = false,
   required = false,
   'aria-label': ariaLabel,
+  listClassName,
+  showHoveredLabel = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [highlighted, setHighlighted] = useState(0);
   const [listStyle, setListStyle] = useState<React.CSSProperties>({});
+
+  // Nhãn đầy đủ của dòng đang rê chuột, kèm toạ độ ô nổi hiện nó.
+  const [hovered, setHovered] = useState<{ label: string; style: React.CSSProperties } | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -69,6 +88,23 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   const close = () => {
     setIsOpen(false);
     setKeyword('');
+    setHovered(null);
+  };
+
+  /**
+   * Ô nổi ghi trọn nhãn, đặt ngay dưới đáy DANH SÁCH chứ không dưới từng dòng:
+   * nằm ngoài vùng cuộn của danh sách nên không bị cắt, và không làm danh sách
+   * cao thêm một pixel nào.
+   */
+  const showLabelOf = (label: string) => {
+    if (!showHoveredLabel) return;
+    const rect = listRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    setHovered({
+      label,
+      style: { top: rect.bottom + 4, left: rect.left, width: rect.width },
+    });
   };
 
   const pick = (option: SearchableSelectOption) => {
@@ -197,7 +233,11 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         <ul
           ref={listRef}
           id={id ? `${id}-listbox` : undefined}
-          className="searchable-select__list searchable-select__list--portal"
+          className={[
+            'searchable-select__list',
+            'searchable-select__list--portal',
+            listClassName ?? '',
+          ].filter(Boolean).join(' ')}
           role="listbox"
           style={listStyle}
         >
@@ -214,7 +254,11 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                     ? 'searchable-select__option is-highlighted'
                     : 'searchable-select__option'
                 }
-                onMouseEnter={() => setHighlighted(index)}
+                onMouseEnter={() => {
+                  setHighlighted(index);
+                  showLabelOf(option.label);
+                }}
+                onMouseLeave={() => setHovered(null)}
                 onMouseDown={(event) => {
                   // mousedown chứ không phải click: click nổ sau blur, lúc đó
                   // danh sách đã đóng và cú bấm rơi vào khoảng không.
@@ -228,6 +272,13 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
             ))
           )}
         </ul>,
+        document.body
+      )}
+
+      {isOpen && hovered && createPortal(
+        <div className="searchable-select__hovered-label" role="tooltip" style={hovered.style}>
+          {hovered.label}
+        </div>,
         document.body
       )}
     </div>

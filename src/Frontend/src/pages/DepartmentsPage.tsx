@@ -54,7 +54,9 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
   const { activeProfile } = useAuth();
   const canManageCatalog = canCreateOrDeleteCatalog(activeProfile?.roleCode);
   const [search, setSearch] = useState('');
-  const [facultyFilter, setFacultyFilter] = useState('');
+  // Ô lọc theo khoa/viện đã bỏ khỏi thanh công cụ; cột Khoa/viện vẫn lọc được
+  // bằng menu lọc trên chính tiêu đề cột.
+  const [facultyFilter] = useState('');
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<Department | null>(null);
@@ -176,7 +178,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
     },
     {
       key: 'facultyId',
-      header: 'Khoa viện',
+      header: 'Khoa/viện',
       width: '28%',
       filterValue: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
       render: (row) => (row.facultyId === null ? '—' : facultyNameOf(row.facultyId)),
@@ -252,15 +254,6 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
           fileName: 'danh-sach-bo-mon',
           subInstitution: 'PHÒNG ĐÀO TẠO',
         }}
-        filterOptions={[
-          { label: 'Tất cả khoa / viện', value: '' },
-          ...faculties.map((faculty) => ({
-            label: faculty.facultyName,
-            value: String(faculty.facultyId),
-          })),
-        ]}
-        currentFilter={facultyFilter}
-        onFilterChange={setFacultyFilter}
         onAddNew={canManageCatalog ? openCreate : undefined}
         addNewLabel="Thêm bộ môn"
         toolbarActions={(
@@ -313,7 +306,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
             />
           </div>
           <div className="form-group">
-            <label htmlFor="department-faculty">Khoa viện</label>
+            <label htmlFor="department-faculty">Khoa/viện</label>
             <SearchableSelect
               id="department-faculty"
               value={form.facultyId}

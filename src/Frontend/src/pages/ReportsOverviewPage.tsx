@@ -16,6 +16,7 @@ import { useAuth } from '../auth/authContext';
 import { useSemester } from '../context/semesterContext';
 import { DataTable, type Column, type DataTableSortDirection } from '../components/DataTable';
 import { QuestionAnalysisChart } from '../components/QuestionAnalysisChart';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { SchoolSurveyOverview } from '../components/reports/SchoolSurveyOverview';
 import { SectionSurveyResponsesPage } from './SectionSurveyResponsesPage';
 import { catalogApi } from '../services/catalogApi';
@@ -1173,53 +1174,57 @@ export const ReportsOverviewPage: React.FC = () => {
   return (
     <div className="survey-operations-page reports-module">
       {/* Thanh tiêu đề + chọn học kỳ */}
+      {/* Bốn phần nằm ngang một hàng ở góc trái trên, đứng trước tiêu đề — giống
+          hệt trang Tổng quan khảo sát. */}
+      <section className="statistics-toolbar">
+        <label className="form-group">
+          <span>Học kỳ</span>
+          <select
+            id="reports-semester"
+            value={selectedSemesterId ?? ''}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              if (Number.isNaN(next)) return;
+              changeSemester(next);
+            }}
+          >
+            {academicYears.flatMap((year) =>
+              year.semesters.map((semester) => (
+                <option key={semester.semesterId} value={semester.semesterId}>
+                  {semester.semesterName} · {year.academicYearName}
+                </option>
+              )),
+            )}
+          </select>
+        </label>
+
+        {/* Đợt khảo sát áp cho cả trang: tổng quan, tra cứu và tổng hợp đơn vị. */}
+        <div className="form-group statistics-toolbar-field--campaign">
+          <span>Đợt khảo sát</span>
+          <SearchableSelect
+            id="reports-campaign"
+            aria-label="Đợt khảo sát"
+            listClassName="statistics-toolbar-field--campaign-list"
+            showHoveredLabel
+            value={semesterSurveyId ? String(semesterSurveyId) : ''}
+            disabled={semesterSurveys.length === 0}
+            placeholder={
+              semesterSurveys.length === 0 ? 'Kỳ này chưa có đợt khảo sát' : 'Chọn đợt khảo sát'
+            }
+            onChange={(next) => changeSemesterSurvey(next ? Number(next) : undefined)}
+            options={semesterSurveys.map((survey) => ({
+              value: String(survey.semesterSurveyId),
+              label: survey.surveyName,
+            }))}
+          />
+        </div>
+      </section>
+
       <div className="reports-header">
         <h1 className="reports-title">
           <BarChart3 className="operation-icon" aria-hidden="true" />
           Thống kê kết quả khảo sát học phần
         </h1>
-        <div className="reports-scope-fields">
-          <div className="operations-field reports-semester-field">
-            <label htmlFor="reports-semester">Học kỳ</label>
-            <select
-              id="reports-semester"
-              value={selectedSemesterId ?? ''}
-              onChange={(e) => {
-                const next = Number(e.target.value);
-                if (Number.isNaN(next)) return;
-                changeSemester(next);
-              }}
-            >
-              {academicYears.flatMap((year) =>
-                year.semesters.map((semester) => (
-                  <option key={semester.semesterId} value={semester.semesterId}>
-                    {year.academicYearName} - {semester.semesterName}
-                  </option>
-                )),
-              )}
-            </select>
-          </div>
-
-          {/* Bài khảo sát áp cho cả trang: tổng quan, tra cứu và tổng hợp đơn vị. */}
-          <div className="operations-field reports-campaign-field">
-            <label htmlFor="reports-campaign">Bài khảo sát</label>
-            <select
-              id="reports-campaign"
-              value={semesterSurveyId ?? ''}
-              disabled={semesterSurveys.length === 0}
-              onChange={(e) => changeSemesterSurvey(e.target.value ? Number(e.target.value) : undefined)}
-            >
-              {semesterSurveys.length === 0 && (
-                <option value="">Kỳ này chưa có bài khảo sát</option>
-              )}
-              {semesterSurveys.map((survey) => (
-                <option key={survey.semesterSurveyId} value={survey.semesterSurveyId}>
-                  {survey.surveyName}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
       </div>
 
       {/* Ngưỡng quyết định lớp nào được gộp vào mọi con số của trang này, nên in

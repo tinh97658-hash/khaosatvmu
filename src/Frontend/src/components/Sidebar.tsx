@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Network,
+  PanelLeftClose,
   PanelLeftOpen,
   Presentation,
   School,
@@ -43,6 +44,9 @@ interface SidebarGroup {
   items: SidebarItem[];
 }
 
+/** Nhớ trạng thái thu gọn giữa các lần mở web. */
+const collapsedStorageKey = 'khaosatvmu.sidebar.collapsed';
+
 export function Sidebar({
   currentTab,
   onSelectTab,
@@ -50,6 +54,17 @@ export function Sidebar({
   permissions,
 }: SidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem(collapsedStorageKey) === '1';
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(collapsedStorageKey, isCollapsed ? '1' : '0');
+    // Bề rộng thật nằm ở biến CSS của thẻ gốc để phần nội dung bên phải giãn theo.
+    document.documentElement.classList.toggle('has-collapsed-sidebar', isCollapsed);
+  }, [isCollapsed]);
 
   useEffect(() => {
     if (!isMobileOpen) return;
@@ -148,7 +163,9 @@ export function Sidebar({
 
       <aside
         id="main-sidebar"
-        className={`sidebar ${isMobileOpen ? 'is-mobile-open' : ''}`}
+        className={`sidebar ${isMobileOpen ? 'is-mobile-open' : ''} ${
+          isCollapsed ? 'is-collapsed' : ''
+        }`}
       >
         <div className="sidebar-header">
           <img className="vmu-logo-icon" src="/vmu-logo.png" alt="" aria-hidden="true" />
@@ -187,6 +204,9 @@ export function Sidebar({
                     key={item.id}
                     className={`menu-item ${isActive ? 'active' : ''}`}
                     aria-current={isActive ? 'page' : undefined}
+                    // Thu gọn thì chỉ còn biểu tượng, tên trang chuyển thành chú
+                    // thích của trình duyệt để vẫn biết mình đang trỏ vào đâu.
+                    title={isCollapsed ? item.label : undefined}
                     onClick={() => handleSelect(item.id)}
                   >
                     <Icon className="menu-icon" aria-hidden="true" />
@@ -202,6 +222,24 @@ export function Sidebar({
             </section>
           ))}
         </nav>
+
+        <div className="sidebar-collapse-bar">
+          <button
+            type="button"
+            className="sidebar-collapse-button"
+            aria-label={isCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+            title={isCollapsed ? 'Mở rộng' : 'Thu gọn'}
+            aria-expanded={!isCollapsed}
+            onClick={() => setIsCollapsed((prev) => !prev)}
+          >
+            {isCollapsed ? (
+              <PanelLeftOpen className="menu-icon" aria-hidden="true" />
+            ) : (
+              <PanelLeftClose className="menu-icon" aria-hidden="true" />
+            )}
+            <span className="menu-label">Thu gọn</span>
+          </button>
+        </div>
       </aside>
     </>
   );

@@ -115,7 +115,7 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
   const columns: Column<Faculty>[] = [
     {
       key: 'facultyName',
-      header: 'Tên khoa viện',
+      header: 'Khoa/viện',
       width: '55%',
       filterValue: (item) => item.facultyName,
       render: (item) => <span className="catalog-cell-primary">{item.facultyName}</span>,
@@ -175,14 +175,14 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
         data={filtered}
         searchValue={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Tìm nhanh theo tên khoa viện..."
+        searchPlaceholder="Tìm nhanh theo tên khoa/viện..."
         exportConfig={{
           title: 'DANH SÁCH KHOA / VIỆN',
           fileName: 'danh-sach-khoa-vien',
           subInstitution: 'PHÒNG ĐÀO TẠO',
         }}
         onAddNew={canManageCatalog ? openCreate : undefined}
-        addNewLabel="Thêm khoa viện"
+        addNewLabel="Thêm khoa/viện"
         toolbarActions={(
           <button
             type="button"
@@ -201,14 +201,14 @@ export const FacultiesPage: React.FC<FacultiesPageProps> = ({
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editing ? 'Sửa khoa viện' : 'Thêm khoa viện'}
+        title={editing ? 'Sửa khoa/viện' : 'Thêm khoa/viện'}
       >
         <form className="catalog-form" onSubmit={(event) => void handleSubmit(event)}>
           {validationError && (
             <div className="catalog-validation-error" role="alert">{validationError}</div>
           )}
           <div className="form-group">
-            <label htmlFor="faculty-name">Tên khoa viện</label>
+            <label htmlFor="faculty-name">Tên khoa/viện</label>
             <input
               id="faculty-name"
               type="text"

@@ -424,7 +424,9 @@ export function DataTable<T>({
                     <td className="catalog-table__index">{firstIndex + index + 1}</td>
                   )}
                   {columns.map((column) => (
-                    <td key={column.key}>
+                    // Cột số căn phải để hàng đơn vị thẳng cột, dễ so số dài ngắn.
+                    // Chỉ ô dữ liệu; tiêu đề vẫn căn giữa như mọi cột khác.
+                    <td key={column.key} className={column.numeric ? 'catalog-cell-numeric' : undefined}>
                       {column.render
                         ? column.render(item)
                         : (item as Record<string, unknown>)[column.key] as ReactNode}

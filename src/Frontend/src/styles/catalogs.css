@@ -295,6 +295,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Ô của cột số: căn phải, chữ số đều bề ngang cho thẳng hàng đơn vị. Tiêu đề cột
+   thì giữ nguyên căn giữa như mọi cột khác. */
+.catalog-table td.catalog-cell-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .catalog-cell-primary {
   color: #20262c;
   font-size: 12px;
@@ -1906,6 +1913,26 @@
   height: 15px;
   flex: 0 0 15px;
   color: #0788b8;
+}
+
+/*
+  Ô nổi ghi trọn nhãn của dòng đang rê chuột, đặt dưới đáy danh sách. Nằm ngoài
+  vùng cuộn của danh sách nên không bị cắt, và không làm danh sách đổi kích thước.
+*/
+.searchable-select__hovered-label {
+  position: fixed;
+  z-index: 1000;
+  padding: 6px 9px;
+  border: 1px solid #d7dee2;
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(15, 30, 45, 0.18);
+  color: #20262c;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
 }
 
 .searchable-select__empty {

@@ -1,0 +1,96 @@
+/*
+  Chữ dài hơn ô: cắt bằng dấu ba chấm, rê chuột vào thì chạy ngang cho đọc hết và
+  hiện thêm ô nhỏ bên dưới ghi trọn nội dung.
+
+  Quãng chạy và thời lượng do JavaScript đo rồi truyền vào qua biến CSS, nên chữ
+  chỉ chạy đúng phần bị tràn — không chạy quá đà rồi để lại một khoảng trắng.
+*/
+.marquee-text {
+  position: relative;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.marquee-text-viewport {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.marquee-text-content {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/*
+  Lúc chạy phải bỏ max-width và ellipsis, nếu không chữ vẫn bị cắt đúng chỗ cũ và
+  phần trượt ra chỉ là khoảng trắng.
+*/
+.marquee-text:hover .marquee-text-content,
+.marquee-text:focus-within .marquee-text-content {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  animation: marquee-text-scroll var(--marquee-duration, 6s) linear infinite alternate;
+}
+
+/*
+  Quãng chạy tính bằng chính CSS: 100% ở đây là bề rộng của chữ, trừ đi bề rộng ô
+  do JavaScript đo được. Chữ ngắn hơn ô thì hiệu số dương, min() kẹp về 0 nên
+  không nhúc nhích — nhờ vậy hoạt ảnh không phụ thuộc vào việc lớp is-overflowing
+  có được gắn kịp hay không.
+*/
+@keyframes marquee-text-scroll {
+  /* Dừng ở hai đầu cho mắt kịp bắt chữ trước khi đổi chiều. */
+  0%, 12% { transform: translateX(0); }
+  88%, 100% { transform: translateX(min(0px, calc(var(--marquee-viewport, 0px) - 100%))); }
+}
+
+/* Ô nhỏ bên dưới, ghi trọn nội dung; chỉ hiện khi chữ thật sự bị cắt. */
+.marquee-text-full {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  display: none;
+  max-width: min(420px, 80vw);
+  padding: 6px 9px;
+  border: 1px solid #d7dee2;
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(15, 30, 45, 0.16);
+  color: #20262c;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.marquee-text.is-overflowing:hover .marquee-text-full,
+.marquee-text.is-overflowing:focus-within .marquee-text-full {
+  display: block;
+}
+
+/* Ô nằm sát mép phải thì thả ô chú thích sang trái để không tràn ra ngoài màn. */
+.marquee-text--align-right .marquee-text-full {
+  left: auto;
+  right: 0;
+}
+
+/* Người đặt hệ thống ở chế độ giảm chuyển động thì chỉ hiện chú thích, không chạy chữ. */
+@media (prefers-reduced-motion: reduce) {
+  .marquee-text.is-overflowing:hover .marquee-text-content,
+  .marquee-text.is-overflowing:focus-within .marquee-text-content {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: none;
+  }
+}

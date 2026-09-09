@@ -210,7 +210,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     },
     {
       key: 'facultyId',
-      header: 'Khoa viện',
+      header: 'Khoa/viện',
       width: '20%',
       filterValue: (item) => (item.facultyId === null ? '—' : facultyNameOf(item.facultyId)),
       render: (item) => (item.facultyId === null ? '—' : facultyNameOf(item.facultyId)),
@@ -349,12 +349,12 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
 
           <div className="catalog-form-grid catalog-form-grid--2">
             <div className="form-group">
-              <label htmlFor="course-faculty">Khoa viện</label>
+              <label htmlFor="course-faculty">Khoa/viện</label>
               <SearchableSelect
                 id="course-faculty"
                 value={form.facultyId}
                 onChange={(value) => updateForm({ facultyId: value, departmentId: '' })}
-                emptyLabel="Chưa gán khoa viện"
+                emptyLabel="Chưa gán khoa/viện"
                 options={faculties.map((faculty) => ({
                   value: String(faculty.facultyId),
                   label: faculty.facultyName,

@@ -198,6 +198,16 @@
   font-size: 12px;
 }
 
+/*
+  Ô chọn của trình duyệt tự giãn theo mục dài nhất, mà tên đợt khảo sát dài cả
+  dòng nên nó kéo giãn luôn cả thanh lọc. Chặn bề rộng và cắt bằng dấu ba chấm;
+  danh sách xổ xuống vẫn hiện đủ tên.
+*/
+.operations-field select {
+  max-width: min(360px, 42vw);
+  text-overflow: ellipsis;
+}
+
 .operations-field input:focus,
 .operations-field select:focus,
 .inline-tree-wizard input:focus,
@@ -1531,6 +1541,26 @@
   border: 0;
   background: transparent;
   cursor: pointer;
+}
+
+/*
+  Cột Sĩ số và Lượt trả lời chỉ chứa một con số, căn giữa cho thẳng cột thay vì
+  dạt về mép trái của ô.
+*/
+.campaign-table td:nth-child(4),
+.campaign-table td:nth-child(7) {
+  text-align: center;
+}
+
+/* Số lượt trả lời để trần, không đóng khung như các huy hiệu đếm khác. */
+.campaign-response-count {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--operations-text);
+  font-size: 12px;
 }
 
 .section-response-link .operations-count {

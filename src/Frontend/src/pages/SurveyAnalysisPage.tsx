@@ -15,6 +15,7 @@ import { useColumnFilters, type FilterableColumn } from '../hooks/useColumnFilte
 import { NoteModalButton } from '../components/NoteModalButton';
 import { useScoringThresholds } from '../hooks/useScoringThresholds';
 import { ExportDropdown } from '../components/ExportDropdown';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { ApiError } from '../services/apiClient';
 import {
   courseDiagnosisLabels,
@@ -932,15 +933,8 @@ export const SurveyAnalysisPage: React.FC = () => {
           trước đây không có CSS nào nên thẻ h1 rơi về cỡ mặc định của trình duyệt,
           to gấp rưỡi tiêu đề mọi trang khác. Tên trang giờ nằm ở thanh trên cùng,
           giống hệt các trang còn lại. */}
-      <header className="catalog-page-header">
-        <div>
-          <h2>Thống kê chi tiết</h2>
-          <p>
-            Chuẩn hoá điểm theo mặt bằng khoa, phân tách lỗi học phần/giảng viên và báo cáo cá nhân.
-          </p>
-        </div>
-      </header>
-
+      {/* Thanh chọn đứng TRƯỚC tiêu đề để bốn phần nằm ngay góc trái trên, giống
+          hệt trang Tổng quan khảo sát. */}
       <div className="statistics-toolbar">
         <div className="form-group">
           <span>Học kỳ</span>
@@ -966,14 +960,17 @@ export const SurveyAnalysisPage: React.FC = () => {
           </select>
         </div>
 
-        <div className="form-group">
+        <div className="form-group statistics-toolbar-field--campaign">
           <span>Đợt khảo sát</span>
-          <select
-            className="input-select"
+          <SearchableSelect
+            id="analysis-campaign-select"
+            aria-label="Đợt khảo sát"
+            listClassName="statistics-toolbar-field--campaign-list"
+            showHoveredLabel
             value={semesterSurveyId}
             disabled={semesterSurveys.length === 0}
-            onChange={(e) => {
-              const nextCampaignId = e.target.value;
+            placeholder={semesterSurveys.length === 0 ? 'Chưa có đợt nào' : 'Chọn đợt khảo sát'}
+            onChange={(nextCampaignId) => {
               setSemesterSurveyId(nextCampaignId);
               navigateAnalysis({
                 tab,
@@ -982,13 +979,11 @@ export const SurveyAnalysisPage: React.FC = () => {
                 selection: null,
               });
             }}
-          >
-            {semesterSurveys.map((survey) => (
-              <option key={survey.semesterSurveyId} value={String(survey.semesterSurveyId)}>
-                {survey.surveyName}
-              </option>
-            ))}
-          </select>
+            options={semesterSurveys.map((survey) => ({
+              value: String(survey.semesterSurveyId),
+              label: survey.surveyName,
+            }))}
+          />
         </div>
 
         <div className="statistics-toolbar-actions">

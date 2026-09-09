@@ -14,6 +14,7 @@ import {
 import { useSemester } from '../context/semesterContext';
 import { NoteModalButton } from '../components/NoteModalButton';
 import { ExportDropdown } from '../components/ExportDropdown';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { ApiError } from '../services/apiClient';
 import { surveyApi, surveyErrorMessage } from '../services/surveyApi';
 import type {
@@ -143,21 +144,25 @@ export const SurveyDashboardPage: React.FC = () => {
           </select>
         </label>
 
-        <label className="form-group">
+        {/* Danh sách xổ xuống của <select> do trình duyệt tự vẽ, luôn giãn theo tên
+            đợt dài nhất. Danh sách tự vẽ mới bám đúng bề rộng ô chọn. */}
+        <div className="form-group statistics-toolbar-field--campaign">
           <span>Đợt khảo sát</span>
-          <select
+          <SearchableSelect
+            id="dashboard-campaign-select"
+            aria-label="Đợt khảo sát"
+            listClassName="statistics-toolbar-field--campaign-list"
+            showHoveredLabel
             value={semesterSurveyId}
-            onChange={(event) => setSemesterSurveyId(event.target.value)}
+            onChange={setSemesterSurveyId}
             disabled={semesterSurveys.length === 0}
-          >
-            {semesterSurveys.length === 0 && <option value="">Chưa có đợt nào</option>}
-            {semesterSurveys.map((survey) => (
-              <option key={survey.semesterSurveyId} value={String(survey.semesterSurveyId)}>
-                {survey.surveyName} · {survey.sectionSurveyCount} lớp
-              </option>
-            ))}
-          </select>
-        </label>
+            placeholder={semesterSurveys.length === 0 ? 'Chưa có đợt nào' : 'Chọn đợt khảo sát'}
+            options={semesterSurveys.map((survey) => ({
+              value: String(survey.semesterSurveyId),
+              label: `${survey.surveyName} · ${survey.sectionSurveyCount} lớp`,
+            }))}
+          />
+        </div>
 
         <div className="statistics-toolbar-actions">
           {data && (

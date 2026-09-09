@@ -6,7 +6,6 @@ import {
   CircleAlert,
   ClipboardList,
   Copy,
-  ExternalLink,
   LoaderCircle,
   Pencil,
   Plus,
@@ -778,14 +777,14 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                   <thead>
                     {/* Bề rộng theo phần trăm để tỷ lệ cột giữ nguyên ở mọi cỡ màn hình. */}
                     <tr>
-                      <th style={{ width: '17%' }}>Lớp học phần</th>
-                      <th style={{ width: '11%' }}>Bộ môn</th>
-                      <th style={{ width: '11%' }}>Giảng viên</th>
-                      <th style={{ width: '5%' }}>Sĩ số</th>
-                      <th style={{ width: '20%' }}>Đường dẫn riêng</th>
-                      <th style={{ width: '14%' }}>Thời gian mở</th>
-                      <th style={{ width: '7%' }}>Lượt trả lời</th>
-                      <th style={{ width: '15%' }}>Thao tác</th>
+                      <th style={{ width: '19%' }}>Lớp học phần</th>
+                      <th style={{ width: '12%' }}>Bộ môn</th>
+                      <th style={{ width: '17%' }}>Giảng viên</th>
+                      <th style={{ width: '4%' }}>Sĩ số</th>
+                      <th style={{ width: '16%' }}>Đường dẫn riêng</th>
+                      <th style={{ width: '13%' }}>Thời gian mở</th>
+                      <th style={{ width: '5%' }}>Lượt trả lời</th>
+                      <th style={{ width: '14%' }}>Thao tác</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -840,7 +839,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                               mà vai trò chỉ đọc không có quyền vào đó — câu H-e chốt
                               giảng viên chỉ xem tiến độ, không xem kết quả. */}
                           {!canViewReports ? (
-                            <span className="operations-count">{section.responseCount}</span>
+                            <span className="operations-count campaign-response-count">{section.responseCount}</span>
                           ) : (
                             <button
                               type="button"
@@ -848,7 +847,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                               onClick={() => openSurveyReport(section.courseSectionSurveyId)}
                               title="Xem kết quả chi tiết trong Thống kê & Báo cáo"
                             >
-                              <span className="operations-count">{section.responseCount}</span>
+                              <span className="operations-count campaign-response-count">{section.responseCount}</span>
                             </button>
                           )}
                         </td>
@@ -891,15 +890,6 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                                 Sửa lịch
                               </button>
                             )}
-                            <a
-                              className="btn btn-secondary btn-sm"
-                              href={surveyLinkOf(section.linkToken)}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <ExternalLink className="operation-icon" aria-hidden="true" />
-                              Mở
-                            </a>
                           </div>
                         </td>
                       </tr>
