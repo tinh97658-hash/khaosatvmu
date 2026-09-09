@@ -498,7 +498,7 @@
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
-.catalog-icon-button:hover {
+.catalog-icon-button:hover:not(:disabled) {
   border-color: #bac5cb;
   background: #f7f9fa;
   color: #20262c;
@@ -509,7 +509,7 @@
   height: 24px;
 }
 
-.catalog-icon-button--danger:hover {
+.catalog-icon-button--danger:hover:not(:disabled) {
   border-color: #e5b8b8;
   background: #fcebec;
   color: #b52d2d;
@@ -523,10 +523,21 @@
   color: #a35f07;
 }
 
-.catalog-icon-button--accent:hover {
+.catalog-icon-button--accent:hover:not(:disabled) {
   border-color: #dfae61;
   background: #f9e9cd;
   color: #7d4805;
+}
+
+.catalog-icon-button:disabled,
+.catalog-icon-button:disabled:hover {
+  border-color: #dfe5e8;
+  background: #f3f5f6;
+  color: #a2abb1;
+  cursor: not-allowed;
+  opacity: 0.65;
+  box-shadow: none;
+  transform: none;
 }
 
 .catalog-empty {

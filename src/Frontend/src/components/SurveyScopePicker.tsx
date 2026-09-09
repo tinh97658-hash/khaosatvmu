@@ -41,6 +41,8 @@ interface SurveyScopePickerProps {
   /** Cho id các ô không đụng nhau khi hai hộp thoại cùng nằm trong DOM. */
   idPrefix: string;
   disabled?: boolean;
+  /** Giới hạn lựa chọn vào các lớp backend đã lọc theo bộ môn của hồ sơ. */
+  departmentScoped?: boolean;
 }
 
 /**
@@ -61,6 +63,7 @@ export const SurveyScopePicker: React.FC<SurveyScopePickerProps> = ({
   semesterSurveyId,
   idPrefix,
   disabled = false,
+  departmentScoped = false,
 }) => {
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -205,13 +208,19 @@ export const SurveyScopePicker: React.FC<SurveyScopePickerProps> = ({
   };
 
   const message = previewText();
+  const visibleScopeChoices = departmentScoped
+    ? [
+        { value: 'all' as const, label: 'Tất cả lớp trong bộ môn' },
+        { value: 'section' as const, label: 'Lớp học phần' },
+      ]
+    : scopeChoices;
 
   return (
     <>
       <div className="form-group">
         <span className="form-label">Phạm vi phát phiếu</span>
         <div className="scope-choice-row" role="radiogroup" aria-label="Phạm vi phát phiếu">
-          {scopeChoices.map((choice) => (
+          {visibleScopeChoices.map((choice) => (
             <button
               key={choice.value}
               type="button"

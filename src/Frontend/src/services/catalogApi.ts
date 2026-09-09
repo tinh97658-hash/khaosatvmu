@@ -262,6 +262,7 @@ export interface SaveCoursePayload {
 
 /** Thông báo tiếng Việt cho mã lỗi của API danh mục. */
 export const catalogErrorMessages: Record<string, string> = {
+  CATALOG_OUT_OF_SCOPE: 'Bạn không có quyền thực hiện thao tác này với hồ sơ đang sử dụng.',
   CATALOG_INVALID_REQUEST: 'Dữ liệu gửi lên không hợp lệ.',
   CATALOG_FACULTY_NOT_FOUND: 'Không tìm thấy khoa viện.',
   CATALOG_FACULTY_NAME_REQUIRED: 'Thiếu tên khoa viện.',
