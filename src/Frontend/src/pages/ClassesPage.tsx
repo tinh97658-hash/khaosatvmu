@@ -36,7 +36,7 @@ import type {
 } from '../types';
 import { useSemester } from '../context/semesterContext';
 import { useAuth } from '../auth/authContext';
-import { canCreateOrDeleteCatalog, isReadOnlyRole, isUnrestrictedRole } from '../auth/roles';
+import { canCreateOrDeleteCatalog, isUnrestrictedRole, ROLE_CODES } from '../auth/roles';
 import { foldVietnamese } from '../utils/vietnamese';
 
 interface ClassesPageProps {
@@ -232,10 +232,12 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
   // Import lấy bộ môn từ tệp nên chỉ quản trị mới được dùng; ẩn nút cho gọn.
   const { activeProfile } = useAuth();
   const canManageAll = isUnrestrictedRole(activeProfile?.roleCode);
-  // Thêm và xoá là việc của quản trị; trưởng bộ môn chỉ xem và sửa.
+  // Thêm, sửa và xoá lớp là việc của quản trị.
   const canManageCatalog = canCreateOrDeleteCatalog(activeProfile?.roleCode);
-  // Giảng viên chỉ theo dõi lớp mình dạy, không sửa gì trên trang này.
-  const readOnly = isReadOnlyRole(activeProfile?.roleCode);
+  // Trưởng bộ môn chỉ được bổ sung email cho lớp chưa xác định trong bộ môn mình.
+  const canUpdateLecturerEmail =
+    canManageAll || activeProfile?.roleCode === ROLE_CODES.departmentManager;
+  const isDepartmentManager = activeProfile?.roleCode === ROLE_CODES.departmentManager;
 
   // ----- Giảng viên chưa xác định -------------------------------------------
   // Backend đã lọc sẵn theo phạm vi, nên trưởng bộ môn chỉ thấy bộ môn mình mà
@@ -718,35 +720,38 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
   ];
 
   // Bỏ hẳn cả cột chứ không ẩn từng nút: ẩn hết nút thì còn lại một cột trống 92px.
-  if (!readOnly) {
+  if (canManageAll || canUpdateLecturerEmail) {
     columns.push({
       key: 'actions',
       header: 'Hành động',
       width: '10%',
       render: (item) => (
         <div className="catalog-actions">
-          {/* Chỉ lớp còn treo mới có nút này. Nó chỉ sửa đúng lớp đó, vì hai lớp
-              treo cùng một tên vẫn có thể là hai người khác nhau. */}
-          {item.lecturerId === null && (
+          {/* Trưởng bộ môn luôn nhìn thấy nút để cột hành động không bị trống; lớp đã
+              xác định giảng viên thì nút bị khóa vì không còn email cần bổ sung. */}
+          {canUpdateLecturerEmail && (isDepartmentManager || item.lecturerId === null) && (
             <button
               type="button"
               className="catalog-icon-button catalog-icon-button--accent"
               onClick={() => openResolveSection(item)}
+              disabled={item.lecturerId !== null}
               aria-label={`Cập nhật giảng viên lớp ${item.sectionName}`}
-              title="Cập nhật giảng viên"
+              title={item.lecturerId === null ? 'Cập nhật email giảng viên' : 'Lớp đã có email giảng viên'}
             >
               <MailPlus aria-hidden="true" size={15} />
             </button>
           )}
-          <button
-            type="button"
-            className="catalog-icon-button"
-            onClick={() => openEditSection(item)}
-            aria-label={`Sửa lớp ${item.sectionName}`}
-            title="Sửa"
-          >
-            <Pencil aria-hidden="true" size={15} />
-          </button>
+          {canManageAll && (
+            <button
+              type="button"
+              className="catalog-icon-button"
+              onClick={() => openEditSection(item)}
+              aria-label={`Sửa lớp ${item.sectionName}`}
+              title="Sửa"
+            >
+              <Pencil aria-hidden="true" size={15} />
+            </button>
+          )}
           {canManageCatalog && (
             <button
               type="button"
@@ -1223,6 +1228,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
               onChange={(event) =>
                 setResolveForm((prev) => ({ ...prev, fullName: event.target.value }))
               }
+              disabled={isDepartmentManager}
               required
             />
             <small className="catalog-field-hint">
@@ -1255,6 +1261,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
                 id="resolve-department"
                 value={resolveForm.departmentId}
                 onChange={(value) => setResolveForm((prev) => ({ ...prev, departmentId: value }))}
+                disabled={isDepartmentManager}
                 emptyLabel="Chưa xác định"
                 options={departments.map((department) => ({
                   value: String(department.departmentId),
@@ -1268,6 +1275,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({
                 id="resolve-faculty"
                 value={resolveForm.facultyId}
                 onChange={(value) => setResolveForm((prev) => ({ ...prev, facultyId: value }))}
+                disabled={isDepartmentManager}
                 emptyLabel="Chưa xác định"
                 options={faculties.map((faculty) => ({
                   value: String(faculty.facultyId),

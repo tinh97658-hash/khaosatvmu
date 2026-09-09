@@ -75,6 +75,9 @@ public class SurveySectionScopeTests
     private static UserScope Lecturer =>
         new(RoleCodes.Lecturer, 1, null, null, SeesEverything: false);
 
+    private static UserScope ManagerOf(int departmentId) =>
+        new(RoleCodes.DepartmentManager, 1, departmentId, null, SeesEverything: false);
+
     /// <summary>Một bộ môn có đủ lớp trong một học kỳ để dựng kịch bản phạm vi.</summary>
     private sealed record DepartmentSlice(
         int SemesterId,
@@ -392,6 +395,33 @@ public class SurveySectionScopeTests
     }
 
     [Fact]
+    public async Task AddSections_ByDepartmentManager_ShouldOnlyAddOwnDepartment()
+    {
+        await RunInRollbackAsync(async (db, serviceFor) =>
+        {
+            var seeded = await SeedDepartmentScopedSurveyAsync(db, 2);
+            if (seeded is null) return;
+            var (semesterSurveyId, slice, _) = seeded.Value;
+
+            var result = await serviceFor(ManagerOf(slice.DepartmentId))
+                .AddSectionsToSemesterSurveyAsync(
+                    semesterSurveyId,
+                    new AddSectionsToSemesterSurveyCommand(
+                        SurveyScopeTypes.All,
+                        null,
+                        DateTime.UtcNow.AddDays(1),
+                        DateTime.UtcNow.AddDays(20)));
+
+            result.Succeeded.Should().BeTrue();
+            var createdSectionIds = await db.CourseSectionSurveys
+                .Where(x => x.SemesterSurveyId == semesterSurveyId)
+                .Select(x => x.CourseSectionId)
+                .ToListAsync();
+            createdSectionIds.Should().OnlyContain(id => slice.SectionIds.Contains(id));
+        });
+    }
+
+    [Fact]
     public async Task UpdateSemesterSurvey_WhenNewRangeExcludesASection_ShouldBeRejected()
     {
         await RunInRollbackAsync(async (db, serviceFor) =>
@@ -459,6 +489,26 @@ public class SurveySectionScopeTests
             result.Succeeded.Should().BeFalse();
             result.ErrorCode.Should().Be(
                 SurveyErrorCodes.SectionScheduleOutsideSemesterSurvey);
+        });
+    }
+
+    [Fact]
+    public async Task UpdateSectionSchedule_ByDepartmentManager_ShouldBeRejected()
+    {
+        await RunInRollbackAsync(async (db, serviceFor) =>
+        {
+            var seeded = await SeedDepartmentScopedSurveyAsync(db, 1);
+            if (seeded is null) return;
+            var section = await db.CourseSectionSurveys.FirstAsync(
+                x => x.SemesterSurveyId == seeded.Value.SemesterSurveyId);
+
+            var result = await serviceFor(ManagerOf(seeded.Value.Slice.DepartmentId))
+                .UpdateCourseSectionSurveyScheduleAsync(
+                    section.CourseSectionSurveyId,
+                    new SaveSurveyScheduleCommand(section.StartTime, section.EndTime));
+
+            result.Succeeded.Should().BeFalse();
+            result.ErrorCode.Should().Be(SurveyErrorCodes.OutOfScope);
         });
     }
 

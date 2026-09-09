@@ -787,6 +787,10 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
         // Lớp thuộc bộ môn nào là theo học phần sở hữu, nên chỉ được tạo lớp cho học
         // phần của bộ môn mình.
         var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.CanManageCourseSections)
+        {
+            return Failed<CourseSectionDto>(CatalogErrorCodes.OutOfScope);
+        }
         var departmentId = await DepartmentOfCourseAsync(command.CourseId, cancellationToken);
         if (CheckDepartmentInScope(scope, departmentId) is { } outOfScope)
         {
@@ -832,6 +836,10 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
         // Kiểm cả học phần cũ lẫn học phần mới: không được lấy lớp của bộ môn khác về,
         // cũng không được đẩy lớp của mình sang bộ môn khác bằng cách đổi học phần.
         var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.CanManageCourseSections)
+        {
+            return Failed<CourseSectionDto>(CatalogErrorCodes.OutOfScope);
+        }
         var currentDepartmentId = await DepartmentOfCourseAsync(section.CourseId, cancellationToken);
         if (CheckDepartmentInScope(scope, currentDepartmentId) is { } currentOutOfScope)
         {
@@ -877,6 +885,10 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
         }
 
         var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.CanManageCourseSections)
+        {
+            return Failed<bool>(CatalogErrorCodes.OutOfScope);
+        }
         var departmentId = await DepartmentOfCourseAsync(section.CourseId, cancellationToken);
         if (CheckDepartmentInScope(scope, departmentId) is { } outOfScope)
         {
@@ -1363,6 +1375,10 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
         // Gác phạm vi trước mọi thứ khác, y như các hàm ghi còn lại: lớp thuộc bộ
         // môn nào là theo học phần sở hữu.
         var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.CanResolveCourseSectionLecturer)
+        {
+            return Failed<ResolveUnidentifiedLecturerDto>(CatalogErrorCodes.OutOfScope);
+        }
         var sectionDepartmentId = await DepartmentOfCourseAsync(section.CourseId, cancellationToken);
         if (CheckDepartmentInScope(scope, sectionDepartmentId) is { } outOfScope)
         {
@@ -1376,7 +1392,9 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
             return Failed<ResolveUnidentifiedLecturerDto>(CatalogErrorCodes.SectionLecturerAlreadySet);
         }
 
-        var fullName = command.FullName?.Trim() ?? string.Empty;
+        var fullName = scope.SeesEverything
+            ? command.FullName?.Trim() ?? string.Empty
+            : section.UnidentifiedLecturerName?.Trim() ?? string.Empty;
         if (fullName.Length == 0)
         {
             // Tên đọc từ tệp là mặc định; bỏ trống hẳn thì không biết đang gắn cho ai.
@@ -1395,6 +1413,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
 
         // Trưởng bộ môn chỉ được tạo người của bộ môn mình, giống CreateLecturerAsync.
         var departmentId = command.DepartmentId;
+        var facultyId = command.FacultyId;
         if (!scope.SeesEverything)
         {
             if (scope.DepartmentId is not { } ownDepartmentId)
@@ -1402,6 +1421,14 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
                 return Failed<ResolveUnidentifiedLecturerDto>(CatalogErrorCodes.OutOfScope);
             }
             departmentId = ownDepartmentId;
+            facultyId = await db.Courses
+                .Where(x => x.CourseId == section.CourseId)
+                .Select(x => x.FacultyId)
+                .FirstOrDefaultAsync(cancellationToken);
+            facultyId ??= await db.Departments
+                .Where(x => x.DepartmentId == ownDepartmentId)
+                .Select(x => x.FacultyId)
+                .FirstOrDefaultAsync(cancellationToken);
         }
 
         if (departmentId is { } deptId
@@ -1409,7 +1436,8 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
         {
             return Failed<ResolveUnidentifiedLecturerDto>(CatalogErrorCodes.DepartmentNotFound);
         }
-        if (command.FacultyId is { } facultyId && !await FacultyExistsAsync(facultyId, cancellationToken))
+        if (facultyId is { } selectedFacultyId
+            && !await FacultyExistsAsync(selectedFacultyId, cancellationToken))
         {
             return Failed<ResolveUnidentifiedLecturerDto>(CatalogErrorCodes.FacultyNotFound);
         }
@@ -1433,7 +1461,7 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
                 FullName = fullName,
                 Email = email,
                 DepartmentId = departmentId,
-                FacultyId = command.FacultyId,
+                FacultyId = facultyId,
                 PositionId = defaultPositionId
             };
             db.Lecturers.Add(lecturer);
@@ -2608,13 +2636,17 @@ public sealed partial class EfCatalogService(AppDbContext db, IUserScopeResolver
         int courseSectionId,
         CancellationToken cancellationToken = default)
     {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.CanManageCourseSections)
+        {
+            return Failed<CourseSectionDto>(CatalogErrorCodes.OutOfScope);
+        }
+
         var section = await db.CourseSections.IgnoreQueryFilters()
             .FirstOrDefaultAsync(x => x.CourseSectionId == courseSectionId && x.IsDeleted, cancellationToken);
         if (section is null) return Failed<CourseSectionDto>(CatalogErrorCodes.CourseSectionNotFound);
 
-        // Khôi phục đi cùng cặp với xoá, nên dùng đúng luật của DeleteCourseSectionAsync:
-        // lớp phải thuộc bộ môn mình. Giảng viên bị chặn hẳn vì chỉ đọc.
-        var scope = await userScope.ResolveAsync(cancellationToken);
+        // Khôi phục đi cùng cặp với xoá và cũng chỉ dành cho quản trị.
         var departmentId = await DepartmentOfCourseAsync(section.CourseId, cancellationToken);
         if (CheckDepartmentInScope(scope, departmentId) is { } outOfScope)
         {

@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../auth/authContext';
-import { isReadOnlyRole } from '../auth/roles';
+import { isUnrestrictedRole, ROLE_CODES } from '../auth/roles';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { SurveyScopePicker } from '../components/SurveyScopePicker';
@@ -122,7 +122,12 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
   // Giảng viên chỉ theo dõi phiếu của lớp mình dạy: không tạo, không xoá, không sửa
   // lịch. Riêng link và mã QR thì giữ, vì chính họ là người đưa cho sinh viên.
   const { activeProfile } = useAuth();
-  const readOnly = isReadOnlyRole(activeProfile?.roleCode);
+  const roleCode = activeProfile?.roleCode;
+  const canManageCampaign = isUnrestrictedRole(roleCode);
+  const canAddScope = canManageCampaign || roleCode === ROLE_CODES.departmentManager;
+  const canViewReports = canManageCampaign || roleCode === ROLE_CODES.departmentManager;
+  const hideCampaignCounts =
+    roleCode === ROLE_CODES.departmentManager || roleCode === ROLE_CODES.lecturer;
 
   const [templates, setTemplates] = useState<SurveyTemplate[]>([]);
   const [semesterSurveys, setSemesterSurveys] = useState<SemesterSurvey[]>([]);
@@ -203,7 +208,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
   // trang hiện một dải lỗi đỏ thừa. Template cũng chỉ dùng để tạo đợt, mà vai trò đó
   // không tạo được — bỏ hẳn lời gọi. Xem congviec3.md mục H6.
   useEffect(() => {
-    if (readOnly) return;
+    if (!canManageCampaign) return;
     const load = async () => {
       try {
         const nextTemplates = await surveyApi.templates();
@@ -213,7 +218,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
       }
     };
     void load();
-  }, [readOnly]);
+  }, [canManageCampaign]);
 
   const loadSections = useCallback(async (semesterSurveyId: number) => {
     try {
@@ -264,7 +269,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
   // Vai trò chỉ đọc không có COURSE_CAMPAIGNS_ACCESS nên gọi vào là 403; họ cũng
   // không có nút tạo để mà chặn, nên bỏ qua hẳn. Xem congviec3.md mục H6.
   useEffect(() => {
-    if (readOnly || !semesterId) {
+    if (!canManageCampaign || !semesterId) {
       setSectionCount(null);
       return;
     }
@@ -287,7 +292,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [semesterId, readOnly]);
+  }, [semesterId, canManageCampaign]);
 
   const hasNoSections = sectionCount === 0;
 
@@ -568,7 +573,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
             ))}
           </select>
         </div>
-        {!readOnly && (
+        {canManageCampaign && (
           <div className="operations-tab-actions">
             <button
               type="button"
@@ -676,7 +681,9 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                   <ChevronDown className="operation-icon" aria-hidden="true" />
                 )}
                 <span className="semester-survey-title">{survey.surveyName}</span>
-                <span className="operations-count">{survey.sectionSurveyCount} lớp</span>
+                {!hideCampaignCounts && (
+                  <span className="operations-count">{survey.sectionSurveyCount} lớp</span>
+                )}
               </button>
 
               <div className="semester-survey-meta">
@@ -684,24 +691,26 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                   <CalendarDays className="operation-icon" aria-hidden="true" />
                   {formatRange(survey.startTime, survey.endTime)}
                 </span>
-                <span>
-                  <Users className="operation-icon" aria-hidden="true" />
-                  {survey.responseCount} lượt trả lời
-                </span>
+                {!hideCampaignCounts && (
+                  <span>
+                    <Users className="operation-icon" aria-hidden="true" />
+                    {survey.responseCount} lượt trả lời
+                  </span>
+                )}
                 <span>{survey.templateName}</span>
-                <span>{survey.questionCount} câu hỏi</span>
+                {!hideCampaignCounts && <span>{survey.questionCount} câu hỏi</span>}
                 {/*
                   Lớp mới của chính các bộ môn đợt đang phủ thì chưa có bài. Không
                   đếm lớp của khoa khác: đợt cố ý giới hạn phạm vi mà đem so với cả
                   kỳ thì lúc nào cũng "thiếu" hàng nghìn lớp.
                 */}
-                {!readOnly && survey.missingSectionCount > 0 && (
+                {canManageCampaign && survey.missingSectionCount > 0 && (
                   <span className="semester-survey-missing">
                     <CircleAlert className="operation-icon" aria-hidden="true" />
                     {survey.missingSectionCount} lớp trong phạm vi chưa có bài khảo sát
                   </span>
                 )}
-                {!readOnly && (
+                {canAddScope && (
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
@@ -740,7 +749,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                     </>
                   )}
                 </button>
-                {!readOnly && (
+                {canManageCampaign && (
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
@@ -750,7 +759,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                     Chỉnh sửa
                   </button>
                 )}
-                {!readOnly && (
+                {canManageCampaign && (
                   <button
                     type="button"
                     className="btn btn-danger btn-sm"
@@ -830,7 +839,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                           {/* Số lượt trả lời là lối tắt sang trang Thống kê & Báo cáo,
                               mà vai trò chỉ đọc không có quyền vào đó — câu H-e chốt
                               giảng viên chỉ xem tiến độ, không xem kết quả. */}
-                          {readOnly ? (
+                          {!canViewReports ? (
                             <span className="operations-count">{section.responseCount}</span>
                           ) : (
                             <button
@@ -845,7 +854,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                         </td>
                         <td>
                           <div className="campaign-row-actions">
-                            {!readOnly && (
+                            {canViewReports && (
                               <button
                                 type="button"
                                 className="btn btn-secondary btn-sm"
@@ -865,7 +874,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
                               <QrCode className="operation-icon" aria-hidden="true" />
                               QR
                             </button>
-                            {!readOnly && (
+                            {canManageCampaign && (
                               <button
                                 type="button"
                                 className="btn btn-secondary btn-sm"
@@ -1240,6 +1249,7 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
             semesterSurveyId={addTarget?.semesterSurveyId}
             idPrefix="add-sections"
             disabled={addingId !== null}
+            departmentScoped={roleCode === ROLE_CODES.departmentManager}
           />
 
           <div className="catalog-form-grid catalog-form-grid--2">

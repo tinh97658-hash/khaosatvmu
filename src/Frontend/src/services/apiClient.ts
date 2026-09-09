@@ -75,7 +75,7 @@ export async function csrfRequest<T>(
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch (error) {
-    if (error instanceof ApiError && (error.status === 400 || error.status === 403)) {
+    if (error instanceof ApiError && error.errorCode === 'AUTH_CSRF_INVALID') {
       const freshToken = await getCsrfToken(true);
       return apiRequest<T>(path, {
         method,

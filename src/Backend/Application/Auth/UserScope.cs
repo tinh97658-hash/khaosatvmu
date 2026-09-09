@@ -56,6 +56,16 @@ public sealed record UserScope(
     /// </summary>
     public bool IsReadOnly => SeesOnlyOwn;
 
+    public bool CanManageSurveyCampaigns => SeesEverything;
+
+    public bool CanAddSurveyScope =>
+        SeesEverything || (RoleCode == RoleCodes.DepartmentManager && !SeesNothing);
+
+    public bool CanManageCourseSections => SeesEverything;
+
+    public bool CanResolveCourseSectionLecturer =>
+        SeesEverything || (RoleCode == RoleCodes.DepartmentManager && !SeesNothing);
+
     /// <summary>
     /// Bị giới hạn phạm vi nhưng lại không biết giới hạn vào đâu. Gặp trường hợp này
     /// thì phải trả về danh sách RỖNG, tuyệt đối không được rơi vào nhánh không lọc —

@@ -855,7 +855,7 @@ public sealed class EfSurveyService(
         CancellationToken cancellationToken = default)
     {
         var scope = await userScope.ResolveAsync(cancellationToken);
-        if (!scope.SeesEverything)
+        if (!scope.CanAddSurveyScope)
         {
             return Failed<SurveyScopePreviewDto>(SurveyErrorCodes.OutOfScope);
         }
@@ -867,6 +867,10 @@ public sealed class EfSurveyService(
         }
 
         var units = await ResolveSectionUnitsAsync([semesterId], cancellationToken);
+        if (!scope.SeesEverything)
+        {
+            units = units.Where(x => x.DepartmentId == scope.DepartmentId).ToList();
+        }
         var scopedSectionIds = SectionIdsInScope(units, normalized, scopeId);
 
         var newSectionCount = scopedSectionIds.Count;
@@ -895,7 +899,7 @@ public sealed class EfSurveyService(
         CancellationToken cancellationToken = default)
     {
         var scope = await userScope.ResolveAsync(cancellationToken);
-        if (!scope.SeesEverything)
+        if (!scope.CanAddSurveyScope)
         {
             return Failed<AddSectionsToSemesterSurveyDto>(SurveyErrorCodes.OutOfScope);
         }
@@ -931,6 +935,10 @@ public sealed class EfSurveyService(
         }
 
         var units = await ResolveSectionUnitsAsync([survey.SemesterId], cancellationToken);
+        if (!scope.SeesEverything)
+        {
+            units = units.Where(x => x.DepartmentId == scope.DepartmentId).ToList();
+        }
         var scopedSectionIds = SectionIdsInScope(units, scopeType, command.ScopeId);
         if (scopedSectionIds.Count == 0)
         {
@@ -1394,11 +1402,9 @@ public sealed class EfSurveyService(
         SaveSurveyScheduleCommand command,
         CancellationToken cancellationToken = default)
     {
-        // Giảng viên bị chặn ngay, trước cả khi tra bản ghi: câu H-c chốt là không.
-        // Trưởng bộ môn vẫn sửa được vì đó là việc vận hành thật của họ, nhưng chỉ
-        // lớp trong bộ môn mình — trước đây hàm này không kiểm phạm vi lần nào.
+        // Lịch từng lớp là cấu hình của đợt khảo sát, chỉ quản trị được thay đổi.
         var scope = await userScope.ResolveAsync(cancellationToken);
-        if (scope.IsReadOnly)
+        if (!scope.CanManageSurveyCampaigns)
         {
             return Failed<CourseSectionSurveyDto>(SurveyErrorCodes.OutOfScope);
         }
@@ -1408,26 +1414,6 @@ public sealed class EfSurveyService(
         if (sectionSurvey is null)
         {
             return Failed<CourseSectionSurveyDto>(SurveyErrorCodes.SectionSurveyNotFound);
-        }
-
-        // Kiểm phạm vi TRƯỚC khi validate lịch, không thì dò được lớp của bộ môn khác
-        // qua chính mã lỗi trả về — đúng bài học của congviec2.md mục D4.
-        if (!scope.SeesEverything)
-        {
-            if (scope.DepartmentId is not { } departmentId)
-            {
-                return Failed<CourseSectionSurveyDto>(SurveyErrorCodes.OutOfScope);
-            }
-
-            var inScope = await db.CourseSections.AnyAsync(
-                section => section.CourseSectionId == sectionSurvey.CourseSectionId
-                           && db.Courses.Any(course => course.CourseId == section.CourseId
-                                                       && course.DepartmentId == departmentId),
-                cancellationToken);
-            if (!inScope)
-            {
-                return Failed<CourseSectionSurveyDto>(SurveyErrorCodes.OutOfScope);
-            }
         }
 
         var startTime = ToUtc(command.StartTime);
@@ -3883,6 +3869,12 @@ public sealed class EfSurveyService(
         int semesterSurveyId,
         CancellationToken cancellationToken = default)
     {
+        var scope = await userScope.ResolveAsync(cancellationToken);
+        if (!scope.CanManageSurveyCampaigns)
+        {
+            return Failed<bool>(SurveyErrorCodes.OutOfScope);
+        }
+
         var survey = await db.SemesterSurveys.IgnoreQueryFilters()
             .FirstOrDefaultAsync(x => x.SemesterSurveyId == semesterSurveyId && x.IsDeleted, cancellationToken);
         if (survey is null) return Failed<bool>(SurveyErrorCodes.SemesterSurveyNotFound);
