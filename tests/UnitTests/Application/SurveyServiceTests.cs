@@ -10,41 +10,62 @@ public class SurveyServiceTests
     private static SaveSurveyQuestionCommand Question(
         string text,
         int answerScaleId = 1,
-        int? attentionCheckValue = null) =>
-        new(text, answerScaleId, attentionCheckValue);
+        int? attentionCheckValue = null,
+        int sectionIndex = 0) =>
+        new(text, answerScaleId, attentionCheckValue, sectionIndex);
+
+    private static SaveSurveyQuestionSectionCommand Section(string name, int? sectionId = null) =>
+        new(sectionId, name);
 
     [Fact]
-    public void SurveyRules_MaximumQuestionsPerTemplate_ShouldBeThirty()
+    public void SurveyRules_MaximumSectionsPerTemplate_ShouldBeTen()
     {
-        SurveyRules.MaximumQuestionsPerTemplate.Should().Be(30);
+        SurveyRules.MaximumSectionsPerTemplate.Should().Be(10);
     }
 
     [Fact]
-    public void SaveSurveyTemplateCommand_WithValidQuestions_ShouldPassCountCheck()
+    public void SaveSurveyTemplateCommand_KeepsEveryQuestion_KhongCoTranSoCau()
     {
-        var questions = Enumerable.Range(1, 15)
+        // Giới hạn 30 câu đã bỏ: bộ dài bao nhiêu là việc của người soạn phiếu.
+        var questions = Enumerable.Range(1, 45)
             .Select(i => Question($"Tiêu chí đánh giá số {i}"))
             .ToList();
-        var command = new SaveSurveyTemplateCommand("Phiếu khảo sát chuẩn VMU", questions);
+        var command = new SaveSurveyTemplateCommand(
+            "Phiếu khảo sát chuẩn VMU",
+            [Section("Nội dung đánh giá học phần")],
+            questions);
 
-        command.Questions.Should().HaveCount(15);
-        command.Questions.Count.Should().BeLessThanOrEqualTo(SurveyRules.MaximumQuestionsPerTemplate);
+        command.Questions.Should().HaveCount(45);
     }
 
     [Fact]
-    public void SaveSurveyTemplateCommand_WithMoreThan30Questions_ShouldExceedLimit()
+    public void SaveSurveyTemplateCommand_MoiCauTroToiMucQuaSectionIndex()
     {
-        var questions = Enumerable.Range(1, 35).Select(i => Question($"Câu hỏi số {i}")).ToList();
-        var command = new SaveSurveyTemplateCommand("Bộ câu hỏi kiểm thử", questions);
+        var command = new SaveSurveyTemplateCommand(
+            "Phiếu hai mục",
+            [Section("Nội dung đánh giá học phần"), Section("Nội dung đánh giá về giảng viên")],
+            [
+                Question("Học phần trang bị đủ kiến thức?", sectionIndex: 0),
+                Question("Giảng viên trình bày rõ ràng, dễ hiểu.", sectionIndex: 1),
+            ]);
 
-        var isValid = command.Questions.Count <= SurveyRules.MaximumQuestionsPerTemplate;
-        isValid.Should().BeFalse();
+        command.Sections.Should().HaveCount(2);
+        command.Questions.Select(x => x.SectionIndex).Should().Equal(0, 1);
+    }
+
+    [Fact]
+    public void SaveSurveyQuestionSectionCommand_SectionIdNull_LaMucMoi()
+    {
+        // Mục đã có thì gửi kèm mã để backend UPDATE tên tại chỗ, giữ nguyên
+        // "SectionId" cho báo cáo cũ; mục mới thì để null.
+        Section("Mục mới").SectionId.Should().BeNull();
+        Section("Mục đã có", sectionId: 7).SectionId.Should().Be(7);
     }
 
     [Fact]
     public void SaveSurveyTemplateCommand_MixesAnswerScalesPerQuestion()
     {
-        var command = new SaveSurveyTemplateCommand("Phiếu trộn thang", [
+        var command = new SaveSurveyTemplateCommand("Phiếu trộn thang", [Section("Mục duy nhất")], [
             Question("Giảng viên trình bày rõ ràng, dễ hiểu.", 1),
             Question("Bạn có biết về chuẩn đầu ra học phần không?", 2),
             Question("Ý kiến của bạn về học phần?", 4),
