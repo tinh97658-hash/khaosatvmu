@@ -23,6 +23,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { canAccessModule } from '../auth/modulePermissions';
+import { useAuth } from '../auth/authContext';
+import { canAccessDashboard } from '../auth/roles';
 import { HeaderSemesterPicker } from './HeaderSemesterPicker';
 
 interface SidebarProps {
@@ -54,6 +56,9 @@ export function Sidebar({
   permissions,
 }: SidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  const { activeProfile } = useAuth();
+  const dashboardAllowed = canAccessDashboard(activeProfile?.roleCode);
 
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -130,7 +135,12 @@ export function Sidebar({
   ]
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => canAccessModule(permissions, item.id)),
+      items: group.items.filter(
+        (item) =>
+          canAccessModule(permissions, item.id)
+          // Bảng điều khiển tạm đóng với giảng viên và trưởng bộ môn.
+          && (item.id !== 'overview' || dashboardAllowed)
+      ),
     }))
     .filter((group) => group.items.length > 0);
 

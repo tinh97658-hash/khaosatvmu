@@ -35,6 +35,10 @@ import {
 import { SearchableSelect } from '../components/SearchableSelect';
 import '../styles/reports.css';
 import '../styles/dashboard.css';
+// Thanh chọn học kỳ / đợt dùng .statistics-toolbar. Trang được nạp lười nên phải
+// tự import tệp kiểu dáng đó, không thì lần đầu vào trang thanh chọn chưa có CSS
+// và nằm bung ra thành từng dòng.
+import '../styles/survey-statistics.css';
 import { foldVietnamese } from '../utils/vietnamese';
 
 interface DashboardOverviewProps {

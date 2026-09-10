@@ -123,7 +123,9 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
   const { activeProfile } = useAuth();
   const roleCode = activeProfile?.roleCode;
   const canManageCampaign = isUnrestrictedRole(roleCode);
-  const canAddScope = canManageCampaign || roleCode === ROLE_CODES.departmentManager;
+  // Thêm phạm vi chỉ còn dành cho quản trị. Trưởng bộ môn trước đây tự thêm được
+  // bộ môn mình vào đợt, giờ tắt theo yêu cầu.
+  const canAddScope = canManageCampaign;
   const canViewReports = canManageCampaign || roleCode === ROLE_CODES.departmentManager;
   const hideCampaignCounts =
     roleCode === ROLE_CODES.departmentManager || roleCode === ROLE_CODES.lecturer;
@@ -554,7 +556,6 @@ export const CourseSurveysPage: React.FC<CourseSurveysPageProps> = ({
           <span>Chọn học kỳ cần khảo sát</span>
         </div>
         <div className="operations-field">
-          <label htmlFor="course-survey-semester">Học kỳ</label>
           <select
             id="course-survey-semester"
             value={semesterId}

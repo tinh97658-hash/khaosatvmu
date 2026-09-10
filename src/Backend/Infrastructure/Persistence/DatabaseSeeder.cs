@@ -61,23 +61,26 @@ public static class DatabaseSeeder
     {
         var definitions = new[]
         {
+            // Tên và nhóm phải trùng KHÍT với thanh điều hướng: trang phân quyền
+            // là nơi người quản trị tích chọn từng module, đọc thấy tên khác tên
+            // trên menu là không biết mình đang mở khoá cho trang nào.
             (Code: "PROGRESS_ACCESS",             Name: "Tiến độ thu phiếu",                Description: "Truy cập module tiến độ thu phiếu",                    Category: "Tổng quan"),
-            (Code: "SURVEY_DASHBOARD_ACCESS",     Name: "Tổng quan khảo sát",                Description: "Truy cập module tổng quan khảo sát",                    Category: "Báo cáo"),
-            (Code: "REPORTS_ACCESS",              Name: "Thống kê và báo cáo",              Description: "Truy cập module thống kê và báo cáo",                  Category: "Báo cáo"),
-            (Code: "SURVEY_STATISTICS_ACCESS",    Name: "Bảng dữ liệu khảo sát",             Description: "Truy cập module bảng dữ liệu khảo sát",                 Category: "Báo cáo"),
-            (Code: "SURVEY_ANALYSIS_ACCESS",      Name: "Phân tích chuyên sâu",              Description: "Truy cập module phân tích chuyên sâu",                  Category: "Báo cáo"),
-            (Code: "GRADUATION_ANALYTICS_ACCESS", Name: "Thống kê sinh viên tốt nghiệp",     Description: "Truy cập module thống kê sinh viên tốt nghiệp đúng hạn", Category: "Báo cáo"),
+            (Code: "SURVEY_DASHBOARD_ACCESS",     Name: "Tổng quan khảo sát",                Description: "Truy cập module tổng quan khảo sát",                    Category: "Tổng quan"),
+            (Code: "REPORTS_ACCESS",              Name: "Thống kê & Báo cáo",                Description: "Truy cập module thống kê và báo cáo",                  Category: "Tổng quan"),
+            (Code: "SURVEY_STATISTICS_ACCESS",    Name: "Bảng dữ liệu khảo sát",             Description: "Truy cập module bảng dữ liệu khảo sát",                 Category: "Tổng quan"),
+            (Code: "SURVEY_ANALYSIS_ACCESS",      Name: "Thống kê chi tiết",                 Description: "Truy cập module thống kê chi tiết",                    Category: "Tổng quan"),
+            (Code: "GRADUATION_ANALYTICS_ACCESS", Name: "Thống kê tốt nghiệp",               Description: "Truy cập module thống kê sinh viên tốt nghiệp đúng hạn", Category: "Tổng quan"),
             (Code: "FACULTIES_ACCESS",            Name: "Khoa / Viện",                       Description: "Truy cập module quản lý khoa và viện",                  Category: "Danh mục đào tạo"),
             (Code: "DEPARTMENTS_ACCESS",          Name: "Bộ môn",                            Description: "Truy cập module quản lý bộ môn",                        Category: "Danh mục đào tạo"),
             (Code: "LECTURERS_ACCESS",            Name: "Giảng viên",                        Description: "Truy cập module quản lý giảng viên và chức vụ",         Category: "Danh mục đào tạo"),
             (Code: "MAJORS_ACCESS",               Name: "Ngành đào tạo",                     Description: "Truy cập module quản lý ngành đào tạo",                 Category: "Danh mục đào tạo"),
             (Code: "COURSES_ACCESS",              Name: "Học phần",                          Description: "Truy cập module quản lý học phần",                      Category: "Danh mục đào tạo"),
             (Code: "COURSE_SECTIONS_ACCESS",      Name: "Lớp học phần",                      Description: "Truy cập module quản lý lớp học phần, năm học và học kỳ", Category: "Danh mục đào tạo"),
-            (Code: "COURSE_QUESTION_SETS_ACCESS", Name: "Bộ câu hỏi khảo sát học phần",      Description: "Truy cập module bộ câu hỏi khảo sát học phần",         Category: "Khảo sát học phần"),
-            (Code: "COURSE_CAMPAIGNS_ACCESS",     Name: "Khảo sát học phần",                 Description: "Truy cập module khảo sát học phần",                    Category: "Khảo sát học phần"),
-            (Code: "PROGRAM_CAMPAIGNS_ACCESS",    Name: "Đợt khảo sát chương trình đào tạo", Description: "Truy cập module đợt khảo sát chương trình đào tạo",     Category: "Khảo sát chương trình"),
-            (Code: "PROGRAM_CRITERIA_ACCESS",     Name: "Tiêu chí chương trình đào tạo",     Description: "Truy cập module tiêu chí chương trình đào tạo",        Category: "Khảo sát chương trình"),
-            (Code: "USER_ADMIN_ACCESS",           Name: "Người dùng và phân quyền",          Description: "Truy cập module quản trị người dùng và phân quyền",    Category: "Quản trị hệ thống"),
+            (Code: "COURSE_QUESTION_SETS_ACCESS", Name: "Danh sách bộ khảo sát",             Description: "Truy cập module bộ câu hỏi khảo sát học phần",         Category: "Khảo sát học phần"),
+            (Code: "COURSE_CAMPAIGNS_ACCESS",     Name: "Danh sách đợt khảo sát",            Description: "Truy cập module đợt khảo sát học phần",                Category: "Khảo sát học phần"),
+            (Code: "PROGRAM_CAMPAIGNS_ACCESS",    Name: "Đợt khảo sát CTĐT",                 Description: "Truy cập module đợt khảo sát chương trình đào tạo",     Category: "Khảo sát chương trình"),
+            (Code: "PROGRAM_CRITERIA_ACCESS",     Name: "Tiêu chí CTĐT",                     Description: "Truy cập module tiêu chí chương trình đào tạo",        Category: "Khảo sát chương trình"),
+            (Code: "USER_ADMIN_ACCESS",           Name: "Người dùng & phân quyền",           Description: "Truy cập module quản trị người dùng và phân quyền",    Category: "Quản trị"),
         };
 
         var permissions = new Dictionary<string, Permission>(StringComparer.OrdinalIgnoreCase);
@@ -95,6 +98,15 @@ public static class DatabaseSeeder
                     Category = definition.Category
                 };
                 db.Permissions.Add(permission);
+            }
+            else
+            {
+                // Đổi tên module thì cập nhật luôn dòng đã có. Trước đây chỉ thêm
+                // khi thiếu, nên đổi tên trong mã xong CSDL vẫn giữ tên cũ và trang
+                // phân quyền hiện tên không còn khớp menu nữa.
+                permission.Name = definition.Name;
+                permission.Description = definition.Description;
+                permission.Category = definition.Category;
             }
 
             permissions[definition.Code] = permission;

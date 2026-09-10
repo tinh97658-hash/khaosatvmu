@@ -38,3 +38,13 @@ export function isReadOnlyRole(roleCode: string | null | undefined): boolean {
 export function canCreateOrDeleteCatalog(roleCode: string | null | undefined): boolean {
   return isUnrestrictedRole(roleCode);
 }
+
+/**
+ * Trang Bảng điều khiển TẠM ĐÓNG với giảng viên và trưởng bộ môn.
+ *
+ * Hai vai trò này có bản điều khiển riêng, nhưng nội dung chưa chốt nên tạm gỡ
+ * khỏi thanh điều hướng. Mở lại chỉ cần cho hàm này trả về true.
+ */
+export function canAccessDashboard(roleCode: string | null | undefined): boolean {
+  return roleCode !== ROLE_CODES.lecturer && roleCode !== ROLE_CODES.departmentManager;
+}

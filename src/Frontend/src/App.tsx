@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react
 import { toast } from 'sonner';
 import { useAuth } from './auth/authContext';
 import { canAccessModule } from './auth/modulePermissions';
-import { isReadOnlyRole, isUnrestrictedRole } from './auth/roles';
+import { canAccessDashboard, isReadOnlyRole, isUnrestrictedRole } from './auth/roles';
 import { AuthLoading } from './components/AuthLoading';
 import { getHashRoot } from './pages/reportRoute';
 
@@ -132,11 +132,22 @@ function DashboardApp() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [currentTab]);
 
+  // Bảng điều khiển tạm đóng với giảng viên và trưởng bộ môn, nên hai vai trò đó
+  // phải đáp xuống trang khác — cả khi mới vào lẫn khi gõ thẳng địa chỉ cũ.
+  const dashboardAllowed = canAccessDashboard(auth.activeProfile?.roleCode);
+  const landingTab = dashboardAllowed
+    ? 'overview'
+    : ['progress', 'course-campaigns', 'survey-statistics', 'reports', 'classes', 'users-admin']
+        .find((moduleId) => canAccessModule(permissions, moduleId)) ?? 'progress';
+
   useEffect(() => {
-    if (!canAccessModule(permissions, currentTab)) {
-      setCurrentTab('overview');
+    const blocked =
+      !canAccessModule(permissions, currentTab)
+      || (currentTab === 'overview' && !dashboardAllowed);
+    if (blocked) {
+      setCurrentTab(landingTab);
     }
-  }, [currentTab, permissions, setCurrentTab]);
+  }, [currentTab, permissions, setCurrentTab, dashboardAllowed, landingTab]);
 
   // Nạp danh mục đã lưu trong database khi vào hệ thống.
   useEffect(() => {

@@ -47,6 +47,8 @@ import {
 } from '../utils/reportThresholds';
 import '../styles/survey-operations.css';
 import '../styles/reports.css';
+// Thanh chọn học kỳ / đợt dùng .statistics-toolbar nằm trong tệp này.
+import '../styles/survey-statistics.css';
 import { foldVietnamese } from '../utils/vietnamese';
 
 /** Một đơn vị (Khoa hoặc Bộ môn) gộp từ kết quả để xếp hạng. */

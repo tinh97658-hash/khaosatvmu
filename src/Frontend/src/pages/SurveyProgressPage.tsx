@@ -17,6 +17,8 @@ import {
   LAGGING_COMPLETION_RATE,
 } from '../utils/reportThresholds';
 import '../styles/survey-operations.css';
+// Thanh chọn học kỳ / đợt dùng .statistics-toolbar nằm trong tệp này.
+import '../styles/survey-statistics.css';
 import { foldVietnamese } from '../utils/vietnamese';
 
 interface SurveyProgressPageProps {
