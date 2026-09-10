@@ -1,6 +1,10 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
+// Kiểu dáng của chính ô chọn nằm trong tệp này. Thành phần tự import lấy, chứ để
+// từng trang tự nhớ thì trang nào quên là ô chọn bung ra không còn hình hài gì —
+// nhất là các trang được nạp lười, tệp CSS chỉ về khi trang đó được mở.
+import '../styles/catalogs.css';
 
 export interface SearchableSelectOption {
   value: string;
